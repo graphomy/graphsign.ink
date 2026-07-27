@@ -1,125 +1,120 @@
 # Security Standards
 
-Security is mandatory.
+> Source of truth: [Confluence — Security Architecture and API Standards](https://graphomy.atlassian.net/wiki/spaces/INK/pages/852307)
 
-Never trade security for convenience.
-
----
-
-## Authentication
-
-JWT
-
-Refresh Token
-
-MFA
-
-Short sessions
-
----
-
-## Authorization
-
-RBAC
-
-Least privilege
-
-Default deny
-
----
-
-## Secrets
-
-Never store
-
-API keys
-
-Passwords
-
-Certificates
-
-JWT secrets
-
-inside code.
-
----
+Security is mandatory. Never trade security for convenience.
 
 ## Encryption
 
-TLS
+### In Transit
+- TLS 1.3 enforced for all communications
 
-Encryption at rest
+### At Rest
+- Database: PostgreSQL native + storage-level encryption
+- Object storage: R2/MinIO native encryption
+- Completed documents: envelope-encryption with KMS-held keys
 
-Signed URLs
+### Key Management
+- Signing and encryption keys in KMS/HSM — never in code or env files
+- Automated key rotation on schedule
+- Least-privilege: only signing service has key access
 
----
+## Authentication
 
-## OWASP
+- JWT (Zitadel-issued)
+- Refresh tokens
+- MFA (TOTP) — enforceable at org level, mandatory for admins/super-admin
+- Recovery codes generated and securely stored
+- Short sessions
 
-Protect against
+## Authorization
 
-SQL Injection
+- RBAC with least privilege
+- Default deny
+- Roles: Author, Reviewer/Approver, Signer, Org Admin, Super Admin
 
-XSS
+## Tenant Isolation
 
-CSRF
+- **Database:** Row-Level Security on every tenant table
+- **API:** Every call validates tenant context
+- **Storage:** Object storage partitioned by tenant
+- **Signing:** Least-privilege; only component with signing key access
 
-SSRF
+## Secrets
 
-Command Injection
+Never store in code: API keys, passwords, certificates, JWT secrets, signing keys.
 
-Broken Authentication
+## OWASP Top 10 Protection
 
-Broken Access Control
-
----
+- Input validation and sanitization
+- Output encoding
+- CSRF protection
+- XSS prevention (CSP, secure headers)
+- SQL injection prevention (Prisma ORM)
+- Secure authentication and session management
+- HSTS, X-Frame-Options, Content-Security-Policy
 
 ## Input Validation
 
-Validate
-
-every request
-
-every field
-
-every upload
-
----
+Validate every request, every field, every upload. Use Zod for schema validation. Allowlists over denylists.
 
 ## File Upload
 
-Virus scan
-
-Validate MIME
-
-Validate extension
-
-Limit size
-
----
-
-## Logging
-
-Never log sensitive information.
-
----
+- Virus scan
+- Validate MIME type
+- Validate extension
+- Limit size
 
 ## Rate Limiting
 
-Authentication
+| Endpoint | Limit |
+|---|---|
+| Authentication | 10 req/min per IP |
+| Signing | 5 req/min per user |
+| General API | 100 req/min per API key |
+| Webhooks | Async, queue-based |
 
-Signing
+Rate limit headers: `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`, `Retry-After`.
 
-Password Reset
+## Logging
 
-Webhook
+Never log: passwords, API keys, certificates, JWT tokens, customer documents.
 
-must be rate limited.
+## Audit Logging
 
----
+- Append-only — cannot be modified
+- Hash-chained — cryptographic tamper-evidence
+- Exportable — full audit log export
+- Configurable retention periods
+- All actions logged (document creation, signing, admin actions)
+
+## Document Integrity
+
+- PAdES B-LTA sealing with embedded LTV data
+- Verification independence — documents verify without graphsign.ink
+- RFC 3161 trusted timestamps embedded in seals
+
+## Data Classification
+
+| Data Type | Classification | Protection |
+|---|---|---|
+| Document content | Confidential | Encrypted at rest, KMS envelope encryption |
+| Signatures & audit logs | Confidential | Encrypted, tamper-evident, append-only |
+| User PII | Confidential | Encrypted, access-controlled |
+| API keys & credentials | Secret | KMS/HSM, never logged |
+| Signing keys | Secret | KMS/HSM only |
+
+## Compliance Framework
+
+| Framework | Level | Edition |
+|---|---|---|
+| eIDAS SES | Simple | All (Free) |
+| eIDAS AES | Advanced | All (BYO Certificate) |
+| eIDAS QES | Qualified | Enterprise (V3) |
+| ESIGN Act | Federal | All |
+| UETA | State | All |
+| 21 CFR Part 11 | Full | Enterprise (V3) |
 
 ## AI Rules
 
-Whenever generating code
-
-perform security review first.
+Whenever generating code, perform security review first. Reference this document.

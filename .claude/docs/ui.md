@@ -1,123 +1,87 @@
 # UI Standards
 
-Design
+> See also: `docs/coding-standards.md` for frontend project structure
 
-Minimal
+## Design
 
-Fast
-
-Accessible
-
-Professional
-
----
+Minimal, fast, accessible, professional, calm, predictable, simple.
 
 ## Framework
 
-React
-
-Next.js
-
-Tailwind
-
-shadcn/ui
-
----
+- React 18+ with Next.js 14+ (App Router)
+- Tailwind CSS 3+
+- shadcn/ui component library
+- PDF.js for document rendering
 
 ## Layout
 
-8px spacing system
-
-Responsive
-
-Desktop first
-
----
+- 8px spacing system
+- Responsive — desktop first
+- Every page has one primary action
 
 ## Colors
 
-Black
-
-White
-
-Red (#ba0000)
-
-Neutral gray
-
----
+- Black, White
+- Red (#ba0000) — brand accent
+- Neutral gray palette
 
 ## Typography
 
-One font family.
-
-Maximum two font weights.
-
----
+One font family. Maximum two font weights.
 
 ## Components
 
-Reusable
+- Reusable, composable, accessible
+- Use shadcn/ui as the component base
+- Never invent new component styles — reuse existing components
 
-Composable
+## PDF Viewer & Field Placement
 
-Accessible
+- PDF.js (Mozilla) for browser PDF rendering
+- `pdf-lib` for lightweight client-side manipulation (page ordering, previews)
+- Drag-and-drop signature/field placement at precise coordinates
+- **Cryptographic sealing never happens in the browser** — delegated to the Signing Service
 
----
+## Signer Experience
+
+- Account-less signing via secure magic link
+- Responsive signing page
+- Signature capture: draw, type, or upload
+- Guided tab-through field completion with progress indicator
+- Clear consent-to-e-sign UI
 
 ## Forms
 
-Client validation
+- Client validation + server validation
+- Helpful error messages
+- Zod schemas shared between client and server
 
-Server validation
+## Loading States
 
-Helpful errors
-
----
-
-## Loading
-
-Every async action
-
-Loading State
-
-Skeleton
-
-Progress
-
----
+Every async action must show: loading state, skeleton, or progress indicator.
 
 ## Empty States
 
-Every page
-
-must have
-
-Empty State
-
----
+Every list page must have an empty state with clear next action.
 
 ## Error States
 
-Friendly
-
-Recoverable
-
----
+Friendly, recoverable, with clear guidance.
 
 ## Accessibility
 
-WCAG AA
+- WCAG 2.2 AA
+- Keyboard navigation
+- ARIA labels
+- Focus states
+- Screen reader support for signing flow
 
-Keyboard navigation
+## Performance
 
-ARIA labels
-
-Focus states
-
----
+- Main bundle under 500KB
+- Lazy load non-critical components
+- Optimize and lazy load images
 
 ## AI Rules
 
-Never invent new component styles.
-
-Reuse existing components.
+Never invent new component styles. Reuse existing shadcn/ui components. Follow the established design system.
