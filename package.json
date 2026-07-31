@@ -1,0 +1,35 @@
+{
+  "name": "graphsign-ink",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Open-source electronic signature platform",
+  "license": "AGPL-3.0",
+  "packageManager": "pnpm@9.15.4",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "dev:api": "pnpm --filter @graphsign/api dev",
+    "dev:web": "pnpm --filter @graphsign/web dev",
+    "build": "pnpm -r build",
+    "build:api": "pnpm --filter @graphsign/api build",
+    "build:web": "pnpm --filter @graphsign/web build",
+    "test": "pnpm -r test",
+    "test:api": "pnpm --filter @graphsign/api test",
+    "test:web": "pnpm --filter @graphsign/web test",
+    "test:watch": "pnpm -r test:watch",
+    "test:coverage": "pnpm -r test:coverage",
+    "lint": "pnpm -r lint",
+    "format": "prettier --write \"**/*.{ts,tsx,json,md}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,json,md}\"",
+    "db:generate": "pnpm --filter @graphsign/db generate",
+    "db:migrate": "pnpm --filter @graphsign/db migrate",
+    "db:push": "pnpm --filter @graphsign/db push",
+    "typecheck": "pnpm -r typecheck"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "prettier": "^3.3.0",
+    "typescript": "^5.5.0"
+  }
+}
