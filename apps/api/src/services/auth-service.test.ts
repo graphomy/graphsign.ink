@@ -217,6 +217,8 @@ describe('AuthService', () => {
       expect(result.id).toBe('00000000-0000-7000-8000-000000000001');
       expect(result.email).toBe('user@example.com');
       expect(result.status).toBe('active');
+      expect(result.token).toBeDefined();
+      expect(result.organisationId).toBe(DEFAULT_ORG.id);
 
       expect(audit.log).toHaveBeenCalledWith(
         expect.objectContaining({

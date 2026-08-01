@@ -121,10 +121,17 @@ export function createAuthRoutes(deps?: AuthDeps) {
       userAgent: c.req.header('user-agent'),
     });
 
+    c.header(
+      'Set-Cookie',
+      `graphsign_session=${result.token}; HttpOnly; Path=/; SameSite=Strict; Secure`,
+    );
+
     return c.json({
       id: result.id,
       email: result.email,
       status: result.status,
+      token: result.token,
+      organisationId: result.organisationId,
       message: 'Login successful.',
     });
   });

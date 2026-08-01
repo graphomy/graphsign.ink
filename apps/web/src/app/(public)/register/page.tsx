@@ -2,11 +2,7 @@
 
 import { useState, type FormEvent } from 'react';
 import Link from 'next/link';
-import {
-  registerFormSchema,
-  getPasswordRequirements,
-  type RegisterFormData,
-} from '@/lib/validators/auth';
+import { registerFormSchema, getPasswordRequirements } from '@/lib/validators/auth';
 
 /**
  * Registration page — creates a new user account.
@@ -27,7 +23,6 @@ export default function RegisterPage() {
   const [isSuccess, setIsSuccess] = useState(false);
 
   const passwordRequirements = getPasswordRequirements(password);
-  const allRequirementsMet = passwordRequirements.every((r) => r.met);
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
