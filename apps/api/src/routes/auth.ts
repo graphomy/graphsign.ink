@@ -270,5 +270,29 @@ export function createAuthRoutes(deps?: AuthDeps) {
     });
   });
 
+  /**
+   * POST /api/v1/auth/logout
+   *
+   * Terminates active session and expires session cookie.
+   */
+  auth.post('/logout', async (c) => {
+    const authService = getAuthService(c);
+    const userId = c.req.header('x-user-id');
+
+    const result = await authService.logout(userId, {
+      ipAddress: c.req.header('x-forwarded-for')?.split(',')[0]?.trim(),
+      userAgent: c.req.header('user-agent'),
+    });
+
+    c.header(
+      'Set-Cookie',
+      'graphsign_session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; SameSite=Strict; Secure',
+    );
+
+    return c.json({
+      message: result.message,
+    });
+  });
+
   return auth;
 }

@@ -543,4 +543,24 @@ describe('AuthService', () => {
       ).rejects.toThrow('Password reset token has expired.');
     });
   });
+
+  describe('logout', () => {
+    it('should log audit event and return success message when userId is provided', async () => {
+      const result = await authService.logout('00000000-0000-7000-8000-000000000001');
+
+      expect(result.message).toBe('Signed out successfully.');
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'user.logout',
+          userId: '00000000-0000-7000-8000-000000000001',
+        }),
+      );
+    });
+
+    it('should return success message without audit log if no userId is provided', async () => {
+      const result = await authService.logout();
+
+      expect(result.message).toBe('Signed out successfully.');
+    });
+  });
 });

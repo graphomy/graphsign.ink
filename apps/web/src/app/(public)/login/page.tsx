@@ -1,18 +1,14 @@
 'use client';
 
-import { useState, type FormEvent } from 'react';
+import { useState, Suspense, type FormEvent } from 'react';
+import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { loginFormSchema } from '@/lib/validators/auth';
 
-/**
- * Login page — authenticates existing user accounts.
- *
- * Acceptance criteria (INK-215 / GS-215):
- * - Valid email + password → signed in
- * - Invalid email or password → clear error displayed
- * - Unverified email → prompt to verify email
- */
-export default function LoginPage() {
+function LoginContent() {
+  const searchParams = useSearchParams();
+  const isTimeout = searchParams.get('reason') === 'timeout';
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -115,6 +111,17 @@ export default function LoginPage() {
         noValidate
         data-testid="login-form"
       >
+        {/* Session Timeout Warning Banner */}
+        {isTimeout && (
+          <div
+            className="rounded-lg bg-amber-50 border border-amber-200 p-4 text-sm text-amber-800"
+            role="alert"
+            data-testid="timeout-banner"
+          >
+            Your session expired due to inactivity. Please sign in again to continue.
+          </div>
+        )}
+
         {/* API error */}
         {apiError && (
           <div
@@ -244,5 +251,17 @@ export default function LoginPage() {
         </Link>
       </p>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="text-center py-8 text-neutral-500 text-sm">Loading sign in page...</div>
+      }
+    >
+      <LoginContent />
+    </Suspense>
   );
 }
