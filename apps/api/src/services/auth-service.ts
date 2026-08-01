@@ -165,20 +165,58 @@ export class AuthService {
     });
 
     if (!user || user.deletedAt !== null) {
-      // Vague error to prevent email enumeration
+      await this.audit.log({
+        organisationId: org.id,
+        action: 'user.login_failed',
+        resourceType: 'user',
+        resourceId: '00000000-0000-0000-0000-000000000000',
+        metadata: { email: data.email, reason: 'user_not_found' },
+        ipAddress: meta.ipAddress,
+        userAgent: meta.userAgent,
+      });
       throw new UnauthorizedError('Invalid email or password.');
     }
 
     const isValidPassword = await verifyPassword(data.password, user.passwordHash);
     if (!isValidPassword) {
+      await this.audit.log({
+        organisationId: org.id,
+        userId: user.id,
+        action: 'user.login_failed',
+        resourceType: 'user',
+        resourceId: user.id,
+        metadata: { email: data.email, reason: 'invalid_password' },
+        ipAddress: meta.ipAddress,
+        userAgent: meta.userAgent,
+      });
       throw new UnauthorizedError('Invalid email or password.');
     }
 
     if (!user.emailVerified || user.status === 'pending_verification') {
+      await this.audit.log({
+        organisationId: org.id,
+        userId: user.id,
+        action: 'user.login_failed',
+        resourceType: 'user',
+        resourceId: user.id,
+        metadata: { email: data.email, reason: 'email_unverified' },
+        ipAddress: meta.ipAddress,
+        userAgent: meta.userAgent,
+      });
       throw new UnauthorizedError('Please verify your email address before logging in.');
     }
 
     if (user.status !== 'active') {
+      await this.audit.log({
+        organisationId: org.id,
+        userId: user.id,
+        action: 'user.login_failed',
+        resourceType: 'user',
+        resourceId: user.id,
+        metadata: { email: data.email, reason: 'account_disabled', status: user.status },
+        ipAddress: meta.ipAddress,
+        userAgent: meta.userAgent,
+      });
       throw new UnauthorizedError('Account is disabled or suspended.');
     }
 
@@ -495,6 +533,54 @@ export class AuthService {
 
     return {
       message: 'Signed out successfully.',
+    };
+  }
+
+  /**
+   * Enables MFA for a user and records an audit log event with IP and user agent.
+   */
+  async enableMfa(
+    userId: string,
+    meta: { ipAddress?: string; userAgent?: string } = {},
+  ): Promise<{ message: string }> {
+    const org = await this.getOrCreateDefaultOrganisation();
+
+    await this.audit.log({
+      organisationId: org.id,
+      userId,
+      action: 'user.mfa_enabled',
+      resourceType: 'user',
+      resourceId: userId,
+      ipAddress: meta.ipAddress,
+      userAgent: meta.userAgent,
+    });
+
+    return {
+      message: 'MFA enabled successfully.',
+    };
+  }
+
+  /**
+   * Disables MFA for a user and records an audit log event with IP and user agent.
+   */
+  async disableMfa(
+    userId: string,
+    meta: { ipAddress?: string; userAgent?: string } = {},
+  ): Promise<{ message: string }> {
+    const org = await this.getOrCreateDefaultOrganisation();
+
+    await this.audit.log({
+      organisationId: org.id,
+      userId,
+      action: 'user.mfa_disabled',
+      resourceType: 'user',
+      resourceId: userId,
+      ipAddress: meta.ipAddress,
+      userAgent: meta.userAgent,
+    });
+
+    return {
+      message: 'MFA disabled successfully.',
     };
   }
 

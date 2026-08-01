@@ -301,5 +301,43 @@ export function createAuthRoutes(deps?: AuthDeps) {
     });
   });
 
+  /**
+   * POST /api/v1/auth/mfa/enable
+   *
+   * Enables MFA for the authenticated user and logs audit event with IP and user agent.
+   */
+  auth.post('/mfa/enable', async (c) => {
+    const authService = getAuthService(c);
+    const userId = c.req.header('x-user-id') ?? '00000000-0000-7000-8000-000000000001';
+
+    const result = await authService.enableMfa(userId, {
+      ipAddress: c.req.header('x-forwarded-for')?.split(',')[0]?.trim(),
+      userAgent: c.req.header('user-agent'),
+    });
+
+    return c.json({
+      message: result.message,
+    });
+  });
+
+  /**
+   * POST /api/v1/auth/mfa/disable
+   *
+   * Disables MFA for the authenticated user and logs audit event with IP and user agent.
+   */
+  auth.post('/mfa/disable', async (c) => {
+    const authService = getAuthService(c);
+    const userId = c.req.header('x-user-id') ?? '00000000-0000-7000-8000-000000000001';
+
+    const result = await authService.disableMfa(userId, {
+      ipAddress: c.req.header('x-forwarded-for')?.split(',')[0]?.trim(),
+      userAgent: c.req.header('user-agent'),
+    });
+
+    return c.json({
+      message: result.message,
+    });
+  });
+
   return auth;
 }

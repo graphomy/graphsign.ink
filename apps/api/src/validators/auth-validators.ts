@@ -133,3 +133,9 @@ export const resetPasswordResponseSchema = z.object({
 });
 
 export type ResetPasswordResponse = z.infer<typeof resetPasswordResponseSchema>;
+
+export const mfaToggleResponseSchema = z.object({
+  message: z.string(),
+});
+
+export type MfaToggleResponse = z.infer<typeof mfaToggleResponseSchema>;
