@@ -1,0 +1,128 @@
+import { Hono } from 'hono';
+import type { PrismaClient } from '@graphsign/db';
+import { createPrismaClient, prisma as legacyPrisma } from '@graphsign/db';
+import { registerRequestSchema, verifyEmailRequestSchema } from '../validators/auth-validators.js';
+import { AuthService } from '../services/auth-service.js';
+import type { MailerService } from '../services/mailer-service.js';
+import { createMailerService } from '../services/mailer-service.js';
+import type { AuditService } from '../services/audit-service.js';
+import { PrismaAuditService } from '../services/audit-service.js';
+import { ValidationError } from '../utils/errors.js';
+import { createRateLimiter } from '../middleware/rate-limiter.js';
+import type { Env } from '../index.js';
+
+export interface AuthDeps {
+  prisma?: PrismaClient;
+  mailer?: MailerService;
+  audit?: AuditService;
+}
+
+/**
+ * Auth route factory.
+ * Receives optional dependencies (for testing), or resolves them from c.env in Cloudflare Workers.
+ */
+export function createAuthRoutes(deps?: AuthDeps) {
+  const auth = new Hono<{ Bindings: Env }>();
+
+  // Rate limit auth endpoints: 10 req/min per IP (security.md)
+  auth.use('/*', createRateLimiter(10, 60_000));
+
+  function getAuthService(c: any): AuthService {
+    let db = deps?.prisma;
+    if (!db) {
+      db = c.env?.DATABASE_URL ? createPrismaClient(c.env.DATABASE_URL) : legacyPrisma;
+    }
+
+    let mailer = deps?.mailer;
+    if (!mailer) {
+      mailer = createMailerService(c.env ?? {});
+    }
+
+    let audit = deps?.audit;
+    if (!audit) {
+      audit = new PrismaAuditService(db);
+    }
+
+    return new AuthService(db, mailer, audit);
+  }
+
+  /**
+   * POST /api/v1/auth/register
+   *
+   * Creates a new user account. Requires email verification before active.
+   */
+  auth.post('/register', async (c) => {
+    const body = await c.req.json().catch(() => null);
+
+    if (!body) {
+      throw new ValidationError('Request body is required.');
+    }
+
+    const parsed = registerRequestSchema.safeParse(body);
+
+    if (!parsed.success) {
+      const firstError = parsed.error.errors[0];
+      throw new ValidationError(firstError?.message ?? 'Invalid input.', {
+        field: firstError?.path.join('.') ?? 'unknown',
+        issue: firstError?.message ?? 'validation_failed',
+      });
+    }
+
+    const authService = getAuthService(c);
+
+    const result = await authService.register(parsed.data, {
+      ipAddress: c.req.header('x-forwarded-for')?.split(',')[0]?.trim(),
+      userAgent: c.req.header('user-agent'),
+    });
+
+    return c.json(
+      {
+        id: result.id,
+        email: result.email,
+        status: result.status,
+        createdAt: result.createdAt.toISOString(),
+        message: 'Account created. Please check your email to verify your account.',
+      },
+      201,
+    );
+  });
+
+  /**
+   * POST /api/v1/auth/verify-email
+   *
+   * Verifies a user's email using the token from the verification email.
+   */
+  auth.post('/verify-email', async (c) => {
+    const body = await c.req.json().catch(() => null);
+
+    if (!body) {
+      throw new ValidationError('Request body is required.');
+    }
+
+    const parsed = verifyEmailRequestSchema.safeParse(body);
+
+    if (!parsed.success) {
+      const firstError = parsed.error.errors[0];
+      throw new ValidationError(firstError?.message ?? 'Invalid input.', {
+        field: firstError?.path.join('.') ?? 'unknown',
+        issue: firstError?.message ?? 'validation_failed',
+      });
+    }
+
+    const authService = getAuthService(c);
+
+    const result = await authService.verifyEmail(parsed.data.token, {
+      ipAddress: c.req.header('x-forwarded-for')?.split(',')[0]?.trim(),
+      userAgent: c.req.header('user-agent'),
+    });
+
+    return c.json({
+      id: result.id,
+      email: result.email,
+      status: result.status,
+      message: 'Email verified successfully. You can now sign in.',
+    });
+  });
+
+  return auth;
+}

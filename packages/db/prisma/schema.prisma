@@ -1,0 +1,78 @@
+// Prisma schema for graphsign.ink
+// Source of truth: .claude/docs/database.md and .claude/docs/domain-model.md
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// Tenant container — every business table references this via organisation_id.
+model Organisation {
+  id        String   @id @db.Uuid
+  name      String   @db.VarChar(255)
+  slug      String   @unique @db.VarChar(100)
+  tenantId  String   @unique @map("tenant_id") @db.Uuid
+  status    String   @default("active") @db.VarChar(20)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz()
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz()
+
+  users     User[]
+  auditLogs AuditLog[]
+
+  @@index([slug])
+  @@index([status])
+  @@index([tenantId])
+  @@map("organisations")
+}
+
+/// Platform user — auth, profile, roles.
+model User {
+  id                            String    @id @db.Uuid
+  organisationId                String    @map("organisation_id") @db.Uuid
+  email                         String    @db.VarChar(255)
+  passwordHash                  String    @map("password_hash") @db.VarChar(255)
+  emailVerified                 Boolean   @default(false) @map("email_verified")
+  emailVerificationTokenHash    String?   @map("email_verification_token_hash") @db.VarChar(255)
+  emailVerificationTokenExpiresAt DateTime? @map("email_verification_token_expires_at") @db.Timestamptz()
+  status                        String    @default("pending_verification") @db.VarChar(20)
+  createdAt                     DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt                     DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
+  deletedAt                     DateTime? @map("deleted_at") @db.Timestamptz()
+
+  organisation Organisation @relation(fields: [organisationId], references: [id])
+  auditLogs    AuditLog[]
+
+  @@unique([organisationId, email])
+  @@index([status])
+  @@map("users")
+}
+
+/// Immutable, append-only, hash-chained audit trail.
+model AuditLog {
+  id           String   @id @db.Uuid
+  organisationId String @map("organisation_id") @db.Uuid
+  userId       String?  @map("user_id") @db.Uuid
+  action       String   @db.VarChar(100)
+  resourceType String   @map("resource_type") @db.VarChar(50)
+  resourceId   String   @map("resource_id") @db.Uuid
+  metadata     Json?    @db.JsonB
+  previousHash String?  @map("previous_hash") @db.VarChar(128)
+  currentHash  String   @map("current_hash") @db.VarChar(128)
+  ipAddress    String?  @map("ip_address") @db.VarChar(45)
+  userAgent    String?  @map("user_agent") @db.VarChar(512)
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  organisation Organisation @relation(fields: [organisationId], references: [id])
+  user         User?        @relation(fields: [userId], references: [id])
+
+  @@index([resourceType, resourceId])
+  @@index([userId])
+  @@index([createdAt])
+  @@map("audit_log")
+}
