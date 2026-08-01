@@ -211,6 +211,8 @@ describe('POST /api/v1/auth/login', () => {
     expect(body.id).toBe('00000000-0000-7000-8000-000000000001');
     expect(body.email).toBe('user@example.com');
     expect(body.status).toBe('active');
+    expect(body.token).toBeDefined();
+    expect(body.organisationId).toBe(DEFAULT_ORG.id);
     expect(body.message).toContain('Login successful');
   });
 

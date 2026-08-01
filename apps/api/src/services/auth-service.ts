@@ -33,6 +33,8 @@ export interface LoginResult {
   id: string;
   email: string;
   status: string;
+  token: string;
+  organisationId: string;
 }
 
 export interface VerifyEmailResult {
@@ -192,10 +194,14 @@ export class AuthService {
       userAgent: meta.userAgent,
     });
 
+    const sessionToken = generateToken();
+
     return {
       id: user.id,
       email: user.email,
       status: user.status,
+      token: sessionToken,
+      organisationId: org.id,
     };
   }
 

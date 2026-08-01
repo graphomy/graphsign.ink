@@ -48,13 +48,21 @@ export default function LoginPage() {
         body: JSON.stringify({ email: parsed.data.email, password: parsed.data.password }),
       });
 
+      const data = await res.json().catch(() => null);
+
       if (!res.ok) {
-        const data = await res.json().catch(() => null);
         setApiError(data?.error?.message ?? 'Invalid email or password.');
         return;
       }
 
+      if (data?.token) {
+        localStorage.setItem('graphsign_session_token', data.token);
+        localStorage.setItem('graphsign_user_email', data.email);
+        localStorage.setItem('graphsign_org_id', data.organisationId);
+      }
+
       setIsSuccess(true);
+      window.location.href = '/dashboard';
     } catch {
       setApiError('Unable to connect to the server. Please try again later.');
     } finally {
@@ -89,10 +97,11 @@ export default function LoginPage() {
           </p>
           <div className="pt-2">
             <Link
-              href="/"
+              href="/dashboard"
               className="inline-block rounded-lg bg-[#ba0000] px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-[#a00000] transition-colors"
+              data-testid="go-to-dashboard-button"
             >
-              Go to Homepage
+              Go to Dashboard
             </Link>
           </div>
         </div>
