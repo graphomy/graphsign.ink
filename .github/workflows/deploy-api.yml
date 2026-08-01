@@ -50,7 +50,7 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: apps/api
-          wranglerVersion: "3.80.0"
+          packageManager: pnpm
           command: deploy --name ${{ github.ref_name == 'main' && 'graphsign-api' || 'dev-graphsign-api' }}
           secrets: |
             DATABASE_URL
