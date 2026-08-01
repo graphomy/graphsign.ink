@@ -1,9 +1,20 @@
 import type { PrismaClient } from '@graphsign/db';
 import type { MailerService } from './mailer-service.js';
 import type { AuditService } from './audit-service.js';
-import type { RegisterRequest } from '../validators/auth-validators.js';
-import { generateId, hashPassword, generateToken, hashToken } from '../utils/crypto.js';
-import { ConflictError, NotFoundError, ValidationError } from '../utils/errors.js';
+import type { RegisterRequest, LoginRequest } from '../validators/auth-validators.js';
+import {
+  generateId,
+  hashPassword,
+  verifyPassword,
+  generateToken,
+  hashToken,
+} from '../utils/crypto.js';
+import {
+  ConflictError,
+  NotFoundError,
+  UnauthorizedError,
+  ValidationError,
+} from '../utils/errors.js';
 
 /** Verification tokens expire in 24 hours. */
 const VERIFICATION_TOKEN_EXPIRY_HOURS = 24;
@@ -15,6 +26,12 @@ export interface RegisterResult {
   createdAt: Date;
 }
 
+export interface LoginResult {
+  id: string;
+  email: string;
+  status: string;
+}
+
 export interface VerifyEmailResult {
   id: string;
   email: string;
@@ -22,7 +39,7 @@ export interface VerifyEmailResult {
 }
 
 /**
- * Authentication service — handles user registration and email verification.
+ * Authentication service — handles user registration, email verification, and login.
  *
  * Business rules live here, not in controllers (product.md).
  * Designed with a clean interface so Zitadel can replace the local
@@ -115,6 +132,67 @@ export class AuthService {
       email: user.email,
       status: user.status,
       createdAt: user.createdAt,
+    };
+  }
+
+  /**
+   * Authenticates a user with email and password.
+   *
+   * Flow:
+   * 1. Find user by email within default organisation
+   * 2. Verify password hash using scrypt
+   * 3. Check email verification / status (active)
+   * 4. Log audit event
+   */
+  async login(
+    data: LoginRequest,
+    meta: { ipAddress?: string; userAgent?: string } = {},
+  ): Promise<LoginResult> {
+    const org = await this.getOrCreateDefaultOrganisation();
+
+    const user = await this.prisma.user.findUnique({
+      where: {
+        organisationId_email: {
+          organisationId: org.id,
+          email: data.email,
+        },
+      },
+    });
+
+    if (!user || user.deletedAt !== null) {
+      // Vague error to prevent email enumeration
+      throw new UnauthorizedError('Invalid email or password.');
+    }
+
+    const isValidPassword = await verifyPassword(data.password, user.passwordHash);
+    if (!isValidPassword) {
+      throw new UnauthorizedError('Invalid email or password.');
+    }
+
+    if (!user.emailVerified || user.status === 'pending_verification') {
+      throw new UnauthorizedError('Please verify your email address before logging in.');
+    }
+
+    if (user.status !== 'active') {
+      throw new UnauthorizedError('Account is disabled or suspended.');
+    }
+
+    // Audit log — login event
+    await this.audit.log({
+      organisationId: org.id,
+      userId: user.id,
+      action: 'user.login',
+      resourceType: 'user',
+      resourceId: user.id,
+      metadata: { email: data.email },
+      ipAddress: meta.ipAddress,
+      userAgent: meta.userAgent,
+    });
+
+    return {
+      id: user.id,
+      email: user.email,
+      status: user.status,
     };
   }
 

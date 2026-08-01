@@ -9,6 +9,7 @@ vi.mock('../utils/crypto.js', () => ({
   hashPassword: vi.fn(
     async () => '$scrypt$32768$8$1$00000000000000000000000000000000$hashed_password',
   ),
+  verifyPassword: vi.fn(async (pass: string) => pass === 'Str0ng!Pass'),
   generateToken: vi.fn(() => 'raw-verification-token'),
   hashToken: vi.fn(async () => 'sha256-hashed-token'),
   sha256: vi.fn(async () => 'sha256-hash'),
@@ -191,6 +192,91 @@ describe('AuthService', () => {
       });
 
       expect(prisma.organisation.create).toHaveBeenCalled();
+    });
+  });
+
+  describe('login', () => {
+    it('should authenticate active user with valid password', async () => {
+      const user = {
+        id: '00000000-0000-7000-8000-000000000001',
+        email: 'user@example.com',
+        passwordHash: '$scrypt$32768$8$1$00000000000000000000000000000000$hashed_password',
+        emailVerified: true,
+        status: 'active',
+        organisationId: DEFAULT_ORG.id,
+        deletedAt: null,
+      };
+
+      (prisma.user.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue(user);
+
+      const result = await authService.login({
+        email: 'user@example.com',
+        password: 'Str0ng!Pass',
+      });
+
+      expect(result.id).toBe('00000000-0000-7000-8000-000000000001');
+      expect(result.email).toBe('user@example.com');
+      expect(result.status).toBe('active');
+
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'user.login',
+          userId: user.id,
+        }),
+      );
+    });
+
+    it('should throw UnauthorizedError when user does not exist', async () => {
+      (prisma.user.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+
+      await expect(
+        authService.login({
+          email: 'unknown@example.com',
+          password: 'Str0ng!Pass',
+        }),
+      ).rejects.toThrow('Invalid email or password.');
+    });
+
+    it('should throw UnauthorizedError on invalid password', async () => {
+      const user = {
+        id: '00000000-0000-7000-8000-000000000001',
+        email: 'user@example.com',
+        passwordHash: '$scrypt$hash',
+        emailVerified: true,
+        status: 'active',
+        organisationId: DEFAULT_ORG.id,
+        deletedAt: null,
+      };
+
+      (prisma.user.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue(user);
+
+      await expect(
+        authService.login({
+          email: 'user@example.com',
+          password: 'WrongPassword!',
+        }),
+      ).rejects.toThrow('Invalid email or password.');
+    });
+
+    it('should throw UnauthorizedError when email is not verified', async () => {
+      const user = {
+        id: '00000000-0000-7000-8000-000000000001',
+        email: 'user@example.com',
+        passwordHash: '$scrypt$hash',
+        emailVerified: false,
+        status: 'pending_verification',
+        organisationId: DEFAULT_ORG.id,
+        deletedAt: null,
+      };
+
+      (prisma.user.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue(user);
+
+      await expect(
+        authService.login({
+          email: 'user@example.com',
+          password: 'Str0ng!Pass',
+        }),
+      ).rejects.toThrow('Please verify your email address before logging in.');
     });
   });
 

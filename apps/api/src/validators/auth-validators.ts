@@ -42,6 +42,30 @@ export const registerResponseSchema = z.object({
 
 export type RegisterResponse = z.infer<typeof registerResponseSchema>;
 
+export const loginRequestSchema = z.object({
+  email: z
+    .string()
+    .transform((val) => val.toLowerCase().trim())
+    .pipe(
+      z
+        .string()
+        .email('Please enter a valid email address.')
+        .max(255, 'Email must be 255 characters or fewer.'),
+    ),
+  password: z.string().min(1, 'Password is required.'),
+});
+
+export type LoginRequest = z.infer<typeof loginRequestSchema>;
+
+export const loginResponseSchema = z.object({
+  id: z.string().uuid(),
+  email: z.string().email(),
+  status: z.string(),
+  message: z.string(),
+});
+
+export type LoginResponse = z.infer<typeof loginResponseSchema>;
+
 export const verifyEmailRequestSchema = z.object({
   token: z.string().min(1, 'Verification token is required.'),
 });

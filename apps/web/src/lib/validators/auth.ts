@@ -34,6 +34,17 @@ export const registerFormSchema = z
 
 export type RegisterFormData = z.infer<typeof registerFormSchema>;
 
+export const loginFormSchema = z.object({
+  email: z
+    .string()
+    .min(1, 'Email is required.')
+    .email('Please enter a valid email address.')
+    .max(255, 'Email must be 255 characters or fewer.'),
+  password: z.string().min(1, 'Password is required.'),
+});
+
+export type LoginFormData = z.infer<typeof loginFormSchema>;
+
 /**
  * Password strength checker — returns requirements with pass/fail status.
  */

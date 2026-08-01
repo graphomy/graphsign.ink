@@ -9,6 +9,7 @@ vi.mock('../utils/crypto.js', () => ({
   hashPassword: vi.fn(
     async () => '$scrypt$32768$8$1$00000000000000000000000000000000$hashed_password',
   ),
+  verifyPassword: vi.fn(async (pass: string) => pass === 'Str0ng!Pass'),
   generateToken: vi.fn(() => 'raw-verification-token'),
   hashToken: vi.fn(async () => 'sha256-hashed-token'),
   sha256: vi.fn(async () => 'sha256-hash'),
@@ -172,6 +173,73 @@ describe('POST /api/v1/auth/register', () => {
     expect(body.error.timestamp).toBeDefined();
     expect(body.error.requestId).toBeDefined();
     expect(body.error.path).toBeDefined();
+  });
+});
+
+describe('POST /api/v1/auth/login', () => {
+  let deps: ReturnType<typeof createMockDeps>;
+  let app: Hono;
+
+  beforeEach(() => {
+    deps = createMockDeps();
+    app = createApp(deps);
+  });
+
+  it('should return 200 on successful login', async () => {
+    deps.prisma.user.findUnique.mockResolvedValue({
+      id: '00000000-0000-7000-8000-000000000001',
+      email: 'user@example.com',
+      passwordHash: '$scrypt$hash',
+      emailVerified: true,
+      status: 'active',
+      organisationId: DEFAULT_ORG.id,
+      deletedAt: null,
+    });
+
+    const res = await app.request('/api/v1/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: 'user@example.com',
+        password: 'Str0ng!Pass',
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    expect(body.id).toBe('00000000-0000-7000-8000-000000000001');
+    expect(body.email).toBe('user@example.com');
+    expect(body.status).toBe('active');
+    expect(body.message).toContain('Login successful');
+  });
+
+  it('should return 401 on invalid credentials', async () => {
+    deps.prisma.user.findUnique.mockResolvedValue(null);
+
+    const res = await app.request('/api/v1/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: 'user@example.com',
+        password: 'WrongPassword!',
+      }),
+    });
+
+    expect(res.status).toBe(401);
+    const body = (await res.json()) as any;
+    expect(body.error.code).toBe('UNAUTHORIZED');
+  });
+
+  it('should return 400 for missing credentials', async () => {
+    const res = await app.request('/api/v1/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as any;
+    expect(body.error.code).toBe('VALIDATION_ERROR');
   });
 });
 
