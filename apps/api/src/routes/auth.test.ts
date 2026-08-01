@@ -300,3 +300,58 @@ describe('POST /api/v1/auth/verify-email', () => {
     expect(res.status).toBe(400);
   });
 });
+
+describe('POST /api/v1/auth/resend-verification', () => {
+  let deps: ReturnType<typeof createMockDeps>;
+  let app: Hono;
+
+  beforeEach(() => {
+    deps = createMockDeps();
+    app = createApp(deps);
+  });
+
+  it('should return 200 on successful resend request', async () => {
+    deps.prisma.user.findUnique.mockResolvedValue({
+      id: '00000000-0000-7000-8000-000000000001',
+      email: 'user@example.com',
+      organisationId: DEFAULT_ORG.id,
+      emailVerified: false,
+      status: 'pending_verification',
+      deletedAt: null,
+    });
+
+    const res = await app.request('/api/v1/auth/resend-verification', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'user@example.com' }),
+    });
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    expect(body.message).toContain('resent successfully');
+  });
+
+  it('should return 400 for invalid email format', async () => {
+    const res = await app.request('/api/v1/auth/resend-verification', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'invalid-email' }),
+    });
+
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as any;
+    expect(body.error.code).toBe('VALIDATION_ERROR');
+  });
+
+  it('should return 400 for missing request body', async () => {
+    const res = await app.request('/api/v1/auth/resend-verification', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as any;
+    expect(body.error.code).toBe('VALIDATION_ERROR');
+  });
+});
+

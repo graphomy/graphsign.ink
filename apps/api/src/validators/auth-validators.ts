@@ -71,3 +71,24 @@ export const verifyEmailRequestSchema = z.object({
 });
 
 export type VerifyEmailRequest = z.infer<typeof verifyEmailRequestSchema>;
+
+export const resendVerificationRequestSchema = z.object({
+  email: z
+    .string()
+    .transform((val) => val.toLowerCase().trim())
+    .pipe(
+      z
+        .string()
+        .email('Please enter a valid email address.')
+        .max(255, 'Email must be 255 characters or fewer.'),
+    ),
+});
+
+export type ResendVerificationRequest = z.infer<typeof resendVerificationRequestSchema>;
+
+export const resendVerificationResponseSchema = z.object({
+  message: z.string(),
+});
+
+export type ResendVerificationResponse = z.infer<typeof resendVerificationResponseSchema>;
+

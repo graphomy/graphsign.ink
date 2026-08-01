@@ -259,7 +259,80 @@ export class AuthService {
   }
 
   /**
+   * Resends a verification email to a user if their account is unverified.
+   *
+   * Flow:
+   * 1. Find user by email within default organisation
+   * 2. If user doesn't exist or is deleted, return gracefully (generic success to avoid email enumeration)
+   * 3. If email is already verified, throw ValidationError
+   * 4. Generate new raw token and token hash with fresh 24h expiration
+   * 5. Update user record
+   * 6. Dispatch verification email
+   * 7. Log audit event
+   */
+  async resendVerificationEmail(
+    email: string,
+    meta: { ipAddress?: string; userAgent?: string } = {},
+  ): Promise<{ message: string }> {
+    const org = await this.getOrCreateDefaultOrganisation();
+
+    const user = await this.prisma.user.findUnique({
+      where: {
+        organisationId_email: {
+          organisationId: org.id,
+          email,
+        },
+      },
+    });
+
+    if (!user || user.deletedAt !== null) {
+      // Return success without revealing account existence
+      return {
+        message: 'If an account exists with this email, a verification link has been sent.',
+      };
+    }
+
+    if (user.emailVerified) {
+      throw new ValidationError('Email is already verified.');
+    }
+
+    const rawToken = generateToken();
+    const tokenHash = await hashToken(rawToken);
+    const tokenExpiresAt = new Date(Date.now() + VERIFICATION_TOKEN_EXPIRY_HOURS * 60 * 60 * 1000);
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        emailVerificationTokenHash: tokenHash,
+        emailVerificationTokenExpiresAt: tokenExpiresAt,
+      },
+    });
+
+    try {
+      await this.mailer.sendVerificationEmail(user.email, rawToken);
+    } catch (err) {
+      console.error('Failed to resend verification email:', err);
+    }
+
+    await this.audit.log({
+      organisationId: org.id,
+      userId: user.id,
+      action: 'user.verification_resent',
+      resourceType: 'user',
+      resourceId: user.id,
+      metadata: { email: user.email },
+      ipAddress: meta.ipAddress,
+      userAgent: meta.userAgent,
+    });
+
+    return {
+      message: 'Verification email resent successfully.',
+    };
+  }
+
+  /**
    * Gets or creates the default organisation for MVP.
+
    * Multi-org support will be added in a separate story.
    */
   private async getOrCreateDefaultOrganisation() {

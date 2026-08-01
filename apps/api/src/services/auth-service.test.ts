@@ -359,4 +359,72 @@ describe('AuthService', () => {
       );
     });
   });
+
+  describe('resendVerificationEmail', () => {
+    it('should generate new token and resend verification email for unverified user', async () => {
+      const user = {
+        id: '00000000-0000-7000-8000-000000000001',
+        email: 'user@example.com',
+        organisationId: DEFAULT_ORG.id,
+        emailVerified: false,
+        status: 'pending_verification',
+        deletedAt: null,
+      };
+
+      (prisma.user.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue(user);
+      (prisma.user.update as ReturnType<typeof vi.fn>).mockResolvedValue({
+        ...user,
+        emailVerificationTokenHash: 'sha256-hashed-token',
+      });
+
+      const result = await authService.resendVerificationEmail('user@example.com');
+
+      expect(result.message).toBe('Verification email resent successfully.');
+      expect(prisma.user.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: user.id },
+          data: expect.objectContaining({
+            emailVerificationTokenHash: 'sha256-hashed-token',
+          }),
+        }),
+      );
+      expect(mailer.sendVerificationEmail).toHaveBeenCalledWith(
+        'user@example.com',
+        'raw-verification-token',
+      );
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'user.verification_resent',
+          resourceId: user.id,
+        }),
+      );
+    });
+
+    it('should throw ValidationError if user email is already verified', async () => {
+      const user = {
+        id: '00000000-0000-7000-8000-000000000001',
+        email: 'user@example.com',
+        organisationId: DEFAULT_ORG.id,
+        emailVerified: true,
+        status: 'active',
+        deletedAt: null,
+      };
+
+      (prisma.user.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue(user);
+
+      await expect(authService.resendVerificationEmail('user@example.com')).rejects.toThrow(
+        'Email is already verified.',
+      );
+    });
+
+    it('should return success message without failing if user is not found', async () => {
+      (prisma.user.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+
+      const result = await authService.resendVerificationEmail('nonexistent@example.com');
+
+      expect(result.message).toContain('If an account exists');
+      expect(mailer.sendVerificationEmail).not.toHaveBeenCalled();
+    });
+  });
 });
+

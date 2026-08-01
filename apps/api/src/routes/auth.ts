@@ -5,6 +5,7 @@ import {
   registerRequestSchema,
   loginRequestSchema,
   verifyEmailRequestSchema,
+  resendVerificationRequestSchema,
 } from '../validators/auth-validators.js';
 import { AuthService } from '../services/auth-service.js';
 import type { MailerService } from '../services/mailer-service.js';
@@ -165,5 +166,40 @@ export function createAuthRoutes(deps?: AuthDeps) {
     });
   });
 
+  /**
+   * POST /api/v1/auth/resend-verification
+   *
+   * Resends the email verification link to the given user email address.
+   */
+  auth.post('/resend-verification', async (c) => {
+    const body = await c.req.json().catch(() => null);
+
+    if (!body) {
+      throw new ValidationError('Request body is required.');
+    }
+
+    const parsed = resendVerificationRequestSchema.safeParse(body);
+
+    if (!parsed.success) {
+      const firstError = parsed.error.errors[0];
+      throw new ValidationError(firstError?.message ?? 'Invalid input.', {
+        field: firstError?.path.join('.') ?? 'unknown',
+        issue: firstError?.message ?? 'validation_failed',
+      });
+    }
+
+    const authService = getAuthService(c);
+
+    const result = await authService.resendVerificationEmail(parsed.data.email, {
+      ipAddress: c.req.header('x-forwarded-for')?.split(',')[0]?.trim(),
+      userAgent: c.req.header('user-agent'),
+    });
+
+    return c.json({
+      message: result.message,
+    });
+  });
+
   return auth;
 }
+
