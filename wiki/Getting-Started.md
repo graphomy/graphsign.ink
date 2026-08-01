@@ -53,7 +53,7 @@ NEXT_PUBLIC_API_URL="http://localhost:8787"
 
 # Mailer Configuration (Optional: Leave blank to print email links to console in dev)
 RESEND_API_KEY=""
-EMAIL_FROM="noreply@graphsign.ink"
+EMAIL_FROM="noreply@emaildomain.com"
 
 # Web App URL
 WEB_URL="http://localhost:3000"
