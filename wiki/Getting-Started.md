@@ -74,6 +74,7 @@ pnpm --filter @graphsign/db exec prisma db push
 ### 5. Running the Application Locally
 
 #### Option A: Run All Services Simultaneously
+
 To start both the API worker service and the Next.js web application together:
 
 ```bash
@@ -83,16 +84,18 @@ pnpm dev
 #### Option B: Run Services Individually
 
 - **API Worker Service (Hono on Cloudflare Worker)**:
+
   ```bash
   pnpm --filter @graphsign/api dev
   ```
-  *The API server will run at [http://localhost:8787](http://localhost:8787).*
+
+  _The API server will run at [http://localhost:8787](http://localhost:8787)._
 
 - **Web App (Next.js App Router)**:
   ```bash
   pnpm --filter @graphsign/web dev
   ```
-  *The Web frontend will run at [http://localhost:3000](http://localhost:3000).*
+  _The Web frontend will run at [http://localhost:3000](http://localhost:3000)._
 
 ---
 

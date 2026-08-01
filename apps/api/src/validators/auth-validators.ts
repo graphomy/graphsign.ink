@@ -91,4 +91,3 @@ export const resendVerificationResponseSchema = z.object({
 });
 
 export type ResendVerificationResponse = z.infer<typeof resendVerificationResponseSchema>;
-

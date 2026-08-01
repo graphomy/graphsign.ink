@@ -179,4 +179,3 @@ describe('resendVerificationRequestSchema', () => {
     expect(result.success).toBe(false);
   });
 });
-

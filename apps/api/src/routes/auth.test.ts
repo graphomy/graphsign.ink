@@ -354,4 +354,3 @@ describe('POST /api/v1/auth/resend-verification', () => {
     expect(body.error.code).toBe('VALIDATION_ERROR');
   });
 });
-
