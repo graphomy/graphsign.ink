@@ -52,6 +52,7 @@ function createMockDeps() {
     },
     mailer: {
       sendVerificationEmail: vi.fn(async () => {}),
+      sendPasswordResetEmail: vi.fn(async () => {}),
     },
     audit: {
       log: vi.fn(async () => {}),
@@ -210,6 +211,8 @@ describe('POST /api/v1/auth/login', () => {
     expect(body.id).toBe('00000000-0000-7000-8000-000000000001');
     expect(body.email).toBe('user@example.com');
     expect(body.status).toBe('active');
+    expect(body.token).toBeDefined();
+    expect(body.organisationId).toBe(DEFAULT_ORG.id);
     expect(body.message).toContain('Login successful');
   });
 
@@ -298,5 +301,150 @@ describe('POST /api/v1/auth/verify-email', () => {
     });
 
     expect(res.status).toBe(400);
+  });
+});
+
+describe('POST /api/v1/auth/resend-verification', () => {
+  let deps: ReturnType<typeof createMockDeps>;
+  let app: Hono;
+
+  beforeEach(() => {
+    deps = createMockDeps();
+    app = createApp(deps);
+  });
+
+  it('should return 200 on successful resend request', async () => {
+    deps.prisma.user.findUnique.mockResolvedValue({
+      id: '00000000-0000-7000-8000-000000000001',
+      email: 'user@example.com',
+      organisationId: DEFAULT_ORG.id,
+      emailVerified: false,
+      status: 'pending_verification',
+      deletedAt: null,
+    });
+
+    const res = await app.request('/api/v1/auth/resend-verification', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'user@example.com' }),
+    });
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    expect(body.message).toContain('resent successfully');
+  });
+
+  it('should return 400 for invalid email format', async () => {
+    const res = await app.request('/api/v1/auth/resend-verification', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'invalid-email' }),
+    });
+
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as any;
+    expect(body.error.code).toBe('VALIDATION_ERROR');
+  });
+
+  it('should return 400 for missing request body', async () => {
+    const res = await app.request('/api/v1/auth/resend-verification', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as any;
+    expect(body.error.code).toBe('VALIDATION_ERROR');
+  });
+});
+
+describe('POST /api/v1/auth/forgot-password', () => {
+  let deps: ReturnType<typeof createMockDeps>;
+  let app: Hono;
+
+  beforeEach(() => {
+    deps = createMockDeps();
+    app = createApp(deps);
+  });
+
+  it('should return 200 on successful forgot password request', async () => {
+    deps.prisma.user.findUnique.mockResolvedValue({
+      id: '00000000-0000-7000-8000-000000000001',
+      email: 'user@example.com',
+      organisationId: DEFAULT_ORG.id,
+      status: 'active',
+      deletedAt: null,
+    });
+
+    const res = await app.request('/api/v1/auth/forgot-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'user@example.com' }),
+    });
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    expect(body.message).toContain('sent successfully');
+  });
+
+  it('should return 400 for invalid email format', async () => {
+    const res = await app.request('/api/v1/auth/forgot-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'invalid-email' }),
+    });
+
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as any;
+    expect(body.error.code).toBe('VALIDATION_ERROR');
+  });
+});
+
+describe('POST /api/v1/auth/reset-password', () => {
+  let deps: ReturnType<typeof createMockDeps>;
+  let app: Hono;
+
+  beforeEach(() => {
+    deps = createMockDeps();
+    app = createApp(deps);
+  });
+
+  it('should return 200 on successful password reset', async () => {
+    deps.prisma.user.findFirst.mockResolvedValue({
+      id: '00000000-0000-7000-8000-000000000001',
+      email: 'user@example.com',
+      organisationId: DEFAULT_ORG.id,
+      passwordResetTokenHash: 'sha256-hashed-token',
+      passwordResetTokenExpiresAt: new Date(Date.now() + 3600000),
+      deletedAt: null,
+    });
+
+    const res = await app.request('/api/v1/auth/reset-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        token: 'raw-verification-token',
+        password: 'NewStr0ng!Pass',
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    expect(body.message).toContain('Password updated successfully');
+  });
+
+  it('should return 400 for missing token or weak password', async () => {
+    const res = await app.request('/api/v1/auth/reset-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        token: '',
+        password: 'weak',
+      }),
+    });
+
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as any;
+    expect(body.error.code).toBe('VALIDATION_ERROR');
   });
 });

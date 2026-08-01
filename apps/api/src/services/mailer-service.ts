@@ -7,6 +7,7 @@ import { Resend } from 'resend';
  */
 export interface MailerService {
   sendVerificationEmail(to: string, token: string): Promise<void>;
+  sendPasswordResetEmail(to: string, token: string): Promise<void>;
 }
 
 /**
@@ -57,6 +58,37 @@ export class ResendMailerService implements MailerService {
       `,
     });
   }
+
+  async sendPasswordResetEmail(to: string, token: string): Promise<void> {
+    const resetUrl = `${this.webUrl}/reset-password?token=${encodeURIComponent(token)}`;
+
+    await this.resend.emails.send({
+      from: this.from,
+      to,
+      subject: 'Reset your graphsign.ink password',
+      html: `
+        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+          <h1 style="color: #111; font-size: 24px;">Password Reset Request</h1>
+          <p style="color: #333; font-size: 16px; line-height: 1.5;">
+            We received a request to reset your graphsign.ink account password. Click the button below to choose a new password.
+          </p>
+          <a href="${resetUrl}"
+             style="display: inline-block; background: #ba0000; color: white;
+                    padding: 12px 24px; text-decoration: none; border-radius: 6px;
+                    font-size: 16px; margin: 16px 0;">
+            Reset Password
+          </a>
+          <p style="color: #666; font-size: 14px;">
+            This reset link is valid for 1 hour. If you didn't request a password reset, you can safely ignore this email.
+          </p>
+          <p style="color: #999; font-size: 12px;">
+            If the button doesn't work, copy and paste this URL into your browser:<br/>
+            <a href="${resetUrl}" style="color: #ba0000;">${resetUrl}</a>
+          </p>
+        </div>
+      `,
+    });
+  }
 }
 
 /**
@@ -70,6 +102,12 @@ export class ConsoleMailerService implements MailerService {
     const verifyUrl = `${this.webUrl}/verify-email?token=${encodeURIComponent(token)}`;
     console.log(`[MAILER] Verification email for ${to}:`);
     console.log(`[MAILER] Verify URL: ${verifyUrl}`);
+  }
+
+  async sendPasswordResetEmail(to: string, token: string): Promise<void> {
+    const resetUrl = `${this.webUrl}/reset-password?token=${encodeURIComponent(token)}`;
+    console.log(`[MAILER] Password reset email for ${to}:`);
+    console.log(`[MAILER] Reset URL: ${resetUrl}`);
   }
 }
 

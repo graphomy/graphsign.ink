@@ -5,6 +5,9 @@ import {
   registerRequestSchema,
   loginRequestSchema,
   verifyEmailRequestSchema,
+  resendVerificationRequestSchema,
+  forgotPasswordRequestSchema,
+  resetPasswordRequestSchema,
 } from '../validators/auth-validators.js';
 import { AuthService } from '../services/auth-service.js';
 import type { MailerService } from '../services/mailer-service.js';
@@ -120,10 +123,17 @@ export function createAuthRoutes(deps?: AuthDeps) {
       userAgent: c.req.header('user-agent'),
     });
 
+    c.header(
+      'Set-Cookie',
+      `graphsign_session=${result.token}; HttpOnly; Path=/; SameSite=Strict; Secure`,
+    );
+
     return c.json({
       id: result.id,
       email: result.email,
       status: result.status,
+      token: result.token,
+      organisationId: result.organisationId,
       message: 'Login successful.',
     });
   });
@@ -162,6 +172,108 @@ export function createAuthRoutes(deps?: AuthDeps) {
       email: result.email,
       status: result.status,
       message: 'Email verified successfully. You can now sign in.',
+    });
+  });
+
+  /**
+   * POST /api/v1/auth/resend-verification
+   *
+   * Resends the email verification link to the given user email address.
+   */
+  auth.post('/resend-verification', async (c) => {
+    const body = await c.req.json().catch(() => null);
+
+    if (!body) {
+      throw new ValidationError('Request body is required.');
+    }
+
+    const parsed = resendVerificationRequestSchema.safeParse(body);
+
+    if (!parsed.success) {
+      const firstError = parsed.error.errors[0];
+      throw new ValidationError(firstError?.message ?? 'Invalid input.', {
+        field: firstError?.path.join('.') ?? 'unknown',
+        issue: firstError?.message ?? 'validation_failed',
+      });
+    }
+
+    const authService = getAuthService(c);
+
+    const result = await authService.resendVerificationEmail(parsed.data.email, {
+      ipAddress: c.req.header('x-forwarded-for')?.split(',')[0]?.trim(),
+      userAgent: c.req.header('user-agent'),
+    });
+
+    return c.json({
+      message: result.message,
+    });
+  });
+
+  /**
+   * POST /api/v1/auth/forgot-password
+   *
+   * Requests a password reset link email.
+   */
+  auth.post('/forgot-password', async (c) => {
+    const body = await c.req.json().catch(() => null);
+
+    if (!body) {
+      throw new ValidationError('Request body is required.');
+    }
+
+    const parsed = forgotPasswordRequestSchema.safeParse(body);
+
+    if (!parsed.success) {
+      const firstError = parsed.error.errors[0];
+      throw new ValidationError(firstError?.message ?? 'Invalid input.', {
+        field: firstError?.path.join('.') ?? 'unknown',
+        issue: firstError?.message ?? 'validation_failed',
+      });
+    }
+
+    const authService = getAuthService(c);
+
+    const result = await authService.requestPasswordReset(parsed.data.email, {
+      ipAddress: c.req.header('x-forwarded-for')?.split(',')[0]?.trim(),
+      userAgent: c.req.header('user-agent'),
+    });
+
+    return c.json({
+      message: result.message,
+    });
+  });
+
+  /**
+   * POST /api/v1/auth/reset-password
+   *
+   * Resets a user's password using the token from the reset email.
+   */
+  auth.post('/reset-password', async (c) => {
+    const body = await c.req.json().catch(() => null);
+
+    if (!body) {
+      throw new ValidationError('Request body is required.');
+    }
+
+    const parsed = resetPasswordRequestSchema.safeParse(body);
+
+    if (!parsed.success) {
+      const firstError = parsed.error.errors[0];
+      throw new ValidationError(firstError?.message ?? 'Invalid input.', {
+        field: firstError?.path.join('.') ?? 'unknown',
+        issue: firstError?.message ?? 'validation_failed',
+      });
+    }
+
+    const authService = getAuthService(c);
+
+    const result = await authService.resetPassword(parsed.data.token, parsed.data.password, {
+      ipAddress: c.req.header('x-forwarded-for')?.split(',')[0]?.trim(),
+      userAgent: c.req.header('user-agent'),
+    });
+
+    return c.json({
+      message: result.message,
     });
   });
 

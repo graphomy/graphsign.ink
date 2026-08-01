@@ -19,6 +19,9 @@ import {
 /** Verification tokens expire in 24 hours. */
 const VERIFICATION_TOKEN_EXPIRY_HOURS = 24;
 
+/** Password reset tokens expire in 1 hour. */
+const PASSWORD_RESET_TOKEN_EXPIRY_HOURS = 1;
+
 export interface RegisterResult {
   id: string;
   email: string;
@@ -30,6 +33,8 @@ export interface LoginResult {
   id: string;
   email: string;
   status: string;
+  token: string;
+  organisationId: string;
 }
 
 export interface VerifyEmailResult {
@@ -189,10 +194,14 @@ export class AuthService {
       userAgent: meta.userAgent,
     });
 
+    const sessionToken = generateToken();
+
     return {
       id: user.id,
       email: user.email,
       status: user.status,
+      token: sessionToken,
+      organisationId: org.id,
     };
   }
 
@@ -259,7 +268,208 @@ export class AuthService {
   }
 
   /**
+   * Resends a verification email to a user if their account is unverified.
+   *
+   * Flow:
+   * 1. Find user by email within default organisation
+   * 2. If user doesn't exist or is deleted, return gracefully (generic success to avoid email enumeration)
+   * 3. If email is already verified, throw ValidationError
+   * 4. Generate new raw token and token hash with fresh 24h expiration
+   * 5. Update user record
+   * 6. Dispatch verification email
+   * 7. Log audit event
+   */
+  async resendVerificationEmail(
+    email: string,
+    meta: { ipAddress?: string; userAgent?: string } = {},
+  ): Promise<{ message: string }> {
+    const org = await this.getOrCreateDefaultOrganisation();
+
+    const user = await this.prisma.user.findUnique({
+      where: {
+        organisationId_email: {
+          organisationId: org.id,
+          email,
+        },
+      },
+    });
+
+    if (!user || user.deletedAt !== null) {
+      // Return success without revealing account existence
+      return {
+        message: 'If an account exists with this email, a verification link has been sent.',
+      };
+    }
+
+    if (user.emailVerified) {
+      throw new ValidationError('Email is already verified.');
+    }
+
+    const rawToken = generateToken();
+    const tokenHash = await hashToken(rawToken);
+    const tokenExpiresAt = new Date(Date.now() + VERIFICATION_TOKEN_EXPIRY_HOURS * 60 * 60 * 1000);
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        emailVerificationTokenHash: tokenHash,
+        emailVerificationTokenExpiresAt: tokenExpiresAt,
+      },
+    });
+
+    try {
+      await this.mailer.sendVerificationEmail(user.email, rawToken);
+    } catch (err) {
+      console.error('Failed to resend verification email:', err);
+    }
+
+    await this.audit.log({
+      organisationId: org.id,
+      userId: user.id,
+      action: 'user.verification_resent',
+      resourceType: 'user',
+      resourceId: user.id,
+      metadata: { email: user.email },
+      ipAddress: meta.ipAddress,
+      userAgent: meta.userAgent,
+    });
+
+    return {
+      message: 'Verification email resent successfully.',
+    };
+  }
+
+  /**
+   * Initiates a password reset request for a registered user.
+   *
+   * Flow:
+   * 1. Find user by email within default organisation
+   * 2. If user doesn't exist or is deleted, return gracefully (prevents email enumeration)
+   * 3. Generate raw reset token and token hash with 1-hour expiration
+   * 4. Update user record with token hash & expiration
+   * 5. Dispatch password reset email via mailer service
+   * 6. Log audit event
+   */
+  async requestPasswordReset(
+    email: string,
+    meta: { ipAddress?: string; userAgent?: string } = {},
+  ): Promise<{ message: string }> {
+    const org = await this.getOrCreateDefaultOrganisation();
+
+    const user = await this.prisma.user.findUnique({
+      where: {
+        organisationId_email: {
+          organisationId: org.id,
+          email,
+        },
+      },
+    });
+
+    if (!user || user.deletedAt !== null) {
+      // Intentionally vague to prevent user enumeration
+      return {
+        message: 'If an account exists with this email, a password reset link has been sent.',
+      };
+    }
+
+    const rawToken = generateToken();
+    const tokenHash = await hashToken(rawToken);
+    const tokenExpiresAt = new Date(
+      Date.now() + PASSWORD_RESET_TOKEN_EXPIRY_HOURS * 60 * 60 * 1000,
+    );
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        passwordResetTokenHash: tokenHash,
+        passwordResetTokenExpiresAt: tokenExpiresAt,
+      },
+    });
+
+    try {
+      await this.mailer.sendPasswordResetEmail(user.email, rawToken);
+    } catch (err) {
+      console.error('Failed to send password reset email:', err);
+    }
+
+    await this.audit.log({
+      organisationId: org.id,
+      userId: user.id,
+      action: 'user.password_reset_requested',
+      resourceType: 'user',
+      resourceId: user.id,
+      metadata: { email: user.email },
+      ipAddress: meta.ipAddress,
+      userAgent: meta.userAgent,
+    });
+
+    return {
+      message: 'Password reset link sent successfully. Please check your email.',
+    };
+  }
+
+  /**
+   * Resets a user's password using a valid reset token.
+   *
+   * Flow:
+   * 1. Hash provided raw token
+   * 2. Find user with matching token hash
+   * 3. Verify token hasn't expired and user isn't deleted
+   * 4. Hash new password
+   * 5. Update user passwordHash, clear reset token fields
+   * 6. Log audit event
+   */
+  async resetPassword(
+    token: string,
+    newPassword: string,
+    meta: { ipAddress?: string; userAgent?: string } = {},
+  ): Promise<{ message: string }> {
+    const tokenHash = await hashToken(token);
+
+    const user = await this.prisma.user.findFirst({
+      where: {
+        passwordResetTokenHash: tokenHash,
+        deletedAt: null,
+      },
+    });
+
+    if (!user) {
+      throw new NotFoundError('Invalid or expired password reset token.');
+    }
+
+    if (user.passwordResetTokenExpiresAt && user.passwordResetTokenExpiresAt < new Date()) {
+      throw new ValidationError('Password reset token has expired. Please request a new one.');
+    }
+
+    const newHashedPassword = await hashPassword(newPassword);
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        passwordHash: newHashedPassword,
+        passwordResetTokenHash: null,
+        passwordResetTokenExpiresAt: null,
+      },
+    });
+
+    await this.audit.log({
+      organisationId: user.organisationId,
+      userId: user.id,
+      action: 'user.password_reset_completed',
+      resourceType: 'user',
+      resourceId: user.id,
+      ipAddress: meta.ipAddress,
+      userAgent: meta.userAgent,
+    });
+
+    return {
+      message: 'Password updated successfully. You can now sign in with your new password.',
+    };
+  }
+
+  /**
    * Gets or creates the default organisation for MVP.
+
    * Multi-org support will be added in a separate story.
    */
   private async getOrCreateDefaultOrganisation() {

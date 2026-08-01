@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { registerRequestSchema, verifyEmailRequestSchema } from './auth-validators.js';
+import {
+  registerRequestSchema,
+  verifyEmailRequestSchema,
+  resendVerificationRequestSchema,
+  forgotPasswordRequestSchema,
+  resetPasswordRequestSchema,
+} from './auth-validators.js';
 
 describe('registerRequestSchema', () => {
   it('should accept a valid email and strong password', () => {
@@ -148,6 +154,75 @@ describe('verifyEmailRequestSchema', () => {
 
   it('should reject missing token field', () => {
     const result = verifyEmailRequestSchema.safeParse({});
+    expect(result.success).toBe(false);
+  });
+});
+
+describe('resendVerificationRequestSchema', () => {
+  it('should accept a valid email and normalize it', () => {
+    const result = resendVerificationRequestSchema.safeParse({
+      email: '  User@Example.COM  ',
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.email).toBe('user@example.com');
+    }
+  });
+
+  it('should reject an invalid email format', () => {
+    const result = resendVerificationRequestSchema.safeParse({
+      email: 'not-an-email',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('should reject missing email field', () => {
+    const result = resendVerificationRequestSchema.safeParse({});
+    expect(result.success).toBe(false);
+  });
+});
+
+describe('forgotPasswordRequestSchema', () => {
+  it('should accept valid email and normalize it', () => {
+    const result = forgotPasswordRequestSchema.safeParse({
+      email: '  User@Example.COM  ',
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.email).toBe('user@example.com');
+    }
+  });
+
+  it('should reject invalid email format', () => {
+    const result = forgotPasswordRequestSchema.safeParse({
+      email: 'not-an-email',
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+describe('resetPasswordRequestSchema', () => {
+  it('should accept valid token and strong password', () => {
+    const result = resetPasswordRequestSchema.safeParse({
+      token: 'reset-token-123',
+      password: 'NewStr0ng!Pass',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('should reject empty token', () => {
+    const result = resetPasswordRequestSchema.safeParse({
+      token: '',
+      password: 'NewStr0ng!Pass',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('should reject weak password', () => {
+    const result = resetPasswordRequestSchema.safeParse({
+      token: 'reset-token-123',
+      password: 'weak',
+    });
     expect(result.success).toBe(false);
   });
 });
