@@ -1,7 +1,11 @@
 import { Hono } from 'hono';
 import type { PrismaClient } from '@graphsign/db';
 import { createPrismaClient, prisma as legacyPrisma } from '@graphsign/db';
-import { registerRequestSchema, verifyEmailRequestSchema } from '../validators/auth-validators.js';
+import {
+  registerRequestSchema,
+  loginRequestSchema,
+  verifyEmailRequestSchema,
+} from '../validators/auth-validators.js';
 import { AuthService } from '../services/auth-service.js';
 import type { MailerService } from '../services/mailer-service.js';
 import { createMailerService } from '../services/mailer-service.js';
@@ -85,6 +89,43 @@ export function createAuthRoutes(deps?: AuthDeps) {
       },
       201,
     );
+  });
+
+  /**
+   * POST /api/v1/auth/login
+   *
+   * Authenticates user credentials and returns session status.
+   */
+  auth.post('/login', async (c) => {
+    const body = await c.req.json().catch(() => null);
+
+    if (!body) {
+      throw new ValidationError('Request body is required.');
+    }
+
+    const parsed = loginRequestSchema.safeParse(body);
+
+    if (!parsed.success) {
+      const firstError = parsed.error.errors[0];
+      throw new ValidationError(firstError?.message ?? 'Invalid input.', {
+        field: firstError?.path.join('.') ?? 'unknown',
+        issue: firstError?.message ?? 'validation_failed',
+      });
+    }
+
+    const authService = getAuthService(c);
+
+    const result = await authService.login(parsed.data, {
+      ipAddress: c.req.header('x-forwarded-for')?.split(',')[0]?.trim(),
+      userAgent: c.req.header('user-agent'),
+    });
+
+    return c.json({
+      id: result.id,
+      email: result.email,
+      status: result.status,
+      message: 'Login successful.',
+    });
   });
 
   /**

@@ -1,0 +1,241 @@
+'use client';
+
+import { useState, type FormEvent } from 'react';
+import Link from 'next/link';
+import { loginFormSchema } from '@/lib/validators/auth';
+
+/**
+ * Login page — authenticates existing user accounts.
+ *
+ * Acceptance criteria (INK-215 / GS-215):
+ * - Valid email + password → signed in
+ * - Invalid email or password → clear error displayed
+ * - Unverified email → prompt to verify email
+ */
+export default function LoginPage() {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [apiError, setApiError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSuccess, setIsSuccess] = useState(false);
+
+  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setErrors({});
+    setApiError('');
+
+    // Client-side validation
+    const parsed = loginFormSchema.safeParse({ email, password });
+    if (!parsed.success) {
+      const fieldErrors: Record<string, string> = {};
+      for (const err of parsed.error.errors) {
+        const field = err.path[0];
+        if (field && typeof field === 'string' && !fieldErrors[field]) {
+          fieldErrors[field] = err.message;
+        }
+      }
+      setErrors(fieldErrors);
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8787';
+      const res = await fetch(`${apiUrl}/api/v1/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: parsed.data.email, password: parsed.data.password }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        setApiError(data?.error?.message ?? 'Invalid email or password.');
+        return;
+      }
+
+      setIsSuccess(true);
+    } catch {
+      setApiError('Unable to connect to the server. Please try again later.');
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  if (isSuccess) {
+    return (
+      <div
+        className="rounded-xl border border-neutral-200 bg-white p-8 shadow-sm"
+        role="alert"
+        aria-live="polite"
+        data-testid="login-success"
+      >
+        <div className="text-center space-y-4">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-green-100">
+            <svg
+              className="h-6 w-6 text-green-600"
+              fill="none"
+              viewBox="0 0 24 24"
+              strokeWidth={2}
+              stroke="currentColor"
+              aria-hidden="true"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+            </svg>
+          </div>
+          <h2 className="text-xl font-semibold text-neutral-900">Signed in successfully</h2>
+          <p className="text-neutral-600">
+            Welcome back, <strong className="text-neutral-900">{email}</strong>.
+          </p>
+          <div className="pt-2">
+            <Link
+              href="/"
+              className="inline-block rounded-lg bg-[#ba0000] px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-[#a00000] transition-colors"
+            >
+              Go to Homepage
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-center text-2xl font-semibold text-neutral-900">Welcome back</h2>
+        <p className="mt-2 text-center text-sm text-neutral-600">
+          Sign in to your graphsign.ink account.
+        </p>
+      </div>
+
+      <form
+        onSubmit={handleSubmit}
+        className="rounded-xl border border-neutral-200 bg-white p-8 shadow-sm space-y-5"
+        noValidate
+        data-testid="login-form"
+      >
+        {/* API error */}
+        {apiError && (
+          <div
+            className="rounded-lg bg-red-50 border border-red-200 p-4 text-sm text-red-700"
+            role="alert"
+            aria-live="assertive"
+            data-testid="api-error"
+          >
+            {apiError}
+          </div>
+        )}
+
+        {/* Email */}
+        <div>
+          <label htmlFor="email" className="block text-sm font-medium text-neutral-700">
+            Email address
+          </label>
+          <input
+            id="email"
+            name="email"
+            type="email"
+            autoComplete="email"
+            required
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className={`mt-1.5 block w-full rounded-lg border px-3.5 py-2.5 text-sm shadow-sm
+              placeholder:text-neutral-400
+              focus:outline-none focus:ring-2 focus:ring-[#ba0000]/20 focus:border-[#ba0000]
+              ${errors.email ? 'border-red-500' : 'border-neutral-300'}`}
+            placeholder="you@company.com"
+            aria-invalid={!!errors.email}
+            aria-describedby={errors.email ? 'email-error' : undefined}
+            data-testid="email-input"
+          />
+          {errors.email && (
+            <p id="email-error" className="mt-1.5 text-sm text-red-600" role="alert">
+              {errors.email}
+            </p>
+          )}
+        </div>
+
+        {/* Password */}
+        <div>
+          <div className="flex items-center justify-between">
+            <label htmlFor="password" className="block text-sm font-medium text-neutral-700">
+              Password
+            </label>
+          </div>
+          <input
+            id="password"
+            name="password"
+            type="password"
+            autoComplete="current-password"
+            required
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className={`mt-1.5 block w-full rounded-lg border px-3.5 py-2.5 text-sm shadow-sm
+              placeholder:text-neutral-400
+              focus:outline-none focus:ring-2 focus:ring-[#ba0000]/20 focus:border-[#ba0000]
+              ${errors.password ? 'border-red-500' : 'border-neutral-300'}`}
+            placeholder="••••••••"
+            aria-invalid={!!errors.password}
+            aria-describedby={errors.password ? 'password-error' : undefined}
+            data-testid="password-input"
+          />
+          {errors.password && (
+            <p id="password-error" className="mt-1.5 text-sm text-red-600" role="alert">
+              {errors.password}
+            </p>
+          )}
+        </div>
+
+        {/* Submit */}
+        <button
+          type="submit"
+          disabled={isLoading}
+          className="w-full rounded-lg bg-[#ba0000] px-4 py-2.5 text-sm font-semibold text-white
+            shadow-sm hover:bg-[#a00000] focus:outline-none focus:ring-2 focus:ring-[#ba0000]
+            focus:ring-offset-2 disabled:opacity-60 disabled:cursor-not-allowed
+            transition-colors duration-150"
+          data-testid="login-button"
+        >
+          {isLoading ? (
+            <span className="flex items-center justify-center gap-2">
+              <svg
+                className="h-4 w-4 animate-spin"
+                viewBox="0 0 24 24"
+                fill="none"
+                aria-hidden="true"
+              >
+                <circle
+                  className="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  strokeWidth="4"
+                />
+                <path
+                  className="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                />
+              </svg>
+              Signing in...
+            </span>
+          ) : (
+            'Sign in'
+          )}
+        </button>
+      </form>
+
+      <p className="text-center text-sm text-neutral-600">
+        Don&apos;t have an account?{' '}
+        <Link
+          href="/register"
+          className="font-medium text-[#ba0000] hover:text-[#a00000] transition-colors"
+        >
+          Create an account
+        </Link>
+      </p>
+    </div>
+  );
+}
