@@ -4,10 +4,10 @@ on:
   push:
     branches: [develop, main]
     paths:
-      - "apps/web/**"
-      - "packages/**"
-      - "pnpm-lock.yaml"
-      - ".github/workflows/deploy-web.yml"
+      - 'apps/web/**'
+      - 'packages/**'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/deploy-web.yml'
 
 concurrency:
   group: deploy-web-${{ github.ref_name }}

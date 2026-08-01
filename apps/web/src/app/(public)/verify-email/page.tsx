@@ -23,7 +23,9 @@ function VerifyEmailContent() {
 
   // Resend state
   const [resendEmail, setResendEmail] = useState('');
-  const [resendStatus, setResendStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+  const [resendStatus, setResendStatus] = useState<'idle' | 'loading' | 'success' | 'error'>(
+    'idle',
+  );
   const [resendMessage, setResendMessage] = useState('');
 
   useEffect(() => {
@@ -46,7 +48,8 @@ function VerifyEmailContent() {
         } else {
           const data = await res.json().catch(() => null);
           setErrorMessage(
-            data?.error?.message ?? 'Invalid or expired verification link. Please request a new one.',
+            data?.error?.message ??
+              'Invalid or expired verification link. Please request a new one.',
           );
           setStatus('error');
         }
@@ -153,7 +156,8 @@ function VerifyEmailContent() {
             </div>
             <h3 className="text-xl font-semibold text-neutral-900">Email Verified!</h3>
             <p className="text-sm text-neutral-600">
-              Your email address has been successfully verified. You now have full access to graphsign.ink.
+              Your email address has been successfully verified. You now have full access to
+              graphsign.ink.
             </p>
             <div className="pt-2">
               <Link
@@ -225,7 +229,10 @@ function VerifyEmailContent() {
 
               <form onSubmit={handleResendSubmit} className="space-y-4" data-testid="resend-form">
                 <div>
-                  <label htmlFor="resend-email" className="block text-sm font-medium text-neutral-700">
+                  <label
+                    htmlFor="resend-email"
+                    className="block text-sm font-medium text-neutral-700"
+                  >
                     Email address
                   </label>
                   <input

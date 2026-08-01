@@ -1,3 +1,4 @@
+import { describe, it, expect } from 'vitest';
 import {
   registerRequestSchema,
   verifyEmailRequestSchema,
@@ -178,4 +179,3 @@ describe('resendVerificationRequestSchema', () => {
     expect(result.success).toBe(false);
   });
 });
-
