@@ -229,7 +229,7 @@ describe('AuthService', () => {
       );
     });
 
-    it('should throw UnauthorizedError when user does not exist', async () => {
+    it('should throw UnauthorizedError and log user.login_failed when user does not exist', async () => {
       (prisma.user.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue(null);
 
       await expect(
@@ -238,6 +238,13 @@ describe('AuthService', () => {
           password: 'Str0ng!Pass',
         }),
       ).rejects.toThrow('Invalid email or password.');
+
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'user.login_failed',
+          metadata: expect.objectContaining({ reason: 'user_not_found' }),
+        }),
+      );
     });
 
     it('should throw UnauthorizedError on invalid password', async () => {
@@ -563,6 +570,42 @@ describe('AuthService', () => {
       const result = await authService.logout();
 
       expect(result.message).toBe('Signed out successfully.');
+    });
+  });
+
+  describe('mfa toggle', () => {
+    it('should log user.mfa_enabled with IP address and user agent', async () => {
+      const result = await authService.enableMfa('00000000-0000-7000-8000-000000000001', {
+        ipAddress: '192.168.1.1',
+        userAgent: 'Mozilla/5.0',
+      });
+
+      expect(result.message).toBe('MFA enabled successfully.');
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'user.mfa_enabled',
+          userId: '00000000-0000-7000-8000-000000000001',
+          ipAddress: '192.168.1.1',
+          userAgent: 'Mozilla/5.0',
+        }),
+      );
+    });
+
+    it('should log user.mfa_disabled with IP address and user agent', async () => {
+      const result = await authService.disableMfa('00000000-0000-7000-8000-000000000001', {
+        ipAddress: '192.168.1.1',
+        userAgent: 'Mozilla/5.0',
+      });
+
+      expect(result.message).toBe('MFA disabled successfully.');
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'user.mfa_disabled',
+          userId: '00000000-0000-7000-8000-000000000001',
+          ipAddress: '192.168.1.1',
+          userAgent: 'Mozilla/5.0',
+        }),
+      );
     });
   });
 });
