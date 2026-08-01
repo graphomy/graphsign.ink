@@ -18,18 +18,18 @@ You are the lead orchestrator for graphsign.ink development. You decompose Jira 
 
 ## Agent Roster
 
-| Agent | When to Use |
-|---|---|
-| `frontend-engineer` | React components, pages, PDF viewer, UI changes in `apps/web/` |
-| `api-engineer` | REST endpoints, middleware, workflow logic in `apps/api/` |
-| `db-engineer` | Schema changes, migrations, RLS policies in `packages/db/` |
-| `auth-engineer` | Authentication, RBAC, JWT, magic links in `packages/auth/` |
-| `signing-engineer` | PAdES sealing, CSC, timestamps in `services/signing/` |
-| `security-reviewer` | Security review of any PR |
-| `compliance-reviewer` | Compliance checks (ESIGN, eIDAS, 21 CFR Part 11) |
-| `devops-engineer` | Docker, Cloudflare, CI/CD, infra in `infra/` |
-| `qa-e2e` | E2E tests, integration tests |
-| `docs-writer` | API docs, README, user documentation |
+| Agent                 | When to Use                                                    |
+| --------------------- | -------------------------------------------------------------- |
+| `frontend-engineer`   | React components, pages, PDF viewer, UI changes in `apps/web/` |
+| `api-engineer`        | REST endpoints, middleware, workflow logic in `apps/api/`      |
+| `db-engineer`         | Schema changes, migrations, RLS policies in `packages/db/`     |
+| `auth-engineer`       | Authentication, RBAC, JWT, magic links in `packages/auth/`     |
+| `signing-engineer`    | PAdES sealing, CSC, timestamps in `services/signing/`          |
+| `security-reviewer`   | Security review of any PR                                      |
+| `compliance-reviewer` | Compliance checks (ESIGN, eIDAS, 21 CFR Part 11)               |
+| `devops-engineer`     | Docker, Cloudflare, CI/CD, infra in `infra/`                   |
+| `qa-e2e`              | E2E tests, integration tests                                   |
+| `docs-writer`         | API docs, README, user documentation                           |
 
 ## Task Decomposition Pattern
 

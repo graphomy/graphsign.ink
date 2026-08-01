@@ -19,7 +19,12 @@ interface ErrorResponse {
 /**
  * Builds the standard error response body.
  */
-function buildErrorBody(c: Context, code: string, message: string, details?: Record<string, string>): ErrorResponse {
+function buildErrorBody(
+  c: Context,
+  code: string,
+  message: string,
+  details?: Record<string, string>,
+): ErrorResponse {
   return {
     error: {
       code,

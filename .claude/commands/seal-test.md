@@ -15,6 +15,7 @@ Run signing service integration tests.
 3. Run integration tests that verify:
 
 ### Seal Flow
+
 - [ ] PDF is flattened with field values
 - [ ] Document hash is computed correctly
 - [ ] Signature is applied via CSC signHash
@@ -24,12 +25,14 @@ Run signing service integration tests.
 - [ ] Final PDF is valid PAdES B-LTA
 
 ### Verification
+
 - [ ] Sealed PDF opens in Adobe Reader without errors
 - [ ] Signature validity shows correct signer
 - [ ] Timestamp is present and valid
 - [ ] Document modification after seal is detectable
 
 ### Error Handling
+
 - [ ] Missing certificate returns meaningful error
 - [ ] TSA timeout is handled with retry
 - [ ] Invalid PDF input is rejected gracefully

@@ -20,24 +20,24 @@ graphsign.ink enforces a 70 / 20 / 10 testing pyramid:
 /------------\   - Pure functions, state machines, Zod validation, PDF parsing
 ```
 
-| Test Level | Scope | Framework | Execution Context | Target Speed |
-|---|---|---|---|---|
-| **Unit** | Pure functions, domain logic, state machines, validators | Vitest (TS), JUnit 5 (Java) | In-memory / isolated | < 10ms per test |
-| **Integration** | DB repositories, RLS policies, Auth middleware, Signing service | Vitest + Neon/Postgres test instance + MinIO | Test DB & container bindings | < 200ms per test |
-| **E2E** | Full browser workflow (Signer, Author, Org Admin) | Playwright | Headless browser vs local stack | < 5s per scenario |
-| **Accessibility** | WCAG 2.2 AA compliance on UI pages | `@axe-core/playwright` | Part of E2E pipeline | < 2s per page |
+| Test Level        | Scope                                                           | Framework                                    | Execution Context               | Target Speed      |
+| ----------------- | --------------------------------------------------------------- | -------------------------------------------- | ------------------------------- | ----------------- |
+| **Unit**          | Pure functions, domain logic, state machines, validators        | Vitest (TS), JUnit 5 (Java)                  | In-memory / isolated            | < 10ms per test   |
+| **Integration**   | DB repositories, RLS policies, Auth middleware, Signing service | Vitest + Neon/Postgres test instance + MinIO | Test DB & container bindings    | < 200ms per test  |
+| **E2E**           | Full browser workflow (Signer, Author, Org Admin)               | Playwright                                   | Headless browser vs local stack | < 5s per scenario |
+| **Accessibility** | WCAG 2.2 AA compliance on UI pages                              | `@axe-core/playwright`                       | Part of E2E pipeline            | < 2s per page     |
 
 ---
 
 ## 2. Mandatory Coverage Thresholds
 
-| Scope | Threshold | Strict Enforcement |
-|---|---|---|
-| **Global Codebase** | **80%** lines & branches | Enforced by CI quality gate |
-| **Core Business Logic (`packages/core/`)** | **90%** lines & branches | Required for state machine & domain services |
-| **Cryptographic Sealing (`services/signing/`)** | **100%** path coverage | Required for PAdES B-LTA and CSC integration |
-| **Audit Log & Hash Chain (`packages/db/`)** | **100%** path coverage | Cryptographic tamper-evidence validation |
-| **Authentication & RBAC (`packages/auth/`)** | **95%** path coverage | Security-critical boundary |
+| Scope                                           | Threshold                | Strict Enforcement                           |
+| ----------------------------------------------- | ------------------------ | -------------------------------------------- |
+| **Global Codebase**                             | **80%** lines & branches | Enforced by CI quality gate                  |
+| **Core Business Logic (`packages/core/`)**      | **90%** lines & branches | Required for state machine & domain services |
+| **Cryptographic Sealing (`services/signing/`)** | **100%** path coverage   | Required for PAdES B-LTA and CSC integration |
+| **Audit Log & Hash Chain (`packages/db/`)**     | **100%** path coverage   | Cryptographic tamper-evidence validation     |
+| **Authentication & RBAC (`packages/auth/`)**    | **95%** path coverage    | Security-critical boundary                   |
 
 > **Rule:** Never reduce test coverage. A pull request that drops overall coverage will be blocked by CI.
 
@@ -46,6 +46,7 @@ graphsign.ink enforces a 70 / 20 / 10 testing pyramid:
 ## 3. Specialized Domain Testing Requirements
 
 ### 3.1 Multi-Tenant Row-Level Security (RLS) Testing
+
 Every table containing `organisation_id` must have automated RLS tests verifying:
 
 1. **Isolation:** Data inserted under `Tenant A` context (`SET app.current_tenant = 'tenant-a'`) is completely invisible when querying under `Tenant B` context.
@@ -54,6 +55,7 @@ Every table containing `organisation_id` must have automated RLS tests verifying
 4. **Bypass Prohibition:** Verify non-superadmin database roles (`app_readwrite`, `app_readonly`) cannot bypass RLS.
 
 ### 3.2 Cryptographic Sealing & PAdES Testing
+
 The JVM Signing Service (`services/signing/`) requires integration tests that perform full-cycle sealing and verification:
 
 1. **Field Flattening:** PDF form fields are flattened into static content before sealing.
@@ -63,6 +65,7 @@ The JVM Signing Service (`services/signing/`) requires integration tests that pe
 5. **CSC Protocol:** CSC endpoints (`credentials/list`, `signHash`) respond according to the CSC v2 API spec.
 
 ### 3.3 Audit Trail & Hash Chain Testing
+
 Tests must explicitly verify the append-only, tamper-evident hash chain:
 
 1. **Hash Link Continuity:** For any sequence of audit events $E_1, E_2, \dots, E_n$, verify that $E_i.\text{previous\_hash} = E_{i-1}.\text{current\_hash}$.
@@ -71,6 +74,7 @@ Tests must explicitly verify the append-only, tamper-evident hash chain:
 4. **No Mutability:** Direct SQL `UPDATE` or `DELETE` on `audit_log` is rejected by DB triggers/permissions.
 
 ### 3.4 Magic Link Signer Workflow Testing
+
 Signer-facing workflows (account-less access) must test:
 
 1. **Single-Use Enforcement:** A magic link token can only complete a signing session once; subsequent attempts fail with `TOKEN_ALREADY_USED`.
@@ -85,6 +89,7 @@ Signer-facing workflows (account-less access) must test:
 To maintain test reliability and speed, follow strict mocking boundaries:
 
 ### What MUST Be Mocked in Unit Tests
+
 - **External Email Service (`Resend`):** Mock email dispatch; capture sent payloads in memory.
 - **SMS Gateway (`Twilio`):** Mock OTP generation and SMS sending.
 - **External AI Providers:** Mock LLM completions with deterministic JSON/text fixtures.
@@ -92,6 +97,7 @@ To maintain test reliability and speed, follow strict mocking boundaries:
 - **Qualified Trust Service Providers (QTSPs):** Mock remote CSC HTTP responses during local unit test runs.
 
 ### What Must NEVER Be Mocked in Integration & E2E Tests
+
 - **Postgres Row-Level Security Policies:** Tests must run against a real Postgres instance with RLS enabled.
 - **Audit Hash Chain Computation:** Hashes must be computed using real SHA-256 algorithms.
 - **Zod Schemas & Validators:** Always run live request/response schemas.
@@ -135,6 +141,7 @@ services/signing/
 ```
 
 ### Naming Conventions
+
 - Unit/Integration tests (TypeScript): `*.test.ts` or `*.test.tsx`
 - E2E scenario tests (Playwright): `*.spec.ts`
 - Java tests: `*Test.java`
@@ -144,16 +151,16 @@ services/signing/
 
 ## 6. Execution Commands
 
-| Task | Command |
-|---|---|
-| **Run All Unit Tests** | `pnpm test` |
-| **Run Unit Tests (Watch)** | `pnpm test:watch` |
-| **Run DB Integration Tests** | `pnpm --filter @graphsign/db test` |
-| **Run Playwright E2E Tests** | `pnpm test:e2e` |
-| **Run Accessibility Audit** | `pnpm test:a11y` or `/a11y-check` |
+| Task                          | Command                                                 |
+| ----------------------------- | ------------------------------------------------------- |
+| **Run All Unit Tests**        | `pnpm test`                                             |
+| **Run Unit Tests (Watch)**    | `pnpm test:watch`                                       |
+| **Run DB Integration Tests**  | `pnpm --filter @graphsign/db test`                      |
+| **Run Playwright E2E Tests**  | `pnpm test:e2e`                                         |
+| **Run Accessibility Audit**   | `pnpm test:a11y` or `/a11y-check`                       |
 | **Run Signing Service Tests** | `cd services/signing && ./gradlew test` or `/seal-test` |
-| **Run RLS Policy Check** | `/rls-check` |
-| **Generate Coverage Report** | `pnpm test:coverage` |
+| **Run RLS Policy Check**      | `/rls-check`                                            |
+| **Generate Coverage Report**  | `pnpm test:coverage`                                    |
 
 ---
 

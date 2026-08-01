@@ -40,6 +40,7 @@ Follow the structure in `docs/coding-standards.md` § Frontend Structure.
 ## Signer Page
 
 The signing page is account-less (magic link). It must be:
+
 - Responsive and minimal
 - Guided tab-through field completion with progress
 - Support draw/type/upload signature capture

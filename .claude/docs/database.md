@@ -12,12 +12,12 @@ Use Prisma. Never write inline SQL unless necessary.
 
 ## Naming
 
-| Element | Convention | Example |
-|---|---|---|
-| Tables | snake_case | `documents`, `audit_log` |
-| Columns | snake_case | `created_at`, `organisation_id` |
-| Indexes | idx_table_column | `idx_documents_status` |
-| Foreign Keys | fk_table_reference | `fk_documents_template` |
+| Element      | Convention         | Example                         |
+| ------------ | ------------------ | ------------------------------- |
+| Tables       | snake_case         | `documents`, `audit_log`        |
+| Columns      | snake_case         | `created_at`, `organisation_id` |
+| Indexes      | idx_table_column   | `idx_documents_status`          |
+| Foreign Keys | fk_table_reference | `fk_documents_template`         |
 
 ## IDs
 
@@ -65,13 +65,13 @@ Key tables: `organisations`, `users`, `documents`, `signatures`, `templates`, `c
 
 ### Critical Indexes
 
-| Table | Index | Purpose |
-|---|---|---|
-| organisations | slug, status, tenant_id | Lookup, filtering |
-| users | (organisation_id, email), status | Unique email per org |
-| documents | organisation_id, status, created_at | Common queries |
-| signatures | document_id, recipient_id, status | By document/recipient |
-| audit_log | (resource_type, resource_id), user_id, created_at | Event lookup |
+| Table         | Index                                             | Purpose               |
+| ------------- | ------------------------------------------------- | --------------------- |
+| organisations | slug, status, tenant_id                           | Lookup, filtering     |
+| users         | (organisation_id, email), status                  | Unique email per org  |
+| documents     | organisation_id, status, created_at               | Common queries        |
+| signatures    | document_id, recipient_id, status                 | By document/recipient |
+| audit_log     | (resource_type, resource_id), user_id, created_at | Event lookup          |
 
 ## Constraints
 
@@ -98,20 +98,20 @@ Prefer database constraints over application validation.
 
 ## Backup & Recovery
 
-| Type | Frequency | Retention | RPO |
-|---|---|---|---|
-| Full Database | Daily 2 AM UTC | 30 days | 24 hours |
-| Incremental | Hourly | 7 days | 1 hour |
-| WAL Archive | Continuous | 30 days | 5 minutes |
+| Type          | Frequency      | Retention | RPO       |
+| ------------- | -------------- | --------- | --------- |
+| Full Database | Daily 2 AM UTC | 30 days   | 24 hours  |
+| Incremental   | Hourly         | 7 days    | 1 hour    |
+| WAL Archive   | Continuous     | 30 days   | 5 minutes |
 
 ## Database Roles
 
-| Role | Read | Write | DDL | RLS Bypass |
-|---|---|---|---|---|
-| app_readonly | ✓ | ✗ | ✗ | ✗ |
-| app_readwrite | ✓ | ✓ | ✗ | ✗ |
-| app_admin | ✓ | ✓ | ✓ | ✗ |
-| super_admin | ✓ | ✓ | ✓ | ✓ |
+| Role          | Read | Write | DDL | RLS Bypass |
+| ------------- | ---- | ----- | --- | ---------- |
+| app_readonly  | ✓    | ✗     | ✗   | ✗          |
+| app_readwrite | ✓    | ✓     | ✗   | ✗          |
+| app_admin     | ✓    | ✓     | ✓   | ✗          |
+| super_admin   | ✓    | ✓     | ✓   | ✓          |
 
 ## AI Rules
 

@@ -50,6 +50,7 @@ ENVIRONMENT = "production"
 ## Environment Secrets
 
 Set via `wrangler secret put`:
+
 - `NEON_DATABASE_URL`
 - `R2_ACCESS_KEY`, `R2_SECRET`
 - `ZITADEL_ISSUER`, `ZITADEL_CLIENT_ID`, `ZITADEL_CLIENT_SECRET`
@@ -60,6 +61,7 @@ Set via `wrangler secret put`:
 ## Validation
 
 After deployment:
+
 1. Verify Pages URL loads the frontend
 2. Verify Workers API responds to health check
 3. Verify R2 connectivity (upload/download test)

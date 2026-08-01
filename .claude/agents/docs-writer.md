@@ -20,6 +20,7 @@ You write and maintain all documentation for graphsign.ink.
 ## Documentation Types
 
 ### API Documentation
+
 - OpenAPI 3.0+ specification
 - Scalar or Swagger UI for interactive docs
 - Every endpoint documented with request/response schemas
@@ -27,17 +28,20 @@ You write and maintain all documentation for graphsign.ink.
 - Rate limiting documented per endpoint
 
 ### Code Documentation
+
 - JSDoc on every exported function
 - Explain WHY, not WHAT
 - Mermaid diagrams for complex flows
 
 ### User Documentation
+
 - Feature guides
 - Getting started
 - Self-hosting guide (Docker Compose)
 - FAQ
 
 ### Developer Documentation
+
 - Local development setup
 - Architecture overview
 - Contributing guidelines

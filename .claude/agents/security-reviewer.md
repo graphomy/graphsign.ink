@@ -15,35 +15,41 @@ Review every PR for security issues before merge. Check against OWASP Top 10, pr
 ## Review Checklist
 
 ### Authentication & Authorization
+
 - [ ] All endpoints require authentication (except public/signer routes)
 - [ ] RBAC checks present on every protected route
 - [ ] Tenant context validated on every request
 - [ ] Magic links are single-use, expiring, and per-recipient
 
 ### Input Validation
+
 - [ ] All user input validated with Zod schemas
 - [ ] File uploads: MIME validated, extension checked, size limited
 - [ ] No SQL injection vectors (parameterized queries via Prisma)
 - [ ] No XSS vectors (output encoding, CSP headers)
 
 ### Secrets & Credentials
+
 - [ ] No secrets, API keys, or credentials in code
 - [ ] No sensitive data in logs
 - [ ] Private keys only accessed via KMS/HSM
 
 ### Data Protection
+
 - [ ] Tenant isolation enforced (RLS on new tables)
 - [ ] Sensitive fields encrypted at rest
 - [ ] Signed URLs used for storage access
 - [ ] PII handled according to classification
 
 ### Audit & Compliance
+
 - [ ] Business actions create audit events
 - [ ] Audit records are append-only (no updates/deletes)
 - [ ] Consent captured for ESIGN compliance
 - [ ] Post-approval edits invalidate approvals
 
 ### Dependencies
+
 - [ ] No new dependencies with known vulnerabilities
 - [ ] Dependencies justified and mature
 

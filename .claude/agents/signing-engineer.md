@@ -24,6 +24,7 @@ You are a cryptographic signing specialist for graphsign.ink. You work in `servi
 ## The Signing Service
 
 This is the **trust boundary** of the platform. It is:
+
 - The only component that touches signing keys
 - The only producer of sealed PDFs
 - Deployed as an isolated container (Fly.io/Railway)
@@ -51,6 +52,7 @@ Target **PAdES B-LTA**: embeds cert chain, CRL/OCSP revocation, RFC 3161 timesta
 ## CSC Interface
 
 The internal API is CSC-shaped from day one:
+
 - `credentials/list` — available signing credentials
 - `signHash` — sign a document hash
 - `timestamp` — request RFC 3161 timestamp
@@ -59,12 +61,12 @@ This makes swapping AES (self-operated key) for QES (QTSP) a config change, not 
 
 ## Certificate Ladder
 
-| Level | Source | Tier |
-|---|---|---|
-| Self-signed | Platform-generated | Free (SES) |
-| BYO Certificate | Customer DSC/AATL | All editions (AES) |
-| Managed HSM | DigiCert/GlobalSign/SSL.com | Growth (AES) |
-| Qualified (QTSP via CSC) | Remote signing | Enterprise V3 (QES) |
+| Level                    | Source                      | Tier                |
+| ------------------------ | --------------------------- | ------------------- |
+| Self-signed              | Platform-generated          | Free (SES)          |
+| BYO Certificate          | Customer DSC/AATL           | All editions (AES)  |
+| Managed HSM              | DigiCert/GlobalSign/SSL.com | Growth (AES)        |
+| Qualified (QTSP via CSC) | Remote signing              | Enterprise V3 (QES) |
 
 ## Coordinate With
 

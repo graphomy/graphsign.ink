@@ -19,12 +19,12 @@ See `docs/architecture.md` § Runtime Flows and `docs/security.md` § Authentica
 
 ```typescript
 interface SigningToken {
-  id: string;            // UUID v7
-  envelopeId: string;    // UUID
-  recipientId: string;   // UUID
-  tokenHash: string;     // SHA-256 of the actual token
-  expiresAt: Date;       // Configurable, default 7 days
-  usedAt: Date | null;   // Set on first use
+  id: string; // UUID v7
+  envelopeId: string; // UUID
+  recipientId: string; // UUID
+  tokenHash: string; // SHA-256 of the actual token
+  expiresAt: Date; // Configurable, default 7 days
+  usedAt: Date | null; // Set on first use
   createdAt: Date;
 }
 ```
@@ -58,6 +58,7 @@ https://graphsign.ink/sign/{token}
 ## Audit Events
 
 Every step of the magic link flow must create an audit event:
+
 - `signing_link.opened`
 - `signing_link.consent_given`
 - `signing_link.field_completed`

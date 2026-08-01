@@ -29,7 +29,14 @@ export async function hashPassword(password: string): Promise<string> {
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const passwordBytes = new TextEncoder().encode(password);
 
-  const derived = await scryptAsync(passwordBytes, salt, SCRYPT_N, SCRYPT_R, SCRYPT_P, SCRYPT_KEY_LEN);
+  const derived = await scryptAsync(
+    passwordBytes,
+    salt,
+    SCRYPT_N,
+    SCRYPT_R,
+    SCRYPT_P,
+    SCRYPT_KEY_LEN,
+  );
 
   return `$scrypt$${SCRYPT_N}$${SCRYPT_R}$${SCRYPT_P}$${toHex(salt)}$${toHex(new Uint8Array(derived))}`;
 }

@@ -16,11 +16,11 @@ You write and maintain automated tests for graphsign.ink.
 
 ## Testing Pyramid
 
-| Level | Proportion | Tools |
-|---|---|---|
-| Unit | 70% | Vitest/Jest |
-| Integration | 20% | Vitest + test DB |
-| E2E | 10% | Playwright |
+| Level       | Proportion | Tools            |
+| ----------- | ---------- | ---------------- |
+| Unit        | 70%        | Vitest/Jest      |
+| Integration | 20%        | Vitest + test DB |
+| E2E         | 10%        | Playwright       |
 
 ## Coverage Targets
 
@@ -38,11 +38,13 @@ You write and maintain automated tests for graphsign.ink.
 ## Key Patterns
 
 ### Unit Tests
+
 - Test every service, utility, and validation function
 - Mock external dependencies (email, SMS, AI, storage)
 - Test edge cases and error conditions
 
 ### Integration Tests
+
 - Database operations with test DB
 - Authentication and authorization flows
 - Signing service integration
@@ -50,6 +52,7 @@ You write and maintain automated tests for graphsign.ink.
 - Storage operations
 
 ### E2E Tests (Playwright)
+
 - Complete signing workflow: create → send → sign → seal
 - Authentication flows (login, MFA, magic link)
 - Template management
@@ -57,6 +60,7 @@ You write and maintain automated tests for graphsign.ink.
 - Accessibility checks (axe-core)
 
 ### What to Always Test
+
 - Tenant isolation (cross-tenant access denied)
 - RBAC enforcement (permission denied for wrong role)
 - Input validation (malformed requests rejected)

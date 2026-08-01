@@ -4,18 +4,18 @@
 
 ## NFR Summary
 
-| Attribute | Target |
-|---|---|
-| **Availability** | Best-effort (free tiers); SLA on Enterprise |
+| Attribute           | Target                                                                  |
+| ------------------- | ----------------------------------------------------------------------- |
+| **Availability**    | Best-effort (free tiers); SLA on Enterprise                             |
 | **Signing Latency** | Seal completes within seconds of last signature (warm signing instance) |
-| **Page Load** | < 2 seconds |
-| **API Response** | < 300ms average; 95th percentile < 500ms |
-| **Integrity** | 100% completed docs tamper-evident (PAdES B-LTA) + hash-chained audit |
-| **Confidentiality** | TLS 1.3; encryption at rest; RLS tenant isolation |
-| **Scalability** | Workers autoscale; Neon scale-to-zero; signing scales horizontally |
-| **Portability** | Self-host parity via Docker Compose; standards-based export |
-| **Accessibility** | WCAG 2.2 AA signing experience |
-| **Compliance** | ESIGN/UETA, eIDAS SES→QES (CSC), 21 CFR Part 11 (Enterprise) |
+| **Page Load**       | < 2 seconds                                                             |
+| **API Response**    | < 300ms average; 95th percentile < 500ms                                |
+| **Integrity**       | 100% completed docs tamper-evident (PAdES B-LTA) + hash-chained audit   |
+| **Confidentiality** | TLS 1.3; encryption at rest; RLS tenant isolation                       |
+| **Scalability**     | Workers autoscale; Neon scale-to-zero; signing scales horizontally      |
+| **Portability**     | Self-host parity via Docker Compose; standards-based export             |
+| **Accessibility**   | WCAG 2.2 AA signing experience                                          |
+| **Compliance**      | ESIGN/UETA, eIDAS SES→QES (CSC), 21 CFR Part 11 (Enterprise)            |
 
 ## NFR Stories
 

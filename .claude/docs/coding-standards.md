@@ -33,15 +33,15 @@ All AI agents MUST follow these standards.
 
 ## Naming
 
-| Element | Convention |
-|---|---|
-| Classes | PascalCase |
-| Interfaces | PascalCase |
-| Functions | camelCase |
-| Variables | camelCase |
-| Constants | UPPER_CASE |
-| Files | kebab-case.ts |
-| Folders | kebab-case |
+| Element    | Convention    |
+| ---------- | ------------- |
+| Classes    | PascalCase    |
+| Interfaces | PascalCase    |
+| Functions  | camelCase     |
+| Variables  | camelCase     |
+| Constants  | UPPER_CASE    |
+| Files      | kebab-case.ts |
+| Folders    | kebab-case    |
 
 ## Frontend Structure
 
@@ -110,11 +110,13 @@ See `docs/testing.md` for full testing standards.
 ## Performance Standards
 
 ### Frontend
+
 - Main bundle under 500KB
 - Lazy load non-critical components
 - Optimize and lazy load images
 
 ### Backend
+
 - 95th percentile response time under 500ms
 - Optimize database queries
 - Use caching for expensive operations
@@ -122,6 +124,7 @@ See `docs/testing.md` for full testing standards.
 ## Git Standards
 
 ### Branching
+
 - `main` — production-ready code
 - `develop` — integration branch
 - `feature/*` — feature branches
@@ -129,11 +132,13 @@ See `docs/testing.md` for full testing standards.
 - `hotfix/*` — urgent production fixes
 
 ### Commits
+
 - Conventional Commits format
 - Imperative, present tense
 - Include Jira ID in commit message
 
 ### Pull Requests
+
 - Clear title with Jira ID (e.g., `GS-101: Add document upload`)
 - Link to relevant issues
 - Keep PRs small and focused
