@@ -45,18 +45,17 @@ jobs:
         run: pnpm db:generate
 
       - name: Deploy to Cloudflare Workers
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          workingDirectory: apps/api
-          wranglerVersion: "3.80.0"
-          command: deploy --name ${{ github.ref_name == 'main' && 'graphsign-api' || 'dev-graphsign-api' }}
-          secrets: |
-            DATABASE_URL
-            JWT_SECRET
-            RESEND_API_KEY
+        run: pnpm --filter @graphsign/api exec wrangler deploy --name ${{ github.ref_name == 'main' && 'graphsign-api' || 'dev-graphsign-api' }}
         env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Upload secrets to Cloudflare Worker
+        run: |
+          echo "{\"DATABASE_URL\":\"$DATABASE_URL\",\"JWT_SECRET\":\"$JWT_SECRET\",\"RESEND_API_KEY\":\"$RESEND_API_KEY\"}" | pnpm --filter @graphsign/api exec wrangler secret bulk --name ${{ github.ref_name == 'main' && 'graphsign-api' || 'dev-graphsign-api' }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           JWT_SECRET: ${{ secrets.JWT_SECRET }}
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
