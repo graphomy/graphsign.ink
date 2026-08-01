@@ -51,6 +51,7 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: apps/web
+          wranglerVersion: "3.80.0"
           # develop → dev-graphsign-web (development project)
           # main    → graphsign-web     (production project)
           command: pages deploy .vercel/output/static --project-name=${{ github.ref_name == 'main' && 'graphsign-web' || 'dev-graphsign-web' }}
