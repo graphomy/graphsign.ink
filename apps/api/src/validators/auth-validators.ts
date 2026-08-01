@@ -91,3 +91,43 @@ export const resendVerificationResponseSchema = z.object({
 });
 
 export type ResendVerificationResponse = z.infer<typeof resendVerificationResponseSchema>;
+
+export const forgotPasswordRequestSchema = z.object({
+  email: z
+    .string()
+    .transform((val) => val.toLowerCase().trim())
+    .pipe(
+      z
+        .string()
+        .email('Please enter a valid email address.')
+        .max(255, 'Email must be 255 characters or fewer.'),
+    ),
+});
+
+export type ForgotPasswordRequest = z.infer<typeof forgotPasswordRequestSchema>;
+
+export const forgotPasswordResponseSchema = z.object({
+  message: z.string(),
+});
+
+export type ForgotPasswordResponse = z.infer<typeof forgotPasswordResponseSchema>;
+
+export const resetPasswordRequestSchema = z.object({
+  token: z.string().min(1, 'Reset token is required.'),
+  password: z
+    .string()
+    .min(PASSWORD_MIN_LENGTH, `Password must be at least ${PASSWORD_MIN_LENGTH} characters.`)
+    .max(128, 'Password must be 128 characters or fewer.')
+    .regex(/[A-Z]/, 'Password must contain at least one uppercase letter.')
+    .regex(/[a-z]/, 'Password must contain at least one lowercase letter.')
+    .regex(/[0-9]/, 'Password must contain at least one digit.')
+    .regex(/[^A-Za-z0-9]/, 'Password must contain at least one special character.'),
+});
+
+export type ResetPasswordRequest = z.infer<typeof resetPasswordRequestSchema>;
+
+export const resetPasswordResponseSchema = z.object({
+  message: z.string(),
+});
+
+export type ResetPasswordResponse = z.infer<typeof resetPasswordResponseSchema>;
