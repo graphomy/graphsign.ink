@@ -40,6 +40,8 @@ model User {
   emailVerified                 Boolean   @default(false) @map("email_verified")
   emailVerificationTokenHash    String?   @map("email_verification_token_hash") @db.VarChar(255)
   emailVerificationTokenExpiresAt DateTime? @map("email_verification_token_expires_at") @db.Timestamptz()
+  passwordResetTokenHash        String?   @map("password_reset_token_hash") @db.VarChar(255)
+  passwordResetTokenExpiresAt   DateTime? @map("password_reset_token_expires_at") @db.Timestamptz()
   status                        String    @default("pending_verification") @db.VarChar(20)
   createdAt                     DateTime  @default(now()) @map("created_at") @db.Timestamptz()
   updatedAt                     DateTime  @updatedAt @map("updated_at") @db.Timestamptz()

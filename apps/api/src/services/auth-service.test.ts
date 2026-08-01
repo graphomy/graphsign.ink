@@ -39,6 +39,7 @@ function createMockPrisma() {
 function createMockMailer(): MailerService {
   return {
     sendVerificationEmail: vi.fn(async () => {}),
+    sendPasswordResetEmail: vi.fn(async () => {}),
   };
 }
 
@@ -424,6 +425,122 @@ describe('AuthService', () => {
 
       expect(result.message).toContain('If an account exists');
       expect(mailer.sendVerificationEmail).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('requestPasswordReset', () => {
+    it('should generate reset token and dispatch password reset email', async () => {
+      const user = {
+        id: '00000000-0000-7000-8000-000000000001',
+        email: 'user@example.com',
+        organisationId: DEFAULT_ORG.id,
+        status: 'active',
+        deletedAt: null,
+      };
+
+      (prisma.user.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue(user);
+      (prisma.user.update as ReturnType<typeof vi.fn>).mockResolvedValue({
+        ...user,
+        passwordResetTokenHash: 'sha256-hashed-token',
+      });
+
+      const result = await authService.requestPasswordReset('user@example.com');
+
+      expect(result.message).toContain('sent successfully');
+      expect(prisma.user.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: user.id },
+          data: expect.objectContaining({
+            passwordResetTokenHash: 'sha256-hashed-token',
+          }),
+        }),
+      );
+      expect(mailer.sendPasswordResetEmail).toHaveBeenCalledWith(
+        'user@example.com',
+        'raw-verification-token',
+      );
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'user.password_reset_requested',
+          resourceId: user.id,
+        }),
+      );
+    });
+
+    it('should return generic success message if user email is not found', async () => {
+      (prisma.user.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+
+      const result = await authService.requestPasswordReset('unknown@example.com');
+
+      expect(result.message).toContain('If an account exists');
+      expect(mailer.sendPasswordResetEmail).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('resetPassword', () => {
+    it('should reset user password and clear reset token fields', async () => {
+      const user = {
+        id: '00000000-0000-7000-8000-000000000001',
+        email: 'user@example.com',
+        organisationId: DEFAULT_ORG.id,
+        passwordHash: 'old-hash',
+        passwordResetTokenHash: 'sha256-hashed-token',
+        passwordResetTokenExpiresAt: new Date(Date.now() + 3600000),
+        deletedAt: null,
+      };
+
+      (prisma.user.findFirst as ReturnType<typeof vi.fn>).mockResolvedValue(user);
+      (prisma.user.update as ReturnType<typeof vi.fn>).mockResolvedValue({
+        ...user,
+        passwordHash: '$scrypt$hashed_password',
+        passwordResetTokenHash: null,
+        passwordResetTokenExpiresAt: null,
+      });
+
+      const result = await authService.resetPassword('raw-verification-token', 'NewStr0ng!Pass');
+
+      expect(result.message).toContain('Password updated successfully');
+      expect(prisma.user.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: user.id },
+          data: expect.objectContaining({
+            passwordHash: '$scrypt$32768$8$1$00000000000000000000000000000000$hashed_password',
+            passwordResetTokenHash: null,
+            passwordResetTokenExpiresAt: null,
+          }),
+        }),
+      );
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'user.password_reset_completed',
+          resourceId: user.id,
+        }),
+      );
+    });
+
+    it('should throw NotFoundError if reset token is invalid', async () => {
+      (prisma.user.findFirst as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+
+      await expect(authService.resetPassword('invalid-token', 'NewStr0ng!Pass')).rejects.toThrow(
+        'Invalid or expired password reset token.',
+      );
+    });
+
+    it('should throw ValidationError if reset token is expired', async () => {
+      const user = {
+        id: '00000000-0000-7000-8000-000000000001',
+        email: 'user@example.com',
+        organisationId: DEFAULT_ORG.id,
+        passwordResetTokenHash: 'sha256-hashed-token',
+        passwordResetTokenExpiresAt: new Date(Date.now() - 1000),
+        deletedAt: null,
+      };
+
+      (prisma.user.findFirst as ReturnType<typeof vi.fn>).mockResolvedValue(user);
+
+      await expect(
+        authService.resetPassword('raw-verification-token', 'NewStr0ng!Pass'),
+      ).rejects.toThrow('Password reset token has expired.');
     });
   });
 });
