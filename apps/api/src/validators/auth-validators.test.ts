@@ -1,5 +1,8 @@
-import { describe, it, expect } from 'vitest';
-import { registerRequestSchema, verifyEmailRequestSchema } from './auth-validators.js';
+import {
+  registerRequestSchema,
+  verifyEmailRequestSchema,
+  resendVerificationRequestSchema,
+} from './auth-validators.js';
 
 describe('registerRequestSchema', () => {
   it('should accept a valid email and strong password', () => {
@@ -151,3 +154,28 @@ describe('verifyEmailRequestSchema', () => {
     expect(result.success).toBe(false);
   });
 });
+
+describe('resendVerificationRequestSchema', () => {
+  it('should accept a valid email and normalize it', () => {
+    const result = resendVerificationRequestSchema.safeParse({
+      email: '  User@Example.COM  ',
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.email).toBe('user@example.com');
+    }
+  });
+
+  it('should reject an invalid email format', () => {
+    const result = resendVerificationRequestSchema.safeParse({
+      email: 'not-an-email',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('should reject missing email field', () => {
+    const result = resendVerificationRequestSchema.safeParse({});
+    expect(result.success).toBe(false);
+  });
+});
+
