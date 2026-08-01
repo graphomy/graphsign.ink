@@ -61,6 +61,8 @@ export const loginResponseSchema = z.object({
   id: z.string().uuid(),
   email: z.string().email(),
   status: z.string(),
+  token: z.string(),
+  organisationId: z.string().uuid(),
   message: z.string(),
 });
 

@@ -186,6 +186,23 @@ function DashboardContent() {
                     </button>
                   </td>
                 </tr>
+                <tr className="hover:bg-neutral-50/50 transition-colors">
+                  <td className="py-3.5 px-4 font-medium text-neutral-900">
+                    Software License Contract.pdf
+                  </td>
+                  <td className="py-3.5 px-4 text-xs text-neutral-500">cto@enterprise.io</td>
+                  <td className="py-3.5 px-4">
+                    <span className="inline-flex items-center rounded-full bg-green-50 px-2.5 py-0.5 text-xs font-medium text-green-700 border border-green-200">
+                      Sealed & Completed
+                    </span>
+                  </td>
+                  <td className="py-3.5 px-4 text-xs text-neutral-500">Jul 25, 2026</td>
+                  <td className="py-3.5 px-4 text-right">
+                    <button className="text-xs font-semibold text-[#ba0000] hover:text-[#a00000]">
+                      Download
+                    </button>
+                  </td>
+                </tr>
               </tbody>
             </table>
           </div>
@@ -202,3 +219,4 @@ export default function DashboardPage() {
     </SessionGuard>
   );
 }
+
