@@ -2,7 +2,8 @@
 // Source of truth: .claude/docs/database.md and .claude/docs/domain-model.md
 
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
 }
 
 datasource db {

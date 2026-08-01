@@ -40,7 +40,7 @@ export class AuthService {
    *
    * Flow:
    * 1. Check email uniqueness within the default organisation
-   * 2. Hash password with argon2id
+   * 2. Hash password with scrypt
    * 3. Generate email verification token (SHA-256 hashed for storage)
    * 4. Create user record
    * 5. Send verification email
@@ -74,7 +74,7 @@ export class AuthService {
 
     // Generate verification token — raw token goes to email, hash goes to DB
     const rawToken = generateToken();
-    const tokenHash = hashToken(rawToken);
+    const tokenHash = await hashToken(rawToken);
     const tokenExpiresAt = new Date(
       Date.now() + VERIFICATION_TOKEN_EXPIRY_HOURS * 60 * 60 * 1000,
     );
@@ -134,7 +134,7 @@ export class AuthService {
     token: string,
     meta: { ipAddress?: string; userAgent?: string } = {},
   ): Promise<VerifyEmailResult> {
-    const tokenHash = hashToken(token);
+    const tokenHash = await hashToken(token);
 
     const user = await this.prisma.user.findFirst({
       where: {

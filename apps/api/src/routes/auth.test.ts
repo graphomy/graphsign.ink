@@ -6,10 +6,10 @@ import { errorHandler } from '../middleware/error-handler.js';
 // Mock crypto module
 vi.mock('../utils/crypto.js', () => ({
   generateId: vi.fn(() => '00000000-0000-7000-8000-000000000001'),
-  hashPassword: vi.fn(async () => '$argon2id$hashed_password'),
+  hashPassword: vi.fn(async () => '$scrypt$32768$8$1$00000000000000000000000000000000$hashed_password'),
   generateToken: vi.fn(() => 'raw-verification-token'),
-  hashToken: vi.fn(() => 'sha256-hashed-token'),
-  sha256: vi.fn(() => 'sha256-hash'),
+  hashToken: vi.fn(async () => 'sha256-hashed-token'),
+  sha256: vi.fn(async () => 'sha256-hash'),
 }));
 
 const DEFAULT_ORG = {

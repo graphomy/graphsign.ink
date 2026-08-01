@@ -1,0 +1,11 @@
+name = "graphsign-api"
+main = "src/index.ts"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+EMAIL_FROM = "noreply@graphsign.ink"
+WEB_URL = "http://localhost:3000"
+API_URL = "http://localhost:8787"
+NODE_ENV = "development"
+JWT_ACCESS_TOKEN_EXPIRY = "15m"

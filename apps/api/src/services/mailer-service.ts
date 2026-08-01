@@ -11,21 +11,20 @@ export interface MailerService {
 
 /**
  * Resend-backed email service.
- * Uses the RESEND_API_KEY environment variable.
+ * Receives config values explicitly for Cloudflare Workers context.
  */
 export class ResendMailerService implements MailerService {
   private readonly resend: Resend;
-  private readonly from: string;
-  private readonly webUrl: string;
 
-  constructor() {
-    const apiKey = process.env.RESEND_API_KEY;
+  constructor(
+    apiKey: string,
+    private readonly from: string = 'noreply@graphsign.ink',
+    private readonly webUrl: string = 'http://localhost:3000',
+  ) {
     if (!apiKey) {
-      throw new Error('RESEND_API_KEY environment variable is required for ResendMailerService.');
+      throw new Error('RESEND_API_KEY is required for ResendMailerService.');
     }
     this.resend = new Resend(apiKey);
-    this.from = process.env.EMAIL_FROM ?? 'noreply@graphsign.ink';
-    this.webUrl = process.env.WEB_URL ?? 'http://localhost:3000';
   }
 
   async sendVerificationEmail(to: string, token: string): Promise<void> {
@@ -62,14 +61,10 @@ export class ResendMailerService implements MailerService {
 
 /**
  * Console-based mailer for local development.
- * Logs the verification URL to stdout instead of sending an email.
+ * Logs the verification URL to console instead of sending an email.
  */
 export class ConsoleMailerService implements MailerService {
-  private readonly webUrl: string;
-
-  constructor() {
-    this.webUrl = process.env.WEB_URL ?? 'http://localhost:3000';
-  }
+  constructor(private readonly webUrl: string = 'http://localhost:3000') {}
 
   async sendVerificationEmail(to: string, token: string): Promise<void> {
     const verifyUrl = `${this.webUrl}/verify-email?token=${encodeURIComponent(token)}`;
@@ -79,12 +74,20 @@ export class ConsoleMailerService implements MailerService {
 }
 
 /**
- * Factory that selects the mailer implementation based on environment.
+ * Factory that selects the mailer implementation based on environment bindings.
  */
-export function createMailerService(): MailerService {
-  if (process.env.RESEND_API_KEY) {
-    return new ResendMailerService();
+export function createMailerService(env: {
+  RESEND_API_KEY?: string;
+  EMAIL_FROM?: string;
+  WEB_URL?: string;
+}): MailerService {
+  if (env.RESEND_API_KEY) {
+    return new ResendMailerService(
+      env.RESEND_API_KEY,
+      env.EMAIL_FROM ?? 'noreply@graphsign.ink',
+      env.WEB_URL ?? 'http://localhost:3000',
+    );
   }
   console.warn('[MAILER] RESEND_API_KEY not set — using console mailer for development.');
-  return new ConsoleMailerService();
+  return new ConsoleMailerService(env.WEB_URL ?? 'http://localhost:3000');
 }

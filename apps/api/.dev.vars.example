@@ -1,0 +1,4 @@
+# Local secrets for Wrangler dev environment
+DATABASE_URL="postgresql://user:password@host.neon.tech:5432/graphsign?sslmode=require"
+JWT_SECRET="change-me-to-a-secure-random-string-at-least-32-chars"
+RESEND_API_KEY=""

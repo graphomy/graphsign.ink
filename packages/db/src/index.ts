@@ -1,4 +1,21 @@
 import { PrismaClient } from '@prisma/client';
+import { PrismaNeon } from '@prisma/adapter-neon';
+import { Pool } from '@neondatabase/serverless';
+
+/**
+ * Creates a PrismaClient configured for Neon serverless (WebSocket).
+ * Use this in Cloudflare Workers where TCP sockets are unavailable.
+ *
+ * The Neon serverless driver handles connection pooling on its side,
+ * so creating a new client per request is lightweight.
+ */
+export function createPrismaClient(databaseUrl: string): PrismaClient {
+  const pool = new Pool({ connectionString: databaseUrl });
+  const adapter = new PrismaNeon(pool as any);
+  return new PrismaClient({ adapter } as any);
+}
+
+// ── Legacy singleton for backward compatibility (local dev, tests) ──
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
@@ -7,6 +24,7 @@ const globalForPrisma = globalThis as unknown as {
 /**
  * Prisma client singleton.
  * Reuses the same instance across hot-reloads in development.
+ * Used by tests and local dev scripts that rely on process.env.
  */
 export const prisma =
   globalForPrisma.prisma ??

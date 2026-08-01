@@ -6,10 +6,10 @@ import type { AuditService } from './audit-service.js';
 // Mock the crypto module
 vi.mock('../utils/crypto.js', () => ({
   generateId: vi.fn(() => '00000000-0000-7000-8000-000000000001'),
-  hashPassword: vi.fn(async () => '$argon2id$hashed_password'),
+  hashPassword: vi.fn(async () => '$scrypt$32768$8$1$00000000000000000000000000000000$hashed_password'),
   generateToken: vi.fn(() => 'raw-verification-token'),
-  hashToken: vi.fn(() => 'sha256-hashed-token'),
-  sha256: vi.fn(() => 'sha256-hash'),
+  hashToken: vi.fn(async () => 'sha256-hashed-token'),
+  sha256: vi.fn(async () => 'sha256-hash'),
 }));
 
 function createMockPrisma() {
@@ -93,7 +93,7 @@ describe('AuthService', () => {
 
       // Verify password was hashed — never stored plain
       const createCall = (prisma.user.create as ReturnType<typeof vi.fn>).mock.calls[0]?.[0];
-      expect(createCall?.data?.passwordHash).toBe('$argon2id$hashed_password');
+      expect(createCall?.data?.passwordHash).toBe('$scrypt$32768$8$1$00000000000000000000000000000000$hashed_password');
       expect(createCall?.data?.passwordHash).not.toBe('Str0ng!Pass');
 
       // Verification token hash stored, not raw token

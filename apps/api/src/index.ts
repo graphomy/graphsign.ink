@@ -1,26 +1,37 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import { serve } from '@hono/node-server';
-import { prisma } from '@graphsign/db';
 import { errorHandler } from './middleware/error-handler.js';
 import { createAuthRoutes } from './routes/auth.js';
-import { createMailerService } from './services/mailer-service.js';
-import { PrismaAuditService } from './services/audit-service.js';
+
+/** Cloudflare Worker environment bindings. */
+export type Env = {
+  DATABASE_URL: string;
+  JWT_SECRET: string;
+  JWT_ACCESS_TOKEN_EXPIRY: string;
+  RESEND_API_KEY: string;
+  EMAIL_FROM: string;
+  WEB_URL: string;
+  API_URL: string;
+  NODE_ENV: string;
+};
 
 type Variables = {
   requestId: string;
 };
 
-const app = new Hono<{ Variables: Variables }>();
+const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 
 // Global error handler (Hono onError hook)
 app.onError(errorHandler);
 
-// Global middleware
-app.use('*', cors({
-  origin: process.env.WEB_URL ?? 'http://localhost:3000',
-  credentials: true,
-}));
+// Global middleware — CORS reads WEB_URL from Worker bindings
+app.use('*', async (c, next) => {
+  const corsMiddleware = cors({
+    origin: c.env.WEB_URL ?? 'http://localhost:3000',
+    credentials: true,
+  });
+  return corsMiddleware(c, next);
+});
 
 // Request ID middleware
 app.use('*', async (c, next) => {
@@ -32,19 +43,7 @@ app.use('*', async (c, next) => {
 app.get('/health', (c) => c.json({ status: 'ok', timestamp: new Date().toISOString() }));
 
 // API v1 routes
-const mailer = createMailerService();
-const audit = new PrismaAuditService(prisma);
+app.route('/api/v1/auth', createAuthRoutes());
 
-const authRoutes = createAuthRoutes({ prisma, mailer, audit });
-app.route('/api/v1/auth', authRoutes);
-
-// Start server
-const port = Number(process.env.PORT ?? 8787);
-console.log(`graphsign.ink API starting on port ${port}`);
-
-serve({
-  fetch: app.fetch,
-  port,
-});
-
+// Workers export — no serve() call needed
 export default app;
