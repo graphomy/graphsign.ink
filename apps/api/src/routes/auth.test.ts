@@ -448,3 +448,31 @@ describe('POST /api/v1/auth/reset-password', () => {
     expect(body.error.code).toBe('VALIDATION_ERROR');
   });
 });
+
+describe('POST /api/v1/auth/logout', () => {
+  let deps: ReturnType<typeof createMockDeps>;
+  let app: Hono;
+
+  beforeEach(() => {
+    deps = createMockDeps();
+    app = createApp(deps);
+  });
+
+  it('should return 200 and clear session cookie on logout', async () => {
+    const res = await app.request('/api/v1/auth/logout', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-user-id': '00000000-0000-7000-8000-000000000001',
+      },
+    });
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    expect(body.message).toContain('Signed out successfully');
+
+    const setCookie = res.headers.get('set-cookie');
+    expect(setCookie).toContain('graphsign_session=');
+    expect(setCookie).toContain('Expires=Thu, 01 Jan 1970 00:00:00 GMT');
+  });
+});

@@ -468,6 +468,37 @@ export class AuthService {
   }
 
   /**
+   * Logs out a user and records an audit log event.
+   *
+   * Flow:
+   * 1. Get or resolve default organisation
+   * 2. Log audit event `user.logout`
+   * 3. Return success message
+   */
+  async logout(
+    userId?: string,
+    meta: { ipAddress?: string; userAgent?: string } = {},
+  ): Promise<{ message: string }> {
+    const org = await this.getOrCreateDefaultOrganisation();
+
+    if (userId) {
+      await this.audit.log({
+        organisationId: org.id,
+        userId,
+        action: 'user.logout',
+        resourceType: 'user',
+        resourceId: userId,
+        ipAddress: meta.ipAddress,
+        userAgent: meta.userAgent,
+      });
+    }
+
+    return {
+      message: 'Signed out successfully.',
+    };
+  }
+
+  /**
    * Gets or creates the default organisation for MVP.
 
    * Multi-org support will be added in a separate story.

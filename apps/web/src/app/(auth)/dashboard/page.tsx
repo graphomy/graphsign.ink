@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { SessionGuard } from '@/components/features/auth/SessionGuard';
 
 interface UserSession {
   email: string;
@@ -9,7 +10,7 @@ interface UserSession {
   organisationId: string;
 }
 
-export default function DashboardPage() {
+function DashboardContent() {
   const [user] = useState<UserSession | null>(() => {
     if (typeof window === 'undefined') return null;
     return {
@@ -19,11 +20,22 @@ export default function DashboardPage() {
     };
   });
 
-  function handleSignOut() {
-    localStorage.removeItem('graphsign_session_token');
-    localStorage.removeItem('graphsign_user_email');
-    localStorage.removeItem('graphsign_org_id');
-    window.location.href = '/login';
+  async function handleSignOut() {
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8787';
+      await fetch(`${apiUrl}/api/v1/auth/logout`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${user?.token ?? ''}`,
+        },
+      }).catch(() => null);
+    } finally {
+      localStorage.removeItem('graphsign_session_token');
+      localStorage.removeItem('graphsign_user_email');
+      localStorage.removeItem('graphsign_org_id');
+      window.location.href = '/login';
+    }
   }
 
   return (
@@ -199,3 +211,12 @@ export default function DashboardPage() {
     </div>
   );
 }
+
+export default function DashboardPage() {
+  return (
+    <SessionGuard>
+      <DashboardContent />
+    </SessionGuard>
+  );
+}
+
