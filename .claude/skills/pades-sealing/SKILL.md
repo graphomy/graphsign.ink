@@ -8,12 +8,12 @@ See `docs/architecture.md` § Signing Subsystem and `docs/security.md` § Docume
 
 ## PAdES Levels
 
-| Level | Contents | Use Case |
-|---|---|---|
-| B-B | Basic signature | Minimum |
-| B-T | + RFC 3161 timestamp | Proves signing time |
-| B-LT | + Revocation data (CRL/OCSP) | Long-term validation |
-| **B-LTA** | + Archive timestamp | **Target level** — survives cert expiry |
+| Level     | Contents                     | Use Case                                |
+| --------- | ---------------------------- | --------------------------------------- |
+| B-B       | Basic signature              | Minimum                                 |
+| B-T       | + RFC 3161 timestamp         | Proves signing time                     |
+| B-LT      | + Revocation data (CRL/OCSP) | Long-term validation                    |
+| **B-LTA** | + Archive timestamp          | **Target level** — survives cert expiry |
 
 ## Seal Flow
 
@@ -49,14 +49,15 @@ parameters.setContentTimestampParameters(tspSource);
 
 ## Timestamping
 
-| Tier | TSA | Cost |
-|---|---|---|
-| Free (SES/AES) | FreeTSA.org, Open TSA | Free |
-| Paid (QES) | DigiCert, GlobalSign, Sectigo | Per-timestamp |
+| Tier           | TSA                           | Cost          |
+| -------------- | ----------------------------- | ------------- |
+| Free (SES/AES) | FreeTSA.org, Open TSA         | Free          |
+| Paid (QES)     | DigiCert, GlobalSign, Sectigo | Per-timestamp |
 
 ## Verification
 
 A correctly sealed PDF must:
+
 - Open in Adobe Reader without warnings (if AATL cert)
 - Show valid signature with signer identity
 - Show valid timestamp

@@ -28,16 +28,16 @@ Frontend → Database (direct access is forbidden)
 
 ## Container View
 
-| Container | Technology | Responsibility |
-|---|---|---|
-| Web App | Next.js, Tailwind, shadcn/ui, PDF.js on Cloudflare Pages | Editor, field placement, dashboards, signer page |
-| API / BFF | Hono on Cloudflare Workers (TypeScript) | REST, auth, workflow state machine, quota metering |
-| Queues / Cron | Cloudflare Queues + Cron Triggers | Email/SMS, webhooks, bulk send, auto-delete, archival |
-| Object Storage | Cloudflare R2 (S3-compatible) | Source + sealed PDFs; signed expiring URLs |
-| Signing Service | JVM container (EU DSS / PDFBox), CSC client | PDF flatten, hash, sign, timestamp, PAdES B-LTA |
-| Zitadel | Self-hosted container | OIDC, SAML, SCIM, MFA, sessions |
-| Relational DB | Neon Postgres + RLS | Orgs, envelopes, workflow, metadata |
-| Audit Log | Postgres append-only table, hash-chained | Immutable event trail |
+| Container       | Technology                                               | Responsibility                                        |
+| --------------- | -------------------------------------------------------- | ----------------------------------------------------- |
+| Web App         | Next.js, Tailwind, shadcn/ui, PDF.js on Cloudflare Pages | Editor, field placement, dashboards, signer page      |
+| API / BFF       | Hono on Cloudflare Workers (TypeScript)                  | REST, auth, workflow state machine, quota metering    |
+| Queues / Cron   | Cloudflare Queues + Cron Triggers                        | Email/SMS, webhooks, bulk send, auto-delete, archival |
+| Object Storage  | Cloudflare R2 (S3-compatible)                            | Source + sealed PDFs; signed expiring URLs            |
+| Signing Service | JVM container (EU DSS / PDFBox), CSC client              | PDF flatten, hash, sign, timestamp, PAdES B-LTA       |
+| Zitadel         | Self-hosted container                                    | OIDC, SAML, SCIM, MFA, sessions                       |
+| Relational DB   | Neon Postgres + RLS                                      | Orgs, envelopes, workflow, metadata                   |
+| Audit Log       | Postgres append-only table, hash-chained                 | Immutable event trail                                 |
 
 ## Deployment Topology
 

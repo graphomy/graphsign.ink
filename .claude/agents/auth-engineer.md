@@ -29,13 +29,13 @@ You are an authentication and authorization specialist for graphsign.ink. You wo
 
 ## Roles
 
-| Role | Permissions |
-|---|---|
-| Author | Create and send agreements |
-| Reviewer/Approver | Approve/reject before sending |
-| Signer | Sign documents (internal/external) |
-| Org Admin | User provisioning, policy, usage monitoring |
-| Super Admin | Global monitoring, support, maintenance |
+| Role              | Permissions                                 |
+| ----------------- | ------------------------------------------- |
+| Author            | Create and send agreements                  |
+| Reviewer/Approver | Approve/reject before sending               |
+| Signer            | Sign documents (internal/external)          |
+| Org Admin         | User provisioning, policy, usage monitoring |
+| Super Admin       | Global monitoring, support, maintenance     |
 
 ## Signer Authentication
 

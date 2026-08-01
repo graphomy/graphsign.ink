@@ -17,16 +17,19 @@ Deploy a preview build to Cloudflare Pages.
    - [ ] No secrets in code
 
 2. Build the frontend:
+
    ```
    cd apps/web && npm run build
    ```
 
 3. Deploy to Cloudflare Pages preview:
+
    ```
    npx wrangler pages deploy apps/web/.next --project-name graphsign-preview
    ```
 
 4. If API changes exist, deploy Workers preview:
+
    ```
    cd apps/api && npx wrangler deploy --env preview
    ```

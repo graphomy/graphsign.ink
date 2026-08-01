@@ -26,21 +26,21 @@ erDiagram
 
 ## Core Entities
 
-| Entity | Purpose | Key Notes |
-|---|---|---|
-| **Organisation** | Tenant container | Settings, subscription, compliance config. Every table carries `organisation_id`. |
-| **User** | Platform user | Auth, profile, roles, permissions. OIDC/SAML integration. |
-| **Template** | Reusable document template | Pre-placed fields, usage tracking. |
-| **Envelope** | Signing container | Documents + fields + recipients + workflow state. Central unit of work. |
-| **Document** | Agreement content | File metadata, storage path, content type, form fields. |
-| **Recipient** | Signing participant | Email, signing order, role (signer/approver/cc). |
-| **Field** | Signature/form field | Coordinates, type, assigned recipient. |
-| **Signing Session** | Single-use signer context | Magic-link token hash, expiry, IP, user agent. |
-| **Signature** | Cryptographic seal | Type (draw/type/upload/digital), certificate, PAdES level. |
-| **Certificate** | Signing certificate | Self-signed / DSC / AATL / Qualified. HSM integration. |
-| **Cert Config** | Per-org signing mode | Self-signed / BYO / managed / QTSP-CSC. |
-| **Audit Event** | Immutable action record | Append-only, hash-chained (`prev_hash` → `row_hash`). |
-| **Sealed Record** | Completed sealed PDF | PAdES B-LTA, RFC 3161 timestamp token. |
+| Entity              | Purpose                    | Key Notes                                                                         |
+| ------------------- | -------------------------- | --------------------------------------------------------------------------------- |
+| **Organisation**    | Tenant container           | Settings, subscription, compliance config. Every table carries `organisation_id`. |
+| **User**            | Platform user              | Auth, profile, roles, permissions. OIDC/SAML integration.                         |
+| **Template**        | Reusable document template | Pre-placed fields, usage tracking.                                                |
+| **Envelope**        | Signing container          | Documents + fields + recipients + workflow state. Central unit of work.           |
+| **Document**        | Agreement content          | File metadata, storage path, content type, form fields.                           |
+| **Recipient**       | Signing participant        | Email, signing order, role (signer/approver/cc).                                  |
+| **Field**           | Signature/form field       | Coordinates, type, assigned recipient.                                            |
+| **Signing Session** | Single-use signer context  | Magic-link token hash, expiry, IP, user agent.                                    |
+| **Signature**       | Cryptographic seal         | Type (draw/type/upload/digital), certificate, PAdES level.                        |
+| **Certificate**     | Signing certificate        | Self-signed / DSC / AATL / Qualified. HSM integration.                            |
+| **Cert Config**     | Per-org signing mode       | Self-signed / BYO / managed / QTSP-CSC.                                           |
+| **Audit Event**     | Immutable action record    | Append-only, hash-chained (`prev_hash` → `row_hash`).                             |
+| **Sealed Record**   | Completed sealed PDF       | PAdES B-LTA, RFC 3161 timestamp token.                                            |
 
 ## Workflow States
 

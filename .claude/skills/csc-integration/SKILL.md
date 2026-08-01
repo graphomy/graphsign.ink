@@ -13,6 +13,7 @@ CSC defines a common REST API for cloud/remote digital signatures. The signing s
 ## CSC API Endpoints (Internal)
 
 ### `POST /csc/credentials/list`
+
 List available signing credentials for an organisation.
 
 ```json
@@ -23,9 +24,11 @@ List available signing credentials for an organisation.
 ```
 
 ### `POST /csc/credentials/info`
+
 Get details about a specific credential (certificate, key algorithm, status).
 
 ### `POST /csc/signatures/signHash`
+
 Sign a document hash using a credential.
 
 ```json
@@ -39,6 +42,7 @@ Sign a document hash using a credential.
 ```
 
 Response:
+
 ```json
 {
   "signatures": ["base64-encoded-signature-value"]
@@ -47,11 +51,11 @@ Response:
 
 ## Integration Phases
 
-| Phase | Integration |
-|---|---|
-| V1 | CSC-shaped interface, self-signed/BYO keys via KMS |
-| V2 | Managed cloud-HSM keys via CSC |
-| V3 | QTSP endpoint for eIDAS QES |
+| Phase | Integration                                        |
+| ----- | -------------------------------------------------- |
+| V1    | CSC-shaped interface, self-signed/BYO keys via KMS |
+| V2    | Managed cloud-HSM keys via CSC                     |
+| V3    | QTSP endpoint for eIDAS QES                        |
 
 ## Key Design Principle
 

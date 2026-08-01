@@ -59,9 +59,7 @@ export default function RegisterPage() {
 
       if (!res.ok) {
         const data = await res.json().catch(() => null);
-        setApiError(
-          data?.error?.message ?? 'Something went wrong. Please try again.',
-        );
+        setApiError(data?.error?.message ?? 'Something went wrong. Please try again.');
         return;
       }
 
@@ -83,14 +81,22 @@ export default function RegisterPage() {
       >
         <div className="text-center space-y-4">
           <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-green-100">
-            <svg className="h-6 w-6 text-green-600" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" aria-hidden="true">
+            <svg
+              className="h-6 w-6 text-green-600"
+              fill="none"
+              viewBox="0 0 24 24"
+              strokeWidth={2}
+              stroke="currentColor"
+              aria-hidden="true"
+            >
               <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
             </svg>
           </div>
           <h2 className="text-xl font-semibold text-neutral-900">Check your email</h2>
           <p className="text-neutral-600">
-            We&apos;ve sent a verification link to <strong className="text-neutral-900">{email}</strong>.
-            Please click the link to activate your account.
+            We&apos;ve sent a verification link to{' '}
+            <strong className="text-neutral-900">{email}</strong>. Please click the link to activate
+            your account.
           </p>
           <p className="text-sm text-neutral-500">
             The link expires in 24 hours. Didn&apos;t receive the email? Check your spam folder.
@@ -103,9 +109,7 @@ export default function RegisterPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-center text-2xl font-semibold text-neutral-900">
-          Create your account
-        </h2>
+        <h2 className="text-center text-2xl font-semibold text-neutral-900">Create your account</h2>
         <p className="mt-2 text-center text-sm text-neutral-600">
           Start managing your agreements securely.
         </p>
@@ -188,15 +192,37 @@ export default function RegisterPage() {
 
           {/* Password strength indicator */}
           {password.length > 0 && (
-            <div className="mt-3 space-y-1.5" id="password-requirements" aria-label="Password requirements">
+            <div
+              className="mt-3 space-y-1.5"
+              id="password-requirements"
+              aria-label="Password requirements"
+            >
               {passwordRequirements.map((req) => (
                 <div key={req.label} className="flex items-center gap-2 text-xs">
                   {req.met ? (
-                    <svg className="h-3.5 w-3.5 text-green-500 shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" aria-hidden="true">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                    <svg
+                      className="h-3.5 w-3.5 text-green-500 shrink-0"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      strokeWidth={2.5}
+                      stroke="currentColor"
+                      aria-hidden="true"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M4.5 12.75l6 6 9-13.5"
+                      />
                     </svg>
                   ) : (
-                    <svg className="h-3.5 w-3.5 text-neutral-400 shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" aria-hidden="true">
+                    <svg
+                      className="h-3.5 w-3.5 text-neutral-400 shrink-0"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      strokeWidth={2.5}
+                      stroke="currentColor"
+                      aria-hidden="true"
+                    >
                       <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                     </svg>
                   )}
@@ -250,9 +276,25 @@ export default function RegisterPage() {
         >
           {isLoading ? (
             <span className="flex items-center justify-center gap-2">
-              <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              <svg
+                className="h-4 w-4 animate-spin"
+                viewBox="0 0 24 24"
+                fill="none"
+                aria-hidden="true"
+              >
+                <circle
+                  className="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  strokeWidth="4"
+                />
+                <path
+                  className="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                />
               </svg>
               Creating account...
             </span>

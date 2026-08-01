@@ -7,14 +7,17 @@ Security is mandatory. Never trade security for convenience.
 ## Encryption
 
 ### In Transit
+
 - TLS 1.3 enforced for all communications
 
 ### At Rest
+
 - Database: PostgreSQL native + storage-level encryption
 - Object storage: R2/MinIO native encryption
 - Completed documents: envelope-encryption with KMS-held keys
 
 ### Key Management
+
 - Signing and encryption keys in KMS/HSM — never in code or env files
 - Automated key rotation on schedule
 - Least-privilege: only signing service has key access
@@ -67,12 +70,12 @@ Validate every request, every field, every upload. Use Zod for schema validation
 
 ## Rate Limiting
 
-| Endpoint | Limit |
-|---|---|
-| Authentication | 10 req/min per IP |
-| Signing | 5 req/min per user |
-| General API | 100 req/min per API key |
-| Webhooks | Async, queue-based |
+| Endpoint       | Limit                   |
+| -------------- | ----------------------- |
+| Authentication | 10 req/min per IP       |
+| Signing        | 5 req/min per user      |
+| General API    | 100 req/min per API key |
+| Webhooks       | Async, queue-based      |
 
 Rate limit headers: `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`, `Retry-After`.
 
@@ -96,24 +99,24 @@ Never log: passwords, API keys, certificates, JWT tokens, customer documents.
 
 ## Data Classification
 
-| Data Type | Classification | Protection |
-|---|---|---|
-| Document content | Confidential | Encrypted at rest, KMS envelope encryption |
-| Signatures & audit logs | Confidential | Encrypted, tamper-evident, append-only |
-| User PII | Confidential | Encrypted, access-controlled |
-| API keys & credentials | Secret | KMS/HSM, never logged |
-| Signing keys | Secret | KMS/HSM only |
+| Data Type               | Classification | Protection                                 |
+| ----------------------- | -------------- | ------------------------------------------ |
+| Document content        | Confidential   | Encrypted at rest, KMS envelope encryption |
+| Signatures & audit logs | Confidential   | Encrypted, tamper-evident, append-only     |
+| User PII                | Confidential   | Encrypted, access-controlled               |
+| API keys & credentials  | Secret         | KMS/HSM, never logged                      |
+| Signing keys            | Secret         | KMS/HSM only                               |
 
 ## Compliance Framework
 
-| Framework | Level | Edition |
-|---|---|---|
-| eIDAS SES | Simple | All (Free) |
-| eIDAS AES | Advanced | All (BYO Certificate) |
-| eIDAS QES | Qualified | Enterprise (V3) |
-| ESIGN Act | Federal | All |
-| UETA | State | All |
-| 21 CFR Part 11 | Full | Enterprise (V3) |
+| Framework      | Level     | Edition               |
+| -------------- | --------- | --------------------- |
+| eIDAS SES      | Simple    | All (Free)            |
+| eIDAS AES      | Advanced  | All (BYO Certificate) |
+| eIDAS QES      | Qualified | Enterprise (V3)       |
+| ESIGN Act      | Federal   | All                   |
+| UETA           | State     | All                   |
+| 21 CFR Part 11 | Full      | Enterprise (V3)       |
 
 ## AI Rules
 

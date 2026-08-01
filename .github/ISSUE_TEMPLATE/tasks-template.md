@@ -4,7 +4,6 @@ about: Describe the details of the task to be completed.
 title: ''
 labels: ''
 assignees: graphomy
-
 ---
 
 **Objective**

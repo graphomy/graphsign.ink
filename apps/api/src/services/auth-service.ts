@@ -75,9 +75,7 @@ export class AuthService {
     // Generate verification token — raw token goes to email, hash goes to DB
     const rawToken = generateToken();
     const tokenHash = await hashToken(rawToken);
-    const tokenExpiresAt = new Date(
-      Date.now() + VERIFICATION_TOKEN_EXPIRY_HOURS * 60 * 60 * 1000,
-    );
+    const tokenExpiresAt = new Date(Date.now() + VERIFICATION_TOKEN_EXPIRY_HOURS * 60 * 60 * 1000);
 
     const user = await this.prisma.user.create({
       data: {
@@ -147,10 +145,7 @@ export class AuthService {
       throw new NotFoundError('Invalid or expired verification token.');
     }
 
-    if (
-      user.emailVerificationTokenExpiresAt &&
-      user.emailVerificationTokenExpiresAt < new Date()
-    ) {
+    if (user.emailVerificationTokenExpiresAt && user.emailVerificationTokenExpiresAt < new Date()) {
       throw new ValidationError('Verification token has expired. Please request a new one.');
     }
 

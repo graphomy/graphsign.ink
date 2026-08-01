@@ -15,30 +15,36 @@ Run a security review on staged or recent changes.
 3. Check each changed file against:
 
 ### Authentication & Authorization
+
 - All endpoints require auth (except public/signer routes)
 - RBAC checks on every protected route
 - Tenant context validated
 
 ### Input Validation
+
 - User input validated with Zod
 - File uploads validated (MIME, extension, size)
 - No SQL injection or XSS vectors
 
 ### Secrets
+
 - No secrets, API keys, or credentials in code
 - No sensitive data in logs
 - Private keys only via KMS/HSM
 
 ### Data Protection
+
 - RLS enabled on new tables
 - Sensitive fields encrypted
 - Signed URLs for storage access
 
 ### Audit
+
 - Business actions create audit events
 - Audit records append-only
 
 ### Dependencies
+
 - No new vulnerable dependencies
 
 4. Output a security report with findings categorized as:

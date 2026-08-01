@@ -44,19 +44,19 @@ graphsign.ink/
 
 ### Tech Stack (Quick Reference)
 
-| Layer | Technology |
-|---|---|
-| Language | TypeScript (strict mode) everywhere; Java for signing service |
-| Frontend | Next.js 14+, React 18+, Tailwind CSS, shadcn/ui, PDF.js |
-| API | Hono on Cloudflare Workers |
-| Database | Neon Postgres 15+ with RLS |
-| ORM | Prisma |
-| Object Storage | Cloudflare R2 (MinIO for self-host) |
-| Auth | Zitadel (self-hosted), OIDC, MFA (TOTP) |
-| Signing | EU DSS / PDFBox, PAdES B-LTA, CSC protocol |
-| Hosting | Cloudflare Pages + Workers, Fly.io (signing/Zitadel) |
-| CI/CD | GitHub Actions |
-| Testing | Vitest/Jest (unit), Playwright (E2E) |
+| Layer          | Technology                                                    |
+| -------------- | ------------------------------------------------------------- |
+| Language       | TypeScript (strict mode) everywhere; Java for signing service |
+| Frontend       | Next.js 14+, React 18+, Tailwind CSS, shadcn/ui, PDF.js       |
+| API            | Hono on Cloudflare Workers                                    |
+| Database       | Neon Postgres 15+ with RLS                                    |
+| ORM            | Prisma                                                        |
+| Object Storage | Cloudflare R2 (MinIO for self-host)                           |
+| Auth           | Zitadel (self-hosted), OIDC, MFA (TOTP)                       |
+| Signing        | EU DSS / PDFBox, PAdES B-LTA, CSC protocol                    |
+| Hosting        | Cloudflare Pages + Workers, Fly.io (signing/Zitadel)          |
+| CI/CD          | GitHub Actions                                                |
+| Testing        | Vitest/Jest (unit), Playwright (E2E)                          |
 
 ### Decision Hierarchy
 
@@ -72,19 +72,19 @@ When conflicts occur, follow this order:
 
 ### Agent Roster
 
-| Agent | Scope |
-|---|---|
-| `orchestrator` | Decomposes stories, delegates, validates |
-| `frontend-engineer` | `apps/web/`, React, Tailwind, PDF.js |
-| `api-engineer` | `apps/api/`, Hono, REST endpoints |
-| `db-engineer` | `packages/db/`, Prisma, migrations, RLS |
-| `auth-engineer` | `packages/auth/`, Zitadel, JWT, RBAC, magic links |
-| `signing-engineer` | `services/signing/`, PAdES, CSC, KMS |
-| `security-reviewer` | Reviews PRs for OWASP, secrets, RLS |
-| `compliance-reviewer` | ESIGN/UETA, eIDAS, 21 CFR Part 11 |
-| `devops-engineer` | `infra/`, Docker, Cloudflare, CI/CD |
-| `qa-e2e` | Playwright, integration tests |
-| `docs-writer` | OpenAPI, README, user docs |
+| Agent                 | Scope                                             |
+| --------------------- | ------------------------------------------------- |
+| `orchestrator`        | Decomposes stories, delegates, validates          |
+| `frontend-engineer`   | `apps/web/`, React, Tailwind, PDF.js              |
+| `api-engineer`        | `apps/api/`, Hono, REST endpoints                 |
+| `db-engineer`         | `packages/db/`, Prisma, migrations, RLS           |
+| `auth-engineer`       | `packages/auth/`, Zitadel, JWT, RBAC, magic links |
+| `signing-engineer`    | `services/signing/`, PAdES, CSC, KMS              |
+| `security-reviewer`   | Reviews PRs for OWASP, secrets, RLS               |
+| `compliance-reviewer` | ESIGN/UETA, eIDAS, 21 CFR Part 11                 |
+| `devops-engineer`     | `infra/`, Docker, Cloudflare, CI/CD               |
+| `qa-e2e`              | Playwright, integration tests                     |
+| `docs-writer`         | OpenAPI, README, user docs                        |
 
 ### Global Rules
 

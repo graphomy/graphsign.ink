@@ -37,6 +37,7 @@ CREATE TABLE audit_log (
 ## Verification
 
 To verify chain integrity:
+
 1. Read all audit events for an org ordered by `created_at`
 2. For each event, recompute `current_hash` from the stored fields + `previous_hash`
 3. Compare computed hash to stored `current_hash`
