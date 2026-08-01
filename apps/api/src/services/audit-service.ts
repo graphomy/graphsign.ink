@@ -45,7 +45,7 @@ export class PrismaAuditService implements AuditService {
       now,
       previousHash ?? 'GENESIS',
     ].join('|');
-    const currentHash = sha256(hashInput);
+    const currentHash = await sha256(hashInput);
 
     await this.prisma.auditLog.create({
       data: {

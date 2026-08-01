@@ -10,9 +10,7 @@ interface RateLimitEntry {
  * In-memory rate limiter for auth endpoints.
  * Enforces 10 req/min per IP per security.md.
  *
- * For production at scale, this should be replaced with
- * a distributed rate limiter (e.g., Cloudflare Workers rate limiting
- * or Redis-backed).
+ * Designed for Cloudflare Workers (lazy cleanup, no setInterval).
  */
 export function createRateLimiter(
   maxRequests: number = 10,
@@ -20,19 +18,18 @@ export function createRateLimiter(
 ): MiddlewareHandler {
   const store = new Map<string, RateLimitEntry>();
 
-  // Periodic cleanup to prevent memory leaks
-  setInterval(() => {
-    const now = Date.now();
-    for (const [key, entry] of store) {
-      if (entry.resetAt <= now) {
-        store.delete(key);
-      }
-    }
-  }, windowMs);
-
   return async (c, next) => {
     const ip = c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown';
     const now = Date.now();
+
+    // Lazy cleanup of expired entries on request
+    if (store.size > 500) {
+      for (const [key, entry] of store) {
+        if (entry.resetAt <= now) {
+          store.delete(key);
+        }
+      }
+    }
 
     let entry = store.get(ip);
     if (!entry || entry.resetAt <= now) {

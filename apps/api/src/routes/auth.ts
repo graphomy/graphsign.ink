@@ -1,26 +1,50 @@
 import { Hono } from 'hono';
 import type { PrismaClient } from '@graphsign/db';
+import { createPrismaClient, prisma as legacyPrisma } from '@graphsign/db';
 import { registerRequestSchema, verifyEmailRequestSchema } from '../validators/auth-validators.js';
 import { AuthService } from '../services/auth-service.js';
 import type { MailerService } from '../services/mailer-service.js';
+import { createMailerService } from '../services/mailer-service.js';
 import type { AuditService } from '../services/audit-service.js';
+import { PrismaAuditService } from '../services/audit-service.js';
 import { ValidationError } from '../utils/errors.js';
 import { createRateLimiter } from '../middleware/rate-limiter.js';
+import type { Env } from '../index.js';
+
+export interface AuthDeps {
+  prisma?: PrismaClient;
+  mailer?: MailerService;
+  audit?: AuditService;
+}
 
 /**
  * Auth route factory.
- * Receives dependencies via constructor injection for testability.
+ * Receives optional dependencies (for testing), or resolves them from c.env in Cloudflare Workers.
  */
-export function createAuthRoutes(deps: {
-  prisma: PrismaClient;
-  mailer: MailerService;
-  audit: AuditService;
-}) {
-  const auth = new Hono();
-  const authService = new AuthService(deps.prisma, deps.mailer, deps.audit);
+export function createAuthRoutes(deps?: AuthDeps) {
+  const auth = new Hono<{ Bindings: Env }>();
 
   // Rate limit auth endpoints: 10 req/min per IP (security.md)
   auth.use('/*', createRateLimiter(10, 60_000));
+
+  function getAuthService(c: any): AuthService {
+    let db = deps?.prisma;
+    if (!db) {
+      db = c.env?.DATABASE_URL ? createPrismaClient(c.env.DATABASE_URL) : legacyPrisma;
+    }
+
+    let mailer = deps?.mailer;
+    if (!mailer) {
+      mailer = createMailerService(c.env ?? {});
+    }
+
+    let audit = deps?.audit;
+    if (!audit) {
+      audit = new PrismaAuditService(db);
+    }
+
+    return new AuthService(db, mailer, audit);
+  }
 
   /**
    * POST /api/v1/auth/register
@@ -43,6 +67,8 @@ export function createAuthRoutes(deps: {
         issue: firstError?.message ?? 'validation_failed',
       });
     }
+
+    const authService = getAuthService(c);
 
     const result = await authService.register(parsed.data, {
       ipAddress: c.req.header('x-forwarded-for')?.split(',')[0]?.trim(),
@@ -82,6 +108,8 @@ export function createAuthRoutes(deps: {
         issue: firstError?.message ?? 'validation_failed',
       });
     }
+
+    const authService = getAuthService(c);
 
     const result = await authService.verifyEmail(parsed.data.token, {
       ipAddress: c.req.header('x-forwarded-for')?.split(',')[0]?.trim(),
