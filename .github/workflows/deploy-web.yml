@@ -1,0 +1,56 @@
+name: Deploy Web
+
+on:
+  push:
+    branches: [develop, main]
+    paths:
+      - "apps/web/**"
+      - "packages/**"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/deploy-web.yml"
+
+concurrency:
+  group: deploy-web-${{ github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Deploy to Cloudflare Pages
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    # Map branch to GitHub environment
+    environment: ${{ github.ref_name == 'main' && 'production' || 'development' }}
+
+    permissions:
+      contents: read
+      deployments: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build web app for Cloudflare Pages
+        run: pnpm --filter @graphsign/web pages:build
+
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: apps/web
+          # develop → dev-graphsign-web (development project)
+          # main    → graphsign-web     (production project)
+          command: pages deploy .vercel/output/static --project-name=${{ github.ref_name == 'main' && 'graphsign-web' || 'dev-graphsign-web' }}
