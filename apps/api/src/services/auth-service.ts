@@ -21,6 +21,7 @@ import {
   verifyTotpToken,
   generateQrCodeDataUri,
 } from '../utils/totp.js';
+import { signJwt, verifyJwt, decodeJwt } from '../utils/jwt.js';
 import {
   ConflictError,
   NotFoundError,
@@ -65,11 +66,29 @@ export interface VerifyEmailResult {
  * implementation without changing routes or controllers.
  */
 export class AuthService {
+  private static revokedJtis = new Set<string>();
+
   constructor(
     private readonly prisma: PrismaClient,
     private readonly mailer: MailerService,
     private readonly audit: AuditService,
   ) {}
+
+  /**
+   * Revokes a JWT token by adding its unique jti claim to the revoked list.
+   */
+  revokeToken(jti: string): void {
+    if (jti) {
+      AuthService.revokedJtis.add(jti);
+    }
+  }
+
+  /**
+   * Checks whether a JWT token has been revoked by checking its jti claim.
+   */
+  isTokenRevoked(jti: string): boolean {
+    return AuthService.revokedJtis.has(jti);
+  }
 
   /**
    * Registers a new user account.
@@ -255,7 +274,13 @@ export class AuthService {
       userAgent: meta.userAgent,
     });
 
-    const sessionToken = generateToken();
+    const sessionToken = await signJwt({
+      sub: user.id,
+      orgId: org.id,
+      email: user.email,
+      role: user.role ?? 'user',
+      jti: generateId(),
+    });
 
     return {
       id: user.id,
@@ -318,7 +343,13 @@ export class AuthService {
       userAgent: meta.userAgent,
     });
 
-    const sessionToken = generateToken();
+    const sessionToken = await signJwt({
+      sub: user.id,
+      orgId: org.id,
+      email: user.email,
+      role: user.role ?? 'user',
+      jti: generateId(),
+    });
 
     return {
       id: user.id,
@@ -601,9 +632,14 @@ export class AuthService {
    */
   async logout(
     userId?: string,
+    jti?: string,
     meta: { ipAddress?: string; userAgent?: string } = {},
   ): Promise<{ message: string }> {
     const org = await this.getOrCreateDefaultOrganisation();
+
+    if (jti) {
+      this.revokeToken(jti);
+    }
 
     if (userId) {
       await this.audit.log({
@@ -849,12 +885,39 @@ export class AuthService {
    * Validates if a session is still active based on the last active timestamp and configured timeout.
    */
   async validateSession(
-    lastActiveAtMs?: number,
+    lastActiveAtMsOrToken?: number | string,
     organisationId?: string,
   ): Promise<{ valid: boolean; sessionTimeoutMinutes: number; expiresAt: string }> {
     const settings = await this.getSessionSettings(organisationId);
     const timeoutMs = settings.sessionTimeoutMinutes * 60 * 1000;
     const now = Date.now();
+
+    if (typeof lastActiveAtMsOrToken === 'string') {
+      const decoded = decodeJwt(lastActiveAtMsOrToken);
+      if (decoded && decoded.jti && this.isTokenRevoked(decoded.jti)) {
+        return {
+          valid: false,
+          sessionTimeoutMinutes: settings.sessionTimeoutMinutes,
+          expiresAt: new Date(now).toISOString(),
+        };
+      }
+      try {
+        const payload = await verifyJwt(lastActiveAtMsOrToken);
+        return {
+          valid: true,
+          sessionTimeoutMinutes: settings.sessionTimeoutMinutes,
+          expiresAt: new Date(payload.exp * 1000).toISOString(),
+        };
+      } catch {
+        return {
+          valid: false,
+          sessionTimeoutMinutes: settings.sessionTimeoutMinutes,
+          expiresAt: new Date(now).toISOString(),
+        };
+      }
+    }
+
+    const lastActiveAtMs = typeof lastActiveAtMsOrToken === 'number' ? lastActiveAtMsOrToken : undefined;
 
     if (!lastActiveAtMs) {
       return {
