@@ -7,6 +7,7 @@ import type {
   UpdateSessionSettingsRequest,
   UpdateProfileRequest,
   LoginMfaRequest,
+  UpdateMfaEnforcementRequest,
 } from '../validators/auth-validators.js';
 import {
   generateId,
@@ -48,6 +49,7 @@ export interface LoginResult {
   token?: string;
   organisationId?: string;
   mfaRequired?: boolean;
+  mfaSetupRequired?: boolean;
   mfaTicket?: string;
 }
 
@@ -234,10 +236,26 @@ export class AuthService {
       throw new UnauthorizedError('Account is disabled or suspended.');
     }
 
+    const isMfaEnforcedForRole =
+      org.mfaRequired &&
+      (Array.isArray(org.mfaRequiredRoles)
+        ? (org.mfaRequiredRoles as string[]).includes('*') ||
+          (org.mfaRequiredRoles as string[]).includes(user.role ?? 'user')
+        : true);
+
     if (user.mfaEnabled) {
       const mfaTicket = `mfa_${user.id}_${Date.now()}`;
       return {
         mfaRequired: true,
+        mfaTicket,
+        email: user.email,
+      };
+    }
+
+    if (isMfaEnforcedForRole) {
+      const mfaTicket = `mfasetup_${user.id}_${Date.now()}`;
+      return {
+        mfaSetupRequired: true,
         mfaTicket,
         email: user.email,
       };
@@ -893,6 +911,8 @@ export class AuthService {
       status: user.status,
       pendingEmail: user.pendingEmail,
       createdAt: user.createdAt.toISOString(),
+      mfaEnabled: user.mfaEnabled ?? false,
+      role: user.role ?? 'user',
     };
   }
 
@@ -1046,6 +1066,73 @@ export class AuthService {
       email: updatedUser.email,
       name: updatedUser.name,
       message: 'Email address updated successfully.',
+    };
+  }
+
+  /**
+   * Retrieves MFA enforcement settings for an organisation.
+   */
+  async getMfaEnforcement(orgId?: string): Promise<{ mfaRequired: boolean; mfaRequiredRoles: string[] }> {
+    const org = orgId
+      ? await this.prisma.organisation.findUnique({ where: { id: orgId } })
+      : await this.getOrCreateDefaultOrganisation();
+
+    if (!org) {
+      throw new NotFoundError('Organisation not found.');
+    }
+
+    const roles = Array.isArray(org.mfaRequiredRoles) ? (org.mfaRequiredRoles as string[]) : [];
+
+    return {
+      mfaRequired: org.mfaRequired ?? false,
+      mfaRequiredRoles: roles,
+    };
+  }
+
+  /**
+   * Updates MFA enforcement settings for an organisation and logs audit event.
+   */
+  async updateMfaEnforcement(
+    orgId: string | undefined,
+    data: UpdateMfaEnforcementRequest,
+    meta: { ipAddress?: string; userAgent?: string } = {},
+  ): Promise<{ mfaRequired: boolean; mfaRequiredRoles: string[]; message: string }> {
+    const org = orgId
+      ? await this.prisma.organisation.findUnique({ where: { id: orgId } })
+      : await this.getOrCreateDefaultOrganisation();
+
+    if (!org) {
+      throw new NotFoundError('Organisation not found.');
+    }
+
+    const updatedRoles = data.mfaRequiredRoles ?? ['*'];
+
+    const updatedOrg = await this.prisma.organisation.update({
+      where: { id: org.id },
+      data: {
+        mfaRequired: data.mfaRequired,
+        mfaRequiredRoles: updatedRoles,
+      },
+    });
+
+    await this.audit.log({
+      organisationId: org.id,
+      action: 'organisation.mfa_enforcement_updated',
+      resourceType: 'organisation',
+      resourceId: org.id,
+      metadata: {
+        previousMfaRequired: org.mfaRequired,
+        newMfaRequired: data.mfaRequired,
+        roles: updatedRoles,
+      },
+      ipAddress: meta.ipAddress,
+      userAgent: meta.userAgent,
+    });
+
+    return {
+      mfaRequired: updatedOrg.mfaRequired,
+      mfaRequiredRoles: (updatedOrg.mfaRequiredRoles as string[]) ?? [],
+      message: 'MFA enforcement settings updated successfully.',
     };
   }
 

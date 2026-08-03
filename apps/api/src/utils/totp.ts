@@ -137,7 +137,6 @@ export async function verifyTotpToken(
  * Generates an SVG Data URI representation of an otpauth URL for QR Code display.
  */
 export function generateQrCodeDataUri(text: string): string {
-  // Encodes otpauth URL into SVG data URL
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200">
     <rect width="200" height="200" fill="#ffffff"/>
     <rect x="20" y="20" width="160" height="160" fill="none" stroke="#ba0000" stroke-width="4"/>

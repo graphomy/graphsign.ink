@@ -763,5 +763,48 @@ describe('MFA Routes', () => {
   });
 });
 
+describe('MFA Enforcement Routes', () => {
+  let deps: ReturnType<typeof createMockDeps>;
+  let app: Hono;
 
+  beforeEach(() => {
+    deps = createMockDeps();
+    (deps.prisma.organisation.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ...DEFAULT_ORG,
+      mfaRequired: false,
+      mfaRequiredRoles: [],
+    });
+    (deps.prisma.organisation.update as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ...DEFAULT_ORG,
+      mfaRequired: true,
+      mfaRequiredRoles: ['admin', 'signer'],
+    });
+    app = createApp(deps);
+  });
 
+  it('should GET /mfa-enforcement successfully', async () => {
+    const res = await app.request('/api/v1/auth/mfa-enforcement', {
+      method: 'GET',
+    });
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    expect(body.mfaRequired).toBe(false);
+  });
+
+  it('should PUT /mfa-enforcement to update policy settings', async () => {
+    const res = await app.request('/api/v1/auth/mfa-enforcement', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        mfaRequired: true,
+        mfaRequiredRoles: ['admin', 'signer'],
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    expect(body.mfaRequired).toBe(true);
+    expect(body.mfaRequiredRoles).toEqual(['admin', 'signer']);
+  });
+});
