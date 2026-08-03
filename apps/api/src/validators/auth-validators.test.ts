@@ -7,6 +7,8 @@ import {
   resetPasswordRequestSchema,
   updateSessionSettingsSchema,
   updateProfileRequestSchema,
+  verifyMfaSetupRequestSchema,
+  loginMfaRequestSchema,
 } from './auth-validators.js';
 
 describe('registerRequestSchema', () => {
@@ -293,5 +295,34 @@ describe('updateProfileRequestSchema', () => {
     expect(result.success).toBe(false);
   });
 });
+
+describe('verifyMfaSetupRequestSchema', () => {
+  it('should accept valid 6-digit TOTP code', () => {
+    const result = verifyMfaSetupRequestSchema.safeParse({ code: '123456' });
+    expect(result.success).toBe(true);
+  });
+
+  it('should reject code that is not 6 digits', () => {
+    expect(verifyMfaSetupRequestSchema.safeParse({ code: '12345' }).success).toBe(false);
+    expect(verifyMfaSetupRequestSchema.safeParse({ code: '1234567' }).success).toBe(false);
+    expect(verifyMfaSetupRequestSchema.safeParse({ code: 'abcdef' }).success).toBe(false);
+  });
+});
+
+describe('loginMfaRequestSchema', () => {
+  it('should accept valid mfaTicket and 6-digit TOTP code', () => {
+    const result = loginMfaRequestSchema.safeParse({
+      mfaTicket: 'mfa_user-123_1700000',
+      code: '654321',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('should reject missing mfaTicket or invalid code', () => {
+    expect(loginMfaRequestSchema.safeParse({ mfaTicket: '', code: '654321' }).success).toBe(false);
+    expect(loginMfaRequestSchema.safeParse({ mfaTicket: 'ticket', code: '123' }).success).toBe(false);
+  });
+});
+
 
 

@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Hono } from 'hono';
 import { createAuthRoutes } from './auth.js';
 import { errorHandler } from '../middleware/error-handler.js';
+import { generateTotpToken } from '../utils/totp.js';
 
 // Mock crypto module
 vi.mock('../utils/crypto.js', () => ({
@@ -685,5 +686,82 @@ describe('Profile Routes', () => {
     expect(body.message).toBe('Email address updated successfully.');
   });
 });
+
+describe('MFA Routes', () => {
+  let deps: ReturnType<typeof createMockDeps>;
+  let app: Hono;
+
+  const mockUser = {
+    id: '00000000-0000-7000-8000-000000000001',
+    organisationId: DEFAULT_ORG.id,
+    email: 'mfauser@example.com',
+    passwordHash: '$2b$10$abcdefghijklmnopqrstuu',
+    emailVerified: true,
+    status: 'active',
+    mfaEnabled: true,
+    mfaSecret: 'JBSWY3DPEHPK3PXP',
+    deletedAt: null,
+  };
+
+  beforeEach(() => {
+    deps = createMockDeps();
+    (deps.prisma.user.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue(mockUser);
+    app = createApp(deps);
+  });
+
+  it('should POST /mfa/setup and return secret and QR code URI', async () => {
+    (deps.prisma.user.update as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ...mockUser,
+      mfaPendingSecret: 'JBSWY3DPEHPK3PXP',
+    });
+
+    const res = await app.request('/api/v1/auth/mfa/setup', {
+      method: 'POST',
+      headers: { 'x-user-id': mockUser.id },
+    });
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    expect(body.secret).toBeDefined();
+    expect(body.qrCode).toContain('data:image/svg+xml');
+  });
+
+  it('should return 400 when /mfa/verify-setup receives invalid code', async () => {
+    (deps.prisma.user.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ...mockUser,
+      mfaPendingSecret: 'JBSWY3DPEHPK3PXP',
+    });
+
+    const res = await app.request('/api/v1/auth/mfa/verify-setup', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-user-id': mockUser.id,
+      },
+      body: JSON.stringify({ code: '000000' }),
+    });
+
+    expect(res.status).toBe(400);
+  });
+
+  it('should POST /login/mfa with valid code and return session token', async () => {
+    const validCode = await generateTotpToken('JBSWY3DPEHPK3PXP');
+
+    const res = await app.request('/api/v1/auth/login/mfa', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        mfaTicket: `mfa_${mockUser.id}_170000000`,
+        code: validCode,
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    expect(body.token).toBeDefined();
+    expect(body.message).toBe('Login successful.');
+  });
+});
+
 
 
