@@ -169,7 +169,12 @@ export const updateProfileRequestSchema = z.object({
   email: z
     .string()
     .transform((val) => val.toLowerCase().trim())
-    .pipe(z.string().email('Please enter a valid email address.').max(255, 'Email must be 255 characters or fewer.'))
+    .pipe(
+      z
+        .string()
+        .email('Please enter a valid email address.')
+        .max(255, 'Email must be 255 characters or fewer.'),
+    )
     .optional(),
 });
 
@@ -233,5 +238,3 @@ export const mfaEnforcementResponseSchema = z.object({
 });
 
 export type MfaEnforcementResponse = z.infer<typeof mfaEnforcementResponseSchema>;
-
-

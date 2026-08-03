@@ -224,7 +224,9 @@ function LoginContent() {
     return (
       <div className="space-y-6" data-testid="mfa-verification-step">
         <div>
-          <h2 className="text-center text-2xl font-semibold text-neutral-900">Two-Step Verification</h2>
+          <h2 className="text-center text-2xl font-semibold text-neutral-900">
+            Two-Step Verification
+          </h2>
           <p className="mt-2 text-center text-sm text-neutral-600">
             Enter the 6-digit code from your authenticator app to complete sign in.
           </p>
@@ -236,13 +238,19 @@ function LoginContent() {
           data-testid="mfa-login-form"
         >
           {apiError && (
-            <div className="rounded-lg bg-red-50 border border-red-200 p-4 text-sm text-red-700" role="alert">
+            <div
+              className="rounded-lg bg-red-50 border border-red-200 p-4 text-sm text-red-700"
+              role="alert"
+            >
               {apiError}
             </div>
           )}
 
           <div className="space-y-2">
-            <label htmlFor="totpCode" className="block text-xs font-semibold text-neutral-700 uppercase tracking-wider text-center">
+            <label
+              htmlFor="totpCode"
+              className="block text-xs font-semibold text-neutral-700 uppercase tracking-wider text-center"
+            >
               6-Digit Authenticator Code
             </label>
             <input
@@ -276,9 +284,12 @@ function LoginContent() {
     return (
       <div className="space-y-6" data-testid="mfa-forced-setup-step">
         <div>
-          <h2 className="text-center text-2xl font-semibold text-neutral-900">MFA Setup Required</h2>
+          <h2 className="text-center text-2xl font-semibold text-neutral-900">
+            MFA Setup Required
+          </h2>
           <p className="mt-2 text-center text-sm text-neutral-600">
-            Your organisation requires Multi-Factor Authentication for your account role before signing in.
+            Your organisation requires Multi-Factor Authentication for your account role before
+            signing in.
           </p>
         </div>
 
@@ -305,7 +316,12 @@ function LoginContent() {
               {setupQrCode && (
                 <div className="bg-white p-2 border border-neutral-200 rounded-lg shadow-sm">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={setupQrCode} alt="TOTP QR Code" className="h-36 w-36" data-testid="forced-mfa-qr" />
+                  <img
+                    src={setupQrCode}
+                    alt="TOTP QR Code"
+                    className="h-36 w-36"
+                    data-testid="forced-mfa-qr"
+                  />
                 </div>
               )}
               {setupSecret && (
@@ -320,7 +336,10 @@ function LoginContent() {
           </div>
 
           <div className="space-y-2 pt-2 border-t border-neutral-100">
-            <label htmlFor="forcedTotpCode" className="block text-xs font-semibold text-neutral-700 uppercase tracking-wider text-center">
+            <label
+              htmlFor="forcedTotpCode"
+              className="block text-xs font-semibold text-neutral-700 uppercase tracking-wider text-center"
+            >
               Step 2: Enter Generated 6-Digit Code
             </label>
             <input

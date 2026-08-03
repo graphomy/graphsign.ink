@@ -152,7 +152,10 @@ function ProfileContent() {
   ];
 
   return (
-    <div className="min-h-screen bg-neutral-50 flex flex-col font-sans" data-testid="profile-settings-container">
+    <div
+      className="min-h-screen bg-neutral-50 flex flex-col font-sans"
+      data-testid="profile-settings-container"
+    >
       {/* Header */}
       <header className="sticky top-0 z-10 border-b border-neutral-200 bg-white/80 backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
@@ -213,7 +216,9 @@ function ProfileContent() {
               Email Change Pending Verification
             </div>
             <p className="text-xs text-amber-800">
-              A verification link was sent to <strong className="font-medium">{profile.pendingEmail}</strong>. Please check your inbox to confirm this email update.
+              A verification link was sent to{' '}
+              <strong className="font-medium">{profile.pendingEmail}</strong>. Please check your
+              inbox to confirm this email update.
             </p>
           </div>
         )}
@@ -258,7 +263,8 @@ function ProfileContent() {
                   data-testid="email-input"
                 />
                 <p className="mt-1 text-xs text-neutral-500">
-                  Changing your email address requires clicking a verification link sent to your new email.
+                  Changing your email address requires clicking a verification link sent to your new
+                  email.
                 </p>
               </div>
 

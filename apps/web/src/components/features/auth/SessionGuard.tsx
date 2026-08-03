@@ -35,7 +35,11 @@ export function SessionGuard({
     })
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
-        if (isMounted && data?.sessionTimeoutMinutes && typeof data.sessionTimeoutMinutes === 'number') {
+        if (
+          isMounted &&
+          data?.sessionTimeoutMinutes &&
+          typeof data.sessionTimeoutMinutes === 'number'
+        ) {
           setEffectiveTimeoutMs(data.sessionTimeoutMinutes * 60 * 1000);
         }
       })
@@ -98,4 +102,3 @@ export function SessionGuard({
 
   return <>{children}</>;
 }
-

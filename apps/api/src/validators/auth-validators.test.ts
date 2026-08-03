@@ -245,7 +245,9 @@ describe('updateSessionSettingsSchema', () => {
 
   it('should accept boundary values 1 and 1440', () => {
     expect(updateSessionSettingsSchema.safeParse({ sessionTimeoutMinutes: 1 }).success).toBe(true);
-    expect(updateSessionSettingsSchema.safeParse({ sessionTimeoutMinutes: 1440 }).success).toBe(true);
+    expect(updateSessionSettingsSchema.safeParse({ sessionTimeoutMinutes: 1440 }).success).toBe(
+      true,
+    );
   });
 
   it('should reject non-integer numbers', () => {
@@ -321,7 +323,9 @@ describe('loginMfaRequestSchema', () => {
 
   it('should reject missing mfaTicket or invalid code', () => {
     expect(loginMfaRequestSchema.safeParse({ mfaTicket: '', code: '654321' }).success).toBe(false);
-    expect(loginMfaRequestSchema.safeParse({ mfaTicket: 'ticket', code: '123' }).success).toBe(false);
+    expect(loginMfaRequestSchema.safeParse({ mfaTicket: 'ticket', code: '123' }).success).toBe(
+      false,
+    );
   });
 });
 

@@ -67,7 +67,9 @@ function SecuritySettingsContent() {
           const enfData = await enforcementRes.json();
           setEnforcement({
             mfaRequired: enfData.mfaRequired ?? false,
-            mfaRequiredRoles: Array.isArray(enfData.mfaRequiredRoles) ? enfData.mfaRequiredRoles : ['*'],
+            mfaRequiredRoles: Array.isArray(enfData.mfaRequiredRoles)
+              ? enfData.mfaRequiredRoles
+              : ['*'],
           });
         }
       } catch {
@@ -160,7 +162,11 @@ function SecuritySettingsContent() {
   }
 
   async function handleDisableMfa() {
-    if (!confirm('Are you sure you want to disable Multi-Factor Authentication? Your account will be less secure.')) {
+    if (
+      !confirm(
+        'Are you sure you want to disable Multi-Factor Authentication? Your account will be less secure.',
+      )
+    ) {
       return;
     }
 
@@ -252,7 +258,10 @@ function SecuritySettingsContent() {
   }
 
   return (
-    <div className="min-h-screen bg-neutral-50 flex flex-col font-sans" data-testid="security-settings-container">
+    <div
+      className="min-h-screen bg-neutral-50 flex flex-col font-sans"
+      data-testid="security-settings-container"
+    >
       {/* Header */}
       <header className="sticky top-0 z-10 border-b border-neutral-200 bg-white/80 backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
@@ -278,7 +287,9 @@ function SecuritySettingsContent() {
       {/* Main Content */}
       <main className="flex-1 py-8 px-4 sm:px-6 lg:px-8 max-w-4xl mx-auto w-full space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-neutral-900 tracking-tight">Security & Multi-Factor Authentication</h1>
+          <h1 className="text-2xl font-bold text-neutral-900 tracking-tight">
+            Security & Multi-Factor Authentication
+          </h1>
           <p className="text-sm text-neutral-600 mt-1">
             Configure TOTP Multi-Factor Authentication and manage organisation security policies.
           </p>
@@ -315,19 +326,28 @@ function SecuritySettingsContent() {
             <>
               <div className="flex items-center justify-between">
                 <div>
-                  <h2 className="text-base font-semibold text-neutral-900">Your Authenticator App (TOTP)</h2>
+                  <h2 className="text-base font-semibold text-neutral-900">
+                    Your Authenticator App (TOTP)
+                  </h2>
                   <p className="text-xs text-neutral-500 mt-0.5">
-                    Use a mobile authenticator app (Google Authenticator, Authy, 1Password) for 2-step verification.
+                    Use a mobile authenticator app (Google Authenticator, Authy, 1Password) for
+                    2-step verification.
                   </p>
                 </div>
                 <div>
                   {profile?.mfaEnabled ? (
-                    <span className="inline-flex items-center gap-1.5 rounded-full bg-green-50 px-3 py-1 text-xs font-semibold text-green-700 border border-green-200" data-testid="mfa-enabled-badge">
+                    <span
+                      className="inline-flex items-center gap-1.5 rounded-full bg-green-50 px-3 py-1 text-xs font-semibold text-green-700 border border-green-200"
+                      data-testid="mfa-enabled-badge"
+                    >
                       <span className="h-2 w-2 rounded-full bg-green-500" />
                       MFA Enabled
                     </span>
                   ) : (
-                    <span className="inline-flex items-center gap-1.5 rounded-full bg-neutral-100 px-3 py-1 text-xs font-semibold text-neutral-600 border border-neutral-200" data-testid="mfa-disabled-badge">
+                    <span
+                      className="inline-flex items-center gap-1.5 rounded-full bg-neutral-100 px-3 py-1 text-xs font-semibold text-neutral-600 border border-neutral-200"
+                      data-testid="mfa-disabled-badge"
+                    >
                       Disabled
                     </span>
                   )}
@@ -338,7 +358,8 @@ function SecuritySettingsContent() {
               {profile?.mfaEnabled && setupStep !== 'setup' && (
                 <div className="rounded-xl bg-neutral-50 border border-neutral-200 p-5 space-y-4">
                   <p className="text-xs text-neutral-600 leading-relaxed">
-                    MFA is active. Every login attempt will require entering a 6-digit code from your authenticator app.
+                    MFA is active. Every login attempt will require entering a 6-digit code from
+                    your authenticator app.
                   </p>
 
                   {backupCodes.length > 0 && (
@@ -347,11 +368,15 @@ function SecuritySettingsContent() {
                         Recovery Backup Codes
                       </h3>
                       <p className="text-xs text-neutral-500">
-                        Store these single-use recovery codes in a safe place. You can use them if you lose access to your authenticator app.
+                        Store these single-use recovery codes in a safe place. You can use them if
+                        you lose access to your authenticator app.
                       </p>
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2">
                         {backupCodes.map((code, idx) => (
-                          <span key={idx} className="font-mono text-xs bg-neutral-100 p-2 rounded text-center font-bold text-neutral-800">
+                          <span
+                            key={idx}
+                            className="font-mono text-xs bg-neutral-100 p-2 rounded text-center font-bold text-neutral-800"
+                          >
                             {code}
                           </span>
                         ))}
@@ -392,7 +417,9 @@ function SecuritySettingsContent() {
 
                   {setupStep === 'setup' && (
                     <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-6 space-y-6">
-                      <h3 className="text-sm font-semibold text-neutral-900">Step 1: Scan QR Code</h3>
+                      <h3 className="text-sm font-semibold text-neutral-900">
+                        Step 1: Scan QR Code
+                      </h3>
                       <p className="text-xs text-neutral-600">
                         Scan this QR code using Google Authenticator, Authy, or 1Password.
                       </p>
@@ -401,11 +428,18 @@ function SecuritySettingsContent() {
                         {qrCode && (
                           <div className="bg-white p-3 border border-neutral-200 rounded-xl shadow-sm">
                             {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src={qrCode} alt="TOTP QR Code" className="h-40 w-40" data-testid="mfa-qr-code" />
+                            <img
+                              src={qrCode}
+                              alt="TOTP QR Code"
+                              className="h-40 w-40"
+                              data-testid="mfa-qr-code"
+                            />
                           </div>
                         )}
                         <div className="space-y-2 text-xs">
-                          <span className="font-semibold text-neutral-700 block">Manual Key Entry:</span>
+                          <span className="font-semibold text-neutral-700 block">
+                            Manual Key Entry:
+                          </span>
                           <code className="block font-mono bg-white p-2.5 rounded border border-neutral-200 text-neutral-900 font-bold select-all tracking-wider text-sm">
                             {secret}
                           </code>
@@ -414,8 +448,13 @@ function SecuritySettingsContent() {
                         </div>
                       </div>
 
-                      <form onSubmit={handleVerifySetup} className="space-y-4 pt-4 border-t border-neutral-200">
-                        <h3 className="text-sm font-semibold text-neutral-900">Step 2: Enter 6-Digit Code</h3>
+                      <form
+                        onSubmit={handleVerifySetup}
+                        className="space-y-4 pt-4 border-t border-neutral-200"
+                      >
+                        <h3 className="text-sm font-semibold text-neutral-900">
+                          Step 2: Enter 6-Digit Code
+                        </h3>
                         <div className="max-w-xs space-y-2">
                           <input
                             type="text"
@@ -446,21 +485,33 @@ function SecuritySettingsContent() {
         </div>
 
         {/* Organisation Admin Enforcement Card */}
-        <div className="rounded-2xl border border-neutral-200 bg-white p-6 sm:p-8 shadow-sm space-y-6" data-testid="mfa-enforcement-card">
+        <div
+          className="rounded-2xl border border-neutral-200 bg-white p-6 sm:p-8 shadow-sm space-y-6"
+          data-testid="mfa-enforcement-card"
+        >
           <div>
-            <h2 className="text-base font-semibold text-neutral-900">Organisation Security Policy</h2>
+            <h2 className="text-base font-semibold text-neutral-900">
+              Organisation Security Policy
+            </h2>
             <p className="text-xs text-neutral-500 mt-0.5">
               Enforce mandatory Multi-Factor Authentication (MFA) for members of your organisation.
             </p>
           </div>
 
-          <form onSubmit={handleSaveEnforcement} className="space-y-6" data-testid="mfa-enforcement-form">
+          <form
+            onSubmit={handleSaveEnforcement}
+            className="space-y-6"
+            data-testid="mfa-enforcement-form"
+          >
             {/* Toggle switch */}
             <div className="flex items-center justify-between p-4 rounded-xl bg-neutral-50 border border-neutral-200">
               <div>
-                <span className="text-sm font-medium text-neutral-900 block">Require MFA for Sign-In</span>
+                <span className="text-sm font-medium text-neutral-900 block">
+                  Require MFA for Sign-In
+                </span>
                 <span className="text-xs text-neutral-500 block">
-                  When enabled, users without MFA configured will be blocked at sign-in until they complete MFA setup.
+                  When enabled, users without MFA configured will be blocked at sign-in until they
+                  complete MFA setup.
                 </span>
               </div>
               <input

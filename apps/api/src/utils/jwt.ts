@@ -41,13 +41,10 @@ function arrayBufferToBase64Url(buffer: ArrayBuffer): string {
 async function getHmacKey(secret: string): Promise<CryptoKey> {
   const encoder = new TextEncoder();
   const keyData = encoder.encode(secret || DEFAULT_SECRET);
-  return crypto.subtle.importKey(
-    'raw',
-    keyData,
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign', 'verify'],
-  );
+  return crypto.subtle.importKey('raw', keyData, { name: 'HMAC', hash: 'SHA-256' }, false, [
+    'sign',
+    'verify',
+  ]);
 }
 
 /**
@@ -115,7 +112,9 @@ export async function verifyJwt(
   );
 
   if (!isValidSignature) {
-    throw new Error('Invalid JWT signature: Token signature does not match or has been tampered with.');
+    throw new Error(
+      'Invalid JWT signature: Token signature does not match or has been tampered with.',
+    );
   }
 
   let payload: JwtPayload;
