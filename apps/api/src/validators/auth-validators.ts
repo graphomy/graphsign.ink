@@ -189,8 +189,50 @@ export const profileResponseSchema = z.object({
   status: z.string(),
   pendingEmail: z.string().nullable().optional(),
   createdAt: z.string().optional(),
+  mfaEnabled: z.boolean().optional(),
+  role: z.string().optional(),
 });
 
 export type ProfileResponse = z.infer<typeof profileResponseSchema>;
+
+export const verifyMfaSetupRequestSchema = z.object({
+  code: z
+    .string({ required_error: 'Verification code is required.' })
+    .length(6, 'Verification code must be exactly 6 digits.')
+    .regex(/^\d+$/, 'Verification code must contain digits only.'),
+});
+
+export type VerifyMfaSetupRequest = z.infer<typeof verifyMfaSetupRequestSchema>;
+
+export const loginMfaRequestSchema = z.object({
+  mfaTicket: z.string().min(1, 'MFA ticket is required.'),
+  code: z
+    .string({ required_error: 'Verification code is required.' })
+    .length(6, 'Verification code must be 6 digits.')
+    .regex(/^\d+$/, 'Verification code must contain digits only.'),
+});
+
+export type LoginMfaRequest = z.infer<typeof loginMfaRequestSchema>;
+
+export const disableMfaRequestSchema = z.object({
+  codeOrPassword: z.string().optional(),
+});
+
+export type DisableMfaRequest = z.infer<typeof disableMfaRequestSchema>;
+
+export const updateMfaEnforcementRequestSchema = z.object({
+  mfaRequired: z.boolean(),
+  mfaRequiredRoles: z.array(z.string()).optional(),
+});
+
+export type UpdateMfaEnforcementRequest = z.infer<typeof updateMfaEnforcementRequestSchema>;
+
+export const mfaEnforcementResponseSchema = z.object({
+  mfaRequired: z.boolean(),
+  mfaRequiredRoles: z.array(z.string()),
+});
+
+export type MfaEnforcementResponse = z.infer<typeof mfaEnforcementResponseSchema>;
+
 
 

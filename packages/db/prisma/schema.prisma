@@ -19,6 +19,8 @@ model Organisation {
   tenantId  String   @unique @map("tenant_id") @db.Uuid
   status    String   @default("active") @db.VarChar(20)
   sessionTimeoutMinutes Int @default(15) @map("session_timeout_minutes")
+  mfaRequired           Boolean   @default(false) @map("mfa_required")
+  mfaRequiredRoles      Json?     @map("mfa_required_roles") @db.JsonB
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz()
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz()
@@ -48,6 +50,11 @@ model User {
   pendingEmail                  String?   @map("pending_email") @db.VarChar(255)
   pendingEmailTokenHash         String?   @map("pending_email_token_hash") @db.VarChar(255)
   pendingEmailTokenExpiresAt    DateTime? @map("pending_email_token_expires_at") @db.Timestamptz()
+  role                          String    @default("user") @db.VarChar(50)
+  mfaEnabled                    Boolean   @default(false) @map("mfa_enabled")
+  mfaSecret                     String?   @map("mfa_secret") @db.VarChar(255)
+  mfaPendingSecret              String?   @map("mfa_pending_secret") @db.VarChar(255)
+  mfaBackupCodes                Json?     @map("mfa_backup_codes") @db.JsonB
   status                        String    @default("pending_verification") @db.VarChar(20)
   createdAt                     DateTime  @default(now()) @map("created_at") @db.Timestamptz()
   updatedAt                     DateTime  @updatedAt @map("updated_at") @db.Timestamptz()

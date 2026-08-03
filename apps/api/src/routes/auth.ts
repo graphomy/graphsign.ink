@@ -12,6 +12,7 @@ import {
   validateSessionRequestSchema,
   updateProfileRequestSchema,
   verifyEmailChangeRequestSchema,
+  updateMfaEnforcementRequestSchema,
 } from '../validators/auth-validators.js';
 import { AuthService } from '../services/auth-service.js';
 import type { MailerService } from '../services/mailer-service.js';
@@ -126,6 +127,24 @@ export function createAuthRoutes(deps?: AuthDeps) {
       ipAddress: c.req.header('x-forwarded-for')?.split(',')[0]?.trim(),
       userAgent: c.req.header('user-agent'),
     });
+
+    if (result.mfaRequired) {
+      return c.json({
+        mfaRequired: true,
+        mfaTicket: result.mfaTicket,
+        email: result.email,
+        message: 'MFA verification required.',
+      });
+    }
+
+    if (result.mfaSetupRequired) {
+      return c.json({
+        mfaSetupRequired: true,
+        mfaTicket: result.mfaTicket,
+        email: result.email,
+        message: 'MFA setup is required by your organisation before signing in.',
+      });
+    }
 
     c.header(
       'Set-Cookie',
@@ -485,6 +504,53 @@ export function createAuthRoutes(deps?: AuthDeps) {
     const authService = getAuthService(c);
 
     const result = await authService.verifyEmailChange(parsed.data.token, {
+      ipAddress: c.req.header('x-forwarded-for')?.split(',')[0]?.trim(),
+      userAgent: c.req.header('user-agent'),
+    });
+
+    return c.json(result);
+  });
+
+  /**
+   * GET /api/v1/auth/mfa-enforcement
+   *
+   * Retrieves MFA enforcement settings for the organisation.
+   */
+  auth.get('/mfa-enforcement', async (c) => {
+    const authService = getAuthService(c);
+    const orgId = c.req.header('x-organisation-id');
+
+    const settings = await authService.getMfaEnforcement(orgId);
+
+    return c.json(settings);
+  });
+
+  /**
+   * PUT /api/v1/auth/mfa-enforcement
+   *
+   * Updates MFA enforcement settings for the organisation.
+   */
+  auth.put('/mfa-enforcement', async (c) => {
+    const body = await c.req.json().catch(() => null);
+
+    if (!body) {
+      throw new ValidationError('Request body is required.');
+    }
+
+    const parsed = updateMfaEnforcementRequestSchema.safeParse(body);
+
+    if (!parsed.success) {
+      const firstError = parsed.error.errors[0];
+      throw new ValidationError(firstError?.message ?? 'Invalid input.', {
+        field: firstError?.path.join('.') ?? 'unknown',
+        issue: firstError?.message ?? 'validation_failed',
+      });
+    }
+
+    const authService = getAuthService(c);
+    const orgId = c.req.header('x-organisation-id');
+
+    const result = await authService.updateMfaEnforcement(orgId, parsed.data, {
       ipAddress: c.req.header('x-forwarded-for')?.split(',')[0]?.trim(),
       userAgent: c.req.header('user-agent'),
     });

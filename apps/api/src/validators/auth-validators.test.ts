@@ -7,6 +7,7 @@ import {
   resetPasswordRequestSchema,
   updateSessionSettingsSchema,
   updateProfileRequestSchema,
+  updateMfaEnforcementRequestSchema,
 } from './auth-validators.js';
 
 describe('registerRequestSchema', () => {
@@ -293,5 +294,23 @@ describe('updateProfileRequestSchema', () => {
     expect(result.success).toBe(false);
   });
 });
+
+describe('updateMfaEnforcementRequestSchema', () => {
+  it('should accept valid mfaRequired boolean and roles array', () => {
+    const result = updateMfaEnforcementRequestSchema.safeParse({
+      mfaRequired: true,
+      mfaRequiredRoles: ['admin', 'signer'],
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('should accept mfaRequired false with empty roles', () => {
+    const result = updateMfaEnforcementRequestSchema.safeParse({
+      mfaRequired: false,
+    });
+    expect(result.success).toBe(true);
+  });
+});
+
 
 

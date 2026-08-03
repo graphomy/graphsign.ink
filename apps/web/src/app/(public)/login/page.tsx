@@ -18,6 +18,13 @@ function LoginContent() {
   const [isSuccess, setIsSuccess] = useState(false);
   const [redirectTarget, setRedirectTarget] = useState('/dashboard');
 
+  const [showMfaPrompt, setShowMfaPrompt] = useState(false);
+  const [showMfaSetupPrompt, setShowMfaSetupPrompt] = useState(false);
+  const [mfaTicket, setMfaTicket] = useState('');
+  const [totpCode, setTotpCode] = useState('');
+  const [setupSecret, setSetupSecret] = useState('');
+  const [setupQrCode, setSetupQrCode] = useState('');
+
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setErrors({});
@@ -53,10 +60,32 @@ function LoginContent() {
         return;
       }
 
+      if (data?.mfaRequired) {
+        setMfaTicket(data.mfaTicket);
+        setShowMfaPrompt(true);
+        return;
+      }
+
+      if (data?.mfaSetupRequired) {
+        setMfaTicket(data.mfaTicket);
+        // Start forced setup
+        const setupRes = await fetch(`${apiUrl}/api/v1/auth/mfa/setup`, { method: 'POST' });
+        const setupData = await setupRes.json().catch(() => null);
+        if (setupData?.secret) {
+          setSetupSecret(setupData.secret);
+          setSetupQrCode(setupData.qrCode);
+          setShowMfaSetupPrompt(true);
+        }
+        return;
+      }
+
       if (data?.token) {
         localStorage.setItem('graphsign_session_token', data.token);
         localStorage.setItem('graphsign_user_email', data.email);
         localStorage.setItem('graphsign_org_id', data.organisationId);
+        if (data.id) {
+          localStorage.setItem('graphsign_user_id', data.id);
+        }
       }
 
       const target = returnTo ? decodeURIComponent(returnTo) : '/dashboard';
@@ -65,6 +94,87 @@ function LoginContent() {
       window.location.href = target;
     } catch {
       setApiError('Unable to connect to the server. Please try again later.');
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  async function handleMfaSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setApiError('');
+
+    if (totpCode.length !== 6) {
+      setApiError('Please enter a 6-digit verification code.');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8787';
+      const res = await fetch(`${apiUrl}/api/v1/auth/login/mfa`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mfaTicket, code: totpCode }),
+      });
+
+      const data = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        setApiError(data?.error?.message ?? 'Invalid verification code.');
+        return;
+      }
+
+      if (data?.token) {
+        localStorage.setItem('graphsign_session_token', data.token);
+        localStorage.setItem('graphsign_user_email', data.email);
+        localStorage.setItem('graphsign_org_id', data.organisationId);
+        if (data.id) {
+          localStorage.setItem('graphsign_user_id', data.id);
+        }
+      }
+
+      const target = returnTo ? decodeURIComponent(returnTo) : '/dashboard';
+      setRedirectTarget(target);
+      setIsSuccess(true);
+      window.location.href = target;
+    } catch {
+      setApiError('Verification failed. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  async function handleForcedSetupSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setApiError('');
+
+    if (totpCode.length !== 6) {
+      setApiError('Please enter a 6-digit verification code.');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8787';
+      const verifyRes = await fetch(`${apiUrl}/api/v1/auth/mfa/verify-setup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: totpCode }),
+      });
+
+      const verifyData = await verifyRes.json().catch(() => null);
+
+      if (!verifyRes.ok) {
+        setApiError(verifyData?.error?.message ?? 'Invalid TOTP code.');
+        return;
+      }
+
+      const target = returnTo ? decodeURIComponent(returnTo) : '/dashboard';
+      setRedirectTarget(target);
+      setIsSuccess(true);
+      window.location.href = target;
+    } catch {
+      setApiError('Setup verification failed. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -105,6 +215,83 @@ function LoginContent() {
             </Link>
           </div>
         </div>
+      </div>
+    );
+  }
+
+  if (showMfaSetupPrompt) {
+    return (
+      <div className="space-y-6" data-testid="mfa-forced-setup-step">
+        <div>
+          <h2 className="text-center text-2xl font-semibold text-neutral-900">MFA Setup Required</h2>
+          <p className="mt-2 text-center text-sm text-neutral-600">
+            Your organisation requires Multi-Factor Authentication for your account role before signing in.
+          </p>
+        </div>
+
+        <form
+          onSubmit={handleForcedSetupSubmit}
+          className="rounded-xl border border-neutral-200 bg-white p-8 shadow-sm space-y-6"
+          data-testid="mfa-forced-setup-form"
+        >
+          {apiError && (
+            <div
+              className="rounded-lg bg-red-50 border border-red-200 p-4 text-sm text-red-700"
+              role="alert"
+              data-testid="mfa-setup-error"
+            >
+              {apiError}
+            </div>
+          )}
+
+          <div className="space-y-4">
+            <h3 className="text-xs font-semibold text-neutral-700 uppercase tracking-wider">
+              Step 1: Scan QR Code with Authenticator App
+            </h3>
+            <div className="flex flex-col items-center gap-3">
+              {setupQrCode && (
+                <div className="bg-white p-2 border border-neutral-200 rounded-lg shadow-sm">
+                  <img src={setupQrCode} alt="TOTP QR Code" className="h-36 w-36" data-testid="forced-mfa-qr" />
+                </div>
+              )}
+              {setupSecret && (
+                <div className="text-center">
+                  <span className="text-xs text-neutral-500 block">Manual Key Entry:</span>
+                  <code className="font-mono text-xs font-bold bg-neutral-100 px-2 py-1 rounded text-neutral-800 tracking-wider">
+                    {setupSecret}
+                  </code>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="space-y-2 pt-2 border-t border-neutral-100">
+            <label htmlFor="forcedTotpCode" className="block text-xs font-semibold text-neutral-700 uppercase tracking-wider text-center">
+              Step 2: Enter Generated 6-Digit Code
+            </label>
+            <input
+              id="forcedTotpCode"
+              type="text"
+              maxLength={6}
+              autoFocus
+              required
+              value={totpCode}
+              onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, ''))}
+              className="block w-full text-center tracking-[0.5em] font-mono text-2xl rounded-lg border border-neutral-300 px-3.5 py-3 shadow-sm focus:border-[#ba0000] focus:ring-2 focus:ring-[#ba0000]/20"
+              placeholder="123456"
+              data-testid="mfa-forced-code-input"
+            />
+          </div>
+
+          <button
+            type="submit"
+            disabled={isLoading || totpCode.length !== 6}
+            className="w-full rounded-lg bg-[#ba0000] px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-[#a00000] disabled:opacity-50 transition-colors"
+            data-testid="mfa-forced-submit-button"
+          >
+            {isLoading ? 'Verifying...' : 'Complete Setup & Sign In'}
+          </button>
+        </form>
       </div>
     );
   }

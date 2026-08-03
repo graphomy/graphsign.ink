@@ -804,6 +804,62 @@ describe('AuthService', () => {
       );
     });
   });
+
+  describe('MFA enforcement', () => {
+    it('should return mfaSetupRequired when organisation enforces MFA for user role', async () => {
+      const enforcedOrg = {
+        ...DEFAULT_ORG,
+        mfaRequired: true,
+        mfaRequiredRoles: ['admin', 'signer', 'user'],
+      };
+
+      const userWithoutMfa = {
+        id: '00000000-0000-7000-8000-000000000001',
+        organisationId: DEFAULT_ORG.id,
+        email: 'enforced@example.com',
+        passwordHash: '$scrypt$32768$8$1$00000000000000000000000000000000$hashed_password',
+        emailVerified: true,
+        status: 'active',
+        mfaEnabled: false,
+        role: 'user',
+        deletedAt: null,
+      };
+
+      (prisma.organisation.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue(enforcedOrg);
+      (prisma.user.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue(userWithoutMfa);
+
+      const result = await authService.login({
+        email: 'enforced@example.com',
+        password: 'Str0ng!Pass',
+      });
+
+      expect(result.mfaSetupRequired).toBe(true);
+      expect(result.mfaTicket).toContain(`mfasetup_${userWithoutMfa.id}_`);
+    });
+
+    it('should update MFA enforcement configuration and log organisation.mfa_enforcement_updated', async () => {
+      (prisma.organisation.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue(DEFAULT_ORG);
+      (prisma.organisation.update as ReturnType<typeof vi.fn>).mockResolvedValue({
+        ...DEFAULT_ORG,
+        mfaRequired: true,
+        mfaRequiredRoles: ['admin', 'signer'],
+      });
+
+      const res = await authService.updateMfaEnforcement(DEFAULT_ORG.id, {
+        mfaRequired: true,
+        mfaRequiredRoles: ['admin', 'signer'],
+      });
+
+      expect(res.mfaRequired).toBe(true);
+      expect(res.mfaRequiredRoles).toEqual(['admin', 'signer']);
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'organisation.mfa_enforcement_updated',
+          organisationId: DEFAULT_ORG.id,
+        }),
+      );
+    });
+  });
 });
 
 
