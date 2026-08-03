@@ -729,7 +729,9 @@ export class AuthService {
     const isValid = await verifyTotpToken(user.mfaPendingSecret, code);
 
     if (!isValid) {
-      throw new ValidationError('Invalid verification code. Please check your authenticator app and try again.');
+      throw new ValidationError(
+        'Invalid verification code. Please check your authenticator app and try again.',
+      );
     }
 
     // Generate 8 backup codes
@@ -935,7 +937,8 @@ export class AuthService {
       }
     }
 
-    const lastActiveAtMs = typeof lastActiveAtMsOrToken === 'number' ? lastActiveAtMsOrToken : undefined;
+    const lastActiveAtMs =
+      typeof lastActiveAtMsOrToken === 'number' ? lastActiveAtMsOrToken : undefined;
 
     if (!lastActiveAtMs) {
       return {
@@ -1080,10 +1083,7 @@ export class AuthService {
   /**
    * Verifies and finalizes an email change request using the verification token.
    */
-  async verifyEmailChange(
-    token: string,
-    meta: { ipAddress?: string; userAgent?: string } = {},
-  ) {
+  async verifyEmailChange(token: string, meta: { ipAddress?: string; userAgent?: string } = {}) {
     const tokenHash = await hashToken(token);
 
     const user = await this.prisma.user.findFirst({
@@ -1135,7 +1135,9 @@ export class AuthService {
   /**
    * Retrieves MFA enforcement settings for an organisation.
    */
-  async getMfaEnforcement(orgId?: string): Promise<{ mfaRequired: boolean; mfaRequiredRoles: string[] }> {
+  async getMfaEnforcement(
+    orgId?: string,
+  ): Promise<{ mfaRequired: boolean; mfaRequiredRoles: string[] }> {
     const org = orgId
       ? await this.prisma.organisation.findUnique({ where: { id: orgId } })
       : await this.getOrCreateDefaultOrganisation();

@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { SessionGuard } from '@/components/features/auth/SessionGuard';
+import { getApiUrl } from '@/lib/api';
 
 function SessionSettingsContent() {
   const [sessionTimeoutMinutes, setSessionTimeoutMinutes] = useState<number>(15);
@@ -17,7 +18,7 @@ function SessionSettingsContent() {
       try {
         setIsLoading(true);
         const token = localStorage.getItem('graphsign_session_token') ?? '';
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8787';
+        const apiUrl = getApiUrl();
 
         const res = await fetch(`${apiUrl}/api/v1/auth/session-settings`, {
           headers: {
@@ -55,7 +56,7 @@ function SessionSettingsContent() {
     try {
       const token = localStorage.getItem('graphsign_session_token') ?? '';
       const orgId = localStorage.getItem('graphsign_org_id') ?? '';
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8787';
+      const apiUrl = getApiUrl();
 
       const res = await fetch(`${apiUrl}/api/v1/auth/session-settings`, {
         method: 'PUT',
@@ -76,7 +77,9 @@ function SessionSettingsContent() {
 
       setSessionTimeoutMinutes(data.sessionTimeoutMinutes);
       setCustomMinutes(data.sessionTimeoutMinutes.toString());
-      setMessage('Session timeout updated successfully. All users in your organisation will now be subject to this inactivity timeout.');
+      setMessage(
+        'Session timeout updated successfully. All users in your organisation will now be subject to this inactivity timeout.',
+      );
     } catch {
       setError('Unable to save settings. Please try again.');
     } finally {
@@ -87,7 +90,10 @@ function SessionSettingsContent() {
   const presets = [5, 15, 30, 60, 120];
 
   return (
-    <div className="min-h-screen bg-neutral-50 flex flex-col font-sans" data-testid="session-settings-container">
+    <div
+      className="min-h-screen bg-neutral-50 flex flex-col font-sans"
+      data-testid="session-settings-container"
+    >
       {/* Navigation Header */}
       <header className="sticky top-0 z-10 border-b border-neutral-200 bg-white/80 backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
@@ -113,9 +119,12 @@ function SessionSettingsContent() {
       {/* Main Content */}
       <main className="flex-1 py-8 px-4 sm:px-6 lg:px-8 max-w-4xl mx-auto w-full space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-neutral-900 tracking-tight">Session Timeout Settings</h1>
+          <h1 className="text-2xl font-bold text-neutral-900 tracking-tight">
+            Session Timeout Settings
+          </h1>
           <p className="text-sm text-neutral-600 mt-1">
-            Configure automated session expiration and re-authentication requirements after user inactivity.
+            Configure automated session expiration and re-authentication requirements after user
+            inactivity.
           </p>
         </div>
 
@@ -149,9 +158,12 @@ function SessionSettingsContent() {
           ) : (
             <>
               <div>
-                <h2 className="text-base font-semibold text-neutral-900">Inactivity Timeout Duration</h2>
+                <h2 className="text-base font-semibold text-neutral-900">
+                  Inactivity Timeout Duration
+                </h2>
                 <p className="text-xs text-neutral-500 mt-0.5">
-                  Users will be automatically logged out and asked to re-authenticate after remaining idle for this period.
+                  Users will be automatically logged out and asked to re-authenticate after
+                  remaining idle for this period.
                 </p>
               </div>
 
@@ -197,7 +209,10 @@ function SessionSettingsContent() {
 
               {/* Custom Input */}
               <div className="space-y-2 pt-2 border-t border-neutral-100">
-                <label htmlFor="custom-timeout" className="block text-xs font-semibold uppercase tracking-wider text-neutral-500">
+                <label
+                  htmlFor="custom-timeout"
+                  className="block text-xs font-semibold uppercase tracking-wider text-neutral-500"
+                >
                   Custom Timeout (1 to 1440 minutes)
                 </label>
                 <div className="flex items-center gap-3 max-w-sm">

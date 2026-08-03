@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { SessionGuard } from '@/components/features/auth/SessionGuard';
+import { getApiUrl } from '@/lib/api';
 
 interface UserSession {
   email: string;
@@ -22,7 +23,7 @@ function DashboardContent() {
 
   async function handleSignOut() {
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8787';
+      const apiUrl = getApiUrl();
       await fetch(`${apiUrl}/api/v1/auth/logout`, {
         method: 'POST',
         headers: {

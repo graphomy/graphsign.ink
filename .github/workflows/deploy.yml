@@ -1,4 +1,4 @@
-name: Deploy Web
+name: Deploy Web Application
 
 on:
   push:
@@ -7,6 +7,7 @@ on:
       - 'apps/web/**'
       - 'packages/**'
       - 'pnpm-lock.yaml'
+      - '.github/workflows/deploy.yml'
       - '.github/workflows/deploy-web.yml'
 
 concurrency:
@@ -15,11 +16,10 @@ concurrency:
 
 jobs:
   deploy:
-    name: Deploy to Cloudflare Pages
+    name: Deploy Web App to Cloudflare Pages
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
-    # Map branch to GitHub environment
     environment: ${{ github.ref_name == 'main' && 'production' || 'development' }}
 
     permissions:

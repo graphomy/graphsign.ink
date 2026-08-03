@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, type FormEvent } from 'react';
+import { getApiUrl } from '@/lib/api';
 
 export interface UnverifiedEmailPromptProps {
   /** User's current email address */
@@ -41,7 +42,7 @@ export function UnverifiedEmailPrompt({
     setMessage('');
 
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8787';
+      const apiUrl = getApiUrl();
       const res = await fetch(`${apiUrl}/api/v1/auth/resend-verification`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

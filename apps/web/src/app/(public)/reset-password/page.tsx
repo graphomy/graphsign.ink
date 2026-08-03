@@ -4,6 +4,7 @@ import { useState, Suspense, type FormEvent } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { getPasswordRequirements } from '@/lib/validators/auth';
+import { getApiUrl } from '@/lib/api';
 
 function ResetPasswordContent() {
   const searchParams = useSearchParams();
@@ -39,7 +40,7 @@ function ResetPasswordContent() {
 
     setIsLoading(true);
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8787';
+      const apiUrl = getApiUrl();
       const res = await fetch(`${apiUrl}/api/v1/auth/reset-password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
