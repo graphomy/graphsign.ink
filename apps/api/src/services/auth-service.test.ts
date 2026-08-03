@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AuthService } from './auth-service.js';
 import type { MailerService } from './mailer-service.js';
 import type { AuditService } from './audit-service.js';
+import { generateTotpToken } from '../utils/totp.js';
 
 // Mock the crypto module
 vi.mock('../utils/crypto.js', () => ({
@@ -804,6 +805,130 @@ describe('AuthService', () => {
       );
     });
   });
+
+  describe('MFA management', () => {
+    it('should generate TOTP setup details and save pending secret', async () => {
+      const mockUser = {
+        id: '00000000-0000-7000-8000-000000000001',
+        email: 'user@example.com',
+        deletedAt: null,
+      };
+
+      (prisma.user.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue(mockUser);
+      (prisma.user.update as ReturnType<typeof vi.fn>).mockResolvedValue({
+        ...mockUser,
+        mfaPendingSecret: 'JBSWY3DPEHPK3PXP',
+      });
+
+      const setup = await authService.setupMfa(mockUser.id);
+      expect(setup.secret).toBeDefined();
+      expect(setup.qrCode).toContain('data:image/svg+xml');
+      expect(setup.otpauthUrl).toContain('otpauth://totp/');
+    });
+
+    it('should return mfaRequired during login when user has MFA enabled', async () => {
+      const mockUser = {
+        id: '00000000-0000-7000-8000-000000000001',
+        organisationId: DEFAULT_ORG.id,
+        email: 'mfa@example.com',
+        passwordHash: '$scrypt$32768$8$1$00000000000000000000000000000000$hashed_password',
+        emailVerified: true,
+        status: 'active',
+        mfaEnabled: true,
+        mfaSecret: 'JBSWY3DPEHPK3PXP',
+        deletedAt: null,
+      };
+
+      (prisma.user.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue(mockUser);
+
+      const result = await authService.login({
+        email: 'mfa@example.com',
+        password: 'Str0ng!Pass',
+      });
+
+      expect(result.mfaRequired).toBe(true);
+      expect(result.mfaTicket).toContain(`mfa_${mockUser.id}_`);
+    });
+
+    it('should complete loginWithMfa with valid TOTP code', async () => {
+      const secret = 'JBSWY3DPEHPK3PXP';
+      const mockUser = {
+        id: '00000000-0000-7000-8000-000000000001',
+        organisationId: DEFAULT_ORG.id,
+        email: 'mfa@example.com',
+        status: 'active',
+        mfaEnabled: true,
+        mfaSecret: secret,
+        deletedAt: null,
+      };
+
+      const validCode = await generateTotpToken(secret);
+
+      (prisma.user.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue(mockUser);
+
+      const result = await authService.loginWithMfa({
+        mfaTicket: `mfa_${mockUser.id}_170000000`,
+        code: validCode,
+      });
+
+      expect(result.id).toBe(mockUser.id);
+      expect(result.token).toBeDefined();
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'user.login',
+          userId: mockUser.id,
+          metadata: expect.objectContaining({ authMethod: 'totp' }),
+        }),
+      );
+    });
+
+    it('should reject loginWithMfa with invalid TOTP code', async () => {
+      const mockUser = {
+        id: '00000000-0000-7000-8000-000000000001',
+        organisationId: DEFAULT_ORG.id,
+        email: 'mfa@example.com',
+        status: 'active',
+        mfaEnabled: true,
+        mfaSecret: 'JBSWY3DPEHPK3PXP',
+        deletedAt: null,
+      };
+
+      (prisma.user.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue(mockUser);
+
+      await expect(
+        authService.loginWithMfa({
+          mfaTicket: `mfa_${mockUser.id}_170000000`,
+          code: '000000',
+        }),
+      ).rejects.toThrow('Invalid TOTP verification code.');
+    });
+
+    it('should disable MFA and log user.mfa_disabled', async () => {
+      const mockUser = {
+        id: '00000000-0000-7000-8000-000000000001',
+        organisationId: DEFAULT_ORG.id,
+        email: 'mfa@example.com',
+        mfaEnabled: true,
+        deletedAt: null,
+      };
+
+      (prisma.user.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue(mockUser);
+      (prisma.user.update as ReturnType<typeof vi.fn>).mockResolvedValue({
+        ...mockUser,
+        mfaEnabled: false,
+      });
+
+      const res = await authService.disableMfa(mockUser.id);
+      expect(res.message).toBe('MFA disabled successfully.');
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'user.mfa_disabled',
+          userId: mockUser.id,
+        }),
+      );
+    });
+  });
 });
+
 
 

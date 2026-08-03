@@ -48,6 +48,10 @@ model User {
   pendingEmail                  String?   @map("pending_email") @db.VarChar(255)
   pendingEmailTokenHash         String?   @map("pending_email_token_hash") @db.VarChar(255)
   pendingEmailTokenExpiresAt    DateTime? @map("pending_email_token_expires_at") @db.Timestamptz()
+  mfaEnabled                    Boolean   @default(false) @map("mfa_enabled")
+  mfaSecret                     String?   @map("mfa_secret") @db.VarChar(255)
+  mfaPendingSecret              String?   @map("mfa_pending_secret") @db.VarChar(255)
+  mfaBackupCodes                Json?     @map("mfa_backup_codes") @db.JsonB
   status                        String    @default("pending_verification") @db.VarChar(20)
   createdAt                     DateTime  @default(now()) @map("created_at") @db.Timestamptz()
   updatedAt                     DateTime  @updatedAt @map("updated_at") @db.Timestamptz()

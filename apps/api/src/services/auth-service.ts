@@ -1,7 +1,13 @@
 import type { PrismaClient } from '@graphsign/db';
 import type { MailerService } from './mailer-service.js';
 import type { AuditService } from './audit-service.js';
-import type { RegisterRequest, LoginRequest, UpdateSessionSettingsRequest, UpdateProfileRequest } from '../validators/auth-validators.js';
+import type {
+  RegisterRequest,
+  LoginRequest,
+  UpdateSessionSettingsRequest,
+  UpdateProfileRequest,
+  LoginMfaRequest,
+} from '../validators/auth-validators.js';
 import {
   generateId,
   hashPassword,
@@ -9,6 +15,12 @@ import {
   generateToken,
   hashToken,
 } from '../utils/crypto.js';
+import {
+  generateBase32Secret,
+  generateOtpauthUrl,
+  verifyTotpToken,
+  generateQrCodeDataUri,
+} from '../utils/totp.js';
 import {
   ConflictError,
   NotFoundError,
@@ -30,11 +42,13 @@ export interface RegisterResult {
 }
 
 export interface LoginResult {
-  id: string;
-  email: string;
-  status: string;
-  token: string;
-  organisationId: string;
+  id?: string;
+  email?: string;
+  status?: string;
+  token?: string;
+  organisationId?: string;
+  mfaRequired?: boolean;
+  mfaTicket?: string;
 }
 
 export interface VerifyEmailResult {
@@ -220,6 +234,15 @@ export class AuthService {
       throw new UnauthorizedError('Account is disabled or suspended.');
     }
 
+    if (user.mfaEnabled) {
+      const mfaTicket = `mfa_${user.id}_${Date.now()}`;
+      return {
+        mfaRequired: true,
+        mfaTicket,
+        email: user.email,
+      };
+    }
+
     // Audit log — login event
     await this.audit.log({
       organisationId: org.id,
@@ -228,6 +251,69 @@ export class AuthService {
       resourceType: 'user',
       resourceId: user.id,
       metadata: { email: data.email },
+      ipAddress: meta.ipAddress,
+      userAgent: meta.userAgent,
+    });
+
+    const sessionToken = generateToken();
+
+    return {
+      id: user.id,
+      email: user.email,
+      status: user.status,
+      token: sessionToken,
+      organisationId: org.id,
+    };
+  }
+
+  /**
+   * Completes login for users with MFA enabled by validating 6-digit TOTP code.
+   */
+  async loginWithMfa(
+    data: LoginMfaRequest,
+    meta: { ipAddress?: string; userAgent?: string } = {},
+  ): Promise<LoginResult> {
+    const org = await this.getOrCreateDefaultOrganisation();
+
+    // mfaTicket format: mfa_<userId>_<timestamp>
+    const ticketParts = data.mfaTicket.split('_');
+    const userId = ticketParts[1];
+
+    if (!userId) {
+      throw new UnauthorizedError('Invalid or expired MFA session ticket.');
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user || user.deletedAt !== null || !user.mfaEnabled || !user.mfaSecret) {
+      throw new UnauthorizedError('Invalid MFA credentials or MFA not enabled.');
+    }
+
+    const isValidCode = await verifyTotpToken(user.mfaSecret, data.code);
+
+    if (!isValidCode) {
+      await this.audit.log({
+        organisationId: org.id,
+        userId: user.id,
+        action: 'user.login_failed',
+        resourceType: 'user',
+        resourceId: user.id,
+        metadata: { email: user.email, reason: 'invalid_mfa_code' },
+        ipAddress: meta.ipAddress,
+        userAgent: meta.userAgent,
+      });
+      throw new UnauthorizedError('Invalid TOTP verification code.');
+    }
+
+    await this.audit.log({
+      organisationId: org.id,
+      userId: user.id,
+      action: 'user.login',
+      resourceType: 'user',
+      resourceId: user.id,
+      metadata: { email: user.email, authMethod: 'totp' },
       ipAddress: meta.ipAddress,
       userAgent: meta.userAgent,
     });
@@ -537,16 +623,116 @@ export class AuthService {
   }
 
   /**
+   * Generates a new TOTP secret and QR code for setting up MFA.
+   */
+  async setupMfa(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user || user.deletedAt !== null) {
+      throw new NotFoundError('User not found.');
+    }
+
+    const secret = generateBase32Secret(20);
+    const otpauthUrl = generateOtpauthUrl(user.email, secret);
+    const qrCode = generateQrCodeDataUri(otpauthUrl);
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        mfaPendingSecret: secret,
+      },
+    });
+
+    return {
+      secret,
+      qrCode,
+      otpauthUrl,
+    };
+  }
+
+  /**
+   * Verifies the 6-digit code during setup, enables MFA on the account, and returns backup codes.
+   */
+  async verifySetupMfa(
+    userId: string,
+    code: string,
+    meta: { ipAddress?: string; userAgent?: string } = {},
+  ): Promise<{ message: string; backupCodes: string[] }> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user || user.deletedAt !== null) {
+      throw new NotFoundError('User not found.');
+    }
+
+    if (!user.mfaPendingSecret) {
+      throw new ValidationError('No MFA setup in progress. Please start MFA setup again.');
+    }
+
+    const isValid = await verifyTotpToken(user.mfaPendingSecret, code);
+
+    if (!isValid) {
+      throw new ValidationError('Invalid verification code. Please check your authenticator app and try again.');
+    }
+
+    // Generate 8 backup codes
+    const backupCodes = Array.from({ length: 8 }, () => generateToken().slice(0, 10).toUpperCase());
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        mfaEnabled: true,
+        mfaSecret: user.mfaPendingSecret,
+        mfaPendingSecret: null,
+        mfaBackupCodes: backupCodes,
+      },
+    });
+
+    await this.audit.log({
+      organisationId: user.organisationId,
+      userId: user.id,
+      action: 'user.mfa_enabled',
+      resourceType: 'user',
+      resourceId: user.id,
+      ipAddress: meta.ipAddress,
+      userAgent: meta.userAgent,
+    });
+
+    return {
+      message: 'MFA enabled successfully.',
+      backupCodes,
+    };
+  }
+
+  /**
    * Enables MFA for a user and records an audit log event with IP and user agent.
    */
   async enableMfa(
     userId: string,
     meta: { ipAddress?: string; userAgent?: string } = {},
   ): Promise<{ message: string }> {
-    const org = await this.getOrCreateDefaultOrganisation();
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    const orgId = user?.organisationId ?? (await this.getOrCreateDefaultOrganisation()).id;
+
+    if (user) {
+      const dummySecret = generateBase32Secret(20);
+      await this.prisma.user.update({
+        where: { id: userId },
+        data: {
+          mfaEnabled: true,
+          mfaSecret: dummySecret,
+        },
+      });
+    }
 
     await this.audit.log({
-      organisationId: org.id,
+      organisationId: orgId,
       userId,
       action: 'user.mfa_enabled',
       resourceType: 'user',
@@ -567,10 +753,26 @@ export class AuthService {
     userId: string,
     meta: { ipAddress?: string; userAgent?: string } = {},
   ): Promise<{ message: string }> {
-    const org = await this.getOrCreateDefaultOrganisation();
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    const orgId = user?.organisationId ?? (await this.getOrCreateDefaultOrganisation()).id;
+
+    if (user) {
+      await this.prisma.user.update({
+        where: { id: userId },
+        data: {
+          mfaEnabled: false,
+          mfaSecret: null,
+          mfaPendingSecret: null,
+          mfaBackupCodes: null as any,
+        },
+      });
+    }
 
     await this.audit.log({
-      organisationId: org.id,
+      organisationId: orgId,
       userId,
       action: 'user.mfa_disabled',
       resourceType: 'user',
