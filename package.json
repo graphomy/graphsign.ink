@@ -28,7 +28,7 @@
     "typecheck": "pnpm -r typecheck"
   },
   "devDependencies": {
-    "@types/node": "^20.14.0",
+    "@types/node": "^26.1.2",
     "prettier": "^3.3.0",
     "typescript": "^5.5.0"
   }
