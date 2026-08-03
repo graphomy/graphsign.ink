@@ -48,8 +48,12 @@ export const errorHandler: ErrorHandler = (err: Error, c: Context) => {
     return c.json(body, err.statusCode as 400 | 401 | 403 | 404 | 409 | 422 | 429 | 500);
   }
 
-  // Unknown errors — never expose internal details
+  // Unknown errors — log full details and format response
   console.error('Unhandled error:', err);
-  const body = buildErrorBody(c, 'INTERNAL_SERVER_ERROR', 'An unexpected error occurred.');
+  const isProd = c.env?.NODE_ENV === 'production';
+  const message = isProd
+    ? 'An unexpected error occurred.'
+    : `An unexpected error occurred: ${err?.message ?? String(err)}`;
+  const body = buildErrorBody(c, 'INTERNAL_SERVER_ERROR', message);
   return c.json(body, 500);
 };
