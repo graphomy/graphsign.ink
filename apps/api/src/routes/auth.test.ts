@@ -32,6 +32,7 @@ function createMockDeps() {
       organisation: {
         findUnique: vi.fn().mockResolvedValue(DEFAULT_ORG),
         create: vi.fn().mockResolvedValue(DEFAULT_ORG),
+        update: vi.fn().mockResolvedValue(DEFAULT_ORG),
       },
       user: {
         findUnique: vi.fn().mockResolvedValue(null),
@@ -514,3 +515,69 @@ describe('POST /api/v1/auth/mfa/enable and /mfa/disable', () => {
     expect(body.message).toBe('MFA disabled successfully.');
   });
 });
+
+describe('Session Settings Routes', () => {
+  let deps: ReturnType<typeof createMockDeps>;
+  let app: Hono;
+
+  beforeEach(() => {
+    deps = createMockDeps();
+    (deps.prisma.organisation.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ...DEFAULT_ORG,
+      sessionTimeoutMinutes: 15,
+    });
+    (deps.prisma.organisation.update as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ...DEFAULT_ORG,
+      sessionTimeoutMinutes: 30,
+    });
+    app = createApp(deps);
+  });
+
+  it('should GET session settings successfully', async () => {
+    const res = await app.request('/api/v1/auth/session-settings', {
+      method: 'GET',
+    });
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    expect(body.sessionTimeoutMinutes).toBe(15);
+  });
+
+  it('should PUT session settings successfully with valid timeout', async () => {
+    const res = await app.request('/api/v1/auth/session-settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionTimeoutMinutes: 30 }),
+    });
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    expect(body.sessionTimeoutMinutes).toBe(30);
+    expect(body.message).toContain('updated successfully');
+  });
+
+  it('should return 400 when PUT session settings receives invalid timeout value (<1)', async () => {
+    const res = await app.request('/api/v1/auth/session-settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionTimeoutMinutes: 0 }),
+    });
+
+    expect(res.status).toBe(400);
+  });
+
+  it('should POST session validate and return active status', async () => {
+    const recentTime = Date.now() - 60000;
+    const res = await app.request('/api/v1/auth/session/validate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ lastActiveAt: recentTime }),
+    });
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    expect(body.valid).toBe(true);
+    expect(body.sessionTimeoutMinutes).toBe(15);
+  });
+});
+

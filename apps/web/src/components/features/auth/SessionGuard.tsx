@@ -14,12 +14,40 @@ export function SessionGuard({
   children,
   idleTimeoutMs = DEFAULT_IDLE_TIMEOUT_MS,
 }: SessionGuardProps) {
+  const [effectiveTimeoutMs, setEffectiveTimeoutMs] = useState<number>(idleTimeoutMs);
   const [isAuthenticated] = useState<boolean>(() => {
     if (typeof window === 'undefined') return true;
     return !!localStorage.getItem('graphsign_session_token');
   });
 
+  // Fetch session settings from backend if available
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    let isMounted = true;
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8787';
+
+    fetch(`${apiUrl}/api/v1/auth/session-settings`, {
+      headers: {
+        Authorization: `Bearer ${localStorage.getItem('graphsign_session_token') ?? ''}`,
+      },
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (isMounted && data?.sessionTimeoutMinutes && typeof data.sessionTimeoutMinutes === 'number') {
+          setEffectiveTimeoutMs(data.sessionTimeoutMinutes * 60 * 1000);
+        }
+      })
+      .catch(() => null);
+
+    return () => {
+      isMounted = false;
+    };
+  }, [isAuthenticated]);
+
   const handleSignOutDueToTimeout = useCallback(() => {
+    const currentPath = window.location.pathname + window.location.search;
+
     localStorage.removeItem('graphsign_session_token');
     localStorage.removeItem('graphsign_user_email');
     localStorage.removeItem('graphsign_org_id');
@@ -27,7 +55,8 @@ export function SessionGuard({
     const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8787';
     fetch(`${apiUrl}/api/v1/auth/logout`, { method: 'POST' }).catch(() => null);
 
-    window.location.href = '/login?reason=timeout';
+    const redirectTarget = `/login?reason=timeout&returnTo=${encodeURIComponent(currentPath)}`;
+    window.location.href = redirectTarget;
   }, []);
 
   useEffect(() => {
@@ -41,7 +70,7 @@ export function SessionGuard({
 
     const resetIdleTimer = () => {
       clearTimeout(timeoutId);
-      timeoutId = setTimeout(handleSignOutDueToTimeout, idleTimeoutMs);
+      timeoutId = setTimeout(handleSignOutDueToTimeout, effectiveTimeoutMs);
     };
 
     // Activity event listeners
@@ -60,7 +89,7 @@ export function SessionGuard({
         window.removeEventListener(event, resetIdleTimer);
       });
     };
-  }, [idleTimeoutMs, handleSignOutDueToTimeout, isAuthenticated]);
+  }, [effectiveTimeoutMs, handleSignOutDueToTimeout, isAuthenticated]);
 
   if (!isAuthenticated) {
     return null;
@@ -68,3 +97,4 @@ export function SessionGuard({
 
   return <>{children}</>;
 }
+

@@ -139,3 +139,27 @@ export const mfaToggleResponseSchema = z.object({
 });
 
 export type MfaToggleResponse = z.infer<typeof mfaToggleResponseSchema>;
+
+export const updateSessionSettingsSchema = z.object({
+  sessionTimeoutMinutes: z
+    .number({ required_error: 'sessionTimeoutMinutes is required.' })
+    .int('sessionTimeoutMinutes must be an integer.')
+    .min(1, 'Session timeout must be at least 1 minute.')
+    .max(1440, 'Session timeout cannot exceed 1440 minutes (24 hours).'),
+});
+
+export type UpdateSessionSettingsRequest = z.infer<typeof updateSessionSettingsSchema>;
+
+export const sessionSettingsResponseSchema = z.object({
+  sessionTimeoutMinutes: z.number(),
+  message: z.string().optional(),
+});
+
+export type SessionSettingsResponse = z.infer<typeof sessionSettingsResponseSchema>;
+
+export const validateSessionRequestSchema = z.object({
+  lastActiveAt: z.number().optional(),
+});
+
+export type ValidateSessionRequest = z.infer<typeof validateSessionRequestSchema>;
+

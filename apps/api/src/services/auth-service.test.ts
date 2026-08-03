@@ -20,6 +20,7 @@ function createMockPrisma() {
     organisation: {
       findUnique: vi.fn(),
       create: vi.fn(),
+      update: vi.fn(),
     },
     user: {
       findUnique: vi.fn(),
@@ -608,4 +609,78 @@ describe('AuthService', () => {
       );
     });
   });
+
+  describe('session settings', () => {
+    it('should retrieve session settings for default organisation', async () => {
+      (prisma.organisation.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue({
+        ...DEFAULT_ORG,
+        sessionTimeoutMinutes: 20,
+      });
+
+      const settings = await authService.getSessionSettings();
+      expect(settings.sessionTimeoutMinutes).toBe(20);
+    });
+
+    it('should update organisation session timeout and log audit event', async () => {
+      (prisma.organisation.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue({
+        ...DEFAULT_ORG,
+        sessionTimeoutMinutes: 15,
+      });
+
+      (prisma.organisation.update as ReturnType<typeof vi.fn>).mockResolvedValue({
+        ...DEFAULT_ORG,
+        sessionTimeoutMinutes: 45,
+      });
+
+      const result = await authService.updateSessionSettings(
+        { sessionTimeoutMinutes: 45 },
+        '00000000-0000-7000-8000-000000000001',
+        DEFAULT_ORG.id,
+        { ipAddress: '127.0.0.1', userAgent: 'test-agent' },
+      );
+
+      expect(result.sessionTimeoutMinutes).toBe(45);
+      expect(result.message).toContain('updated successfully');
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'organisation.session_settings_updated',
+          resourceType: 'organisation',
+          resourceId: DEFAULT_ORG.id,
+          metadata: {
+            previousSessionTimeoutMinutes: 15,
+            newSessionTimeoutMinutes: 45,
+          },
+          ipAddress: '127.0.0.1',
+          userAgent: 'test-agent',
+        }),
+      );
+    });
+
+    it('should validate active session within timeout window', async () => {
+      (prisma.organisation.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue({
+        ...DEFAULT_ORG,
+        sessionTimeoutMinutes: 15,
+      });
+
+      const recentTimestamp = Date.now() - 5 * 60 * 1000; // 5 mins ago
+      const result = await authService.validateSession(recentTimestamp);
+
+      expect(result.valid).toBe(true);
+      expect(result.sessionTimeoutMinutes).toBe(15);
+    });
+
+    it('should report session expired when last active is beyond timeout window', async () => {
+      (prisma.organisation.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue({
+        ...DEFAULT_ORG,
+        sessionTimeoutMinutes: 15,
+      });
+
+      const oldTimestamp = Date.now() - 20 * 60 * 1000; // 20 mins ago
+      const result = await authService.validateSession(oldTimestamp);
+
+      expect(result.valid).toBe(false);
+      expect(result.sessionTimeoutMinutes).toBe(15);
+    });
+  });
 });
+

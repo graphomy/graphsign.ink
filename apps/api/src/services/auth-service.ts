@@ -1,7 +1,7 @@
 import type { PrismaClient } from '@graphsign/db';
 import type { MailerService } from './mailer-service.js';
 import type { AuditService } from './audit-service.js';
-import type { RegisterRequest, LoginRequest } from '../validators/auth-validators.js';
+import type { RegisterRequest, LoginRequest, UpdateSessionSettingsRequest } from '../validators/auth-validators.js';
 import {
   generateId,
   hashPassword,
@@ -581,6 +581,93 @@ export class AuthService {
 
     return {
       message: 'MFA disabled successfully.',
+    };
+  }
+
+  /**
+   * Retrieves the current session timeout configuration for the organisation.
+   */
+  async getSessionSettings(organisationId?: string): Promise<{ sessionTimeoutMinutes: number }> {
+    const org = organisationId
+      ? await this.prisma.organisation.findUnique({ where: { id: organisationId } })
+      : await this.getOrCreateDefaultOrganisation();
+
+    return {
+      sessionTimeoutMinutes: org?.sessionTimeoutMinutes ?? 15,
+    };
+  }
+
+  /**
+   * Updates the organisation's session timeout configuration and records an audit log event.
+   */
+  async updateSessionSettings(
+    data: UpdateSessionSettingsRequest,
+    userId?: string,
+    organisationId?: string,
+    meta: { ipAddress?: string; userAgent?: string } = {},
+  ): Promise<{ sessionTimeoutMinutes: number; message: string }> {
+    const org = organisationId
+      ? await this.prisma.organisation.findUnique({ where: { id: organisationId } })
+      : await this.getOrCreateDefaultOrganisation();
+
+    if (!org) {
+      throw new NotFoundError('Organisation not found.');
+    }
+
+    const previousTimeout = org.sessionTimeoutMinutes;
+
+    const updatedOrg = await this.prisma.organisation.update({
+      where: { id: org.id },
+      data: {
+        sessionTimeoutMinutes: data.sessionTimeoutMinutes,
+      },
+    });
+
+    await this.audit.log({
+      organisationId: org.id,
+      userId: userId ?? undefined,
+      action: 'organisation.session_settings_updated',
+      resourceType: 'organisation',
+      resourceId: org.id,
+      metadata: {
+        previousSessionTimeoutMinutes: previousTimeout,
+        newSessionTimeoutMinutes: data.sessionTimeoutMinutes,
+      },
+      ipAddress: meta.ipAddress,
+      userAgent: meta.userAgent,
+    });
+
+    return {
+      sessionTimeoutMinutes: updatedOrg.sessionTimeoutMinutes,
+      message: 'Session timeout configuration updated successfully.',
+    };
+  }
+
+  /**
+   * Validates if a session is still active based on the last active timestamp and configured timeout.
+   */
+  async validateSession(
+    lastActiveAtMs?: number,
+    organisationId?: string,
+  ): Promise<{ valid: boolean; sessionTimeoutMinutes: number; expiresAt: string }> {
+    const settings = await this.getSessionSettings(organisationId);
+    const timeoutMs = settings.sessionTimeoutMinutes * 60 * 1000;
+    const now = Date.now();
+
+    if (!lastActiveAtMs) {
+      return {
+        valid: true,
+        sessionTimeoutMinutes: settings.sessionTimeoutMinutes,
+        expiresAt: new Date(now + timeoutMs).toISOString(),
+      };
+    }
+
+    const isExpired = now - lastActiveAtMs > timeoutMs;
+
+    return {
+      valid: !isExpired,
+      sessionTimeoutMinutes: settings.sessionTimeoutMinutes,
+      expiresAt: new Date(lastActiveAtMs + timeoutMs).toISOString(),
     };
   }
 
