@@ -4,6 +4,7 @@ import { useState, Suspense, type FormEvent } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { loginFormSchema } from '@/lib/validators/auth';
+import { getApiUrl } from '@/lib/api';
 
 function LoginContent() {
   const searchParams = useSearchParams();
@@ -46,7 +47,7 @@ function LoginContent() {
 
     setIsLoading(true);
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8787';
+      const apiUrl = getApiUrl();
       const res = await fetch(`${apiUrl}/api/v1/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -110,7 +111,7 @@ function LoginContent() {
 
     setIsLoading(true);
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8787';
+      const apiUrl = getApiUrl();
       const res = await fetch(`${apiUrl}/api/v1/auth/login/mfa`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -155,7 +156,7 @@ function LoginContent() {
 
     setIsLoading(true);
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8787';
+      const apiUrl = getApiUrl();
       const verifyRes = await fetch(`${apiUrl}/api/v1/auth/mfa/verify-setup`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

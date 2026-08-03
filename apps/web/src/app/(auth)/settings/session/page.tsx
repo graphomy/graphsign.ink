@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { SessionGuard } from '@/components/features/auth/SessionGuard';
+import { getApiUrl } from '@/lib/api';
 
 function SessionSettingsContent() {
   const [sessionTimeoutMinutes, setSessionTimeoutMinutes] = useState<number>(15);
@@ -17,7 +18,7 @@ function SessionSettingsContent() {
       try {
         setIsLoading(true);
         const token = localStorage.getItem('graphsign_session_token') ?? '';
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8787';
+        const apiUrl = getApiUrl();
 
         const res = await fetch(`${apiUrl}/api/v1/auth/session-settings`, {
           headers: {
@@ -55,7 +56,7 @@ function SessionSettingsContent() {
     try {
       const token = localStorage.getItem('graphsign_session_token') ?? '';
       const orgId = localStorage.getItem('graphsign_org_id') ?? '';
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8787';
+      const apiUrl = getApiUrl();
 
       const res = await fetch(`${apiUrl}/api/v1/auth/session-settings`, {
         method: 'PUT',

@@ -4,6 +4,7 @@ import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { SessionGuard } from '@/components/features/auth/SessionGuard';
+import { getApiUrl } from '@/lib/api';
 
 interface UserProfile {
   id: string;
@@ -34,7 +35,7 @@ function ProfileContent() {
 
     async function handleVerifyEmailChange() {
       try {
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8787';
+        const apiUrl = getApiUrl();
         const res = await fetch(`${apiUrl}/api/v1/auth/profile/verify-email-change`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -63,7 +64,7 @@ function ProfileContent() {
       try {
         setIsLoading(true);
         const token = localStorage.getItem('graphsign_session_token') ?? '';
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8787';
+        const apiUrl = getApiUrl();
 
         const res = await fetch(`${apiUrl}/api/v1/auth/profile`, {
           headers: {
@@ -97,7 +98,7 @@ function ProfileContent() {
 
     try {
       const token = localStorage.getItem('graphsign_session_token') ?? '';
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8787';
+      const apiUrl = getApiUrl();
 
       const payload: { name?: string; timezone?: string; email?: string } = {
         name,

@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { SessionGuard } from '@/components/features/auth/SessionGuard';
+import { getApiUrl } from '@/lib/api';
 
 interface ProfileData {
   id: string;
@@ -40,7 +41,7 @@ function SecuritySettingsContent() {
       try {
         setIsLoading(true);
         const token = localStorage.getItem('graphsign_session_token') ?? '';
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8787';
+        const apiUrl = getApiUrl();
 
         // Load profile
         const profileRes = await fetch(`${apiUrl}/api/v1/auth/profile`, {
@@ -86,7 +87,7 @@ function SecuritySettingsContent() {
 
     try {
       const token = localStorage.getItem('graphsign_session_token') ?? '';
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8787';
+      const apiUrl = getApiUrl();
 
       const res = await fetch(`${apiUrl}/api/v1/auth/mfa/setup`, {
         method: 'POST',
@@ -126,7 +127,7 @@ function SecuritySettingsContent() {
 
     try {
       const token = localStorage.getItem('graphsign_session_token') ?? '';
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8787';
+      const apiUrl = getApiUrl();
 
       const res = await fetch(`${apiUrl}/api/v1/auth/mfa/verify-setup`, {
         method: 'POST',
@@ -169,7 +170,7 @@ function SecuritySettingsContent() {
 
     try {
       const token = localStorage.getItem('graphsign_session_token') ?? '';
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8787';
+      const apiUrl = getApiUrl();
 
       const res = await fetch(`${apiUrl}/api/v1/auth/mfa/disable`, {
         method: 'POST',
@@ -206,7 +207,7 @@ function SecuritySettingsContent() {
 
     try {
       const token = localStorage.getItem('graphsign_session_token') ?? '';
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8787';
+      const apiUrl = getApiUrl();
 
       const res = await fetch(`${apiUrl}/api/v1/auth/mfa-enforcement`, {
         method: 'PUT',

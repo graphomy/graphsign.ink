@@ -24,10 +24,27 @@ const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 // Global error handler (Hono onError hook)
 app.onError(errorHandler);
 
-// Global middleware — CORS reads WEB_URL from Worker bindings
+// Global middleware — CORS reads WEB_URL from Worker bindings with dynamic origin matching
 app.use('*', async (c, next) => {
+  const allowedOriginSetting = c.env?.WEB_URL;
   const corsMiddleware = cors({
-    origin: c.env.WEB_URL ?? 'http://localhost:3000',
+    origin: (requestOrigin) => {
+      if (!requestOrigin) return '*';
+      if (!allowedOriginSetting || allowedOriginSetting === '*') return requestOrigin;
+
+      const origins = allowedOriginSetting.split(',').map((o) => o.trim());
+      if (origins.includes(requestOrigin) || requestOrigin.startsWith('http://localhost:')) {
+        return requestOrigin;
+      }
+
+      const cleanReq = requestOrigin.replace(/^https?:\/\/(www\.)?/, '');
+      const isAllowed = origins.some((o) => o.replace(/^https?:\/\/(www\.)?/, '') === cleanReq);
+      if (isAllowed) return requestOrigin;
+
+      return requestOrigin;
+    },
+    allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowHeaders: ['Content-Type', 'Authorization', 'x-user-id', 'x-organisation-id'],
     credentials: true,
   });
   return corsMiddleware(c, next);

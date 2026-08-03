@@ -3,6 +3,7 @@
 import { useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import { registerFormSchema, getPasswordRequirements } from '@/lib/validators/auth';
+import { getApiUrl } from '@/lib/api';
 
 /**
  * Registration page — creates a new user account.
@@ -45,7 +46,7 @@ export default function RegisterPage() {
 
     setIsLoading(true);
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8787';
+      const apiUrl = getApiUrl();
       const res = await fetch(`${apiUrl}/api/v1/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

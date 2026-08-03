@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback, type ReactNode } from 'react';
+import { getApiUrl } from '@/lib/api';
 
 interface SessionGuardProps {
   children: ReactNode;
@@ -25,7 +26,7 @@ export function SessionGuard({
     if (!isAuthenticated) return;
 
     let isMounted = true;
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8787';
+    const apiUrl = getApiUrl();
 
     fetch(`${apiUrl}/api/v1/auth/session-settings`, {
       headers: {
@@ -52,7 +53,7 @@ export function SessionGuard({
     localStorage.removeItem('graphsign_user_email');
     localStorage.removeItem('graphsign_org_id');
 
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8787';
+    const apiUrl = getApiUrl();
     fetch(`${apiUrl}/api/v1/auth/logout`, { method: 'POST' }).catch(() => null);
 
     const redirectTarget = `/login?reason=timeout&returnTo=${encodeURIComponent(currentPath)}`;
