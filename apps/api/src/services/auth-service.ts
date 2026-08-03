@@ -285,6 +285,69 @@ export class AuthService {
   }
 
   /**
+   * Completes login for users with MFA enabled by validating 6-digit TOTP code.
+   */
+  async loginWithMfa(
+    data: LoginMfaRequest,
+    meta: { ipAddress?: string; userAgent?: string } = {},
+  ): Promise<LoginResult> {
+    const org = await this.getOrCreateDefaultOrganisation();
+
+    // mfaTicket format: mfa_<userId>_<timestamp>
+    const ticketParts = data.mfaTicket.split('_');
+    const userId = ticketParts[1];
+
+    if (!userId) {
+      throw new UnauthorizedError('Invalid or expired MFA session ticket.');
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user || user.deletedAt !== null || !user.mfaEnabled || !user.mfaSecret) {
+      throw new UnauthorizedError('Invalid MFA credentials or MFA not enabled.');
+    }
+
+    const isValidCode = await verifyTotpToken(user.mfaSecret, data.code);
+
+    if (!isValidCode) {
+      await this.audit.log({
+        organisationId: org.id,
+        userId: user.id,
+        action: 'user.login_failed',
+        resourceType: 'user',
+        resourceId: user.id,
+        metadata: { email: user.email, reason: 'invalid_mfa_code' },
+        ipAddress: meta.ipAddress,
+        userAgent: meta.userAgent,
+      });
+      throw new UnauthorizedError('Invalid TOTP verification code.');
+    }
+
+    await this.audit.log({
+      organisationId: org.id,
+      userId: user.id,
+      action: 'user.login',
+      resourceType: 'user',
+      resourceId: user.id,
+      metadata: { email: user.email, authMethod: 'totp' },
+      ipAddress: meta.ipAddress,
+      userAgent: meta.userAgent,
+    });
+
+    const sessionToken = generateToken();
+
+    return {
+      id: user.id,
+      email: user.email,
+      status: user.status,
+      token: sessionToken,
+      organisationId: org.id,
+    };
+  }
+
+  /**
    * Verifies a user's email address using the verification token.
    *
    * Flow:
@@ -578,92 +641,6 @@ export class AuthService {
   }
 
   /**
-   * Enables MFA for a user and records an audit log event with IP and user agent.
-   */
-  async enableMfa(
-    userId: string,
-    meta: { ipAddress?: string; userAgent?: string } = {},
-  ): Promise<{ message: string }> {
-    const org = await this.getOrCreateDefaultOrganisation();
-
-    await this.audit.log({
-      organisationId: org.id,
-      userId,
-      action: 'user.mfa_enabled',
-      resourceType: 'user',
-      resourceId: userId,
-      ipAddress: meta.ipAddress,
-      userAgent: meta.userAgent,
-    });
-
-    return {
-      message: 'MFA enabled successfully.',
-    };
-  }
-
-  /**
-   * Completes login for users with MFA enabled by validating 6-digit TOTP code.
-   */
-  async loginWithMfa(
-    data: LoginMfaRequest,
-    meta: { ipAddress?: string; userAgent?: string } = {},
-  ): Promise<LoginResult> {
-    const org = await this.getOrCreateDefaultOrganisation();
-
-    const ticketParts = data.mfaTicket.split('_');
-    const userId = ticketParts[1];
-
-    if (!userId) {
-      throw new UnauthorizedError('Invalid or expired MFA session ticket.');
-    }
-
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-    });
-
-    if (!user || user.deletedAt !== null || !user.mfaEnabled || !user.mfaSecret) {
-      throw new UnauthorizedError('Invalid MFA credentials or MFA not enabled.');
-    }
-
-    const isValidCode = await verifyTotpToken(user.mfaSecret, data.code);
-
-    if (!isValidCode) {
-      await this.audit.log({
-        organisationId: org.id,
-        userId: user.id,
-        action: 'user.login_failed',
-        resourceType: 'user',
-        resourceId: user.id,
-        metadata: { email: user.email, reason: 'invalid_mfa_code' },
-        ipAddress: meta.ipAddress,
-        userAgent: meta.userAgent,
-      });
-      throw new UnauthorizedError('Invalid TOTP verification code.');
-    }
-
-    await this.audit.log({
-      organisationId: org.id,
-      userId: user.id,
-      action: 'user.login',
-      resourceType: 'user',
-      resourceId: user.id,
-      metadata: { email: user.email, authMethod: 'totp' },
-      ipAddress: meta.ipAddress,
-      userAgent: meta.userAgent,
-    });
-
-    const sessionToken = generateToken();
-
-    return {
-      id: user.id,
-      email: user.email,
-      status: user.status,
-      token: sessionToken,
-      organisationId: org.id,
-    };
-  }
-
-  /**
    * Generates a new TOTP secret and QR code for setting up MFA.
    */
   async setupMfa(userId: string) {
@@ -745,6 +722,45 @@ export class AuthService {
     return {
       message: 'MFA enabled successfully.',
       backupCodes,
+    };
+  }
+
+  /**
+   * Enables MFA for a user and records an audit log event with IP and user agent.
+   */
+  async enableMfa(
+    userId: string,
+    meta: { ipAddress?: string; userAgent?: string } = {},
+  ): Promise<{ message: string }> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    const orgId = user?.organisationId ?? (await this.getOrCreateDefaultOrganisation()).id;
+
+    if (user) {
+      const dummySecret = generateBase32Secret(20);
+      await this.prisma.user.update({
+        where: { id: userId },
+        data: {
+          mfaEnabled: true,
+          mfaSecret: dummySecret,
+        },
+      });
+    }
+
+    await this.audit.log({
+      organisationId: orgId,
+      userId,
+      action: 'user.mfa_enabled',
+      resourceType: 'user',
+      resourceId: userId,
+      ipAddress: meta.ipAddress,
+      userAgent: meta.userAgent,
+    });
+
+    return {
+      message: 'MFA enabled successfully.',
     };
   }
 

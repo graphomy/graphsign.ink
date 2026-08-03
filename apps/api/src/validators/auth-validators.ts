@@ -235,4 +235,3 @@ export const mfaEnforcementResponseSchema = z.object({
 export type MfaEnforcementResponse = z.infer<typeof mfaEnforcementResponseSchema>;
 
 
-
