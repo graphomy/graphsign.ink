@@ -8,6 +8,7 @@ import { loginFormSchema } from '@/lib/validators/auth';
 function LoginContent() {
   const searchParams = useSearchParams();
   const isTimeout = searchParams.get('reason') === 'timeout';
+  const returnTo = searchParams.get('returnTo');
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -15,6 +16,7 @@ function LoginContent() {
   const [apiError, setApiError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+  const [redirectTarget, setRedirectTarget] = useState('/dashboard');
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -57,8 +59,10 @@ function LoginContent() {
         localStorage.setItem('graphsign_org_id', data.organisationId);
       }
 
+      const target = returnTo ? decodeURIComponent(returnTo) : '/dashboard';
+      setRedirectTarget(target);
       setIsSuccess(true);
-      window.location.href = '/dashboard';
+      window.location.href = target;
     } catch {
       setApiError('Unable to connect to the server. Please try again later.');
     } finally {
@@ -93,11 +97,11 @@ function LoginContent() {
           </p>
           <div className="pt-2">
             <Link
-              href="/dashboard"
+              href={redirectTarget}
               className="inline-block rounded-lg bg-[#ba0000] px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-[#a00000] transition-colors"
               data-testid="go-to-dashboard-button"
             >
-              Go to Dashboard
+              Continue
             </Link>
           </div>
         </div>

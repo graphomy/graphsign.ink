@@ -61,6 +61,13 @@ function DashboardContent() {
             <span className="hidden sm:inline-block text-sm text-neutral-600">
               Signed in as <strong className="text-neutral-900 font-medium">{user?.email}</strong>
             </span>
+            <Link
+              href="/settings/session"
+              className="rounded-lg border border-neutral-300 bg-white px-3.5 py-1.5 text-xs font-semibold text-neutral-700 shadow-sm hover:bg-neutral-50 hover:text-neutral-900 transition-colors"
+              data-testid="session-settings-link"
+            >
+              Session Settings
+            </Link>
             <button
               onClick={handleSignOut}
               className="rounded-lg border border-neutral-300 bg-white px-3.5 py-1.5 text-xs font-semibold text-neutral-700 shadow-sm hover:bg-neutral-50 hover:text-neutral-900 transition-colors"

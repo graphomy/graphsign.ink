@@ -8,6 +8,8 @@ import {
   resendVerificationRequestSchema,
   forgotPasswordRequestSchema,
   resetPasswordRequestSchema,
+  updateSessionSettingsSchema,
+  validateSessionRequestSchema,
 } from '../validators/auth-validators.js';
 import { AuthService } from '../services/auth-service.js';
 import type { MailerService } from '../services/mailer-service.js';
@@ -337,6 +339,76 @@ export function createAuthRoutes(deps?: AuthDeps) {
     return c.json({
       message: result.message,
     });
+  });
+
+  /**
+   * GET /api/v1/auth/session-settings
+   *
+   * Retrieves current session timeout setting (in minutes) for the organisation.
+   */
+  auth.get('/session-settings', async (c) => {
+    const authService = getAuthService(c);
+    const orgId = c.req.header('x-organisation-id');
+
+    const settings = await authService.getSessionSettings(orgId);
+
+    return c.json({
+      sessionTimeoutMinutes: settings.sessionTimeoutMinutes,
+    });
+  });
+
+  /**
+   * PUT /api/v1/auth/session-settings
+   *
+   * Updates session timeout setting for the organisation and logs audit event.
+   */
+  auth.put('/session-settings', async (c) => {
+    const body = await c.req.json().catch(() => null);
+
+    if (!body) {
+      throw new ValidationError('Request body is required.');
+    }
+
+    const parsed = updateSessionSettingsSchema.safeParse(body);
+
+    if (!parsed.success) {
+      const firstError = parsed.error.errors[0];
+      throw new ValidationError(firstError?.message ?? 'Invalid input.', {
+        field: firstError?.path.join('.') ?? 'unknown',
+        issue: firstError?.message ?? 'validation_failed',
+      });
+    }
+
+    const authService = getAuthService(c);
+    const userId = c.req.header('x-user-id');
+    const orgId = c.req.header('x-organisation-id');
+
+    const result = await authService.updateSessionSettings(parsed.data, userId, orgId, {
+      ipAddress: c.req.header('x-forwarded-for')?.split(',')[0]?.trim(),
+      userAgent: c.req.header('user-agent'),
+    });
+
+    return c.json({
+      sessionTimeoutMinutes: result.sessionTimeoutMinutes,
+      message: result.message,
+    });
+  });
+
+  /**
+   * POST /api/v1/auth/session/validate
+   *
+   * Checks if session is active or expired given last active timestamp.
+   */
+  auth.post('/session/validate', async (c) => {
+    const body = await c.req.json().catch(() => ({}));
+    const parsed = validateSessionRequestSchema.safeParse(body);
+
+    const authService = getAuthService(c);
+    const orgId = c.req.header('x-organisation-id');
+
+    const result = await authService.validateSession(parsed.data?.lastActiveAt, orgId);
+
+    return c.json(result);
   });
 
   return auth;

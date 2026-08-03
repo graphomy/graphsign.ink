@@ -5,6 +5,7 @@ import {
   resendVerificationRequestSchema,
   forgotPasswordRequestSchema,
   resetPasswordRequestSchema,
+  updateSessionSettingsSchema,
 } from './auth-validators.js';
 
 describe('registerRequestSchema', () => {
@@ -226,3 +227,42 @@ describe('resetPasswordRequestSchema', () => {
     expect(result.success).toBe(false);
   });
 });
+
+describe('updateSessionSettingsSchema', () => {
+  it('should accept valid session timeout minutes within bounds', () => {
+    const result = updateSessionSettingsSchema.safeParse({
+      sessionTimeoutMinutes: 30,
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.sessionTimeoutMinutes).toBe(30);
+    }
+  });
+
+  it('should accept boundary values 1 and 1440', () => {
+    expect(updateSessionSettingsSchema.safeParse({ sessionTimeoutMinutes: 1 }).success).toBe(true);
+    expect(updateSessionSettingsSchema.safeParse({ sessionTimeoutMinutes: 1440 }).success).toBe(true);
+  });
+
+  it('should reject non-integer numbers', () => {
+    const result = updateSessionSettingsSchema.safeParse({
+      sessionTimeoutMinutes: 15.5,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('should reject values less than 1', () => {
+    const result = updateSessionSettingsSchema.safeParse({
+      sessionTimeoutMinutes: 0,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('should reject values greater than 1440', () => {
+    const result = updateSessionSettingsSchema.safeParse({
+      sessionTimeoutMinutes: 1441,
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
