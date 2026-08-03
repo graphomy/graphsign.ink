@@ -219,6 +219,58 @@ function LoginContent() {
     );
   }
 
+  if (showMfaPrompt) {
+    return (
+      <div className="space-y-6" data-testid="mfa-verification-step">
+        <div>
+          <h2 className="text-center text-2xl font-semibold text-neutral-900">Two-Step Verification</h2>
+          <p className="mt-2 text-center text-sm text-neutral-600">
+            Enter the 6-digit code from your authenticator app to complete sign in.
+          </p>
+        </div>
+
+        <form
+          onSubmit={handleMfaSubmit}
+          className="rounded-xl border border-neutral-200 bg-white p-8 shadow-sm space-y-6"
+          data-testid="mfa-login-form"
+        >
+          {apiError && (
+            <div className="rounded-lg bg-red-50 border border-red-200 p-4 text-sm text-red-700" role="alert">
+              {apiError}
+            </div>
+          )}
+
+          <div className="space-y-2">
+            <label htmlFor="totpCode" className="block text-xs font-semibold text-neutral-700 uppercase tracking-wider text-center">
+              6-Digit Authenticator Code
+            </label>
+            <input
+              id="totpCode"
+              type="text"
+              maxLength={6}
+              autoFocus
+              required
+              value={totpCode}
+              onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, ''))}
+              className="block w-full text-center tracking-[0.5em] font-mono text-2xl rounded-lg border border-neutral-300 px-3.5 py-3 shadow-sm focus:border-[#ba0000] focus:ring-2 focus:ring-[#ba0000]/20"
+              placeholder="123456"
+              data-testid="mfa-code-input"
+            />
+          </div>
+
+          <button
+            type="submit"
+            disabled={isLoading || totpCode.length !== 6}
+            className="w-full rounded-lg bg-[#ba0000] px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-[#a00000] disabled:opacity-50 transition-colors"
+            data-testid="mfa-submit-button"
+          >
+            {isLoading ? 'Verifying...' : 'Verify & Sign In'}
+          </button>
+        </form>
+      </div>
+    );
+  }
+
   if (showMfaSetupPrompt) {
     return (
       <div className="space-y-6" data-testid="mfa-forced-setup-step">
@@ -251,6 +303,7 @@ function LoginContent() {
             <div className="flex flex-col items-center gap-3">
               {setupQrCode && (
                 <div className="bg-white p-2 border border-neutral-200 rounded-lg shadow-sm">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={setupQrCode} alt="TOTP QR Code" className="h-36 w-36" data-testid="forced-mfa-qr" />
                 </div>
               )}

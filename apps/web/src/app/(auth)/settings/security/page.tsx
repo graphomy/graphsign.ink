@@ -399,6 +399,7 @@ function SecuritySettingsContent() {
                       <div className="flex flex-col sm:flex-row items-center gap-6">
                         {qrCode && (
                           <div className="bg-white p-3 border border-neutral-200 rounded-xl shadow-sm">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img src={qrCode} alt="TOTP QR Code" className="h-40 w-40" data-testid="mfa-qr-code" />
                           </div>
                         )}
