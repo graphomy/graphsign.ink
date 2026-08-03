@@ -1,7 +1,7 @@
 import type { PrismaClient } from '@graphsign/db';
 import type { MailerService } from './mailer-service.js';
 import type { AuditService } from './audit-service.js';
-import type { RegisterRequest, LoginRequest, UpdateSessionSettingsRequest } from '../validators/auth-validators.js';
+import type { RegisterRequest, LoginRequest, UpdateSessionSettingsRequest, UpdateProfileRequest } from '../validators/auth-validators.js';
 import {
   generateId,
   hashPassword,
@@ -668,6 +668,182 @@ export class AuthService {
       valid: !isExpired,
       sessionTimeoutMinutes: settings.sessionTimeoutMinutes,
       expiresAt: new Date(lastActiveAtMs + timeoutMs).toISOString(),
+    };
+  }
+
+  /**
+   * Retrieves profile information for the specified user.
+   */
+  async getProfile(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user || user.deletedAt !== null) {
+      throw new NotFoundError('User profile not found.');
+    }
+
+    return {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      timezone: user.timezone ?? 'UTC',
+      status: user.status,
+      pendingEmail: user.pendingEmail,
+      createdAt: user.createdAt.toISOString(),
+    };
+  }
+
+  /**
+   * Updates profile fields (name, timezone) and initiates email change verification if email is changed.
+   */
+  async updateProfile(
+    userId: string,
+    data: UpdateProfileRequest,
+    meta: { ipAddress?: string; userAgent?: string } = {},
+  ) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user || user.deletedAt !== null) {
+      throw new NotFoundError('User profile not found.');
+    }
+
+    const updateData: Partial<{
+      name: string;
+      timezone: string;
+      pendingEmail: string | null;
+      pendingEmailTokenHash: string | null;
+      pendingEmailTokenExpiresAt: Date | null;
+    }> = {};
+
+    let emailChangeRequested = false;
+
+    if (data.name !== undefined) {
+      updateData.name = data.name;
+    }
+
+    if (data.timezone !== undefined) {
+      updateData.timezone = data.timezone;
+    }
+
+    if (data.email && data.email !== user.email) {
+      // Check if new email is already in use in the organisation
+      const existingUser = await this.prisma.user.findUnique({
+        where: {
+          organisationId_email: {
+            organisationId: user.organisationId,
+            email: data.email,
+          },
+        },
+      });
+
+      if (existingUser && existingUser.id !== userId) {
+        throw new ConflictError('An account with this email already exists in your organisation.');
+      }
+
+      // Generate email verification token (24h expiry)
+      const rawToken = generateToken();
+      const tokenHash = await hashToken(rawToken);
+      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+      updateData.pendingEmail = data.email;
+      updateData.pendingEmailTokenHash = tokenHash;
+      updateData.pendingEmailTokenExpiresAt = expiresAt;
+      emailChangeRequested = true;
+
+      try {
+        await this.mailer.sendEmailChangeVerificationEmail(data.email, rawToken);
+      } catch (err) {
+        console.error('Failed to send email change verification:', err);
+      }
+    }
+
+    const updatedUser = await this.prisma.user.update({
+      where: { id: userId },
+      data: updateData,
+    });
+
+    await this.audit.log({
+      organisationId: user.organisationId,
+      userId: user.id,
+      action: emailChangeRequested ? 'user.email_change_requested' : 'user.profile_updated',
+      resourceType: 'user',
+      resourceId: user.id,
+      metadata: {
+        updatedFields: Object.keys(updateData),
+        ...(emailChangeRequested ? { pendingEmail: data.email } : {}),
+      },
+      ipAddress: meta.ipAddress,
+      userAgent: meta.userAgent,
+    });
+
+    return {
+      id: updatedUser.id,
+      email: updatedUser.email,
+      name: updatedUser.name,
+      timezone: updatedUser.timezone ?? 'UTC',
+      status: updatedUser.status,
+      pendingEmail: updatedUser.pendingEmail,
+      message: emailChangeRequested
+        ? 'Profile updated. A verification link has been sent to your new email address.'
+        : 'Profile updated successfully.',
+    };
+  }
+
+  /**
+   * Verifies and finalizes an email change request using the verification token.
+   */
+  async verifyEmailChange(
+    token: string,
+    meta: { ipAddress?: string; userAgent?: string } = {},
+  ) {
+    const tokenHash = await hashToken(token);
+
+    const user = await this.prisma.user.findFirst({
+      where: {
+        pendingEmailTokenHash: tokenHash,
+        deletedAt: null,
+      },
+    });
+
+    if (!user || !user.pendingEmail) {
+      throw new NotFoundError('Invalid or expired email change verification token.');
+    }
+
+    if (user.pendingEmailTokenExpiresAt && user.pendingEmailTokenExpiresAt < new Date()) {
+      throw new ValidationError('Email change verification token has expired.');
+    }
+
+    const newEmail = user.pendingEmail;
+
+    const updatedUser = await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        email: newEmail,
+        pendingEmail: null,
+        pendingEmailTokenHash: null,
+        pendingEmailTokenExpiresAt: null,
+      },
+    });
+
+    await this.audit.log({
+      organisationId: user.organisationId,
+      userId: user.id,
+      action: 'user.email_changed',
+      resourceType: 'user',
+      resourceId: user.id,
+      metadata: { oldEmail: user.email, newEmail },
+      ipAddress: meta.ipAddress,
+      userAgent: meta.userAgent,
+    });
+
+    return {
+      id: updatedUser.id,
+      email: updatedUser.email,
+      name: updatedUser.name,
+      message: 'Email address updated successfully.',
     };
   }
 

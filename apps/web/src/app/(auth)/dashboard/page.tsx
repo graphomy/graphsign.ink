@@ -62,6 +62,13 @@ function DashboardContent() {
               Signed in as <strong className="text-neutral-900 font-medium">{user?.email}</strong>
             </span>
             <Link
+              href="/settings/profile"
+              className="rounded-lg border border-neutral-300 bg-white px-3.5 py-1.5 text-xs font-semibold text-neutral-700 shadow-sm hover:bg-neutral-50 hover:text-neutral-900 transition-colors"
+              data-testid="profile-settings-link"
+            >
+              Profile
+            </Link>
+            <Link
               href="/settings/session"
               className="rounded-lg border border-neutral-300 bg-white px-3.5 py-1.5 text-xs font-semibold text-neutral-700 shadow-sm hover:bg-neutral-50 hover:text-neutral-900 transition-colors"
               data-testid="session-settings-link"

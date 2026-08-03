@@ -54,6 +54,7 @@ function createMockDeps() {
     mailer: {
       sendVerificationEmail: vi.fn(async () => {}),
       sendPasswordResetEmail: vi.fn(async () => {}),
+      sendEmailChangeVerificationEmail: vi.fn(async () => {}),
     },
     audit: {
       log: vi.fn(async () => {}),
@@ -580,4 +581,109 @@ describe('Session Settings Routes', () => {
     expect(body.sessionTimeoutMinutes).toBe(15);
   });
 });
+
+describe('Profile Routes', () => {
+  let deps: ReturnType<typeof createMockDeps>;
+  let app: Hono;
+
+  const mockUser = {
+    id: '00000000-0000-7000-8000-000000000001',
+    organisationId: DEFAULT_ORG.id,
+    email: 'user@example.com',
+    name: 'Alice Vance',
+    timezone: 'UTC',
+    status: 'active',
+    pendingEmail: null,
+    pendingEmailTokenHash: null,
+    pendingEmailTokenExpiresAt: null,
+    createdAt: new Date('2026-01-01T00:00:00Z'),
+    updatedAt: new Date(),
+    deletedAt: null,
+  };
+
+  beforeEach(() => {
+    deps = createMockDeps();
+    (deps.prisma.user.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue(mockUser);
+    (deps.prisma.user.update as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ...mockUser,
+      name: 'Alice Cooper',
+      timezone: 'Europe/London',
+    });
+    app = createApp(deps);
+  });
+
+  it('should GET profile successfully', async () => {
+    const res = await app.request('/api/v1/auth/profile', {
+      method: 'GET',
+      headers: { 'x-user-id': mockUser.id },
+    });
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    expect(body.id).toBe(mockUser.id);
+    expect(body.email).toBe(mockUser.email);
+    expect(body.name).toBe('Alice Vance');
+  });
+
+  it('should PUT profile to update name and timezone', async () => {
+    const res = await app.request('/api/v1/auth/profile', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-user-id': mockUser.id,
+      },
+      body: JSON.stringify({
+        name: 'Alice Cooper',
+        timezone: 'Europe/London',
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    expect(body.name).toBe('Alice Cooper');
+    expect(body.timezone).toBe('Europe/London');
+  });
+
+  it('should return 400 when PUT profile receives invalid email', async () => {
+    const res = await app.request('/api/v1/auth/profile', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-user-id': mockUser.id,
+      },
+      body: JSON.stringify({
+        email: 'invalid-email',
+      }),
+    });
+
+    expect(res.status).toBe(400);
+  });
+
+  it('should POST verify-email-change and return success', async () => {
+    (deps.prisma.user.findFirst as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ...mockUser,
+      pendingEmail: 'newemail@example.com',
+      pendingEmailTokenHash: 'sha256-hashed-token',
+      pendingEmailTokenExpiresAt: new Date(Date.now() + 60000),
+    });
+
+    (deps.prisma.user.update as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ...mockUser,
+      email: 'newemail@example.com',
+      pendingEmail: null,
+    });
+
+    const res = await app.request('/api/v1/auth/profile/verify-email-change', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: 'raw-verification-token' }),
+    });
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    expect(body.email).toBe('newemail@example.com');
+    expect(body.message).toBe('Email address updated successfully.');
+  });
+});
+
 
