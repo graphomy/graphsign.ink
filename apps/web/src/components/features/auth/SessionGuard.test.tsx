@@ -11,9 +11,9 @@ describe('SessionGuard', () => {
     localStorage.setItem('graphsign_session_token', 'test-token');
 
     // Mock window.location
-    // @ts-ignore
+    // @ts-expect-error Mocking window.location for test environment
     delete window.location;
-    // @ts-ignore
+    // @ts-expect-error Mocking window.location for test environment
     window.location = {
       href: '',
       pathname: '/dashboard',
@@ -28,7 +28,7 @@ describe('SessionGuard', () => {
 
   afterEach(() => {
     vi.useRealTimers();
-    // @ts-ignore
+    // @ts-expect-error Restoring original window.location
     window.location = originalLocation;
   });
 
