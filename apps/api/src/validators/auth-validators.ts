@@ -189,6 +189,8 @@ export const profileResponseSchema = z.object({
   status: z.string(),
   pendingEmail: z.string().nullable().optional(),
   createdAt: z.string().optional(),
+  mfaEnabled: z.boolean().optional(),
+  role: z.string().optional(),
 });
 
 export type ProfileResponse = z.infer<typeof profileResponseSchema>;
@@ -218,5 +220,18 @@ export const disableMfaRequestSchema = z.object({
 
 export type DisableMfaRequest = z.infer<typeof disableMfaRequestSchema>;
 
+export const updateMfaEnforcementRequestSchema = z.object({
+  mfaRequired: z.boolean(),
+  mfaRequiredRoles: z.array(z.string()).optional(),
+});
+
+export type UpdateMfaEnforcementRequest = z.infer<typeof updateMfaEnforcementRequestSchema>;
+
+export const mfaEnforcementResponseSchema = z.object({
+  mfaRequired: z.boolean(),
+  mfaRequiredRoles: z.array(z.string()),
+});
+
+export type MfaEnforcementResponse = z.infer<typeof mfaEnforcementResponseSchema>;
 
 

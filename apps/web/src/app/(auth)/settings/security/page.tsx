@@ -8,6 +8,12 @@ interface ProfileData {
   id: string;
   email: string;
   mfaEnabled?: boolean;
+  role?: string;
+}
+
+interface EnforcementSettings {
+  mfaRequired: boolean;
+  mfaRequiredRoles: string[];
 }
 
 function SecuritySettingsContent() {
@@ -22,23 +28,46 @@ function SecuritySettingsContent() {
   const [message, setMessage] = useState<string>('');
   const [error, setError] = useState<string>('');
 
+  // Admin MFA Enforcement state
+  const [enforcement, setEnforcement] = useState<EnforcementSettings>({
+    mfaRequired: false,
+    mfaRequiredRoles: ['*'],
+  });
+  const [isSavingEnforcement, setIsSavingEnforcement] = useState<boolean>(false);
+
   useEffect(() => {
-    async function loadSecurityStatus() {
+    async function loadSecurityData() {
       try {
         setIsLoading(true);
         const token = localStorage.getItem('graphsign_session_token') ?? '';
         const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8787';
 
-        const res = await fetch(`${apiUrl}/api/v1/auth/profile`, {
+        // Load profile
+        const profileRes = await fetch(`${apiUrl}/api/v1/auth/profile`, {
           headers: {
             Authorization: `Bearer ${token}`,
             'x-user-id': localStorage.getItem('graphsign_user_id') ?? '',
           },
         });
 
-        if (res.ok) {
-          const data = await res.json();
+        if (profileRes.ok) {
+          const data = await profileRes.json();
           setProfile(data);
+        }
+
+        // Load organisation MFA enforcement
+        const enforcementRes = await fetch(`${apiUrl}/api/v1/auth/mfa-enforcement`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        if (enforcementRes.ok) {
+          const enfData = await enforcementRes.json();
+          setEnforcement({
+            mfaRequired: enfData.mfaRequired ?? false,
+            mfaRequiredRoles: Array.isArray(enfData.mfaRequiredRoles) ? enfData.mfaRequiredRoles : ['*'],
+          });
         }
       } catch {
         setError('Failed to load security settings.');
@@ -47,7 +76,7 @@ function SecuritySettingsContent() {
       }
     }
 
-    loadSecurityStatus();
+    loadSecurityData();
   }, []);
 
   async function handleStartSetup() {
@@ -169,6 +198,58 @@ function SecuritySettingsContent() {
     }
   }
 
+  async function handleSaveEnforcement(e: React.FormEvent) {
+    e.preventDefault();
+    setIsSavingEnforcement(true);
+    setError('');
+    setMessage('');
+
+    try {
+      const token = localStorage.getItem('graphsign_session_token') ?? '';
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8787';
+
+      const res = await fetch(`${apiUrl}/api/v1/auth/mfa-enforcement`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          mfaRequired: enforcement.mfaRequired,
+          mfaRequiredRoles: enforcement.mfaRequiredRoles,
+        }),
+      });
+
+      const data = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        setError(data?.error?.message ?? 'Failed to update MFA enforcement.');
+        return;
+      }
+
+      setMessage(data.message ?? 'Organisation MFA enforcement policy updated.');
+    } catch {
+      setError('Unable to save MFA enforcement policy.');
+    } finally {
+      setIsSavingEnforcement(false);
+    }
+  }
+
+  function handleRoleToggle(roleName: string) {
+    setEnforcement((prev) => {
+      const current = prev.mfaRequiredRoles;
+      if (current.includes('*')) {
+        return { ...prev, mfaRequiredRoles: [roleName] };
+      }
+      if (current.includes(roleName)) {
+        const next = current.filter((r) => r !== roleName);
+        return { ...prev, mfaRequiredRoles: next.length === 0 ? ['*'] : next };
+      } else {
+        return { ...prev, mfaRequiredRoles: [...current, roleName] };
+      }
+    });
+  }
+
   return (
     <div className="min-h-screen bg-neutral-50 flex flex-col font-sans" data-testid="security-settings-container">
       {/* Header */}
@@ -198,7 +279,7 @@ function SecuritySettingsContent() {
         <div>
           <h1 className="text-2xl font-bold text-neutral-900 tracking-tight">Security & Multi-Factor Authentication</h1>
           <p className="text-sm text-neutral-600 mt-1">
-            Protect your account with TOTP Multi-Factor Authentication (Google Authenticator, Authy, 1Password, etc.).
+            Configure TOTP Multi-Factor Authentication and manage organisation security policies.
           </p>
         </div>
 
@@ -223,19 +304,19 @@ function SecuritySettingsContent() {
           </div>
         )}
 
-        {/* Status Card */}
+        {/* User Personal MFA Status Card */}
         <div className="rounded-2xl border border-neutral-200 bg-white p-6 sm:p-8 shadow-sm space-y-6">
           {isLoading ? (
-            <div className="py-12 text-center text-neutral-500 text-sm animate-pulse">
+            <div className="py-8 text-center text-neutral-500 text-sm animate-pulse">
               Loading security status...
             </div>
           ) : (
             <>
               <div className="flex items-center justify-between">
                 <div>
-                  <h2 className="text-base font-semibold text-neutral-900">Authenticator App (TOTP)</h2>
+                  <h2 className="text-base font-semibold text-neutral-900">Your Authenticator App (TOTP)</h2>
                   <p className="text-xs text-neutral-500 mt-0.5">
-                    Use a mobile authenticator app to generate 6-digit security codes when logging in.
+                    Use a mobile authenticator app (Google Authenticator, Authy, 1Password) for 2-step verification.
                   </p>
                 </div>
                 <div>
@@ -318,7 +399,6 @@ function SecuritySettingsContent() {
                       <div className="flex flex-col sm:flex-row items-center gap-6">
                         {qrCode && (
                           <div className="bg-white p-3 border border-neutral-200 rounded-xl shadow-sm">
-                            {/* SVG Data URL QR */}
                             <img src={qrCode} alt="TOTP QR Code" className="h-40 w-40" data-testid="mfa-qr-code" />
                           </div>
                         )}
@@ -361,6 +441,84 @@ function SecuritySettingsContent() {
               )}
             </>
           )}
+        </div>
+
+        {/* Organisation Admin Enforcement Card */}
+        <div className="rounded-2xl border border-neutral-200 bg-white p-6 sm:p-8 shadow-sm space-y-6" data-testid="mfa-enforcement-card">
+          <div>
+            <h2 className="text-base font-semibold text-neutral-900">Organisation Security Policy</h2>
+            <p className="text-xs text-neutral-500 mt-0.5">
+              Enforce mandatory Multi-Factor Authentication (MFA) for members of your organisation.
+            </p>
+          </div>
+
+          <form onSubmit={handleSaveEnforcement} className="space-y-6" data-testid="mfa-enforcement-form">
+            {/* Toggle switch */}
+            <div className="flex items-center justify-between p-4 rounded-xl bg-neutral-50 border border-neutral-200">
+              <div>
+                <span className="text-sm font-medium text-neutral-900 block">Require MFA for Sign-In</span>
+                <span className="text-xs text-neutral-500 block">
+                  When enabled, users without MFA configured will be blocked at sign-in until they complete MFA setup.
+                </span>
+              </div>
+              <input
+                type="checkbox"
+                checked={enforcement.mfaRequired}
+                onChange={(e) => setEnforcement({ ...enforcement, mfaRequired: e.target.checked })}
+                className="h-5 w-5 rounded border-neutral-300 text-[#ba0000] focus:ring-[#ba0000]"
+                data-testid="enforce-mfa-toggle"
+              />
+            </div>
+
+            {/* Role Selection */}
+            {enforcement.mfaRequired && (
+              <div className="space-y-3 pt-2">
+                <label className="block text-xs font-semibold text-neutral-700 uppercase tracking-wider">
+                  Target Roles for Enforcement
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {[
+                    { id: 'admin', label: 'Admins' },
+                    { id: 'signer', label: 'Signers' },
+                    { id: 'user', label: 'Standard Users' },
+                  ].map((roleItem) => {
+                    const isChecked =
+                      enforcement.mfaRequiredRoles.includes('*') ||
+                      enforcement.mfaRequiredRoles.includes(roleItem.id);
+                    return (
+                      <label
+                        key={roleItem.id}
+                        className={`flex items-center gap-3 p-3 rounded-lg border text-xs font-medium cursor-pointer transition-colors ${
+                          isChecked
+                            ? 'border-[#ba0000] bg-[#ba0000]/5 text-neutral-900'
+                            : 'border-neutral-200 bg-white text-neutral-600 hover:bg-neutral-50'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => handleRoleToggle(roleItem.id)}
+                          className="h-4 w-4 rounded border-neutral-300 text-[#ba0000] focus:ring-[#ba0000]"
+                        />
+                        {roleItem.label}
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            <div className="flex justify-end pt-4 border-t border-neutral-100">
+              <button
+                type="submit"
+                disabled={isSavingEnforcement}
+                className="rounded-lg bg-[#ba0000] px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-[#a00000] disabled:opacity-60 transition-colors"
+                data-testid="save-enforcement-button"
+              >
+                {isSavingEnforcement ? 'Saving Policy...' : 'Save Enforcement Policy'}
+              </button>
+            </div>
+          </form>
         </div>
       </main>
     </div>
