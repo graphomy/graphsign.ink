@@ -23,6 +23,7 @@ import type { AuditService } from '../services/audit-service.js';
 import { PrismaAuditService } from '../services/audit-service.js';
 import { ValidationError } from '../utils/errors.js';
 import { createRateLimiter } from '../middleware/rate-limiter.js';
+import { decodeJwt } from '../utils/jwt.js';
 import type { Env } from '../index.js';
 
 export interface AuthDeps {
@@ -311,7 +312,22 @@ export function createAuthRoutes(deps?: AuthDeps) {
     const authService = getAuthService(c);
     const userId = c.req.header('x-user-id');
 
-    const result = await authService.logout(userId, {
+    const authHeader = c.req.header('authorization');
+    const cookieHeader = c.req.header('cookie');
+    let token: string | undefined;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      token = authHeader.substring(7).trim();
+    } else if (cookieHeader) {
+      const match = cookieHeader.match(/graphsign_session=([^;]+)/);
+      if (match && match[1]) {
+        token = match[1];
+      }
+    }
+
+    const decoded = token ? decodeJwt(token) : null;
+    const jti = decoded?.jti;
+
+    const result = await authService.logout(userId, jti, {
       ipAddress: c.req.header('x-forwarded-for')?.split(',')[0]?.trim(),
       userAgent: c.req.header('user-agent'),
     });
