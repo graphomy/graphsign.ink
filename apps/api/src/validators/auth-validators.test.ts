@@ -6,6 +6,7 @@ import {
   forgotPasswordRequestSchema,
   resetPasswordRequestSchema,
   updateSessionSettingsSchema,
+  updateProfileRequestSchema,
 } from './auth-validators.js';
 
 describe('registerRequestSchema', () => {
@@ -265,4 +266,32 @@ describe('updateSessionSettingsSchema', () => {
     expect(result.success).toBe(false);
   });
 });
+
+describe('updateProfileRequestSchema', () => {
+  it('should accept valid name, timezone, and email', () => {
+    const result = updateProfileRequestSchema.safeParse({
+      name: 'Alice Vance',
+      timezone: 'America/New_York',
+      email: '  Alice@Example.Com  ',
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.name).toBe('Alice Vance');
+      expect(result.data.email).toBe('alice@example.com');
+    }
+  });
+
+  it('should accept empty/optional profile object', () => {
+    const result = updateProfileRequestSchema.safeParse({});
+    expect(result.success).toBe(true);
+  });
+
+  it('should reject invalid email format', () => {
+    const result = updateProfileRequestSchema.safeParse({
+      email: 'not-an-email',
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
 

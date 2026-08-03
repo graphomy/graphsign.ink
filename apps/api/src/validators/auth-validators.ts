@@ -163,3 +163,34 @@ export const validateSessionRequestSchema = z.object({
 
 export type ValidateSessionRequest = z.infer<typeof validateSessionRequestSchema>;
 
+export const updateProfileRequestSchema = z.object({
+  name: z.string().max(255, 'Name must be 255 characters or fewer.').optional(),
+  timezone: z.string().max(100, 'Timezone must be 100 characters or fewer.').optional(),
+  email: z
+    .string()
+    .transform((val) => val.toLowerCase().trim())
+    .pipe(z.string().email('Please enter a valid email address.').max(255, 'Email must be 255 characters or fewer.'))
+    .optional(),
+});
+
+export type UpdateProfileRequest = z.infer<typeof updateProfileRequestSchema>;
+
+export const verifyEmailChangeRequestSchema = z.object({
+  token: z.string().min(1, 'Verification token is required.'),
+});
+
+export type VerifyEmailChangeRequest = z.infer<typeof verifyEmailChangeRequestSchema>;
+
+export const profileResponseSchema = z.object({
+  id: z.string(),
+  email: z.string(),
+  name: z.string().nullable().optional(),
+  timezone: z.string().nullable().optional(),
+  status: z.string(),
+  pendingEmail: z.string().nullable().optional(),
+  createdAt: z.string().optional(),
+});
+
+export type ProfileResponse = z.infer<typeof profileResponseSchema>;
+
+

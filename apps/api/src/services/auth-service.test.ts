@@ -41,6 +41,7 @@ function createMockMailer(): MailerService {
   return {
     sendVerificationEmail: vi.fn(async () => {}),
     sendPasswordResetEmail: vi.fn(async () => {}),
+    sendEmailChangeVerificationEmail: vi.fn(async () => {}),
   };
 }
 
@@ -682,5 +683,127 @@ describe('AuthService', () => {
       expect(result.sessionTimeoutMinutes).toBe(15);
     });
   });
+
+  describe('profile management', () => {
+    it('should retrieve user profile', async () => {
+      const mockUser = {
+        id: '00000000-0000-7000-8000-000000000001',
+        email: 'user@example.com',
+        name: 'Alice Vance',
+        timezone: 'America/New_York',
+        status: 'active',
+        pendingEmail: null,
+        createdAt: new Date('2026-01-01T00:00:00Z'),
+        deletedAt: null,
+      };
+
+      (prisma.user.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue(mockUser);
+
+      const profile = await authService.getProfile(mockUser.id);
+      expect(profile.id).toBe(mockUser.id);
+      expect(profile.email).toBe(mockUser.email);
+      expect(profile.name).toBe('Alice Vance');
+      expect(profile.timezone).toBe('America/New_York');
+    });
+
+    it('should update profile name and timezone and log user.profile_updated', async () => {
+      const mockUser = {
+        id: '00000000-0000-7000-8000-000000000001',
+        organisationId: DEFAULT_ORG.id,
+        email: 'user@example.com',
+        name: 'Alice Vance',
+        timezone: 'UTC',
+        status: 'active',
+        deletedAt: null,
+      };
+
+      (prisma.user.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue(mockUser);
+      (prisma.user.update as ReturnType<typeof vi.fn>).mockResolvedValue({
+        ...mockUser,
+        name: 'Alice Cooper',
+        timezone: 'Asia/Kolkata',
+      });
+
+      const result = await authService.updateProfile(mockUser.id, {
+        name: 'Alice Cooper',
+        timezone: 'Asia/Kolkata',
+      });
+
+      expect(result.name).toBe('Alice Cooper');
+      expect(result.timezone).toBe('Asia/Kolkata');
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'user.profile_updated',
+          userId: mockUser.id,
+        }),
+      );
+    });
+
+    it('should initiate email change verification when email is changed', async () => {
+      const mockUser = {
+        id: '00000000-0000-7000-8000-000000000001',
+        organisationId: DEFAULT_ORG.id,
+        email: 'old@example.com',
+        name: 'Alice',
+        timezone: 'UTC',
+        status: 'active',
+        deletedAt: null,
+      };
+
+      (prisma.user.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue(mockUser);
+      (prisma.user.update as ReturnType<typeof vi.fn>).mockResolvedValue({
+        ...mockUser,
+        pendingEmail: 'new@example.com',
+      });
+
+      const result = await authService.updateProfile(mockUser.id, {
+        email: 'new@example.com',
+      });
+
+      expect(result.pendingEmail).toBe('new@example.com');
+      expect(result.message).toContain('verification link has been sent');
+      expect(mailer.sendEmailChangeVerificationEmail).toHaveBeenCalledWith(
+        'new@example.com',
+        expect.any(String),
+      );
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'user.email_change_requested',
+          userId: mockUser.id,
+        }),
+      );
+    });
+
+    it('should verify email change and update primary email', async () => {
+      const mockUser = {
+        id: '00000000-0000-7000-8000-000000000001',
+        organisationId: DEFAULT_ORG.id,
+        email: 'old@example.com',
+        pendingEmail: 'new@example.com',
+        pendingEmailTokenHash: 'sha256-hashed-token',
+        pendingEmailTokenExpiresAt: new Date(Date.now() + 60000),
+        deletedAt: null,
+      };
+
+      (prisma.user.findFirst as ReturnType<typeof vi.fn>).mockResolvedValue(mockUser);
+      (prisma.user.update as ReturnType<typeof vi.fn>).mockResolvedValue({
+        ...mockUser,
+        email: 'new@example.com',
+        pendingEmail: null,
+      });
+
+      const result = await authService.verifyEmailChange('raw-verification-token');
+
+      expect(result.email).toBe('new@example.com');
+      expect(result.message).toBe('Email address updated successfully.');
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'user.email_changed',
+          userId: mockUser.id,
+        }),
+      );
+    });
+  });
 });
+
 

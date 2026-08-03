@@ -10,6 +10,8 @@ import {
   resetPasswordRequestSchema,
   updateSessionSettingsSchema,
   validateSessionRequestSchema,
+  updateProfileRequestSchema,
+  verifyEmailChangeRequestSchema,
 } from '../validators/auth-validators.js';
 import { AuthService } from '../services/auth-service.js';
 import type { MailerService } from '../services/mailer-service.js';
@@ -407,6 +409,85 @@ export function createAuthRoutes(deps?: AuthDeps) {
     const orgId = c.req.header('x-organisation-id');
 
     const result = await authService.validateSession(parsed.data?.lastActiveAt, orgId);
+
+    return c.json(result);
+  });
+
+  /**
+   * GET /api/v1/auth/profile
+   *
+   * Retrieves profile details for the authenticated user.
+   */
+  auth.get('/profile', async (c) => {
+    const userId = c.req.header('x-user-id') ?? '00000000-0000-7000-8000-000000000001';
+    const authService = getAuthService(c);
+
+    const profile = await authService.getProfile(userId);
+
+    return c.json(profile);
+  });
+
+  /**
+   * PUT /api/v1/auth/profile
+   *
+   * Updates user profile (name, timezone) and dispatches verification email if email is modified.
+   */
+  auth.put('/profile', async (c) => {
+    const body = await c.req.json().catch(() => null);
+
+    if (!body) {
+      throw new ValidationError('Request body is required.');
+    }
+
+    const parsed = updateProfileRequestSchema.safeParse(body);
+
+    if (!parsed.success) {
+      const firstError = parsed.error.errors[0];
+      throw new ValidationError(firstError?.message ?? 'Invalid input.', {
+        field: firstError?.path.join('.') ?? 'unknown',
+        issue: firstError?.message ?? 'validation_failed',
+      });
+    }
+
+    const userId = c.req.header('x-user-id') ?? '00000000-0000-7000-8000-000000000001';
+    const authService = getAuthService(c);
+
+    const result = await authService.updateProfile(userId, parsed.data, {
+      ipAddress: c.req.header('x-forwarded-for')?.split(',')[0]?.trim(),
+      userAgent: c.req.header('user-agent'),
+    });
+
+    return c.json(result);
+  });
+
+  /**
+   * POST /api/v1/auth/profile/verify-email-change
+   *
+   * Verifies and finalizes an email change request.
+   */
+  auth.post('/profile/verify-email-change', async (c) => {
+    const body = await c.req.json().catch(() => null);
+
+    if (!body) {
+      throw new ValidationError('Request body is required.');
+    }
+
+    const parsed = verifyEmailChangeRequestSchema.safeParse(body);
+
+    if (!parsed.success) {
+      const firstError = parsed.error.errors[0];
+      throw new ValidationError(firstError?.message ?? 'Invalid input.', {
+        field: firstError?.path.join('.') ?? 'unknown',
+        issue: firstError?.message ?? 'validation_failed',
+      });
+    }
+
+    const authService = getAuthService(c);
+
+    const result = await authService.verifyEmailChange(parsed.data.token, {
+      ipAddress: c.req.header('x-forwarded-for')?.split(',')[0]?.trim(),
+      userAgent: c.req.header('user-agent'),
+    });
 
     return c.json(result);
   });

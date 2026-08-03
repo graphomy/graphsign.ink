@@ -8,6 +8,7 @@ import { Resend } from 'resend';
 export interface MailerService {
   sendVerificationEmail(to: string, token: string): Promise<void>;
   sendPasswordResetEmail(to: string, token: string): Promise<void>;
+  sendEmailChangeVerificationEmail(to: string, token: string): Promise<void>;
 }
 
 /**
@@ -89,6 +90,33 @@ export class ResendMailerService implements MailerService {
       `,
     });
   }
+
+  async sendEmailChangeVerificationEmail(to: string, token: string): Promise<void> {
+    const verifyUrl = `${this.webUrl}/settings/profile?verifyToken=${encodeURIComponent(token)}`;
+
+    await this.resend.emails.send({
+      from: this.from,
+      to,
+      subject: 'Confirm your new email address for graphsign.ink',
+      html: `
+        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+          <h1 style="color: #111; font-size: 24px;">Confirm New Email Address</h1>
+          <p style="color: #333; font-size: 16px; line-height: 1.5;">
+            You requested to change your primary email address for graphsign.ink. Click the button below to confirm this change.
+          </p>
+          <a href="${verifyUrl}"
+             style="display: inline-block; background: #ba0000; color: white;
+                    padding: 12px 24px; text-decoration: none; border-radius: 6px;
+                    font-size: 16px; margin: 16px 0;">
+            Confirm New Email
+          </a>
+          <p style="color: #666; font-size: 14px;">
+            This link expires in 24 hours. If you did not request this email change, please secure your account.
+          </p>
+        </div>
+      `,
+    });
+  }
 }
 
 /**
@@ -108,6 +136,12 @@ export class ConsoleMailerService implements MailerService {
     const resetUrl = `${this.webUrl}/reset-password?token=${encodeURIComponent(token)}`;
     console.log(`[MAILER] Password reset email for ${to}:`);
     console.log(`[MAILER] Reset URL: ${resetUrl}`);
+  }
+
+  async sendEmailChangeVerificationEmail(to: string, token: string): Promise<void> {
+    const verifyUrl = `${this.webUrl}/settings/profile?verifyToken=${encodeURIComponent(token)}`;
+    console.log(`[MAILER] Email change verification email for ${to}:`);
+    console.log(`[MAILER] Verify URL: ${verifyUrl}`);
   }
 }
 
