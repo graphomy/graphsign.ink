@@ -12,7 +12,9 @@ import { Pool } from '@neondatabase/serverless';
 export function createPrismaClient(databaseUrl: string): PrismaClient {
   const pool = new Pool({ connectionString: databaseUrl });
   const adapter = new PrismaNeon(pool as any);
-  return new PrismaClient({ adapter } as any);
+  // Pass datasourceUrl explicitly so PrismaClient never falls back to
+  // process.env.DATABASE_URL at module load time in Cloudflare Workers.
+  return new PrismaClient({ adapter, datasourceUrl: databaseUrl } as any);
 }
 
 // ── Legacy singleton for backward compatibility (local dev, tests) ──
