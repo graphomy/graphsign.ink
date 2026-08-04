@@ -10,9 +10,16 @@ import { Pool } from '@neondatabase/serverless';
  * so creating a new client per request is lightweight.
  */
 export function createPrismaClient(databaseUrl: string): PrismaClient {
-  // The connection string lives only in the Pool — the adapter owns the connection.
-  // Do NOT pass datasourceUrl to PrismaClient: Prisma forbids mixing driver adapters
-  // with custom datasource URL options and throws at runtime if you do.
+  if (
+    !databaseUrl ||
+    typeof databaseUrl !== 'string' ||
+    (!databaseUrl.startsWith('postgres://') && !databaseUrl.startsWith('postgresql://'))
+  ) {
+    const preview = databaseUrl ? `${String(databaseUrl).substring(0, 15)}...` : 'undefined';
+    throw new Error(
+      `Invalid DATABASE_URL provided to createPrismaClient: "${preview}". Must be a valid postgresql:// or postgres:// connection string.`,
+    );
+  }
   const pool = new Pool({ connectionString: databaseUrl });
   const adapter = new PrismaNeon(pool as any);
   return new PrismaClient({ adapter } as any);
