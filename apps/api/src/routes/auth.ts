@@ -45,7 +45,16 @@ export function createAuthRoutes(deps?: AuthDeps) {
   function getAuthService(c: any): AuthService {
     let db = deps?.prisma;
     if (!db) {
-      db = c.env?.DATABASE_URL ? createPrismaClient(c.env.DATABASE_URL) : legacyPrisma;
+      const dbUrl = c.env?.DATABASE_URL || process.env.DATABASE_URL;
+      if (dbUrl && dbUrl.trim() !== '') {
+        db = createPrismaClient(dbUrl);
+      } else {
+        throw new AppError(
+          'Database connection string (DATABASE_URL) is missing or empty in Worker bindings / secrets.',
+          500,
+          'INTERNAL_SERVER_ERROR',
+        );
+      }
     }
 
     let mailer = deps?.mailer;
