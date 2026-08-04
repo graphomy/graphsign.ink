@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import type { PrismaClient } from '@graphsign/db';
-import { createPrismaClient, prisma as legacyPrisma } from '@graphsign/db';
+import { createPrismaClient } from '@graphsign/db';
 import {
   registerRequestSchema,
   loginRequestSchema,
@@ -21,7 +21,7 @@ import type { MailerService } from '../services/mailer-service.js';
 import { createMailerService } from '../services/mailer-service.js';
 import type { AuditService } from '../services/audit-service.js';
 import { PrismaAuditService } from '../services/audit-service.js';
-import { ValidationError } from '../utils/errors.js';
+import { AppError, ValidationError } from '../utils/errors.js';
 import { createRateLimiter } from '../middleware/rate-limiter.js';
 import { decodeJwt } from '../utils/jwt.js';
 import type { Env } from '../index.js';
@@ -50,9 +50,9 @@ export function createAuthRoutes(deps?: AuthDeps) {
         db = createPrismaClient(dbUrl);
       } else {
         throw new AppError(
+          'INTERNAL_SERVER_ERROR',
           'Database connection string (DATABASE_URL) is missing or empty in Worker bindings / secrets.',
           500,
-          'INTERNAL_SERVER_ERROR',
         );
       }
     }
