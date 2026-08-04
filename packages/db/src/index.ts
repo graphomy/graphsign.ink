@@ -10,11 +10,12 @@ import { Pool } from '@neondatabase/serverless';
  * so creating a new client per request is lightweight.
  */
 export function createPrismaClient(databaseUrl: string): PrismaClient {
+  // The connection string lives only in the Pool — the adapter owns the connection.
+  // Do NOT pass datasourceUrl to PrismaClient: Prisma forbids mixing driver adapters
+  // with custom datasource URL options and throws at runtime if you do.
   const pool = new Pool({ connectionString: databaseUrl });
   const adapter = new PrismaNeon(pool as any);
-  // Pass datasourceUrl explicitly so PrismaClient never falls back to
-  // process.env.DATABASE_URL at module load time in Cloudflare Workers.
-  return new PrismaClient({ adapter, datasourceUrl: databaseUrl } as any);
+  return new PrismaClient({ adapter } as any);
 }
 
 // ── Legacy singleton for backward compatibility (local dev, tests) ──
