@@ -5,7 +5,7 @@ compatibility_flags = ["nodejs_compat"]
 
 [vars]
 EMAIL_FROM = "noreply@graphsign.ink"
-WEB_URL = "http://localhost:3000"
-API_URL = "http://localhost:8787"
+WEB_URL = "https://dev-graphsign-web.pages.dev,http://localhost:3000"
+API_URL = "https://dev-graphsign-api.kunal-f9f.workers.dev"
 NODE_ENV = "development"
 JWT_ACCESS_TOKEN_EXPIRY = "15m"
