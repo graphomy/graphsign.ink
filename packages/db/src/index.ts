@@ -22,18 +22,21 @@ const globalForPrisma = globalThis as unknown as {
 };
 
 /**
- * Prisma client singleton.
- * Reuses the same instance across hot-reloads in development.
- * Used by tests and local dev scripts that rely on process.env.
+ * Legacy singleton helper for local dev / testing scripts that use process.env.
+ * Lazy evaluated to avoid initializing PrismaClient at top-level module load time in Workers.
  */
-export const prisma =
-  globalForPrisma.prisma ??
-  new PrismaClient({
-    log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
-  });
-
-if (process.env.NODE_ENV !== 'production') {
-  globalForPrisma.prisma = prisma;
+export function getLegacyPrisma(): PrismaClient {
+  if (!globalForPrisma.prisma) {
+    if (!process.env.DATABASE_URL) {
+      throw new Error(
+        'DATABASE_URL environment variable is not set. Cannot initialize PrismaClient.',
+      );
+    }
+    globalForPrisma.prisma = new PrismaClient({
+      log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
+    });
+  }
+  return globalForPrisma.prisma;
 }
 
 export { PrismaClient };
