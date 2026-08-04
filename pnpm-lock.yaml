@@ -24,8 +24,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/db
       hono:
-        specifier: ^4.6.0
-        version: 4.12.33
+        specifier: ^4.12.34
+        version: 4.12.34
       jose:
         specifier: ^5.9.0
         version: 5.10.0
@@ -2281,8 +2281,8 @@ packages:
   hermes-parser@0.25.1:
     resolution: {integrity: sha512-6pEjquH3rqaI6cYAXYPcz9MS4rY6R4ngRgrgfDshRptUZIc3lw0MCIJIGDj9++mfySOuPTHB4nrSW99BCvOPIA==}
 
-  hono@4.12.33:
-    resolution: {integrity: sha512-+SwvkaiJtxsiPjhy9LivY/1m7UsNqCJetM1BrZl9A5DkQhlbHQDU730mMiDPWjnoCYOM8Chf3WrCJw27kNTPFQ==}
+  hono@4.12.34:
+    resolution: {integrity: sha512-GqXJqY/xJkJmuloTrnV1ZEXG3fqte+VjkUqoRNZXcrUidiUOP4fMSIHHY4tsqZBK++kVyWmt/AAfSUuy57/eSA==}
     engines: {node: '>=16.9.0'}
 
   html-to-text@9.0.5:
@@ -5457,7 +5457,7 @@ snapshots:
     dependencies:
       hermes-estree: 0.25.1
 
-  hono@4.12.33: {}
+  hono@4.12.34: {}
 
   html-to-text@9.0.5:
     dependencies:
