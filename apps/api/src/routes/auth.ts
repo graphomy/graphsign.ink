@@ -46,12 +46,19 @@ export function createAuthRoutes(deps?: AuthDeps) {
     let db = deps?.prisma;
     if (!db) {
       const dbUrl = c.env?.DATABASE_URL || process.env.DATABASE_URL;
-      if (dbUrl && dbUrl.trim() !== '') {
+      const isValidUrl =
+        dbUrl &&
+        typeof dbUrl === 'string' &&
+        dbUrl.trim() !== '' &&
+        (dbUrl.startsWith('postgres://') || dbUrl.startsWith('postgresql://'));
+
+      if (isValidUrl) {
         db = createPrismaClient(dbUrl);
       } else {
+        const preview = dbUrl ? `${String(dbUrl).substring(0, 10)}...` : 'undefined';
         throw new AppError(
           'INTERNAL_SERVER_ERROR',
-          'Database connection string (DATABASE_URL) is missing or empty in Worker bindings / secrets.',
+          `Database connection string (DATABASE_URL) is missing or invalid in Worker secrets/bindings. Received: "${preview}". Please configure a valid postgresql:// URL in Cloudflare Worker secrets.`,
           500,
         );
       }
