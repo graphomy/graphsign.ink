@@ -3,6 +3,7 @@
 import { useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import { getApiUrl } from '@/lib/api';
+import { GuestGuard } from '@/components/features/auth/GuestGuard';
 
 /**
  * Forgot password page — requests a password reset link.
@@ -11,7 +12,7 @@ import { getApiUrl } from '@/lib/api';
  * - Given a user clicks "Forgot Password", When they enter their registered email,
  *   Then a password reset link is sent to their email.
  */
-export default function ForgotPasswordPage() {
+function ForgotPasswordContent() {
   const [email, setEmail] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -152,5 +153,13 @@ export default function ForgotPasswordPage() {
         </Link>
       </p>
     </div>
+  );
+}
+
+export default function ForgotPasswordPage() {
+  return (
+    <GuestGuard>
+      <ForgotPasswordContent />
+    </GuestGuard>
   );
 }

@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { loginFormSchema } from '@/lib/validators/auth';
 import { getApiUrl } from '@/lib/api';
+import { GuestGuard } from '@/components/features/auth/GuestGuard';
 
 function LoginContent() {
   const searchParams = useSearchParams();
@@ -529,12 +530,14 @@ function LoginContent() {
 
 export default function LoginPage() {
   return (
-    <Suspense
-      fallback={
-        <div className="text-center py-8 text-neutral-500 text-sm">Loading sign in page...</div>
-      }
-    >
-      <LoginContent />
-    </Suspense>
+    <GuestGuard>
+      <Suspense
+        fallback={
+          <div className="text-center py-8 text-neutral-500 text-sm">Loading sign in page...</div>
+        }
+      >
+        <LoginContent />
+      </Suspense>
+    </GuestGuard>
   );
 }
