@@ -4,7 +4,7 @@ compatibility_date = "2024-09-23"
 compatibility_flags = ["nodejs_compat"]
 
 [vars]
-EMAIL_FROM = "noreply@graphsign.ink"
+EMAIL_FROM = "notification@mail.graphomy.com"
 WEB_URL = "https://dev-graphsign-web.pages.dev,http://localhost:3000"
 API_URL = "https://dev-graphsign-api.kunal-f9f.workers.dev"
 NODE_ENV = "development"
