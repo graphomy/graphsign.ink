@@ -4,7 +4,6 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { SessionGuard } from '@/components/features/auth/SessionGuard';
 import { ProfileDropdown } from '@/components/features/auth/ProfileDropdown';
-import { getApiUrl } from '@/lib/api';
 
 interface UserSession {
   email: string;
@@ -21,24 +20,6 @@ function DashboardContent() {
       organisationId: localStorage.getItem('graphsign_org_id') ?? '',
     };
   });
-
-  async function handleSignOut() {
-    try {
-      const apiUrl = getApiUrl();
-      await fetch(`${apiUrl}/api/v1/auth/logout`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${user?.token ?? ''}`,
-        },
-      }).catch(() => null);
-    } finally {
-      localStorage.removeItem('graphsign_session_token');
-      localStorage.removeItem('graphsign_user_email');
-      localStorage.removeItem('graphsign_org_id');
-      window.location.href = '/login';
-    }
-  }
 
   return (
     <div

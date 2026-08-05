@@ -21,7 +21,7 @@ export function ProfileDropdown({ email, token }: ProfileDropdownProps) {
   const displayEmail =
     email ||
     (typeof window !== 'undefined'
-      ? localStorage.getItem('graphsign_user_email') ?? 'user@graphsign.ink'
+      ? (localStorage.getItem('graphsign_user_email') ?? 'user@graphsign.ink')
       : 'user@graphsign.ink');
 
   const userInitial = displayEmail.trim()[0]?.toUpperCase() ?? 'U';
@@ -56,7 +56,7 @@ export function ProfileDropdown({ email, token }: ProfileDropdownProps) {
       const sessionToken =
         token ||
         (typeof window !== 'undefined'
-          ? localStorage.getItem('graphsign_session_token') ?? ''
+          ? (localStorage.getItem('graphsign_session_token') ?? '')
           : '');
 
       await fetch(`${apiUrl}/api/v1/auth/logout`, {

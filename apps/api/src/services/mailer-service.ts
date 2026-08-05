@@ -153,7 +153,8 @@ export function createMailerService(env: {
   EMAIL_FROM?: string;
   WEB_URL?: string;
 }): MailerService {
-  const webUrl = (env.WEB_URL ?? 'http://localhost:3000').split(',')[0]?.trim() || 'http://localhost:3000';
+  const webUrl =
+    (env.WEB_URL ?? 'http://localhost:3000').split(',')[0]?.trim() || 'http://localhost:3000';
 
   if (env.RESEND_API_KEY) {
     return new ResendMailerService(
