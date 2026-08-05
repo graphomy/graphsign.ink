@@ -1,13 +1,12 @@
 import { PrismaClient } from '@prisma/client';
 import { PrismaNeon } from '@prisma/adapter-neon';
-import { Pool } from '@neondatabase/serverless';
 
 /**
  * Creates a PrismaClient configured for Neon serverless (WebSocket).
  * Use this in Cloudflare Workers where TCP sockets are unavailable.
  *
- * The Neon serverless driver handles connection pooling on its side,
- * so creating a new client per request is lightweight.
+ * @prisma/adapter-neon v6.x expects a PoolConfig object (not a Pool instance).
+ * It creates and manages its own Pool internally.
  */
 export function createPrismaClient(databaseUrl: string): PrismaClient {
   if (
@@ -20,8 +19,7 @@ export function createPrismaClient(databaseUrl: string): PrismaClient {
       `Invalid DATABASE_URL provided to createPrismaClient: "${preview}". Must be a valid postgresql:// or postgres:// connection string.`,
     );
   }
-  const pool = new Pool({ connectionString: databaseUrl });
-  const adapter = new PrismaNeon(pool as any);
+  const adapter = new PrismaNeon({ connectionString: databaseUrl });
   return new PrismaClient({ adapter } as any);
 }
 
