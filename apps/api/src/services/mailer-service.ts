@@ -153,13 +153,15 @@ export function createMailerService(env: {
   EMAIL_FROM?: string;
   WEB_URL?: string;
 }): MailerService {
+  const webUrl = (env.WEB_URL ?? 'http://localhost:3000').split(',')[0]?.trim() || 'http://localhost:3000';
+
   if (env.RESEND_API_KEY) {
     return new ResendMailerService(
       env.RESEND_API_KEY,
-      env.EMAIL_FROM ?? 'noreply@graphsign.ink',
-      env.WEB_URL ?? 'http://localhost:3000',
+      env.EMAIL_FROM ?? 'notification@mail.graphomy.com',
+      webUrl,
     );
   }
   console.warn('[MAILER] RESEND_API_KEY not set — using console mailer for development.');
-  return new ConsoleMailerService(env.WEB_URL ?? 'http://localhost:3000');
+  return new ConsoleMailerService(webUrl);
 }
