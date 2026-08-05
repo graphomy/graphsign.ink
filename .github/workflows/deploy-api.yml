@@ -44,6 +44,20 @@ jobs:
       - name: Generate Prisma client
         run: pnpm db:generate
 
+      - name: Validate GitHub Secrets before deployment
+        run: |
+          node -e '
+            const dbUrl = process.env.DATABASE_URL;
+            if (!dbUrl || (!dbUrl.startsWith("postgres://") && !dbUrl.startsWith("postgresql://"))) {
+              console.error("FATAL ERROR: DATABASE_URL secret is missing, empty, or invalid in GitHub Secrets for this environment!");
+              console.error("Received value prefix:", dbUrl ? dbUrl.substring(0, 10) + "..." : "undefined");
+              process.exit(1);
+            }
+            console.log("✅ DATABASE_URL secret validated successfully (starts with postgresql://)");
+          '
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
       - name: Deploy to Cloudflare Workers
         run: pnpm --filter @graphsign/api exec wrangler deploy --name ${{ github.ref_name == 'main' && 'graphsign-api' || 'dev-graphsign-api' }}
         env:
