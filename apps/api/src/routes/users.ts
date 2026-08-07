@@ -44,7 +44,7 @@ export function createUserRoutes(deps?: UserDeps) {
   }
 
   // PUT /api/v1/users/:id/role (INK-62 & INK-64)
-  users.put('/:id/role', jwtAuth, async (c) => {
+  users.put('/:id/role', jwtAuth(), async (c) => {
     const { rbacService } = getServices(c);
     const targetUserId = c.req.param('id');
     const userPayload = c.get('userPayload') as any;
