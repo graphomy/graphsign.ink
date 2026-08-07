@@ -91,7 +91,14 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
   ],
   signer: [PERMISSIONS.DOCUMENTS_READ, PERMISSIONS.SIGNATURES_SIGN],
   auditor: [PERMISSIONS.DOCUMENTS_READ, PERMISSIONS.AUDIT_READ, PERMISSIONS.USERS_READ],
-  user: [PERMISSIONS.DOCUMENTS_READ],
+  user: [
+    PERMISSIONS.DOCUMENTS_READ,
+    PERMISSIONS.DOCUMENTS_CREATE,
+    PERMISSIONS.DOCUMENTS_UPDATE,
+    PERMISSIONS.TEMPLATES_READ,
+    PERMISSIONS.TEMPLATES_MANAGE,
+    PERMISSIONS.AGREEMENTS_SEND,
+  ],
 };
 
 /**
@@ -102,12 +109,39 @@ export function hasPermission(
   permission: string,
   customPermissions?: string[],
 ): boolean {
+  // Super admin manage permission is strictly restricted to super_admin role
   if (role === 'super_admin') return true;
+  if (permission === PERMISSIONS.SUPER_ADMIN_MANAGE) return false;
+
+  // Normalize legacy or shorthand permission aliases
+  let normalizedPerm = permission;
+  if (permission === 'document:read' || permission === 'documents:read')
+    normalizedPerm = PERMISSIONS.DOCUMENTS_READ;
+  if (
+    permission === 'document:write' ||
+    permission === 'documents:write' ||
+    permission === 'documents:create'
+  )
+    normalizedPerm = PERMISSIONS.DOCUMENTS_CREATE;
+  if (permission === 'template:read' || permission === 'templates:read')
+    normalizedPerm = PERMISSIONS.TEMPLATES_READ;
+  if (
+    permission === 'template:write' ||
+    permission === 'templates:write' ||
+    permission === 'templates:create'
+  )
+    normalizedPerm = PERMISSIONS.TEMPLATES_MANAGE;
+
+  if (role === 'org_admin' || role === 'admin') return true;
 
   const defaultPerms = DEFAULT_ROLE_PERMISSIONS[role] ?? DEFAULT_ROLE_PERMISSIONS['user'] ?? [];
-  if (defaultPerms.includes(permission)) return true;
+  if (defaultPerms.includes(normalizedPerm) || defaultPerms.includes(permission)) return true;
 
-  if (customPermissions && customPermissions.includes(permission)) return true;
+  if (
+    customPermissions &&
+    (customPermissions.includes(normalizedPerm) || customPermissions.includes(permission))
+  )
+    return true;
 
   return false;
 }

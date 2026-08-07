@@ -73,7 +73,7 @@ export function HeaderNav() {
             {pathname !== '/dashboard' && (
               <Link
                 href="/dashboard"
-                className="hidden md:inline-flex items-center gap-1.5 text-xs font-semibold text-neutral-600 hover:text-[#ba0000] bg-neutral-100 hover:bg-neutral-200/80 px-3 py-1.5 rounded-lg transition-all border border-neutral-200"
+                className="inline-flex items-center gap-1.5 text-xs font-bold text-[#ba0000] bg-red-50 hover:bg-red-100/80 px-3 py-1.5 rounded-lg transition-all border border-red-200"
               >
                 <span>←</span> Back to Dashboard
               </Link>

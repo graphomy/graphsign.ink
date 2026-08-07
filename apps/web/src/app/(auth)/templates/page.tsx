@@ -264,15 +264,13 @@ function TemplateManagementContent() {
         {/* Top Breadcrumb & Action Header */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-neutral-200 pb-6">
           <div className="space-y-1">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 mb-1">
               <Link
                 href="/dashboard"
-                className="text-xs font-semibold text-neutral-500 hover:text-[#ba0000] transition-colors"
+                className="inline-flex items-center gap-1 text-xs font-bold text-[#ba0000] hover:underline bg-red-50 px-2.5 py-1 rounded border border-red-200"
               >
-                Dashboard
+                ← Back to Dashboard
               </Link>
-              <span className="text-xs text-neutral-400">/</span>
-              <span className="text-xs font-semibold text-neutral-900">Templates</span>
             </div>
             <h1 className="text-2xl font-bold tracking-tight text-neutral-900 flex items-center gap-2.5">
               <span>📐</span> Template Management

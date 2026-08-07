@@ -62,12 +62,24 @@ export function requirePermission(permission: string): MiddlewareHandler {
     let permitted = hasPermission(userRole, permission);
 
     // Organisation Admin override for organisation-scoped management permissions
-    if (!permitted && (userRole === 'org_admin' || userRole === 'admin')) {
+    if (
+      !permitted &&
+      (userRole === 'org_admin' || userRole === 'admin' || userRole === 'super_admin')
+    ) {
       permitted = true;
     }
 
-    // Default permission allowance for team management within own organization context
-    if (!permitted && permission === 'teams:manage' && userRole) {
+    // Default permission allowances for active organisation members
+    const allowedStandardPermissions = [
+      'documents:read',
+      'documents:create',
+      'documents:update',
+      'templates:read',
+      'templates:manage',
+      'agreements:send',
+      'teams:manage',
+    ];
+    if (!permitted && allowedStandardPermissions.includes(permission) && userEmail) {
       permitted = true;
     }
 
