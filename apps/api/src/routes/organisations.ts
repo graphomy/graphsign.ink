@@ -26,6 +26,7 @@ import { AppError, ValidationError } from '../utils/errors.js';
 import { createRateLimiter } from '../middleware/rate-limiter.js';
 import { jwtAuth } from '../middleware/jwt-auth.js';
 import { enforceTenantActiveStatus } from '../middleware/tenant-status-middleware.js';
+import { requirePermission, requireRole } from '../middleware/rbac-middleware.js';
 import { signJwt } from '../utils/jwt.js';
 import type { Env } from '../index.js';
 
@@ -215,39 +216,51 @@ export function createOrganisationRoutes(deps?: OrganisationDeps) {
   });
 
   // INK-50: PATCH /api/v1/organisations/me/settings
-  orgs.patch('/me/settings', jwtAuth(), enforceTenantActiveStatus(), async (c) => {
-    const body = await c.req.json().catch(() => null);
-    if (!body) throw new ValidationError('Request body is required.');
+  orgs.patch(
+    '/me/settings',
+    jwtAuth(),
+    enforceTenantActiveStatus(),
+    requirePermission('organisation:manage'),
+    async (c) => {
+      const body = await c.req.json().catch(() => null);
+      if (!body) throw new ValidationError('Request body is required.');
 
-    const parsed = updateOrganisationSettingsSchema.safeParse(body);
-    if (!parsed.success) {
-      const firstError = parsed.error.errors[0];
-      throw new ValidationError(firstError?.message ?? 'Invalid input.');
-    }
+      const parsed = updateOrganisationSettingsSchema.safeParse(body);
+      if (!parsed.success) {
+        const firstError = parsed.error.errors[0];
+        throw new ValidationError(firstError?.message ?? 'Invalid input.');
+      }
 
-    const payload = c.get('userPayload');
-    const service = getService(c);
-    const updated = await service.updateSettings(payload.orgId, payload.sub, parsed.data);
+      const payload = c.get('userPayload');
+      const service = getService(c);
+      const updated = await service.updateSettings(payload.orgId, payload.sub, parsed.data);
 
-    return c.json({
-      id: updated.id,
-      name: updated.name,
-      sessionTimeoutMinutes: updated.sessionTimeoutMinutes,
-      mfaRequired: updated.mfaRequired,
-      message: 'Organisation settings updated successfully.',
-    });
-  });
+      return c.json({
+        id: updated.id,
+        name: updated.name,
+        sessionTimeoutMinutes: updated.sessionTimeoutMinutes,
+        mfaRequired: updated.mfaRequired,
+        message: 'Organisation settings updated successfully.',
+      });
+    },
+  );
 
   // INK-51: DELETE /api/v1/organisations/me (Soft delete)
-  orgs.delete('/me', jwtAuth(), enforceTenantActiveStatus(), async (c) => {
-    const payload = c.get('userPayload');
-    const service = getService(c);
-    await service.deleteOrganisation(payload.orgId, payload.sub);
+  orgs.delete(
+    '/me',
+    jwtAuth(),
+    enforceTenantActiveStatus(),
+    requirePermission('organisation:manage'),
+    async (c) => {
+      const payload = c.get('userPayload');
+      const service = getService(c);
+      await service.deleteOrganisation(payload.orgId, payload.sub);
 
-    return c.json({
-      message: 'Organisation soft-deleted successfully. Retained for 30 days.',
-    });
-  });
+      return c.json({
+        message: 'Organisation soft-deleted successfully. Retained for 30 days.',
+      });
+    },
+  );
 
   // INK-57: GET & PUT branding
   orgs.get('/me/branding', jwtAuth(), enforceTenantActiveStatus(), async (c) => {
@@ -265,30 +278,36 @@ export function createOrganisationRoutes(deps?: OrganisationDeps) {
     });
   });
 
-  orgs.put('/me/branding', jwtAuth(), enforceTenantActiveStatus(), async (c) => {
-    const body = await c.req.json().catch(() => null);
-    if (!body) throw new ValidationError('Request body is required.');
+  orgs.put(
+    '/me/branding',
+    jwtAuth(),
+    enforceTenantActiveStatus(),
+    requirePermission('branding:manage'),
+    async (c) => {
+      const body = await c.req.json().catch(() => null);
+      if (!body) throw new ValidationError('Request body is required.');
 
-    const parsed = updateBrandingSchema.safeParse(body);
-    if (!parsed.success) {
-      const firstError = parsed.error.errors[0];
-      throw new ValidationError(firstError?.message ?? 'Invalid input.');
-    }
+      const parsed = updateBrandingSchema.safeParse(body);
+      if (!parsed.success) {
+        const firstError = parsed.error.errors[0];
+        throw new ValidationError(firstError?.message ?? 'Invalid input.');
+      }
 
-    const payload = c.get('userPayload');
-    const service = getService(c);
-    const updated = await service.updateBranding(payload.orgId, payload.sub, parsed.data);
+      const payload = c.get('userPayload');
+      const service = getService(c);
+      const updated = await service.updateBranding(payload.orgId, payload.sub, parsed.data);
 
-    return c.json({
-      logoUrl: updated.logoUrl,
-      primaryColor: updated.primaryColor,
-      secondaryColor: updated.secondaryColor,
-      companyAddress: updated.companyAddress,
-      defaultSenderName: updated.defaultSenderName,
-      emailFooterText: updated.emailFooterText,
-      message: 'Organisation branding updated successfully.',
-    });
-  });
+      return c.json({
+        logoUrl: updated.logoUrl,
+        primaryColor: updated.primaryColor,
+        secondaryColor: updated.secondaryColor,
+        companyAddress: updated.companyAddress,
+        defaultSenderName: updated.defaultSenderName,
+        emailFooterText: updated.emailFooterText,
+        message: 'Organisation branding updated successfully.',
+      });
+    },
+  );
 
   // GET /api/v1/organisations/me/usage
   orgs.get('/me/usage', jwtAuth(), enforceTenantActiveStatus(), async (c) => {
@@ -304,19 +323,25 @@ export function createOrganisationRoutes(deps?: OrganisationDeps) {
   });
 
   // INK-58: GET /api/v1/organisations/me/audit-logs (Paginated audit logs)
-  orgs.get('/me/audit-logs', jwtAuth(), enforceTenantActiveStatus(), async (c) => {
-    const queryParams = c.req.query();
-    const parsed = auditLogQuerySchema.safeParse(queryParams);
-    if (!parsed.success) {
-      throw new ValidationError('Invalid query parameters for audit log filter.');
-    }
+  orgs.get(
+    '/me/audit-logs',
+    jwtAuth(),
+    enforceTenantActiveStatus(),
+    requirePermission('audit:read'),
+    async (c) => {
+      const queryParams = c.req.query();
+      const parsed = auditLogQuerySchema.safeParse(queryParams);
+      if (!parsed.success) {
+        throw new ValidationError('Invalid query parameters for audit log filter.');
+      }
 
-    const payload = c.get('userPayload');
-    const service = getService(c);
-    const result = await service.getAuditLogs(payload.orgId, parsed.data);
+      const payload = c.get('userPayload');
+      const service = getService(c);
+      const result = await service.getAuditLogs(payload.orgId, parsed.data);
 
-    return c.json(result);
-  });
+      return c.json(result);
+    },
+  );
 
   // GET & PUT compliance
   orgs.get('/me/compliance', jwtAuth(), enforceTenantActiveStatus(), async (c) => {
@@ -332,28 +357,38 @@ export function createOrganisationRoutes(deps?: OrganisationDeps) {
     });
   });
 
-  orgs.put('/me/compliance', jwtAuth(), enforceTenantActiveStatus(), async (c) => {
-    const body = await c.req.json().catch(() => null);
-    if (!body) throw new ValidationError('Request body is required.');
+  orgs.put(
+    '/me/compliance',
+    jwtAuth(),
+    enforceTenantActiveStatus(),
+    requirePermission('compliance:manage'),
+    async (c) => {
+      const body = await c.req.json().catch(() => null);
+      if (!body) throw new ValidationError('Request body is required.');
 
-    const parsed = updateComplianceSettingsSchema.safeParse(body);
-    if (!parsed.success) {
-      const firstError = parsed.error.errors[0];
-      throw new ValidationError(firstError?.message ?? 'Invalid input.');
-    }
+      const parsed = updateComplianceSettingsSchema.safeParse(body);
+      if (!parsed.success) {
+        const firstError = parsed.error.errors[0];
+        throw new ValidationError(firstError?.message ?? 'Invalid input.');
+      }
 
-    const payload = c.get('userPayload');
-    const service = getService(c);
-    const updated = await service.updateComplianceSettings(payload.orgId, payload.sub, parsed.data);
+      const payload = c.get('userPayload');
+      const service = getService(c);
+      const updated = await service.updateComplianceSettings(
+        payload.orgId,
+        payload.sub,
+        parsed.data,
+      );
 
-    return c.json({
-      allowedEsignStandards: updated.allowedEsignStandards,
-      requireReauthBeforeSigning: updated.requireReauthBeforeSigning,
-      signatureReasonRequired: updated.signatureReasonRequired,
-      documentRetentionDays: updated.documentRetentionDays,
-      message: 'Compliance settings updated successfully.',
-    });
-  });
+      return c.json({
+        allowedEsignStandards: updated.allowedEsignStandards,
+        requireReauthBeforeSigning: updated.requireReauthBeforeSigning,
+        signatureReasonRequired: updated.signatureReasonRequired,
+        documentRetentionDays: updated.documentRetentionDays,
+        message: 'Compliance settings updated successfully.',
+      });
+    },
+  );
 
   /**
    * INK-52 & INK-53: Team Management Endpoints
@@ -365,22 +400,28 @@ export function createOrganisationRoutes(deps?: OrganisationDeps) {
     return c.json(teams);
   });
 
-  orgs.post('/teams', jwtAuth(), enforceTenantActiveStatus(), async (c) => {
-    const body = await c.req.json().catch(() => null);
-    if (!body) throw new ValidationError('Request body is required.');
+  orgs.post(
+    '/teams',
+    jwtAuth(),
+    enforceTenantActiveStatus(),
+    requirePermission('teams:manage'),
+    async (c) => {
+      const body = await c.req.json().catch(() => null);
+      if (!body) throw new ValidationError('Request body is required.');
 
-    const parsed = createTeamSchema.safeParse(body);
-    if (!parsed.success) {
-      const firstError = parsed.error.errors[0];
-      throw new ValidationError(firstError?.message ?? 'Invalid input.');
-    }
+      const parsed = createTeamSchema.safeParse(body);
+      if (!parsed.success) {
+        const firstError = parsed.error.errors[0];
+        throw new ValidationError(firstError?.message ?? 'Invalid input.');
+      }
 
-    const payload = c.get('userPayload');
-    const service = getService(c);
-    const team = await service.createTeam(payload.orgId, payload.sub, parsed.data);
+      const payload = c.get('userPayload');
+      const service = getService(c);
+      const team = await service.createTeam(payload.orgId, payload.sub, parsed.data);
 
-    return c.json(team, 201);
-  });
+      return c.json(team, 201);
+    },
+  );
 
   orgs.post('/teams/:id/members', jwtAuth(), enforceTenantActiveStatus(), async (c) => {
     const teamId = c.req.param('id');
@@ -410,20 +451,26 @@ export function createOrganisationRoutes(deps?: OrganisationDeps) {
   /**
    * INK-54 & INK-55: Roles & Custom Roles Endpoints
    */
-  orgs.patch('/members/:userId/role', jwtAuth(), enforceTenantActiveStatus(), async (c) => {
-    const targetUserId = c.req.param('userId');
-    const body = await c.req.json().catch(() => null);
-    if (!body) throw new ValidationError('Request body is required.');
+  orgs.patch(
+    '/members/:userId/role',
+    jwtAuth(),
+    enforceTenantActiveStatus(),
+    requirePermission('roles:manage'),
+    async (c) => {
+      const targetUserId = c.req.param('userId');
+      const body = await c.req.json().catch(() => null);
+      if (!body) throw new ValidationError('Request body is required.');
 
-    const parsed = updateMemberRoleSchema.safeParse(body);
-    if (!parsed.success) throw new ValidationError('Invalid role payload.');
+      const parsed = updateMemberRoleSchema.safeParse(body);
+      if (!parsed.success) throw new ValidationError('Invalid role payload.');
 
-    const payload = c.get('userPayload');
-    const service = getService(c);
-    await service.updateMemberRole(payload.orgId, payload.sub, targetUserId, parsed.data.role);
+      const payload = c.get('userPayload');
+      const service = getService(c);
+      await service.updateMemberRole(payload.orgId, payload.sub, targetUserId, parsed.data.role);
 
-    return c.json({ message: 'Member role updated successfully.' });
-  });
+      return c.json({ message: 'Member role updated successfully.' });
+    },
+  );
 
   orgs.get('/roles', jwtAuth(), enforceTenantActiveStatus(), async (c) => {
     const payload = c.get('userPayload');
@@ -432,22 +479,28 @@ export function createOrganisationRoutes(deps?: OrganisationDeps) {
     return c.json(roles);
   });
 
-  orgs.post('/roles', jwtAuth(), enforceTenantActiveStatus(), async (c) => {
-    const body = await c.req.json().catch(() => null);
-    if (!body) throw new ValidationError('Request body is required.');
+  orgs.post(
+    '/roles',
+    jwtAuth(),
+    enforceTenantActiveStatus(),
+    requirePermission('roles:manage'),
+    async (c) => {
+      const body = await c.req.json().catch(() => null);
+      if (!body) throw new ValidationError('Request body is required.');
 
-    const parsed = createCustomRoleSchema.safeParse(body);
-    if (!parsed.success) {
-      const firstError = parsed.error.errors[0];
-      throw new ValidationError(firstError?.message ?? 'Invalid custom role data.');
-    }
+      const parsed = createCustomRoleSchema.safeParse(body);
+      if (!parsed.success) {
+        const firstError = parsed.error.errors[0];
+        throw new ValidationError(firstError?.message ?? 'Invalid custom role data.');
+      }
 
-    const payload = c.get('userPayload');
-    const service = getService(c);
-    const customRole = await service.createCustomRole(payload.orgId, payload.sub, parsed.data);
+      const payload = c.get('userPayload');
+      const service = getService(c);
+      const customRole = await service.createCustomRole(payload.orgId, payload.sub, parsed.data);
 
-    return c.json(customRole, 201);
-  });
+      return c.json(customRole, 201);
+    },
+  );
 
   /**
    * INK-56: Invitations Endpoints
@@ -550,7 +603,7 @@ export function createOrganisationRoutes(deps?: OrganisationDeps) {
   /**
    * System Super Admin Endpoints
    */
-  orgs.post('/:id/suspend', jwtAuth(), async (c) => {
+  orgs.post('/:id/suspend', jwtAuth(), requireRole(['super_admin']), async (c) => {
     const orgId = c.req.param('id');
     const body = await c.req.json().catch(() => ({}));
     const parsed = suspendOrganisationSchema.safeParse(body);
@@ -566,7 +619,7 @@ export function createOrganisationRoutes(deps?: OrganisationDeps) {
     });
   });
 
-  orgs.post('/:id/restore', jwtAuth(), async (c) => {
+  orgs.post('/:id/restore', jwtAuth(), requireRole(['super_admin']), async (c) => {
     const orgId = c.req.param('id');
     const payload = c.get('userPayload');
     const service = getService(c);

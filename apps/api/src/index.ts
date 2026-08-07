@@ -5,6 +5,7 @@ import { createAuthRoutes } from './routes/auth.js';
 import { createOrganisationRoutes } from './routes/organisations.js';
 import { createRoleRoutes } from './routes/roles.js';
 import { createUserRoutes } from './routes/users.js';
+import { createAgreementRoutes } from './routes/agreements.js';
 
 /** Cloudflare Worker environment bindings. */
 export type Env = {
@@ -44,9 +45,9 @@ app.use('*', async (c, next) => {
       const isAllowed = origins.some((o) => o.replace(/^https?:\/\/(www\.)?/, '') === cleanReq);
       if (isAllowed) return requestOrigin;
 
-      return requestOrigin;
+      return '';
     },
-    allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowHeaders: ['Content-Type', 'Authorization', 'x-user-id', 'x-organisation-id'],
     credentials: true,
   });
@@ -67,6 +68,7 @@ app.route('/api/v1/auth', createAuthRoutes());
 app.route('/api/v1/organisations', createOrganisationRoutes());
 app.route('/api/v1/roles', createRoleRoutes());
 app.route('/api/v1/users', createUserRoutes());
+app.route('/api/v1/agreements', createAgreementRoutes());
 
 // Workers export — no serve() call needed
 export default app;

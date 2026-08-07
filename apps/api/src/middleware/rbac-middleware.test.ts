@@ -26,6 +26,14 @@ describe('RBAC Middleware (INK-63)', () => {
       expect(next).toHaveBeenCalled();
     });
 
+    it('should NOT allow super_admin role without kunal@graphomy.com email', async () => {
+      const c = createMockContext({ userRole: 'super_admin', userEmail: 'imposter@acme.com' });
+      const next = vi.fn();
+
+      await expect(requireRole(['org_admin'])(c, next)).rejects.toThrow(ForbiddenError);
+      expect(next).not.toHaveBeenCalled();
+    });
+
     it('should throw ForbiddenError if role does not match', async () => {
       const c = createMockContext({ userRole: 'signer', userEmail: 'signer@acme.com' });
       const next = vi.fn();
@@ -57,6 +65,16 @@ describe('RBAC Middleware (INK-63)', () => {
       const next = vi.fn();
 
       await expect(requirePermission('users:manage')(c, next)).rejects.toThrow(ForbiddenError);
+      expect(next).not.toHaveBeenCalled();
+    });
+
+    it('should NOT allow non-super_admin role to access super_admin:manage permission', async () => {
+      const c = createMockContext({ userRole: 'sender', userEmail: 'sender@acme.com' });
+      const next = vi.fn();
+
+      await expect(requirePermission('super_admin:manage')(c, next)).rejects.toThrow(
+        ForbiddenError,
+      );
       expect(next).not.toHaveBeenCalled();
     });
   });

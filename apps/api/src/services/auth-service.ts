@@ -29,6 +29,7 @@ import {
   UnauthorizedError,
   ValidationError,
 } from '../utils/errors.js';
+import { SUPER_ADMIN_EMAIL } from '../config/roles.js';
 
 /** Verification tokens expire in 24 hours. */
 const VERIFICATION_TOKEN_EXPIRY_HOURS = 24;
@@ -134,6 +135,9 @@ export class AuthService {
     const tokenHash = await hashToken(rawToken);
     const tokenExpiresAt = new Date(Date.now() + VERIFICATION_TOKEN_EXPIRY_HOURS * 60 * 60 * 1000);
 
+    // Auto-assign super_admin role if registering email is the platform super admin
+    const assignedRole = data.email === SUPER_ADMIN_EMAIL ? 'super_admin' : 'user';
+
     const user = await this.prisma.user.create({
       data: {
         id: userId,
@@ -144,6 +148,7 @@ export class AuthService {
         emailVerificationTokenHash: tokenHash,
         emailVerificationTokenExpiresAt: tokenExpiresAt,
         status: 'pending_verification',
+        role: assignedRole,
       },
     });
 
