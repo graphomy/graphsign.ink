@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import type { PrismaClient } from '@graphsign/db';
-import { createPrismaClient, prisma as legacyPrisma } from '@graphsign/db';
+import { createPrismaClient } from '@graphsign/db';
 import {
   registerRequestSchema,
   loginRequestSchema,
@@ -21,7 +21,7 @@ import type { MailerService } from '../services/mailer-service.js';
 import { createMailerService } from '../services/mailer-service.js';
 import type { AuditService } from '../services/audit-service.js';
 import { PrismaAuditService } from '../services/audit-service.js';
-import { ValidationError } from '../utils/errors.js';
+import { AppError, ValidationError } from '../utils/errors.js';
 import { createRateLimiter } from '../middleware/rate-limiter.js';
 import { decodeJwt } from '../utils/jwt.js';
 import type { Env } from '../index.js';
@@ -45,7 +45,23 @@ export function createAuthRoutes(deps?: AuthDeps) {
   function getAuthService(c: any): AuthService {
     let db = deps?.prisma;
     if (!db) {
-      db = c.env?.DATABASE_URL ? createPrismaClient(c.env.DATABASE_URL) : legacyPrisma;
+      const dbUrl = c.env?.DATABASE_URL || process.env.DATABASE_URL;
+      const isValidUrl =
+        dbUrl &&
+        typeof dbUrl === 'string' &&
+        dbUrl.trim() !== '' &&
+        (dbUrl.startsWith('postgres://') || dbUrl.startsWith('postgresql://'));
+
+      if (isValidUrl) {
+        db = createPrismaClient(dbUrl);
+      } else {
+        const preview = dbUrl ? `${String(dbUrl).substring(0, 10)}...` : 'undefined';
+        throw new AppError(
+          'INTERNAL_SERVER_ERROR',
+          `Database connection string (DATABASE_URL) is missing or invalid in Worker secrets/bindings. Received: "${preview}". Please configure a valid postgresql:// URL in Cloudflare Worker secrets.`,
+          500,
+        );
+      }
     }
 
     let mailer = deps?.mailer;

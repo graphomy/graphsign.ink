@@ -35,6 +35,10 @@ export function jwtAuth(): MiddlewareHandler {
     try {
       const payload = await verifyJwt(token);
       c.set('userPayload', payload);
+      if (payload.sub) c.set('userId', payload.sub);
+      if (payload.email) c.set('userEmail', payload.email);
+      if (payload.role) c.set('userRole', payload.role);
+      if (payload.orgId) c.set('orgId', payload.orgId);
       await next();
     } catch (err: any) {
       throw new UnauthorizedError(err?.message ?? 'Invalid or tampered session token.');

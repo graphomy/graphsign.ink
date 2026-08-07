@@ -22,6 +22,13 @@ export class ValidationError extends AppError {
   }
 }
 
+export class BadRequestError extends AppError {
+  constructor(message: string, details?: Record<string, string>) {
+    super('BAD_REQUEST', message, 400, details);
+    this.name = 'BadRequestError';
+  }
+}
+
 export class ConflictError extends AppError {
   constructor(message: string, details?: Record<string, string>) {
     super('CONFLICT', message, 409, details);
@@ -33,6 +40,13 @@ export class UnauthorizedError extends AppError {
   constructor(message: string) {
     super('UNAUTHORIZED', message, 401);
     this.name = 'UnauthorizedError';
+  }
+}
+
+export class ForbiddenError extends AppError {
+  constructor(message: string = 'Access forbidden.') {
+    super('FORBIDDEN', message, 403);
+    this.name = 'ForbiddenError';
   }
 }
 

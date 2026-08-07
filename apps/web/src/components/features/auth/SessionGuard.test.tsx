@@ -55,6 +55,8 @@ describe('SessionGuard', () => {
   });
 
   it('should trigger logout and redirect with returnTo on inactivity timeout', async () => {
+    global.fetch = vi.fn().mockResolvedValue({ ok: false });
+
     render(
       <SessionGuard idleTimeoutMs={1000}>
         <div>Protected Page</div>
@@ -71,6 +73,8 @@ describe('SessionGuard', () => {
   });
 
   it('should reset idle timer when user activity occurs', async () => {
+    global.fetch = vi.fn().mockResolvedValue({ ok: false });
+
     render(
       <SessionGuard idleTimeoutMs={1000}>
         <div>Protected Page</div>

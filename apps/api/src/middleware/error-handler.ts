@@ -48,12 +48,35 @@ export const errorHandler: ErrorHandler = (err: Error, c: Context) => {
     return c.json(body, err.statusCode as 400 | 401 | 403 | 404 | 409 | 422 | 429 | 500);
   }
 
-  // Unknown errors — log full details and format response
+  // Handle Prisma known request errors (e.g., duplicate unique constraint P2002)
+  const errCode = (err as any)?.code;
+  if (errCode === 'P2002') {
+    const body = buildErrorBody(
+      c,
+      'CONFLICT',
+      'An account or resource with this information already exists.',
+    );
+    return c.json(body, 409);
+  }
+
+  // Unknown or infrastructure errors — log full details
   console.error('Unhandled error:', err);
+
   const isProd = c.env?.NODE_ENV === 'production';
-  const message = isProd
-    ? 'An unexpected error occurred.'
-    : `An unexpected error occurred: ${err?.message ?? String(err)}`;
+  const isDbError =
+    err.name === 'PrismaClientInitializationError' ||
+    err.name === 'PrismaClientKnownRequestError' ||
+    err.stack?.includes('kn2.connect') ||
+    err.stack?.includes('PrismaNeon');
+
+  let message = 'An unexpected error occurred.';
+  if (!isProd) {
+    message = `An unexpected error occurred: ${err?.message ?? String(err)}`;
+  } else if (isDbError) {
+    // Keep production message clean per security.md, but ensure log traces are clear
+    message = 'An unexpected error occurred.';
+  }
+
   const body = buildErrorBody(c, 'INTERNAL_SERVER_ERROR', message);
   return c.json(body, 500);
 };

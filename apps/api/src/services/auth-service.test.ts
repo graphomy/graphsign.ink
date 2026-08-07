@@ -43,6 +43,7 @@ function createMockMailer(): MailerService {
     sendVerificationEmail: vi.fn(async () => {}),
     sendPasswordResetEmail: vi.fn(async () => {}),
     sendEmailChangeVerificationEmail: vi.fn(async () => {}),
+    sendOrganisationInvitationEmail: vi.fn(async () => {}),
   };
 }
 
