@@ -81,7 +81,9 @@ function TemplateManagementContent() {
 
   useEffect(() => {
     const action = searchParams?.get('action');
-    if (action === 'create') setShowCreateModal(true);
+    if (action === 'create') {
+      queueMicrotask(() => setShowCreateModal(true));
+    }
   }, [searchParams]);
 
   useEffect(() => {

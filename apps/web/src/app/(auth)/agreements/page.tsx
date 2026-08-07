@@ -63,8 +63,11 @@ function AgreementManagementContent() {
 
   useEffect(() => {
     const action = searchParams?.get('action');
-    if (action === 'upload') setShowUploadModal(true);
-    if (action === 'scratch') setShowScratchModal(true);
+    if (action === 'upload') {
+      queueMicrotask(() => setShowUploadModal(true));
+    } else if (action === 'scratch') {
+      queueMicrotask(() => setShowScratchModal(true));
+    }
   }, [searchParams]);
 
   useEffect(() => {
