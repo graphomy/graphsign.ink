@@ -36,7 +36,7 @@ describe('AgreementManagementPage Unit Tests (Epic INK-8)', () => {
       expect(screen.getByText('Active Agreements')).toBeInTheDocument();
     });
 
-    expect(screen.getByText('Drafts')).toBeInTheDocument();
+    expect(screen.getByText(/Drafts/i)).toBeInTheDocument();
     expect(screen.getByText('Archived')).toBeInTheDocument();
   });
 });

@@ -320,7 +320,9 @@ function AgreementManagementContent() {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${getToken()}`,
         },
-        body: JSON.stringify({ tags: tagsList }),
+        body: JSON.stringify({
+          tags: tagsList,
+        }),
       });
 
       if (!res.ok) throw new Error('Failed to update tags.');
@@ -356,7 +358,7 @@ function AgreementManagementContent() {
             </p>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 self-start md:self-auto">
             <button
               onClick={() => {
                 setActionError(null);
@@ -417,7 +419,7 @@ function AgreementManagementContent() {
                   : 'text-neutral-600 hover:text-neutral-900'
               }`}
             >
-              Drafts
+              Drafts Only
             </button>
             <button
               onClick={() => setActiveTab('archived')}
@@ -434,7 +436,7 @@ function AgreementManagementContent() {
           <div className="flex items-center gap-2">
             <input
               type="text"
-              placeholder="Search agreements..."
+              placeholder="Search title..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="bg-neutral-50 border border-neutral-300 rounded-lg px-3 py-1.5 text-xs text-neutral-900 focus:outline-none focus:border-[#ba0000]"
