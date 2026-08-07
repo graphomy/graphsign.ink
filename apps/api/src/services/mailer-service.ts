@@ -9,6 +9,12 @@ export interface MailerService {
   sendVerificationEmail(to: string, token: string): Promise<void>;
   sendPasswordResetEmail(to: string, token: string): Promise<void>;
   sendEmailChangeVerificationEmail(to: string, token: string): Promise<void>;
+  sendOrganisationInvitationEmail(
+    to: string,
+    orgName: string,
+    role: string,
+    token: string,
+  ): Promise<void>;
 }
 
 /**
@@ -117,6 +123,38 @@ export class ResendMailerService implements MailerService {
       `,
     });
   }
+
+  async sendOrganisationInvitationEmail(
+    to: string,
+    orgName: string,
+    role: string,
+    token: string,
+  ): Promise<void> {
+    const inviteUrl = `${this.webUrl}/accept-invite?token=${encodeURIComponent(token)}`;
+
+    await this.resend.emails.send({
+      from: this.from,
+      to,
+      subject: `You have been invited to join ${orgName} on graphsign.ink`,
+      html: `
+        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+          <h1 style="color: #111; font-size: 24px;">Invitation to join ${orgName}</h1>
+          <p style="color: #333; font-size: 16px; line-height: 1.5;">
+            You have been invited to join <strong>${orgName}</strong> as a <strong>${role}</strong> on graphsign.ink.
+          </p>
+          <a href="${inviteUrl}"
+             style="display: inline-block; background: #ba0000; color: white;
+                    padding: 12px 24px; text-decoration: none; border-radius: 6px;
+                    font-size: 16px; margin: 16px 0;">
+            Accept Invitation
+          </a>
+          <p style="color: #666; font-size: 14px;">
+            This invitation expires in 7 days.
+          </p>
+        </div>
+      `,
+    });
+  }
 }
 
 /**
@@ -142,6 +180,17 @@ export class ConsoleMailerService implements MailerService {
     const verifyUrl = `${this.webUrl}/settings/profile?verifyToken=${encodeURIComponent(token)}`;
     console.log(`[MAILER] Email change verification email for ${to}:`);
     console.log(`[MAILER] Verify URL: ${verifyUrl}`);
+  }
+
+  async sendOrganisationInvitationEmail(
+    to: string,
+    orgName: string,
+    role: string,
+    token: string,
+  ): Promise<void> {
+    const inviteUrl = `${this.webUrl}/accept-invite?token=${encodeURIComponent(token)}`;
+    console.log(`[MAILER] Invitation to ${orgName} (${role}) for ${to}:`);
+    console.log(`[MAILER] Invite URL: ${inviteUrl}`);
   }
 }
 
