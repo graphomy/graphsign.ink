@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { SessionGuard } from '@/components/features/auth/SessionGuard';
 import { getApiUrl } from '@/lib/api';
 
@@ -58,6 +59,13 @@ function AgreementManagementContent() {
   const [tagsList, setTagsList] = useState<string[]>([]);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const searchParams = useSearchParams();
+
+  useEffect(() => {
+    const action = searchParams?.get('action');
+    if (action === 'upload') setShowUploadModal(true);
+    if (action === 'scratch') setShowScratchModal(true);
+  }, [searchParams]);
 
   useEffect(() => {
     let ignore = false;
