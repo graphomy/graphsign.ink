@@ -11,7 +11,7 @@
   "scripts": {
     "dev:api": "pnpm --filter @graphsign/api dev",
     "dev:web": "pnpm --filter @graphsign/web dev",
-    "build": "pnpm -r build",
+    "build": "pnpm db:generate && pnpm -r build",
     "build:api": "pnpm --filter @graphsign/api build",
     "build:web": "pnpm --filter @graphsign/web build",
     "test": "pnpm -r test",
