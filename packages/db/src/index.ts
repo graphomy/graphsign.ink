@@ -60,4 +60,7 @@ export type {
   UserOrganisation,
   Agreement,
   AgreementVersion,
+  Template,
+  TemplateVersion,
+  TemplateShare,
 } from '@prisma/client';

@@ -13,6 +13,7 @@ export const PERMISSIONS = {
   // Template management
   TEMPLATES_READ: 'templates:read',
   TEMPLATES_MANAGE: 'templates:manage',
+  TEMPLATES_PUBLISH: 'templates:publish',
 
   // Signing & Workflow
   SIGNATURES_SIGN: 'signatures:sign',
@@ -56,6 +57,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
     PERMISSIONS.DOCUMENTS_DELETE,
     PERMISSIONS.TEMPLATES_READ,
     PERMISSIONS.TEMPLATES_MANAGE,
+    PERMISSIONS.TEMPLATES_PUBLISH,
     PERMISSIONS.SIGNATURES_SIGN,
     PERMISSIONS.AGREEMENTS_APPROVE,
     PERMISSIONS.AGREEMENTS_REVIEW,
