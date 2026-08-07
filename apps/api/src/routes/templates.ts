@@ -87,6 +87,24 @@ export function createTemplateRoutes(deps?: TemplateDeps) {
     },
   );
 
+  // GET /api/v1/templates/:id (FR-005.005 / INK-77 Get Template Details)
+  templates.get(
+    '/:id',
+    jwtAuth(),
+    enforceTenantActiveStatus(),
+    requirePermission('templates:read'),
+    async (c) => {
+      const { service } = getServices(c);
+      const templateId = c.req.param('id');
+      const userPayload = c.get('userPayload') as any;
+      const userId = userPayload?.sub || 'unknown';
+      const orgId = userPayload?.orgId || 'default-org-id';
+
+      const template = await service.getTemplateById(orgId, userId, templateId);
+      return c.json(template, 200);
+    },
+  );
+
   // POST /api/v1/templates (FR-005.001 / INK-73 Create Reusable Template)
   templates.post(
     '/',
@@ -162,6 +180,24 @@ export function createTemplateRoutes(deps?: TemplateDeps) {
     },
   );
 
+  // DELETE /api/v1/templates/:id (FR-005.005 / INK-77 Archive Template)
+  templates.delete(
+    '/:id',
+    jwtAuth(),
+    enforceTenantActiveStatus(),
+    requirePermission('templates:manage'),
+    async (c) => {
+      const { service } = getServices(c);
+      const templateId = c.req.param('id');
+      const userPayload = c.get('userPayload') as any;
+      const authorId = userPayload?.sub || 'unknown';
+      const orgId = userPayload?.orgId || 'default-org-id';
+
+      const updated = await service.archiveTemplate(orgId, authorId, templateId);
+      return c.json(updated, 200);
+    },
+  );
+
   // POST /api/v1/templates/:id/versions (FR-005.002 / INK-74 Create Template Version)
   templates.post(
     '/:id/versions',
@@ -197,9 +233,10 @@ export function createTemplateRoutes(deps?: TemplateDeps) {
       const { service } = getServices(c);
       const templateId = c.req.param('id');
       const userPayload = c.get('userPayload') as any;
+      const userId = userPayload?.sub || 'unknown';
       const orgId = userPayload?.orgId || 'default-org-id';
 
-      const versions = await service.listVersions(orgId, templateId);
+      const versions = await service.listVersions(orgId, userId, templateId);
       return c.json(versions, 200);
     },
   );
@@ -239,9 +276,10 @@ export function createTemplateRoutes(deps?: TemplateDeps) {
       const { service } = getServices(c);
       const templateId = c.req.param('id');
       const userPayload = c.get('userPayload') as any;
+      const userId = userPayload?.sub || 'unknown';
       const orgId = userPayload?.orgId || 'default-org-id';
 
-      const shares = await service.listShares(orgId, templateId);
+      const shares = await service.listShares(orgId, userId, templateId);
       return c.json(shares, 200);
     },
   );
@@ -265,12 +303,12 @@ export function createTemplateRoutes(deps?: TemplateDeps) {
     },
   );
 
-  // POST /api/v1/templates/:id/publish (FR-005.004 / INK-76 Publish Template)
+  // POST /api/v1/templates/:id/publish (FR-005.004 / INK-76 Publish Template - Org Admin only)
   templates.post(
     '/:id/publish',
     jwtAuth(),
     enforceTenantActiveStatus(),
-    requirePermission('templates:manage'),
+    requirePermission('templates:publish'),
     async (c) => {
       const { service } = getServices(c);
       const templateId = c.req.param('id');

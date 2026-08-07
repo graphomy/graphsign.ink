@@ -12,6 +12,7 @@ interface TemplateItem {
   fileName?: string;
   mimeType?: string;
   htmlContent?: string;
+  fields?: Record<string, unknown>[];
   version: number;
   isPublished: boolean;
   isArchived: boolean;
@@ -31,6 +32,15 @@ interface VersionItem {
   createdAt: string;
 }
 
+interface ShareItem {
+  id: string;
+  templateId: string;
+  targetType: string;
+  targetId: string;
+  accessLevel: string;
+  createdAt: string;
+}
+
 function TemplateManagementContent() {
   const [activeView, setActiveView] = useState<'library' | 'mine' | 'shared'>('library');
   const [templates, setTemplates] = useState<TemplateItem[]>([]);
@@ -41,19 +51,28 @@ function TemplateManagementContent() {
 
   // Modals state
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
   const [showVersionModal, setShowVersionModal] = useState(false);
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState<TemplateItem | null>(null);
 
-  // Form states
+  // Form & view states
   const [createTitle, setCreateTitle] = useState('');
   const [createDescription, setCreateDescription] = useState('');
   const [createHtml, setCreateHtml] = useState(
     '<h1>Template Document</h1><p>Define agreement layout and variables here...</p>',
   );
+
+  const [editTitle, setEditTitle] = useState('');
+  const [editDescription, setEditDescription] = useState('');
+  const [editHtml, setEditHtml] = useState('');
+
   const [shareTargetType, setShareTargetType] = useState<'user' | 'team'>('user');
   const [shareTargetId, setShareTargetId] = useState('');
   const [shareAccessLevel, setShareAccessLevel] = useState<'USE' | 'EDIT'>('USE');
+
+  const [sharesList, setSharesList] = useState<ShareItem[]>([]);
   const [versions, setVersions] = useState<VersionItem[]>([]);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -126,6 +145,64 @@ function TemplateManagementContent() {
     }
   }
 
+  function openEditModal(template: TemplateItem) {
+    setSelectedTemplate(template);
+    setEditTitle(template.title);
+    setEditDescription(template.description || '');
+    setEditHtml(template.htmlContent || '');
+    setShowEditModal(true);
+  }
+
+  async function handleEditSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!selectedTemplate) return;
+
+    try {
+      const res = await fetch(`${getApiUrl()}/api/v1/templates/${selectedTemplate.id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
+        },
+        body: JSON.stringify({
+          title: editTitle,
+          description: editDescription,
+          htmlContent: editHtml,
+        }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.message || 'Failed to update template');
+      }
+
+      setActionMessage('Template updated successfully.');
+      setShowEditModal(false);
+      setRefreshTrigger((prev) => prev + 1);
+    } catch (err: unknown) {
+      setActionError((err as Error).message);
+    }
+  }
+
+  async function handleArchive(template: TemplateItem) {
+    if (!confirm(`Are you sure you want to archive template '${template.title}'?`)) return;
+
+    try {
+      const res = await fetch(`${getApiUrl()}/api/v1/templates/${template.id}`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
+        },
+      });
+
+      if (!res.ok) throw new Error('Failed to archive template');
+      setActionMessage('Template archived successfully.');
+      setRefreshTrigger((prev) => prev + 1);
+    } catch (err: unknown) {
+      setActionError((err as Error).message);
+    }
+  }
+
   async function handlePublishToggle(template: TemplateItem) {
     try {
       const res = await fetch(`${getApiUrl()}/api/v1/templates/${template.id}/publish`, {
@@ -169,6 +246,23 @@ function TemplateManagementContent() {
   async function openShareModal(template: TemplateItem) {
     setSelectedTemplate(template);
     setShowShareModal(true);
+    fetchShares(template.id);
+  }
+
+  async function fetchShares(templateId: string) {
+    try {
+      const res = await fetch(`${getApiUrl()}/api/v1/templates/${templateId}/shares`, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
+        },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setSharesList(data || []);
+      }
+    } catch (err) {
+      console.error(err);
+    }
   }
 
   async function handleShareSubmit(e: React.FormEvent) {
@@ -191,9 +285,29 @@ function TemplateManagementContent() {
 
       if (!res.ok) throw new Error('Failed to share template');
       setActionMessage('Template shared successfully.');
-      setShowShareModal(false);
       setShareTargetId('');
-      setRefreshTrigger((prev) => prev + 1);
+      fetchShares(selectedTemplate.id);
+    } catch (err: unknown) {
+      setActionError((err as Error).message);
+    }
+  }
+
+  async function handleRevokeShare(shareId: string) {
+    if (!selectedTemplate) return;
+    try {
+      const res = await fetch(
+        `${getApiUrl()}/api/v1/templates/${selectedTemplate.id}/shares/${shareId}`,
+        {
+          method: 'DELETE',
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
+          },
+        },
+      );
+
+      if (!res.ok) throw new Error('Failed to revoke share');
+      setActionMessage('Share access revoked.');
+      fetchShares(selectedTemplate.id);
     } catch (err: unknown) {
       setActionError((err as Error).message);
     }
@@ -215,6 +329,11 @@ function TemplateManagementContent() {
     } catch (err) {
       console.error(err);
     }
+  }
+
+  function openPreviewModal(template: TemplateItem) {
+    setSelectedTemplate(template);
+    setShowPreviewModal(true);
   }
 
   return (
@@ -378,27 +497,51 @@ function TemplateManagementContent() {
                       🚀 Use
                     </button>
                     <button
+                      onClick={() => openPreviewModal(template)}
+                      className="p-2 hover:bg-slate-800 rounded-lg text-xs text-slate-400 hover:text-white transition-all"
+                      title="Preview Template"
+                    >
+                      👁️
+                    </button>
+                    <button
+                      onClick={() => openEditModal(template)}
+                      className="p-2 hover:bg-slate-800 rounded-lg text-xs text-slate-400 hover:text-white transition-all"
+                      title="Edit Template"
+                    >
+                      ✏️
+                    </button>
+                    <button
                       onClick={() => openVersionModal(template)}
                       className="p-2 hover:bg-slate-800 rounded-lg text-xs text-slate-400 hover:text-white transition-all"
                       title="Version History"
                     >
-                      🕒 History
+                      🕒
                     </button>
                     <button
                       onClick={() => openShareModal(template)}
                       className="p-2 hover:bg-slate-800 rounded-lg text-xs text-slate-400 hover:text-white transition-all"
                       title="Sharing Settings"
                     >
-                      🔗 Share
+                      🔗
                     </button>
                   </div>
 
-                  <button
-                    onClick={() => handlePublishToggle(template)}
-                    className="text-xs text-slate-400 hover:text-amber-400 transition-all p-1"
-                  >
-                    {template.isPublished ? 'Unpublish' : 'Publish'}
-                  </button>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => handlePublishToggle(template)}
+                      className="text-xs text-slate-400 hover:text-amber-400 transition-all p-1"
+                      title="Toggle Publish Status"
+                    >
+                      {template.isPublished ? 'Unpublish' : 'Publish'}
+                    </button>
+                    <button
+                      onClick={() => handleArchive(template)}
+                      className="text-xs text-red-400 hover:text-red-300 transition-all p-1"
+                      title="Archive Template"
+                    >
+                      🗑️
+                    </button>
+                  </div>
                 </div>
               </div>
             ))}
@@ -465,13 +608,79 @@ function TemplateManagementContent() {
           </div>
         )}
 
-        {/* Share Template Modal (Template ACL) */}
+        {/* Edit Template Modal */}
+        {showEditModal && selectedTemplate && (
+          <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-2xl w-full">
+              <h2 className="text-xl font-bold text-white mb-4">Edit Template</h2>
+              <form onSubmit={handleEditSubmit} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 mb-1">Title</label>
+                  <input
+                    type="text"
+                    required
+                    value={editTitle}
+                    onChange={(e) => setEditTitle(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-slate-200"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 mb-1">
+                    Description
+                  </label>
+                  <input
+                    type="text"
+                    value={editDescription}
+                    onChange={(e) => setEditDescription(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-slate-200"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 mb-1">
+                    HTML Content
+                  </label>
+                  <textarea
+                    rows={8}
+                    value={editHtml}
+                    onChange={(e) => setEditHtml(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-4 text-sm text-slate-200 font-mono"
+                  />
+                </div>
+                <div className="flex justify-end gap-3 pt-4 border-t border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => setShowEditModal(false)}
+                    className="px-4 py-2 text-sm text-slate-400"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2 bg-red-600 hover:bg-red-500 text-white text-sm font-semibold rounded-xl"
+                  >
+                    Save Changes
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* Share Template Modal (Template ACL & Revoke Share) */}
         {showShareModal && selectedTemplate && (
           <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-md w-full">
-              <h2 className="text-xl font-bold text-white mb-2">Share Template Settings</h2>
+            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-lg w-full max-h-[85vh] overflow-y-auto">
+              <h2 className="text-xl font-bold text-white mb-1">Share Template Settings</h2>
               <p className="text-xs text-slate-400 mb-4">{selectedTemplate.title}</p>
-              <form onSubmit={handleShareSubmit} className="space-y-4">
+
+              {/* Add Share Form */}
+              <form
+                onSubmit={handleShareSubmit}
+                className="space-y-4 mb-6 bg-slate-950 p-4 rounded-2xl border border-slate-800"
+              >
+                <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+                  Grant New Access
+                </h3>
                 <div>
                   <label className="block text-xs font-semibold text-slate-400 mb-1">
                     Share Target Type
@@ -479,10 +688,10 @@ function TemplateManagementContent() {
                   <select
                     value={shareTargetType}
                     onChange={(e) => setShareTargetType(e.target.value as 'user' | 'team')}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-slate-200"
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-2 text-sm text-slate-200"
                   >
-                    <option value="user">User (by User ID)</option>
-                    <option value="team">Team (by Team ID)</option>
+                    <option value="user">User (by User UUID)</option>
+                    <option value="team">Team (by Team UUID)</option>
                   </select>
                 </div>
                 <div>
@@ -495,7 +704,7 @@ function TemplateManagementContent() {
                     placeholder="Enter user or team UUID..."
                     value={shareTargetId}
                     onChange={(e) => setShareTargetId(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-slate-200"
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-2 text-sm text-slate-200"
                   />
                 </div>
                 <div>
@@ -505,28 +714,66 @@ function TemplateManagementContent() {
                   <select
                     value={shareAccessLevel}
                     onChange={(e) => setShareAccessLevel(e.target.value as 'USE' | 'EDIT')}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-slate-200"
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-2 text-sm text-slate-200"
                   >
                     <option value="USE">USE (Can instantiate agreements)</option>
                     <option value="EDIT">EDIT (Can modify template draft)</option>
                   </select>
                 </div>
-                <div className="flex justify-end gap-3 pt-4 border-t border-slate-800">
-                  <button
-                    type="button"
-                    onClick={() => setShowShareModal(false)}
-                    className="px-4 py-2 text-sm text-slate-400"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="px-5 py-2 bg-red-600 hover:bg-red-500 text-white text-sm font-semibold rounded-xl"
-                  >
-                    Grant Share Access
-                  </button>
-                </div>
+                <button
+                  type="submit"
+                  className="w-full py-2 bg-red-600 hover:bg-red-500 text-white text-xs font-semibold rounded-xl"
+                >
+                  Grant Share Access
+                </button>
               </form>
+
+              {/* Active Shares List */}
+              <div>
+                <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider mb-2">
+                  Active Shares
+                </h3>
+                {sharesList.length === 0 ? (
+                  <p className="text-xs text-slate-500 italic">No direct share ACLs granted yet.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {sharesList.map((share) => (
+                      <div
+                        key={share.id}
+                        className="bg-slate-950 p-3 rounded-xl border border-slate-800 flex items-center justify-between"
+                      >
+                        <div>
+                          <span className="text-xs font-semibold text-white capitalize">
+                            {share.targetType}:{' '}
+                          </span>
+                          <span className="text-xs font-mono text-slate-400">
+                            {share.targetId.slice(0, 8)}...
+                          </span>
+                          <span className="ml-2 text-[10px] bg-red-500/10 text-red-400 px-2 py-0.5 rounded-md font-bold">
+                            {share.accessLevel}
+                          </span>
+                        </div>
+                        <button
+                          onClick={() => handleRevokeShare(share.id)}
+                          className="text-xs text-red-400 hover:text-red-300"
+                        >
+                          Revoke
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="flex justify-end pt-4 mt-4 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setShowShareModal(false)}
+                  className="px-4 py-2 text-sm text-slate-400"
+                >
+                  Close
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -560,6 +807,48 @@ function TemplateManagementContent() {
                   className="px-4 py-2 bg-slate-800 text-slate-200 text-sm rounded-xl"
                 >
                   Close
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Template Preview Modal */}
+        {showPreviewModal && selectedTemplate && (
+          <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-2xl w-full max-h-[85vh] overflow-y-auto">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-bold text-white">Template Preview</h2>
+                <button
+                  onClick={() => setShowPreviewModal(false)}
+                  className="text-slate-400 hover:text-white"
+                >
+                  ✕
+                </button>
+              </div>
+              <h3 className="text-base font-bold text-red-400 mb-1">{selectedTemplate.title}</h3>
+              <p className="text-xs text-slate-400 mb-4">{selectedTemplate.description}</p>
+
+              <div className="bg-slate-950 border border-slate-800 rounded-xl p-6 mb-4 prose prose-invert max-w-none">
+                {selectedTemplate.htmlContent ? (
+                  <div dangerouslySetInnerHTML={{ __html: selectedTemplate.htmlContent }} />
+                ) : (
+                  <p className="text-slate-500 italic">No HTML preview content available.</p>
+                )}
+              </div>
+
+              <div className="flex justify-between items-center pt-4 border-t border-slate-800">
+                <button
+                  onClick={() => handleInstantiate(selectedTemplate)}
+                  className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white text-sm font-semibold rounded-xl"
+                >
+                  🚀 Instantiate Agreement from this Template
+                </button>
+                <button
+                  onClick={() => setShowPreviewModal(false)}
+                  className="px-4 py-2 bg-slate-800 text-slate-200 text-sm rounded-xl"
+                >
+                  Close Preview
                 </button>
               </div>
             </div>

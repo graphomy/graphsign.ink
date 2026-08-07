@@ -1,6 +1,6 @@
 import type { PrismaClient } from '@graphsign/db';
 import { generateId } from '../utils/crypto.js';
-import { NotFoundError } from '../utils/errors.js';
+import { NotFoundError, ForbiddenError } from '../utils/errors.js';
 import type { AuditService } from './audit-service.js';
 import type {
   CreateTemplateInput,
@@ -17,6 +17,72 @@ export class TemplateService {
     private prisma: PrismaClient,
     private audit?: AuditService,
   ) {}
+
+  /**
+   * Helper: Check actor's authorization and access level for a template (Author, Org Admin, or Share ACL)
+   */
+  private async checkTemplateAccess(
+    orgId: string,
+    userId: string,
+    templateId: string,
+    requiredLevel: 'READ' | 'EDIT' | 'MANAGE',
+  ) {
+    const template = await this.prisma.template.findFirst({
+      where: { id: templateId, organisationId: orgId, deletedAt: null },
+      include: { shares: true },
+    });
+
+    if (!template) {
+      throw new NotFoundError('Template not found.');
+    }
+
+    // Check if user is author or has org-admin role
+    if (template.authorId === userId) {
+      return template;
+    }
+
+    const userOrg = await this.prisma.userOrganisation.findFirst({
+      where: { userId, organisationId: orgId },
+    });
+
+    const isOrgAdmin = userOrg?.role === 'org_admin' || userOrg?.role === 'super_admin';
+    if (isOrgAdmin) {
+      return template;
+    }
+
+    // If requiredLevel is READ and template is published, grant access
+    if (requiredLevel === 'READ' && template.isPublished && !template.isArchived) {
+      return template;
+    }
+
+    // Check direct user share or team membership shares
+    const userTeamMemberships = await this.prisma.teamMember.findMany({
+      where: { userId },
+      select: { teamId: true },
+    });
+    const teamIds = userTeamMemberships.map((m) => m.teamId);
+
+    const hasShare = template.shares.find((s) => {
+      const isTarget =
+        (s.targetType === 'user' && s.targetId === userId) ||
+        (s.targetType === 'team' && teamIds.includes(s.targetId));
+
+      if (!isTarget) return false;
+
+      if (requiredLevel === 'READ') return true;
+      if (requiredLevel === 'EDIT') return s.accessLevel === 'EDIT';
+      if (requiredLevel === 'MANAGE') return false; // Manage requires author or admin
+      return false;
+    });
+
+    if (!hasShare) {
+      throw new ForbiddenError(
+        `Access denied. You do not have sufficient permissions (${requiredLevel}) for this template.`,
+      );
+    }
+
+    return template;
+  }
 
   /**
    * Create a new template from scratch (FR-005.001 / INK-73)
@@ -100,6 +166,7 @@ export class TemplateService {
         fileSize: agreement.fileSize,
         mimeType: agreement.mimeType,
         htmlContent: agreement.htmlContent,
+        fields: agreement.fields ? (agreement.fields as any) : [],
         tags: input.tags ? (input.tags as any) : agreement.tags,
         metadata: agreement.metadata ? (agreement.metadata as any) : {},
         version: 1,
@@ -110,6 +177,7 @@ export class TemplateService {
             title: input.title || `[Template] ${agreement.title}`,
             fileUrl: agreement.fileUrl,
             htmlContent: agreement.htmlContent,
+            fields: agreement.fields ? (agreement.fields as any) : [],
             changeSummary: `Converted from agreement '${agreement.title}' (${agreement.id})`,
             authorId,
           },
@@ -132,6 +200,21 @@ export class TemplateService {
   }
 
   /**
+   * Get single template details (FR-005.005 / INK-77)
+   */
+  async getTemplateById(orgId: string, userId: string, templateId: string) {
+    const template = await this.checkTemplateAccess(orgId, userId, templateId, 'READ');
+    return this.prisma.template.findUnique({
+      where: { id: template.id },
+      include: {
+        author: { select: { id: true, name: true, email: true } },
+        shares: true,
+        versions: { orderBy: { version: 'desc' } },
+      },
+    });
+  }
+
+  /**
    * Save template draft updates (FR-005.001 / INK-73)
    */
   async updateTemplateDraft(
@@ -140,16 +223,10 @@ export class TemplateService {
     templateId: string,
     input: UpdateTemplateDraftInput,
   ) {
-    const existing = await this.prisma.template.findFirst({
-      where: { id: templateId, organisationId: orgId, deletedAt: null },
-    });
-
-    if (!existing) {
-      throw new NotFoundError('Template not found.');
-    }
+    const existing = await this.checkTemplateAccess(orgId, authorId, templateId, 'EDIT');
 
     const updated = await this.prisma.template.update({
-      where: { id: templateId },
+      where: { id: existing.id },
       data: {
         title: input.title ?? existing.title,
         description: input.description ?? existing.description,
@@ -182,20 +259,14 @@ export class TemplateService {
     templateId: string,
     input: CreateTemplateVersionInput,
   ) {
-    const existing = await this.prisma.template.findFirst({
-      where: { id: templateId, organisationId: orgId, deletedAt: null },
-    });
-
-    if (!existing) {
-      throw new NotFoundError('Template not found.');
-    }
+    const existing = await this.checkTemplateAccess(orgId, authorId, templateId, 'EDIT');
 
     const nextVersionNum = existing.version + 1;
 
     const newVersion = await this.prisma.templateVersion.create({
       data: {
         id: generateId(),
-        templateId,
+        templateId: existing.id,
         version: nextVersionNum,
         title: existing.title,
         fileUrl: existing.fileUrl,
@@ -207,7 +278,7 @@ export class TemplateService {
     });
 
     await this.prisma.template.update({
-      where: { id: templateId },
+      where: { id: existing.id },
       data: {
         version: nextVersionNum,
         htmlContent: input.htmlContent ?? existing.htmlContent,
@@ -232,17 +303,10 @@ export class TemplateService {
   /**
    * List template version history (FR-005.002 / INK-74)
    */
-  async listVersions(orgId: string, templateId: string) {
-    const existing = await this.prisma.template.findFirst({
-      where: { id: templateId, organisationId: orgId, deletedAt: null },
-    });
-
-    if (!existing) {
-      throw new NotFoundError('Template not found.');
-    }
-
+  async listVersions(orgId: string, userId: string, templateId: string) {
+    const existing = await this.checkTemplateAccess(orgId, userId, templateId, 'READ');
     return this.prisma.templateVersion.findMany({
-      where: { templateId },
+      where: { templateId: existing.id },
       orderBy: { version: 'desc' },
     });
   }
@@ -256,20 +320,14 @@ export class TemplateService {
     templateId: string,
     input: ShareTemplateInput,
   ) {
-    const template = await this.prisma.template.findFirst({
-      where: { id: templateId, organisationId: orgId, deletedAt: null },
-    });
-
-    if (!template) {
-      throw new NotFoundError('Template not found.');
-    }
+    const template = await this.checkTemplateAccess(orgId, authorId, templateId, 'EDIT');
 
     const shareId = generateId();
 
     const share = await this.prisma.templateShare.upsert({
       where: {
         templateId_targetType_targetId: {
-          templateId,
+          templateId: template.id,
           targetType: input.targetType,
           targetId: input.targetId,
         },
@@ -279,7 +337,7 @@ export class TemplateService {
       },
       create: {
         id: shareId,
-        templateId,
+        templateId: template.id,
         targetType: input.targetType,
         targetId: input.targetId,
         accessLevel: input.accessLevel,
@@ -307,17 +365,10 @@ export class TemplateService {
   /**
    * List template shares (FR-005.003 / INK-75)
    */
-  async listShares(orgId: string, templateId: string) {
-    const template = await this.prisma.template.findFirst({
-      where: { id: templateId, organisationId: orgId, deletedAt: null },
-    });
-
-    if (!template) {
-      throw new NotFoundError('Template not found.');
-    }
-
+  async listShares(orgId: string, userId: string, templateId: string) {
+    const template = await this.checkTemplateAccess(orgId, userId, templateId, 'READ');
     return this.prisma.templateShare.findMany({
-      where: { templateId },
+      where: { templateId: template.id },
     });
   }
 
@@ -325,8 +376,10 @@ export class TemplateService {
    * Revoke template share (FR-005.003 / INK-75)
    */
   async removeShare(orgId: string, authorId: string, templateId: string, shareId: string) {
+    const template = await this.checkTemplateAccess(orgId, authorId, templateId, 'EDIT');
+
     const share = await this.prisma.templateShare.findFirst({
-      where: { id: shareId, templateId },
+      where: { id: shareId, templateId: template.id },
     });
 
     if (!share) {
@@ -353,16 +406,10 @@ export class TemplateService {
    * Publish / Unpublish template organization-wide (FR-005.004 / INK-76)
    */
   async publishTemplate(orgId: string, authorId: string, templateId: string, isPublished: boolean) {
-    const template = await this.prisma.template.findFirst({
-      where: { id: templateId, organisationId: orgId, deletedAt: null },
-    });
-
-    if (!template) {
-      throw new NotFoundError('Template not found.');
-    }
+    const template = await this.checkTemplateAccess(orgId, authorId, templateId, 'MANAGE');
 
     const updated = await this.prisma.template.update({
-      where: { id: templateId },
+      where: { id: template.id },
       data: {
         isPublished,
         publishedAt: isPublished ? new Date() : null,
@@ -383,6 +430,33 @@ export class TemplateService {
   }
 
   /**
+   * Archive / Soft-delete template (FR-005.005 / INK-77)
+   */
+  async archiveTemplate(orgId: string, authorId: string, templateId: string) {
+    const template = await this.checkTemplateAccess(orgId, authorId, templateId, 'MANAGE');
+
+    const updated = await this.prisma.template.update({
+      where: { id: template.id },
+      data: {
+        isArchived: true,
+        archivedAt: new Date(),
+      },
+    });
+
+    if (this.audit) {
+      await this.audit.log({
+        organisationId: orgId,
+        userId: authorId,
+        action: 'TEMPLATE_ARCHIVED',
+        resourceType: 'Template',
+        resourceId: templateId,
+      });
+    }
+
+    return updated;
+  }
+
+  /**
    * Instantiate an agreement draft from a template (FR-005.005 / INK-77)
    */
   async instantiateTemplate(
@@ -391,13 +465,7 @@ export class TemplateService {
     templateId: string,
     input: InstantiateTemplateInput,
   ) {
-    const template = await this.prisma.template.findFirst({
-      where: { id: templateId, organisationId: orgId, deletedAt: null },
-    });
-
-    if (!template) {
-      throw new NotFoundError('Template not found.');
-    }
+    const template = await this.checkTemplateAccess(orgId, userId, templateId, 'READ');
 
     const agreementId = generateId();
 
@@ -406,6 +474,8 @@ export class TemplateService {
         id: agreementId,
         organisationId: orgId,
         authorId: userId,
+        templateId: template.id,
+        templateVersion: template.version,
         title: input.title || `[Draft] ${template.title}`,
         description: input.description || template.description,
         status: 'DRAFT',
@@ -414,6 +484,7 @@ export class TemplateService {
         fileSize: template.fileSize,
         mimeType: template.mimeType,
         htmlContent: template.htmlContent,
+        fields: template.fields ? (template.fields as any) : [],
         tags: template.tags ? (template.tags as any) : [],
         metadata: {
           instantiatedFromTemplateId: template.id,
@@ -427,6 +498,7 @@ export class TemplateService {
             title: input.title || `[Draft] ${template.title}`,
             fileUrl: template.fileUrl,
             htmlContent: template.htmlContent,
+            fields: template.fields ? (template.fields as any) : [],
             changeSummary: `Instantiated from template '${template.title}' v${template.version}.0`,
             authorId: userId,
           },
@@ -467,11 +539,18 @@ export class TemplateService {
     } else if (query.view === 'library') {
       where.isPublished = true;
     } else if (query.view === 'shared') {
+      // Resolve user's team memberships for team-level ACL shares
+      const userTeamMemberships = await this.prisma.teamMember.findMany({
+        where: { userId },
+        select: { teamId: true },
+      });
+      const teamIds = userTeamMemberships.map((m) => m.teamId);
+
       where.shares = {
         some: {
           OR: [
             { targetType: 'user', targetId: userId },
-            // Could match team members if team IDs resolved
+            { targetType: 'team', targetId: { in: teamIds } },
           ],
         },
       };

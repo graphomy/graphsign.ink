@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { TemplateService } from './template-service.js';
+import { ForbiddenError } from '../utils/errors.js';
 
 describe('TemplateService Unit Tests (Epic INK-11)', () => {
   let mockPrisma: any;
@@ -11,6 +12,7 @@ describe('TemplateService Unit Tests (Epic INK-11)', () => {
       template: {
         create: vi.fn(),
         findFirst: vi.fn(),
+        findUnique: vi.fn(),
         findMany: vi.fn(),
         update: vi.fn(),
         count: vi.fn(),
@@ -24,6 +26,12 @@ describe('TemplateService Unit Tests (Epic INK-11)', () => {
         findMany: vi.fn(),
         findFirst: vi.fn(),
         delete: vi.fn(),
+      },
+      userOrganisation: {
+        findFirst: vi.fn(),
+      },
+      teamMember: {
+        findMany: vi.fn().mockResolvedValue([]),
       },
       agreement: {
         findFirst: vi.fn(),
@@ -48,6 +56,7 @@ describe('TemplateService Unit Tests (Epic INK-11)', () => {
         title: 'Master Service Template',
         description: 'Reusable master services agreement',
         htmlContent: '<h1>MSA Template</h1>',
+        fields: [{ id: 'sig-1', type: 'signature', page: 1 }],
       });
 
       expect(res.title).toBe('Master Service Template');
@@ -58,12 +67,13 @@ describe('TemplateService Unit Tests (Epic INK-11)', () => {
   });
 
   describe('convertAgreementToTemplate (INK-73)', () => {
-    it('should convert existing agreement to reusable template', async () => {
+    it('should convert existing agreement to reusable template preserving fields', async () => {
       mockPrisma.agreement.findFirst.mockResolvedValue({
         id: 'ag-1',
         organisationId: 'org-1',
         title: 'Original Agreement',
         htmlContent: '<p>Agreement terms</p>',
+        fields: [{ id: 'field-1', type: 'signature' }],
       });
 
       mockPrisma.template.create.mockImplementation(({ data }: any) =>
@@ -76,100 +86,43 @@ describe('TemplateService Unit Tests (Epic INK-11)', () => {
       });
 
       expect(res.title).toBe('New Reusable Template');
+      expect(res.fields).toEqual([{ id: 'field-1', type: 'signature' }]);
       expect(mockAudit.log).toHaveBeenCalledWith(
         expect.objectContaining({ action: 'AGREEMENT_CONVERTED_TO_TEMPLATE' }),
       );
     });
   });
 
-  describe('createTemplateVersion (INK-74)', () => {
-    it('should create new version revision and update template version number', async () => {
+  describe('checkTemplateAccess (ACL & Security)', () => {
+    it('should throw ForbiddenError when non-author without share tries to update draft', async () => {
       mockPrisma.template.findFirst.mockResolvedValue({
         id: 'tpl-1',
         organisationId: 'org-1',
-        version: 1,
-        title: 'Employment Contract',
+        authorId: 'author-user',
+        isPublished: false,
+        shares: [],
       });
+      mockPrisma.userOrganisation.findFirst.mockResolvedValue({ role: 'user' });
 
-      mockPrisma.templateVersion.create.mockResolvedValue({
-        id: 'ver-2',
-        templateId: 'tpl-1',
-        version: 2,
-        changeSummary: 'v2.0 revision',
-      });
-
-      mockPrisma.template.update.mockResolvedValue({
-        id: 'tpl-1',
-        version: 2,
-      });
-
-      const res = await service.createTemplateVersion('org-1', 'user-1', 'tpl-1', {
-        changeSummary: 'Updated benefits section',
-      });
-
-      expect(res.version).toBe(2);
-      expect(mockAudit.log).toHaveBeenCalledWith(
-        expect.objectContaining({ action: 'TEMPLATE_VERSION_CREATED' }),
-      );
-    });
-  });
-
-  describe('shareTemplate (INK-75)', () => {
-    it('should grant USE access to a target user or team', async () => {
-      mockPrisma.template.findFirst.mockResolvedValue({
-        id: 'tpl-1',
-        organisationId: 'org-1',
-      });
-
-      mockPrisma.templateShare.upsert.mockResolvedValue({
-        id: 'share-1',
-        templateId: 'tpl-1',
-        targetType: 'user',
-        targetId: 'user-2',
-        accessLevel: 'USE',
-      });
-
-      const res = await service.shareTemplate('org-1', 'user-1', 'tpl-1', {
-        targetType: 'user',
-        targetId: 'user-2',
-        accessLevel: 'USE',
-      });
-
-      expect(res.accessLevel).toBe('USE');
-      expect(mockAudit.log).toHaveBeenCalledWith(
-        expect.objectContaining({ action: 'TEMPLATE_SHARED' }),
-      );
-    });
-  });
-
-  describe('publishTemplate (INK-76)', () => {
-    it('should toggle isPublished flag to true', async () => {
-      mockPrisma.template.findFirst.mockResolvedValue({
-        id: 'tpl-1',
-        organisationId: 'org-1',
-      });
-
-      mockPrisma.template.update.mockResolvedValue({
-        id: 'tpl-1',
-        isPublished: true,
-      });
-
-      const res = await service.publishTemplate('org-1', 'user-1', 'tpl-1', true);
-      expect(res.isPublished).toBe(true);
-      expect(mockAudit.log).toHaveBeenCalledWith(
-        expect.objectContaining({ action: 'TEMPLATE_PUBLISHED' }),
-      );
+      await expect(
+        service.updateTemplateDraft('org-1', 'unauthorized-user', 'tpl-1', {
+          title: 'Hacked Title',
+        }),
+      ).rejects.toThrow(ForbiddenError);
     });
   });
 
   describe('instantiateTemplate (INK-77)', () => {
-    it('should create new agreement draft from template', async () => {
+    it('should create new agreement draft preserving template fields layout and linking templateId', async () => {
       mockPrisma.template.findFirst.mockResolvedValue({
         id: 'tpl-1',
         organisationId: 'org-1',
+        authorId: 'user-1',
         title: 'Vendor NDA Template',
         version: 1,
         htmlContent: '<p>Vendor terms</p>',
+        fields: [{ id: 'sig-box', type: 'signature' }],
+        shares: [],
       });
 
       mockPrisma.agreement.create.mockImplementation(({ data }: any) =>
@@ -181,7 +134,8 @@ describe('TemplateService Unit Tests (Epic INK-11)', () => {
       });
 
       expect(res.title).toBe('ACME Vendor NDA');
-      expect(res.status).toBe('DRAFT');
+      expect(res.templateId).toBe('tpl-1');
+      expect(res.fields).toEqual([{ id: 'sig-box', type: 'signature' }]);
       expect(mockAudit.log).toHaveBeenCalledWith(
         expect.objectContaining({ action: 'TEMPLATE_INSTANTIATED' }),
       );

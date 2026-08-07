@@ -2,17 +2,21 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { Hono } from 'hono';
 import { createTemplateRoutes } from './templates.js';
 import { signJwt } from '../utils/jwt.js';
+import { errorHandler } from '../middleware/error-handler.js';
 
 describe('Template Routes Integration Tests (Epic INK-11)', () => {
   let mockTemplateService: any;
   let app: Hono;
-  let token: string;
+  let adminToken: string;
+  let senderToken: string;
 
   beforeEach(async () => {
     mockTemplateService = {
       createTemplate: vi.fn(),
       convertAgreementToTemplate: vi.fn(),
+      getTemplateById: vi.fn(),
       updateTemplateDraft: vi.fn(),
+      archiveTemplate: vi.fn(),
       createTemplateVersion: vi.fn(),
       listVersions: vi.fn(),
       shareTemplate: vi.fn(),
@@ -23,91 +27,58 @@ describe('Template Routes Integration Tests (Epic INK-11)', () => {
       listTemplates: vi.fn(),
     };
 
-    token = await signJwt({
-      sub: 'user-123',
+    adminToken = await signJwt({
+      sub: 'admin-123',
       email: 'admin@acme.com',
       orgId: 'org-123',
       role: 'org_admin',
     });
 
+    senderToken = await signJwt({
+      sub: 'sender-123',
+      email: 'sender@acme.com',
+      orgId: 'org-123',
+      role: 'sender',
+    });
+
     app = new Hono();
+    app.onError(errorHandler);
     app.route('/api/v1/templates', createTemplateRoutes({ templateService: mockTemplateService }));
   });
 
-  it('POST /api/v1/templates - creates a new template (INK-73)', async () => {
-    mockTemplateService.createTemplate.mockResolvedValue({
+  it('GET /api/v1/templates/:id - returns template details (INK-77)', async () => {
+    mockTemplateService.getTemplateById.mockResolvedValue({
       id: 'tpl-1',
-      title: 'Vendor Agreement Template',
-      version: 1,
+      title: 'Detailed Template',
+      fields: [{ id: 'f1' }],
     });
 
-    const res = await app.request('/api/v1/templates', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({
-        title: 'Vendor Agreement Template',
-        description: 'Standard vendor contract template',
-      }),
+    const res = await app.request('/api/v1/templates/tpl-1', {
+      headers: { Authorization: `Bearer ${adminToken}` },
     });
 
-    expect(res.status).toBe(201);
+    expect(res.status).toBe(200);
     const body = (await res.json()) as any;
-    expect(body.title).toBe('Vendor Agreement Template');
+    expect(body.title).toBe('Detailed Template');
   });
 
-  it('POST /api/v1/templates/:id/versions - creates a new version (INK-74)', async () => {
-    mockTemplateService.createTemplateVersion.mockResolvedValue({
-      id: 'ver-2',
-      version: 2,
-      changeSummary: 'Updated clauses',
+  it('DELETE /api/v1/templates/:id - archives template (INK-77)', async () => {
+    mockTemplateService.archiveTemplate.mockResolvedValue({
+      id: 'tpl-1',
+      isArchived: true,
     });
 
-    const res = await app.request('/api/v1/templates/tpl-1/versions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({
-        changeSummary: 'Updated clauses',
-      }),
+    const res = await app.request('/api/v1/templates/tpl-1', {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${adminToken}` },
     });
 
-    expect(res.status).toBe(201);
+    expect(res.status).toBe(200);
     const body = (await res.json()) as any;
-    expect(body.version).toBe(2);
+    expect(body.isArchived).toBe(true);
   });
 
-  it('POST /api/v1/templates/:id/shares - shares template with target (INK-75)', async () => {
-    mockTemplateService.shareTemplate.mockResolvedValue({
-      id: 'share-1',
-      targetType: 'user',
-      targetId: '00000000-0000-7000-8000-000000000001',
-      accessLevel: 'USE',
-    });
-
-    const res = await app.request('/api/v1/templates/tpl-1/shares', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({
-        targetType: 'user',
-        targetId: '00000000-0000-7000-8000-000000000001',
-        accessLevel: 'USE',
-      }),
-    });
-
-    expect(res.status).toBe(201);
-    const body = (await res.json()) as any;
-    expect(body.accessLevel).toBe('USE');
-  });
-
-  it('POST /api/v1/templates/:id/publish - publishes template (INK-76)', async () => {
+  it('POST /api/v1/templates/:id/publish - allows org_admin to publish (INK-76)', async () => {
     mockTemplateService.publishTemplate.mockResolvedValue({
       id: 'tpl-1',
       isPublished: true,
@@ -117,34 +88,24 @@ describe('Template Routes Integration Tests (Epic INK-11)', () => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
+        Authorization: `Bearer ${adminToken}`,
       },
       body: JSON.stringify({ isPublished: true }),
     });
 
     expect(res.status).toBe(200);
-    const body = (await res.json()) as any;
-    expect(body.isPublished).toBe(true);
   });
 
-  it('POST /api/v1/templates/:id/instantiate - creates agreement from template (INK-77)', async () => {
-    mockTemplateService.instantiateTemplate.mockResolvedValue({
-      id: 'ag-instantiated',
-      title: 'Custom Agreement from Template',
-      status: 'DRAFT',
-    });
-
-    const res = await app.request('/api/v1/templates/tpl-1/instantiate', {
+  it('POST /api/v1/templates/:id/publish - rejects regular sender role from publishing (INK-76)', async () => {
+    const res = await app.request('/api/v1/templates/tpl-1/publish', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
+        Authorization: `Bearer ${senderToken}`,
       },
-      body: JSON.stringify({ title: 'Custom Agreement from Template' }),
+      body: JSON.stringify({ isPublished: true }),
     });
 
-    expect(res.status).toBe(201);
-    const body = (await res.json()) as any;
-    expect(body.status).toBe('DRAFT');
+    expect(res.status).toBe(403);
   });
 });

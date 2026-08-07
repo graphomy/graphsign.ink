@@ -220,22 +220,27 @@ model Agreement {
   fileName       String?   @map("file_name") @db.VarChar(255)
   fileSize       Int?      @map("file_size")
   mimeType       String?   @map("mime_type") @db.VarChar(100)
-  htmlContent    String?   @map("html_content") @db.Text
-  version        Int       @default(1)
-  isArchived     Boolean   @default(false) @map("is_archived")
-  archivedAt     DateTime? @map("archived_at") @db.Timestamptz()
-  tags           Json?     @db.JsonB
-  metadata       Json?     @db.JsonB
-  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz()
-  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
-  deletedAt      DateTime? @map("deleted_at") @db.Timestamptz()
+  htmlContent     String?   @map("html_content") @db.Text
+  fields          Json?     @db.JsonB
+  templateId      String?   @map("template_id") @db.Uuid
+  templateVersion Int?      @map("template_version")
+  version         Int       @default(1)
+  isArchived      Boolean   @default(false) @map("is_archived")
+  archivedAt      DateTime? @map("archived_at") @db.Timestamptz()
+  tags            Json?     @db.JsonB
+  metadata        Json?     @db.JsonB
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
+  deletedAt       DateTime? @map("deleted_at") @db.Timestamptz()
 
   organisation Organisation       @relation(fields: [organisationId], references: [id])
   author       User               @relation(fields: [authorId], references: [id])
+  template     Template?          @relation(fields: [templateId], references: [id], onDelete: SetNull)
   versions     AgreementVersion[]
 
   @@index([organisationId])
   @@index([authorId])
+  @@index([templateId])
   @@index([status])
   @@index([isArchived])
   @@map("agreements")
@@ -249,6 +254,7 @@ model AgreementVersion {
   title         String   @db.VarChar(255)
   fileUrl       String?  @map("file_url") @db.VarChar(512)
   htmlContent   String?  @map("html_content") @db.Text
+  fields        Json?    @db.JsonB
   changeSummary String?  @map("change_summary") @db.VarChar(512)
   authorId      String   @map("author_id") @db.Uuid
   createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz()
@@ -287,6 +293,7 @@ model Template {
   author       User               @relation(fields: [authorId], references: [id])
   versions     TemplateVersion[]
   shares       TemplateShare[]
+  agreements   Agreement[]
 
   @@index([organisationId])
   @@index([authorId])
@@ -328,6 +335,7 @@ model TemplateShare {
   @@unique([templateId, targetType, targetId])
   @@index([templateId])
   @@index([targetId])
+  @@index([targetType, targetId])
   @@map("template_shares")
 }
 
