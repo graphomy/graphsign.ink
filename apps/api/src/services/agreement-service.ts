@@ -365,7 +365,7 @@ export class AgreementService {
     const limit = query.limit || 20;
     const skip = (page - 1) * limit;
 
-    const where: any = {
+    const where: Record<string, unknown> = {
       organisationId: orgId,
       deletedAt: null,
       isArchived: query.isArchived ?? false,
@@ -382,6 +382,11 @@ export class AgreementService {
       ];
     }
 
+    // Filter by tag using Prisma JsonB array_contains
+    if (query.tag) {
+      where.tags = { array_contains: [query.tag] };
+    }
+
     const [items, total] = await Promise.all([
       this.prisma.agreement.findMany({
         where,
@@ -393,18 +398,8 @@ export class AgreementService {
       this.prisma.agreement.count({ where }),
     ]);
 
-    // Tag filtering in memory if query.tag supplied
-    let filteredItems = items;
-    if (query.tag) {
-      const targetTag = query.tag;
-      filteredItems = items.filter((item) => {
-        const tags = Array.isArray(item.tags) ? (item.tags as string[]) : [];
-        return tags.includes(targetTag);
-      });
-    }
-
     return {
-      items: filteredItems,
+      items,
       pagination: {
         page,
         limit,

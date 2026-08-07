@@ -45,9 +45,9 @@ app.use('*', async (c, next) => {
       const isAllowed = origins.some((o) => o.replace(/^https?:\/\/(www\.)?/, '') === cleanReq);
       if (isAllowed) return requestOrigin;
 
-      return requestOrigin;
+      return '';
     },
-    allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowHeaders: ['Content-Type', 'Authorization', 'x-user-id', 'x-organisation-id'],
     credentials: true,
   });

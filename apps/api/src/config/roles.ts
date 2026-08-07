@@ -132,4 +132,12 @@ export const DEFAULT_ROLES: RoleDefinition[] = [
     isSystemRole: true,
     defaultPermissions: ['documents:read', 'audit:read', 'users:read'],
   },
+  {
+    id: 'user',
+    name: 'User',
+    description: 'Default role with read-only access to documents.',
+    hierarchyLevel: 10,
+    isSystemRole: true,
+    defaultPermissions: ['documents:read'],
+  },
 ];

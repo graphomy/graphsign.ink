@@ -65,13 +65,7 @@ export class RbacService {
 
     const currentRole = targetUser.role || 'user';
 
-    // Update user global role & organisation junction role
-    const updatedUser = await this.prisma.user.update({
-      where: { id: targetUserId },
-      data: { role: newRole },
-      select: { id: true, email: true, name: true, role: true, updatedAt: true },
-    });
-
+    // Update org-scoped junction role only — never mutate global User.role
     await this.prisma.userOrganisation.updateMany({
       where: { userId: targetUserId, organisationId: orgId },
       data: { role: newRole },
@@ -97,7 +91,13 @@ export class RbacService {
 
     return {
       message: `Role for user '${targetUser.email}' updated to '${newRole}'.`,
-      user: updatedUser,
+      user: {
+        id: targetUser.id,
+        email: targetUser.email,
+        name: targetUser.name,
+        role: newRole,
+        updatedAt: new Date(),
+      },
     };
   }
 

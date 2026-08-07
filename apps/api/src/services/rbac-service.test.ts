@@ -11,7 +11,6 @@ describe('RbacService Unit Tests (Epic INK-12)', () => {
     mockPrisma = {
       user: {
         findUnique: vi.fn(),
-        update: vi.fn(),
       },
       userOrganisation: {
         updateMany: vi.fn(),
@@ -27,12 +26,13 @@ describe('RbacService Unit Tests (Epic INK-12)', () => {
   });
 
   describe('listDefaultRoles (INK-61)', () => {
-    it('should list all 7 core default roles', async () => {
+    it('should list all 8 core default roles', async () => {
       const roles = await rbacService.listDefaultRoles();
-      expect(roles).toHaveLength(7);
+      expect(roles).toHaveLength(8);
       expect(roles.map((r) => r.id)).toContain('super_admin');
       expect(roles.map((r) => r.id)).toContain('org_admin');
       expect(roles.map((r) => r.id)).toContain('sender');
+      expect(roles.map((r) => r.id)).toContain('user');
     });
   });
 
@@ -41,13 +41,9 @@ describe('RbacService Unit Tests (Epic INK-12)', () => {
       mockPrisma.user.findUnique.mockResolvedValue({
         id: 'target-1',
         email: 'alice@acme.com',
+        name: 'Alice',
         role: 'user',
         organisations: [{ organisationId: 'org-1', role: 'user' }],
-      });
-      mockPrisma.user.update.mockResolvedValue({
-        id: 'target-1',
-        email: 'alice@acme.com',
-        role: 'sender',
       });
 
       const res = await rbacService.assignUserRole({
@@ -79,19 +75,15 @@ describe('RbacService Unit Tests (Epic INK-12)', () => {
         }),
       ).rejects.toThrow(ForbiddenError);
 
-      expect(mockPrisma.user.update).not.toHaveBeenCalled();
+      expect(mockPrisma.userOrganisation.updateMany).not.toHaveBeenCalled();
     });
 
     it('should allow kunal@graphomy.com to assign super_admin role', async () => {
       mockPrisma.user.findUnique.mockResolvedValue({
         id: 'target-1',
         email: 'bob@graphomy.com',
+        name: 'Bob',
         role: 'org_admin',
-      });
-      mockPrisma.user.update.mockResolvedValue({
-        id: 'target-1',
-        email: 'bob@graphomy.com',
-        role: 'super_admin',
       });
 
       const res = await rbacService.assignUserRole({

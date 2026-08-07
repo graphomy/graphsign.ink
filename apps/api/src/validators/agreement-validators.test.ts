@@ -46,6 +46,17 @@ describe('Agreement Validators Unit Tests (Epic INK-8)', () => {
       });
       expect(valid.success).toBe(true);
     });
+
+    it('should sanitize script tags and XSS vectors from htmlContent', () => {
+      const result = createScratchAgreementSchema.parse({
+        title: 'XSS Test',
+        htmlContent:
+          '<p>Safe content</p><script>alert("xss")</script><iframe src="evil.com"></iframe>',
+      });
+      expect(result.htmlContent).not.toContain('<script');
+      expect(result.htmlContent).not.toContain('<iframe');
+      expect(result.htmlContent).toContain('<p>Safe content</p>');
+    });
   });
 
   describe('queryAgreementsSchema', () => {

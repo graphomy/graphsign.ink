@@ -4,6 +4,8 @@ import { createPrismaClient, getLegacyPrisma } from '@graphsign/db';
 import { RbacService } from '../services/rbac-service.js';
 import type { AuditService } from '../services/audit-service.js';
 import { PrismaAuditService } from '../services/audit-service.js';
+import { jwtAuth } from '../middleware/jwt-auth.js';
+import { requirePermission } from '../middleware/rbac-middleware.js';
 import type { Env } from '../index.js';
 
 export interface RoleDeps {
@@ -36,14 +38,14 @@ export function createRoleRoutes(deps?: RoleDeps) {
   }
 
   // GET /api/v1/roles/default (INK-61)
-  roles.get('/default', async (c) => {
+  roles.get('/default', jwtAuth(), requirePermission('roles:read'), async (c) => {
     const { rbacService } = getServices(c);
     const defaultRoles = await rbacService.listDefaultRoles();
     return c.json(defaultRoles, 200);
   });
 
   // GET /api/v1/roles/permissions (INK-65)
-  roles.get('/permissions', async (c) => {
+  roles.get('/permissions', jwtAuth(), requirePermission('roles:read'), async (c) => {
     const { rbacService } = getServices(c);
     const permissions = rbacService.getPermissionRegistry();
     return c.json({ permissions }, 200);

@@ -7,6 +7,27 @@ export const ALLOWED_MIME_TYPES = [
 ];
 
 export const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024; // 25 MB
+export const MAX_HTML_CONTENT_LENGTH = 512 * 1024; // 512 KB
+
+/**
+ * Strips dangerous HTML elements and attributes to prevent XSS.
+ * Removes script/iframe/object/embed/link tags, on* event handlers,
+ * and javascript: protocol URLs.
+ */
+function sanitizeHtml(html: string): string {
+  return html
+    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+    .replace(/<\/?script[^>]*>/gi, '')
+    .replace(/<iframe[^>]*>[\s\S]*?<\/iframe>/gi, '')
+    .replace(/<\/?iframe[^>]*>/gi, '')
+    .replace(/<object[^>]*>[\s\S]*?<\/object>/gi, '')
+    .replace(/<\/?object[^>]*>/gi, '')
+    .replace(/<embed[^>]*\/?>/gi, '')
+    .replace(/<link[^>]*\/?>/gi, '')
+    .replace(/\s+on\w+\s*=\s*["'][^"']*["']/gi, '')
+    .replace(/\s+on\w+\s*=\s*\S+/gi, '')
+    .replace(/javascript\s*:/gi, '');
+}
 
 export const createUploadAgreementSchema = z.object({
   title: z.string().min(2, 'Agreement title must be at least 2 characters').max(255),
@@ -30,7 +51,11 @@ export const createUploadAgreementSchema = z.object({
 export const createScratchAgreementSchema = z.object({
   title: z.string().min(2, 'Agreement title must be at least 2 characters').max(255),
   description: z.string().max(1000).optional(),
-  htmlContent: z.string().min(1, 'Document content is required'),
+  htmlContent: z
+    .string()
+    .min(1, 'Document content is required')
+    .max(MAX_HTML_CONTENT_LENGTH, 'HTML content exceeds maximum allowed size (512KB)')
+    .transform(sanitizeHtml),
   tags: z.array(z.string()).optional(),
   metadata: z.record(z.unknown()).optional(),
 });
@@ -38,7 +63,11 @@ export const createScratchAgreementSchema = z.object({
 export const updateDraftSchema = z.object({
   title: z.string().min(2).max(255).optional(),
   description: z.string().max(1000).optional(),
-  htmlContent: z.string().optional(),
+  htmlContent: z
+    .string()
+    .max(MAX_HTML_CONTENT_LENGTH, 'HTML content exceeds maximum allowed size (512KB)')
+    .transform(sanitizeHtml)
+    .optional(),
   tags: z.array(z.string()).optional(),
   metadata: z.record(z.unknown()).optional(),
 });

@@ -16,15 +16,16 @@ export interface RbacContextVariables {
  */
 export function requireRole(allowedRoles: string[]): MiddlewareHandler {
   return async (c, next) => {
-    const userRole = c.get('userRole');
-    const userEmail = c.get('userEmail');
+    const userPayload = (c.get('userPayload') as any) ?? {};
+    const userRole = c.get('userRole') || userPayload.role;
+    const userEmail = c.get('userEmail') || userPayload.email;
 
     if (!userRole && !userEmail) {
       throw new UnauthorizedError('Authentication required to access this resource.');
     }
 
-    // Super Admin override for kunal@graphomy.com
-    if (userEmail === SUPER_ADMIN_EMAIL || userRole === 'super_admin') {
+    // Super Admin override — strictly email-only, never trust role claim alone
+    if (userEmail === SUPER_ADMIN_EMAIL) {
       await next();
       return;
     }
@@ -44,15 +45,16 @@ export function requireRole(allowedRoles: string[]): MiddlewareHandler {
  */
 export function requirePermission(permission: string): MiddlewareHandler {
   return async (c, next) => {
-    const userRole = c.get('userRole') || 'user';
-    const userEmail = c.get('userEmail');
+    const userPayload = (c.get('userPayload') as any) ?? {};
+    const userRole = c.get('userRole') || userPayload.role || 'user';
+    const userEmail = c.get('userEmail') || userPayload.email;
 
     if (!userEmail) {
       throw new UnauthorizedError('Authentication required to access this resource.');
     }
 
-    // Super Admin override for kunal@graphomy.com
-    if (userEmail === SUPER_ADMIN_EMAIL || userRole === 'super_admin') {
+    // Super Admin override — strictly email-only, never trust role claim alone
+    if (userEmail === SUPER_ADMIN_EMAIL) {
       await next();
       return;
     }

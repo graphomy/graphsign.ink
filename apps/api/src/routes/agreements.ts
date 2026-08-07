@@ -13,6 +13,9 @@ import {
   queryAgreementsSchema,
 } from '../validators/agreement-validators.js';
 import { BadRequestError } from '../utils/errors.js';
+import { requirePermission } from '../middleware/rbac-middleware.js';
+import { enforceTenantActiveStatus } from '../middleware/tenant-status-middleware.js';
+import { createRateLimiter } from '../middleware/rate-limiter.js';
 import type { Env } from '../index.js';
 
 export interface AgreementDeps {
@@ -23,6 +26,8 @@ export interface AgreementDeps {
 
 export function createAgreementRoutes(deps?: AgreementDeps) {
   const agreements = new Hono<{ Bindings: Env }>();
+
+  agreements.use('/*', createRateLimiter(100, 60_000));
 
   function getServices(c: any) {
     if (deps?.agreementService) return { service: deps.agreementService };
@@ -48,163 +53,235 @@ export function createAgreementRoutes(deps?: AgreementDeps) {
   }
 
   // GET /api/v1/agreements (List & Search)
-  agreements.get('/', jwtAuth(), async (c) => {
-    const { service } = getServices(c);
-    const userPayload = c.get('userPayload') as any;
-    const orgId = userPayload?.orgId || 'default-org-id';
+  agreements.get(
+    '/',
+    jwtAuth(),
+    enforceTenantActiveStatus(),
+    requirePermission('documents:read'),
+    async (c) => {
+      const { service } = getServices(c);
+      const userPayload = c.get('userPayload') as any;
+      const orgId = userPayload?.orgId || 'default-org-id';
 
-    const queryParams = {
-      page: c.req.query('page'),
-      limit: c.req.query('limit'),
-      status: c.req.query('status'),
-      isArchived: c.req.query('isArchived'),
-      tag: c.req.query('tag'),
-      search: c.req.query('search'),
-    };
+      const queryParams = {
+        page: c.req.query('page'),
+        limit: c.req.query('limit'),
+        status: c.req.query('status'),
+        isArchived: c.req.query('isArchived'),
+        tag: c.req.query('tag'),
+        search: c.req.query('search'),
+      };
 
-    const parsed = queryAgreementsSchema.safeParse(queryParams);
-    if (!parsed.success) {
-      throw new BadRequestError(parsed.error.errors[0]?.message || 'Invalid query parameters');
-    }
+      const parsed = queryAgreementsSchema.safeParse(queryParams);
+      if (!parsed.success) {
+        throw new BadRequestError(parsed.error.errors[0]?.message || 'Invalid query parameters');
+      }
 
-    const result = await service.listAgreements(orgId, parsed.data);
-    return c.json(result, 200);
-  });
+      const result = await service.listAgreements(orgId, parsed.data);
+      return c.json(result, 200);
+    },
+  );
 
   // POST /api/v1/agreements/upload (INK-66 Upload PDF/DOCX)
-  agreements.post('/upload', jwtAuth(), async (c) => {
-    const { service } = getServices(c);
-    const userPayload = c.get('userPayload') as any;
-    const authorId = userPayload?.sub || 'unknown';
-    const orgId = userPayload?.orgId || 'default-org-id';
+  agreements.post(
+    '/upload',
+    jwtAuth(),
+    enforceTenantActiveStatus(),
+    requirePermission('documents:create'),
+    async (c) => {
+      const { service } = getServices(c);
+      const userPayload = c.get('userPayload') as any;
+      const authorId = userPayload?.sub || 'unknown';
+      const orgId = userPayload?.orgId || 'default-org-id';
 
-    const body = await c.req.json().catch(() => null);
-    const parsed = createUploadAgreementSchema.safeParse(body);
+      const body = await c.req.json().catch(() => null);
+      const parsed = createUploadAgreementSchema.safeParse(body);
 
-    if (!parsed.success) {
-      throw new BadRequestError(parsed.error.errors[0]?.message || 'Invalid upload payload');
-    }
+      if (!parsed.success) {
+        throw new BadRequestError(parsed.error.errors[0]?.message || 'Invalid upload payload');
+      }
 
-    const agreement = await service.uploadAgreementFile(orgId, authorId, parsed.data);
-    return c.json(agreement, 201);
-  });
+      const agreement = await service.uploadAgreementFile(orgId, authorId, parsed.data);
+      return c.json(agreement, 201);
+    },
+  );
 
   // POST /api/v1/agreements/scratch (INK-67 Create from scratch HTML)
-  agreements.post('/scratch', jwtAuth(), async (c) => {
-    const { service } = getServices(c);
-    const userPayload = c.get('userPayload') as any;
-    const authorId = userPayload?.sub || 'unknown';
-    const orgId = userPayload?.orgId || 'default-org-id';
+  agreements.post(
+    '/scratch',
+    jwtAuth(),
+    enforceTenantActiveStatus(),
+    requirePermission('documents:create'),
+    async (c) => {
+      const { service } = getServices(c);
+      const userPayload = c.get('userPayload') as any;
+      const authorId = userPayload?.sub || 'unknown';
+      const orgId = userPayload?.orgId || 'default-org-id';
 
-    const body = await c.req.json().catch(() => null);
-    const parsed = createScratchAgreementSchema.safeParse(body);
+      const body = await c.req.json().catch(() => null);
+      const parsed = createScratchAgreementSchema.safeParse(body);
 
-    if (!parsed.success) {
-      throw new BadRequestError(
-        parsed.error.errors[0]?.message || 'Invalid scratch creation payload',
-      );
-    }
+      if (!parsed.success) {
+        throw new BadRequestError(
+          parsed.error.errors[0]?.message || 'Invalid scratch creation payload',
+        );
+      }
 
-    const agreement = await service.createFromScratch(orgId, authorId, parsed.data);
-    return c.json(agreement, 201);
-  });
+      const agreement = await service.createFromScratch(orgId, authorId, parsed.data);
+      return c.json(agreement, 201);
+    },
+  );
 
   // PATCH /api/v1/agreements/:id/draft (INK-68 Save draft & autosave)
-  agreements.patch('/:id/draft', jwtAuth(), async (c) => {
-    const { service } = getServices(c);
-    const agreementId = c.req.param('id');
-    const userPayload = c.get('userPayload') as any;
-    const authorId = userPayload?.sub || 'unknown';
-    const orgId = userPayload?.orgId || 'default-org-id';
+  agreements.patch(
+    '/:id/draft',
+    jwtAuth(),
+    enforceTenantActiveStatus(),
+    requirePermission('documents:update'),
+    async (c) => {
+      const { service } = getServices(c);
+      const agreementId = c.req.param('id');
+      const userPayload = c.get('userPayload') as any;
+      const authorId = userPayload?.sub || 'unknown';
+      const orgId = userPayload?.orgId || 'default-org-id';
 
-    const body = await c.req.json().catch(() => null);
-    const parsed = updateDraftSchema.safeParse(body);
+      const body = await c.req.json().catch(() => null);
+      const parsed = updateDraftSchema.safeParse(body);
 
-    if (!parsed.success) {
-      throw new BadRequestError(parsed.error.errors[0]?.message || 'Invalid draft update payload');
-    }
+      if (!parsed.success) {
+        throw new BadRequestError(
+          parsed.error.errors[0]?.message || 'Invalid draft update payload',
+        );
+      }
 
-    const updated = await service.saveDraft(orgId, authorId, agreementId, parsed.data);
-    return c.json(updated, 200);
-  });
+      const updated = await service.saveDraft(orgId, authorId, agreementId, parsed.data);
+      return c.json(updated, 200);
+    },
+  );
 
   // POST /api/v1/agreements/:id/versions (INK-69 Create version)
-  agreements.post('/:id/versions', jwtAuth(), async (c) => {
-    const { service } = getServices(c);
-    const agreementId = c.req.param('id');
-    const userPayload = c.get('userPayload') as any;
-    const authorId = userPayload?.sub || 'unknown';
-    const orgId = userPayload?.orgId || 'default-org-id';
+  agreements.post(
+    '/:id/versions',
+    jwtAuth(),
+    enforceTenantActiveStatus(),
+    requirePermission('documents:update'),
+    async (c) => {
+      const { service } = getServices(c);
+      const agreementId = c.req.param('id');
+      const userPayload = c.get('userPayload') as any;
+      const authorId = userPayload?.sub || 'unknown';
+      const orgId = userPayload?.orgId || 'default-org-id';
 
-    const body = await c.req.json().catch(() => ({}));
-    const version = await service.createVersion(orgId, authorId, agreementId, body?.changeSummary);
-    return c.json(version, 201);
-  });
+      const body = await c.req.json().catch(() => ({}));
+      const version = await service.createVersion(
+        orgId,
+        authorId,
+        agreementId,
+        body?.changeSummary,
+      );
+      return c.json(version, 201);
+    },
+  );
 
   // GET /api/v1/agreements/:id/versions (INK-69 List versions)
-  agreements.get('/:id/versions', jwtAuth(), async (c) => {
-    const { service } = getServices(c);
-    const agreementId = c.req.param('id');
-    const userPayload = c.get('userPayload') as any;
-    const orgId = userPayload?.orgId || 'default-org-id';
+  agreements.get(
+    '/:id/versions',
+    jwtAuth(),
+    enforceTenantActiveStatus(),
+    requirePermission('documents:read'),
+    async (c) => {
+      const { service } = getServices(c);
+      const agreementId = c.req.param('id');
+      const userPayload = c.get('userPayload') as any;
+      const orgId = userPayload?.orgId || 'default-org-id';
 
-    const versions = await service.listVersions(orgId, agreementId);
-    return c.json(versions, 200);
-  });
+      const versions = await service.listVersions(orgId, agreementId);
+      return c.json(versions, 200);
+    },
+  );
 
   // POST /api/v1/agreements/:id/clone (INK-70 Clone agreement)
-  agreements.post('/:id/clone', jwtAuth(), async (c) => {
-    const { service } = getServices(c);
-    const agreementId = c.req.param('id');
-    const userPayload = c.get('userPayload') as any;
-    const authorId = userPayload?.sub || 'unknown';
-    const orgId = userPayload?.orgId || 'default-org-id';
+  agreements.post(
+    '/:id/clone',
+    jwtAuth(),
+    enforceTenantActiveStatus(),
+    requirePermission('documents:create'),
+    async (c) => {
+      const { service } = getServices(c);
+      const agreementId = c.req.param('id');
+      const userPayload = c.get('userPayload') as any;
+      const authorId = userPayload?.sub || 'unknown';
+      const orgId = userPayload?.orgId || 'default-org-id';
 
-    const cloned = await service.cloneAgreement(orgId, authorId, agreementId);
-    return c.json(cloned, 201);
-  });
+      const cloned = await service.cloneAgreement(orgId, authorId, agreementId);
+      return c.json(cloned, 201);
+    },
+  );
 
   // POST /api/v1/agreements/:id/archive & unarchive (INK-71)
-  agreements.post('/:id/archive', jwtAuth(), async (c) => {
-    const { service } = getServices(c);
-    const agreementId = c.req.param('id');
-    const userPayload = c.get('userPayload') as any;
-    const authorId = userPayload?.sub || 'unknown';
-    const orgId = userPayload?.orgId || 'default-org-id';
+  agreements.post(
+    '/:id/archive',
+    jwtAuth(),
+    enforceTenantActiveStatus(),
+    requirePermission('documents:update'),
+    async (c) => {
+      const { service } = getServices(c);
+      const agreementId = c.req.param('id');
+      const userPayload = c.get('userPayload') as any;
+      const authorId = userPayload?.sub || 'unknown';
+      const orgId = userPayload?.orgId || 'default-org-id';
 
-    const archived = await service.setArchiveStatus(orgId, authorId, agreementId, true);
-    return c.json(archived, 200);
-  });
+      const archived = await service.setArchiveStatus(orgId, authorId, agreementId, true);
+      return c.json(archived, 200);
+    },
+  );
 
-  agreements.post('/:id/unarchive', jwtAuth(), async (c) => {
-    const { service } = getServices(c);
-    const agreementId = c.req.param('id');
-    const userPayload = c.get('userPayload') as any;
-    const authorId = userPayload?.sub || 'unknown';
-    const orgId = userPayload?.orgId || 'default-org-id';
+  agreements.post(
+    '/:id/unarchive',
+    jwtAuth(),
+    enforceTenantActiveStatus(),
+    requirePermission('documents:update'),
+    async (c) => {
+      const { service } = getServices(c);
+      const agreementId = c.req.param('id');
+      const userPayload = c.get('userPayload') as any;
+      const authorId = userPayload?.sub || 'unknown';
+      const orgId = userPayload?.orgId || 'default-org-id';
 
-    const unarchived = await service.setArchiveStatus(orgId, authorId, agreementId, false);
-    return c.json(unarchived, 200);
-  });
+      const unarchived = await service.setArchiveStatus(orgId, authorId, agreementId, false);
+      return c.json(unarchived, 200);
+    },
+  );
 
   // PATCH /api/v1/agreements/:id/metadata (INK-72 Metadata & tags)
-  agreements.patch('/:id/metadata', jwtAuth(), async (c) => {
-    const { service } = getServices(c);
-    const agreementId = c.req.param('id');
-    const userPayload = c.get('userPayload') as any;
-    const authorId = userPayload?.sub || 'unknown';
-    const orgId = userPayload?.orgId || 'default-org-id';
+  agreements.patch(
+    '/:id/metadata',
+    jwtAuth(),
+    enforceTenantActiveStatus(),
+    requirePermission('documents:update'),
+    async (c) => {
+      const { service } = getServices(c);
+      const agreementId = c.req.param('id');
+      const userPayload = c.get('userPayload') as any;
+      const authorId = userPayload?.sub || 'unknown';
+      const orgId = userPayload?.orgId || 'default-org-id';
 
-    const body = await c.req.json().catch(() => null);
-    const parsed = updateMetadataTagsSchema.safeParse(body);
+      const body = await c.req.json().catch(() => null);
+      const parsed = updateMetadataTagsSchema.safeParse(body);
 
-    if (!parsed.success) {
-      throw new BadRequestError(parsed.error.errors[0]?.message || 'Invalid metadata payload');
-    }
+      if (!parsed.success) {
+        throw new BadRequestError(parsed.error.errors[0]?.message || 'Invalid metadata payload');
+      }
 
-    const updated = await service.updateMetadataAndTags(orgId, authorId, agreementId, parsed.data);
-    return c.json(updated, 200);
-  });
+      const updated = await service.updateMetadataAndTags(
+        orgId,
+        authorId,
+        agreementId,
+        parsed.data,
+      );
+      return c.json(updated, 200);
+    },
+  );
 
   return agreements;
 }
