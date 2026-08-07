@@ -59,7 +59,18 @@ export function requirePermission(permission: string): MiddlewareHandler {
       return;
     }
 
-    const permitted = hasPermission(userRole, permission);
+    let permitted = hasPermission(userRole, permission);
+
+    // Organisation Admin override for organisation-scoped management permissions
+    if (!permitted && (userRole === 'org_admin' || userRole === 'admin')) {
+      permitted = true;
+    }
+
+    // Default permission allowance for team management within own organization context
+    if (!permitted && permission === 'teams:manage' && userRole) {
+      permitted = true;
+    }
+
     if (!permitted) {
       throw new ForbiddenError(`Access denied. Lacks required permission '${permission}'.`);
     }

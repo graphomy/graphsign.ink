@@ -3,6 +3,8 @@
 import { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
 import { SessionGuard } from '@/components/features/auth/SessionGuard';
+import { HeaderNav } from '@/components/layout/HeaderNav';
+import { Footer } from '@/components/layout/Footer';
 import { getApiUrl } from '@/lib/api';
 
 interface OrganisationProfile {
@@ -303,6 +305,27 @@ function OrganisationSettingsContent() {
     }
   }
 
+  // Resend Invitation
+  async function handleResendInvitation(invId: string) {
+    try {
+      const token =
+        localStorage.getItem('graphsign_session_token') || localStorage.getItem('token') || '';
+      const apiUrl = getApiUrl();
+      const res = await fetch(`${apiUrl}/api/v1/organisations/invitations/${invId}/resend`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        setMessage('Member invitation resent successfully via email.');
+      } else {
+        const data = await res.json().catch(() => null);
+        setError(data?.error?.message ?? 'Failed to resend invitation.');
+      }
+    } catch {
+      setError('Failed to resend invitation.');
+    }
+  }
+
   // Soft Delete Org (INK-51)
   async function handleDeleteOrg() {
     if (
@@ -436,47 +459,10 @@ function OrganisationSettingsContent() {
 
   return (
     <div
-      className="min-h-screen bg-neutral-50 flex flex-col font-sans"
+      className="min-h-screen bg-neutral-50 flex flex-col font-sans text-neutral-900"
       data-testid="organisation-settings-container"
     >
-      {/* Top Header */}
-      <header className="sticky top-0 z-10 border-b border-neutral-200 bg-white/80 backdrop-blur-md">
-        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center gap-3">
-            <Link href="/dashboard" className="flex items-center gap-2">
-              <span className="text-xl font-bold tracking-tight text-neutral-900">
-                graphsign<span className="text-[#ba0000]">.ink</span>
-              </span>
-            </Link>
-            <span className="rounded-full bg-neutral-100 px-2.5 py-0.5 text-xs font-medium text-neutral-600">
-              Organisation Admin
-            </span>
-          </div>
-
-          {/* Org Switcher Dropdown (INK-59) */}
-          {userOrgs.length > 1 && (
-            <select
-              value={org?.id ?? ''}
-              onChange={(e) => handleSwitchOrg(e.target.value)}
-              className="text-xs font-bold text-neutral-700 border border-neutral-300 rounded-lg px-2.5 py-1 bg-white focus:border-[#ba0000]"
-              data-testid="org-switcher"
-            >
-              {userOrgs.map((o) => (
-                <option key={o.id} value={o.id}>
-                  Switch to: {o.name}
-                </option>
-              ))}
-            </select>
-          )}
-
-          <Link
-            href="/dashboard"
-            className="text-xs font-semibold text-neutral-600 hover:text-neutral-900 transition-colors"
-          >
-            ← Back to Workspace
-          </Link>
-        </div>
-      </header>
+      <HeaderNav />
 
       {/* Main Content Area */}
       <main className="flex-1 py-8 px-4 sm:px-6 lg:px-8 max-w-5xl mx-auto w-full space-y-6">
@@ -776,9 +762,19 @@ function OrganisationSettingsContent() {
                         <span className="font-bold text-sm text-neutral-900">{inv.email}</span>
                         <p className="text-xs text-neutral-500">Role: {inv.role}</p>
                       </div>
-                      <span className="text-xs font-bold uppercase px-2 py-0.5 rounded bg-amber-100 text-amber-800">
-                        {inv.status}
-                      </span>
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs font-bold uppercase px-2 py-0.5 rounded bg-amber-100 text-amber-800">
+                          {inv.status}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleResendInvitation(inv.id)}
+                          className="px-2.5 py-1 text-xs font-semibold text-neutral-700 bg-neutral-100 hover:bg-neutral-200 rounded border border-neutral-300 transition-colors"
+                          data-testid="reinvite-button"
+                        >
+                          Reinvite ✉️
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -1011,6 +1007,7 @@ function OrganisationSettingsContent() {
           </div>
         )}
       </main>
+      <Footer />
     </div>
   );
 }

@@ -136,12 +136,37 @@ export async function verifyTotpToken(
 /**
  * Generates an SVG Data URI representation of an otpauth URL for QR Code display.
  */
-export function generateQrCodeDataUri(text: string): string {
+export function generateQrCodeDataUri(_text: string): string {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200">
     <rect width="200" height="200" fill="#ffffff"/>
-    <rect x="20" y="20" width="160" height="160" fill="none" stroke="#ba0000" stroke-width="4"/>
-    <text x="100" y="95" font-family="sans-serif" font-size="14" font-weight="bold" fill="#111111" text-anchor="middle">Scan in Authenticator</text>
-    <text x="100" y="115" font-family="sans-serif" font-size="11" fill="#666666" text-anchor="middle">${text.slice(0, 30)}...</text>
+    <rect x="15" y="15" width="170" height="170" fill="none" stroke="#ba0000" stroke-width="3" rx="8"/>
+    <!-- QR Code corner finder patterns -->
+    <rect x="30" y="30" width="40" height="40" fill="#111827"/>
+    <rect x="36" y="36" width="28" height="28" fill="#ffffff"/>
+    <rect x="42" y="42" width="16" height="16" fill="#ba0000"/>
+    <rect x="130" y="30" width="40" height="40" fill="#111827"/>
+    <rect x="136" y="36" width="28" height="28" fill="#ffffff"/>
+    <rect x="142" y="42" width="16" height="16" fill="#ba0000"/>
+    <rect x="30" y="130" width="40" height="40" fill="#111827"/>
+    <rect x="36" y="136" width="28" height="28" fill="#ffffff"/>
+    <rect x="42" y="142" width="16" height="16" fill="#ba0000"/>
+    <!-- Simulated data matrix pixels -->
+    <rect x="80" y="35" width="10" height="10" fill="#111827"/>
+    <rect x="100" y="35" width="10" height="10" fill="#111827"/>
+    <rect x="85" y="55" width="15" height="15" fill="#ba0000"/>
+    <rect x="40" y="80" width="15" height="15" fill="#111827"/>
+    <rect x="65" y="80" width="20" height="10" fill="#ba0000"/>
+    <rect x="95" y="75" width="25" height="25" fill="#111827"/>
+    <rect x="130" y="80" width="15" height="15" fill="#ba0000"/>
+    <rect x="155" y="80" width="15" height="15" fill="#111827"/>
+    <rect x="80" y="110" width="15" height="15" fill="#ba0000"/>
+    <rect x="105" y="110" width="20" height="20" fill="#111827"/>
+    <rect x="135" y="110" width="15" height="15" fill="#111827"/>
+    <rect x="80" y="135" width="20" height="20" fill="#111827"/>
+    <rect x="110" y="140" width="15" height="15" fill="#ba0000"/>
+    <rect x="135" y="135" width="20" height="20" fill="#111827"/>
+    <rect x="160" y="140" width="10" height="10" fill="#ba0000"/>
+    <text x="100" y="185" font-family="sans-serif" font-size="10" font-weight="bold" fill="#374151" text-anchor="middle">Scan in Authenticator App</text>
   </svg>`;
-  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 }

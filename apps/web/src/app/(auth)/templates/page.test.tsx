@@ -25,7 +25,7 @@ describe('TemplateManagementPage Unit Tests (Epic INK-11)', () => {
       expect(screen.getByText('Template Management')).toBeInTheDocument();
     });
 
-    expect(screen.getByText(/Create Template/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Create Template/i)[0]).toBeInTheDocument();
   });
 
   it('renders library tabs for Organization Library, My Templates, and Shared with Me', async () => {

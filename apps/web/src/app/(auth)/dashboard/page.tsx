@@ -3,7 +3,8 @@
 import { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
 import { SessionGuard } from '@/components/features/auth/SessionGuard';
-import { ProfileDropdown } from '@/components/features/auth/ProfileDropdown';
+import { HeaderNav } from '@/components/layout/HeaderNav';
+import { Footer } from '@/components/layout/Footer';
 import { getApiUrl } from '@/lib/api';
 
 interface UserSession {
@@ -23,12 +24,17 @@ interface AgreementItem {
   author?: { name?: string; email: string };
 }
 
+function getToken(): string {
+  if (typeof window === 'undefined') return '';
+  return localStorage.getItem('token') || localStorage.getItem('graphsign_session_token') || '';
+}
+
 function DashboardContent() {
   const [user] = useState<UserSession | null>(() => {
     if (typeof window === 'undefined') return null;
     return {
       email: localStorage.getItem('graphsign_user_email') ?? 'user@graphsign.ink',
-      token: localStorage.getItem('graphsign_session_token') ?? '',
+      token: getToken(),
       organisationId: localStorage.getItem('graphsign_org_id') ?? '',
     };
   });
@@ -44,12 +50,10 @@ function DashboardContent() {
       setError(null);
       try {
         const res = await fetch(`${getApiUrl()}/api/v1/agreements`, {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
-          },
+          headers: { Authorization: `Bearer ${getToken()}` },
         });
 
-        if (!res.ok) throw new Error('Failed to load dashboard workspace data');
+        if (!res.ok) throw new Error('Failed to load dashboard workspace data.');
         const data = await res.json();
         if (!ignore) {
           setAgreements(data.items || []);
@@ -71,211 +75,173 @@ function DashboardContent() {
   }, []);
 
   const pendingCount = agreements.filter(
-    (a) => a.status === 'DRAFT' || a.status === 'PENDING' || a.status === 'pending',
+    (a) => a.status === 'DRAFT' || a.status === 'PENDING' || a.status === 'SENT',
   ).length;
-
   const completedCount = agreements.filter(
-    (a) => a.status === 'COMPLETED' || a.status === 'SEALED' || a.status === 'completed',
+    (a) => a.status === 'COMPLETED' || a.status === 'SEALED',
   ).length;
-
   const totalCount = agreements.length;
 
   return (
-    <div
-      className="min-h-screen bg-slate-950 flex flex-col font-sans text-slate-100"
-      data-testid="dashboard-container"
-    >
-      {/* Header Navigation */}
-      <header className="sticky top-0 z-10 border-b border-slate-800 bg-slate-900/80 backdrop-blur-md">
-        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center gap-6">
-            <Link href="/dashboard" className="flex items-center gap-2">
-              <span className="text-xl font-extrabold tracking-tight text-white">
-                graphsign<span className="text-red-500">.ink</span>
-              </span>
-            </Link>
-            <nav className="hidden md:flex items-center gap-4 text-sm font-medium text-slate-400">
-              <Link
-                href="/dashboard"
-                className="text-white hover:text-white transition-colors py-1 px-2 rounded-md bg-slate-800"
-              >
-                Dashboard
-              </Link>
-              <Link
-                href="/agreements"
-                className="hover:text-white transition-colors py-1 px-2 rounded-md"
-              >
-                Agreements
-              </Link>
-              <Link
-                href="/templates"
-                className="hover:text-white transition-colors py-1 px-2 rounded-md"
-              >
-                Templates
-              </Link>
-              <Link
-                href="/settings/organisation"
-                className="hover:text-white transition-colors py-1 px-2 rounded-md"
-              >
-                Settings
-              </Link>
-            </nav>
-          </div>
+    <div className="min-h-screen bg-neutral-50 flex flex-col font-sans text-neutral-900">
+      <HeaderNav />
 
-          <div className="flex items-center gap-4">
-            <ProfileDropdown email={user?.email} token={user?.token} />
-          </div>
-        </div>
-      </header>
-
-      {/* Main Content */}
-      <main className="flex-1 py-8 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto w-full space-y-8">
-        {/* Welcome Banner */}
-        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-slate-900 via-slate-850 to-red-950/80 p-8 border border-slate-800 shadow-xl">
-          <div className="relative z-10 space-y-2 max-w-2xl">
-            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white">
-              Welcome back to your workspace
+      <main className="flex-1 py-8 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto w-full space-y-6">
+        {/* Workspace Banner */}
+        <div className="bg-white border border-neutral-200 rounded-2xl p-6 sm:p-8 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6">
+          <div className="space-y-1">
+            <h1 className="text-2xl font-bold tracking-tight text-neutral-900">
+              Welcome back, <span className="text-[#ba0000]">{user?.email.split('@')[0]}</span>
             </h1>
-            <p className="text-sm text-slate-300 leading-relaxed">
-              Create cryptographically verifiable PDF agreements, manage signing workflows, and
-              track tamper-proof audit trails in real-time.
+            <p className="text-xs text-neutral-600">
+              Manage e-signatures, document templates, custom permissions, and audit logs.
             </p>
           </div>
-          <div className="mt-6 flex flex-wrap items-center gap-3">
+
+          <div className="flex items-center gap-3">
             <Link
               href="/agreements?action=upload"
-              className="rounded-xl bg-red-600 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-red-600/20 hover:bg-red-500 transition-all flex items-center gap-2"
+              className="px-4 py-2.5 bg-[#ba0000] hover:bg-red-700 text-white text-xs font-semibold rounded-lg shadow-sm transition-all flex items-center gap-1.5"
             >
               <span>📄</span> Upload Agreement
             </Link>
             <Link
               href="/agreements?action=scratch"
-              className="rounded-xl border border-slate-700 bg-slate-800/80 px-5 py-2.5 text-sm font-semibold text-slate-200 hover:bg-slate-700 hover:text-white transition-all backdrop-blur-sm flex items-center gap-2"
+              className="px-4 py-2.5 bg-white border border-neutral-300 hover:bg-neutral-100 text-neutral-800 text-xs font-semibold rounded-lg shadow-sm transition-all flex items-center gap-1.5"
             >
               <span>✏️</span> Create from Scratch
             </Link>
             <Link
               href="/templates?action=create"
-              className="rounded-xl border border-slate-700 bg-slate-800/80 px-5 py-2.5 text-sm font-semibold text-slate-200 hover:bg-slate-700 hover:text-white transition-all backdrop-blur-sm flex items-center gap-2"
+              className="px-4 py-2.5 bg-neutral-900 hover:bg-neutral-800 text-white text-xs font-semibold rounded-lg shadow-sm transition-all flex items-center gap-1.5"
             >
-              <span>📋</span> Upload Template
+              <span>📐</span> Upload Template
             </Link>
           </div>
         </div>
 
-        {/* Live Metrics */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5 shadow-sm space-y-2 backdrop-blur-md">
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-              Pending / Drafts
-            </p>
-            <p className="text-3xl font-extrabold text-white">{loading ? '-' : pendingCount}</p>
-            <p className="text-xs text-amber-400 font-medium">Active agreement drafts</p>
+        {error && (
+          <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-xs font-medium text-red-700">
+            {error}
+          </div>
+        )}
+
+        {/* Live Workspace Metrics */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+          <div className="bg-white border border-neutral-200 rounded-xl p-5 shadow-sm space-y-1">
+            <span className="text-xs font-semibold text-neutral-500 uppercase tracking-wider block">
+              Pending Actions
+            </span>
+            <div className="flex items-baseline justify-between">
+              <span className="text-3xl font-extrabold text-neutral-900">{pendingCount}</span>
+              <span className="text-xs font-medium text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                Requires Signature
+              </span>
+            </div>
           </div>
 
-          <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5 shadow-sm space-y-2 backdrop-blur-md">
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+          <div className="bg-white border border-neutral-200 rounded-xl p-5 shadow-sm space-y-1">
+            <span className="text-xs font-semibold text-neutral-500 uppercase tracking-wider block">
               Completed Agreements
-            </p>
-            <p className="text-3xl font-extrabold text-white">{loading ? '-' : completedCount}</p>
-            <p className="text-xs text-emerald-400 font-medium">All signatures verified & sealed</p>
+            </span>
+            <div className="flex items-baseline justify-between">
+              <span className="text-3xl font-extrabold text-neutral-900">{completedCount}</span>
+              <span className="text-xs font-medium text-green-700 bg-green-50 px-2 py-0.5 rounded border border-green-200">
+                Sealed & Valid
+              </span>
+            </div>
           </div>
 
-          <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5 shadow-sm space-y-2 backdrop-blur-md">
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-              Total Workspace Documents
-            </p>
-            <p className="text-3xl font-extrabold text-white">{loading ? '-' : totalCount}</p>
-            <div className="flex items-center gap-2">
-              <span className="flex h-2.5 w-2.5 rounded-full bg-emerald-400 animate-pulse" />
-              <span className="text-xs text-slate-400 font-medium">Audit chain active</span>
+          <div className="bg-white border border-neutral-200 rounded-xl p-5 shadow-sm space-y-1">
+            <span className="text-xs font-semibold text-neutral-500 uppercase tracking-wider block">
+              Total Workspace Contracts
+            </span>
+            <div className="flex items-baseline justify-between">
+              <span className="text-3xl font-extrabold text-neutral-900">{totalCount}</span>
+              <span className="text-xs font-medium text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                Active Vault
+              </span>
             </div>
           </div>
         </div>
 
-        {/* Recent Agreements Table */}
-        <div className="rounded-2xl border border-slate-800 bg-slate-900/60 shadow-sm overflow-hidden space-y-4 p-6 backdrop-blur-md">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-bold text-white">Recent Agreements</h2>
+        {/* Recent Agreements Section */}
+        <div className="bg-white border border-neutral-200 rounded-xl shadow-sm overflow-hidden">
+          <div className="p-5 border-b border-neutral-200 flex items-center justify-between">
+            <div>
+              <h2 className="text-sm font-bold text-neutral-900">Recent Workspace Agreements</h2>
+              <p className="text-xs text-neutral-500">Live agreement pipeline</p>
+            </div>
             <Link
               href="/agreements"
-              className="text-xs font-semibold text-red-400 hover:text-red-300 transition-colors"
+              className="text-xs font-semibold text-[#ba0000] hover:underline"
             >
-              View All →
+              View All Agreements →
             </Link>
           </div>
 
-          {error && (
-            <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-sm">
-              {error}
-            </div>
-          )}
-
           {loading ? (
-            <div className="py-12 text-center text-slate-400 text-sm">
-              Loading workspace agreements...
+            <div className="p-8 text-center text-xs font-medium text-neutral-500">
+              Loading recent agreements...
             </div>
           ) : agreements.length === 0 ? (
-            <div className="py-12 text-center border border-dashed border-slate-800 rounded-2xl bg-slate-950/40 space-y-3">
-              <p className="text-sm font-medium text-slate-400">No agreements created yet.</p>
-              <div className="flex justify-center gap-3">
+            <div className="p-12 text-center space-y-3">
+              <div className="h-10 w-10 rounded-full bg-neutral-100 text-neutral-400 mx-auto flex items-center justify-center text-lg">
+                📑
+              </div>
+              <p className="text-xs font-semibold text-neutral-700">
+                No agreements in workspace yet.
+              </p>
+              <div className="flex justify-center gap-3 pt-1">
                 <Link
-                  href="/agreements?action=upload"
-                  className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded-xl text-xs font-semibold shadow-md shadow-red-600/20"
+                  href="/agreements?action=scratch"
+                  className="px-3 py-1.5 bg-[#ba0000] text-white text-xs font-semibold rounded-md shadow-sm"
                 >
-                  Upload First Agreement
+                  Create Agreement from Scratch
                 </Link>
               </div>
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm text-slate-300">
-                <thead className="border-b border-slate-800 bg-slate-950 text-xs uppercase font-semibold text-slate-400">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-neutral-50 text-neutral-500 uppercase tracking-wider font-semibold border-b border-neutral-200">
                   <tr>
-                    <th scope="col" className="py-3 px-4">
-                      Document Name
-                    </th>
-                    <th scope="col" className="py-3 px-4">
-                      Author
-                    </th>
-                    <th scope="col" className="py-3 px-4">
-                      Status
-                    </th>
-                    <th scope="col" className="py-3 px-4">
-                      Created Date
-                    </th>
-                    <th scope="col" className="py-3 px-4 text-right">
-                      Actions
-                    </th>
+                    <th className="px-5 py-3">Document Title</th>
+                    <th className="px-5 py-3">Status</th>
+                    <th className="px-5 py-3">Author</th>
+                    <th className="px-5 py-3">Created</th>
+                    <th className="px-5 py-3 text-right">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-800/60">
+                <tbody className="divide-y divide-neutral-100">
                   {agreements.slice(0, 5).map((agreement) => (
-                    <tr key={agreement.id} className="hover:bg-slate-800/40 transition-colors">
-                      <td className="py-3.5 px-4 font-medium text-white">{agreement.title}</td>
-                      <td className="py-3.5 px-4 text-xs text-slate-400">
-                        {agreement.author?.email || 'Workspace Author'}
+                    <tr key={agreement.id} className="hover:bg-neutral-50/80 transition-colors">
+                      <td className="px-5 py-3.5 font-semibold text-neutral-900">
+                        {agreement.title}
                       </td>
-                      <td className="py-3.5 px-4">
+                      <td className="px-5 py-3.5">
                         <span
-                          className={`inline-flex items-center rounded-lg px-2.5 py-0.5 text-xs font-semibold ${
+                          className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
                             agreement.status === 'COMPLETED' || agreement.status === 'SEALED'
-                              ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                              : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                              ? 'bg-green-100 text-green-800 border border-green-200'
+                              : 'bg-amber-100 text-amber-800 border border-amber-200'
                           }`}
                         >
                           {agreement.status}
                         </span>
                       </td>
-                      <td className="py-3.5 px-4 text-xs text-slate-400">
+                      <td className="px-5 py-3.5 text-neutral-600">
+                        {agreement.author?.email || 'System User'}
+                      </td>
+                      <td className="px-5 py-3.5 text-neutral-500">
                         {new Date(agreement.createdAt).toLocaleDateString()}
                       </td>
-                      <td className="py-3.5 px-4 text-right">
+                      <td className="px-5 py-3.5 text-right">
                         <Link
                           href="/agreements"
-                          className="text-xs font-semibold text-red-400 hover:text-red-300"
+                          className="text-xs font-semibold text-[#ba0000] hover:underline"
                         >
-                          Manage
+                          Manage →
                         </Link>
                       </td>
                     </tr>
@@ -286,6 +252,8 @@ function DashboardContent() {
           )}
         </div>
       </main>
+
+      <Footer />
     </div>
   );
 }
@@ -294,7 +262,7 @@ export default function DashboardPage() {
   return (
     <SessionGuard>
       <Suspense
-        fallback={<div className="p-12 text-center text-slate-400">Loading workspace...</div>}
+        fallback={<div className="p-12 text-center text-xs text-neutral-500">Loading...</div>}
       >
         <DashboardContent />
       </Suspense>
