@@ -52,6 +52,7 @@ model Organisation {
   customRoles  CustomRole[]
   domains      OrganisationDomain[]
   agreements   Agreement[]
+  templates    Template[]
   auditLogs    AuditLog[]
 
   @@index([slug])
@@ -92,6 +93,7 @@ model User {
   ledTeams        Team[]                   @relation("TeamLead")
   teamMemberships TeamMember[]
   agreements      Agreement[]
+  templates       Template[]
   auditLogs       AuditLog[]
 
   @@unique([organisationId, email])
@@ -255,6 +257,78 @@ model AgreementVersion {
 
   @@unique([agreementId, version])
   @@map("agreement_versions")
+}
+
+/// Template model — reusable agreement blueprints, versioning, publishing, and sharing.
+model Template {
+  id             String    @id @db.Uuid
+  organisationId String    @map("organisation_id") @db.Uuid
+  authorId       String    @map("author_id") @db.Uuid
+  title          String    @db.VarChar(255)
+  description    String?   @db.VarChar(1000)
+  fileUrl        String?   @map("file_url") @db.VarChar(512)
+  fileName       String?   @map("file_name") @db.VarChar(255)
+  fileSize       Int?      @map("file_size")
+  mimeType       String?   @map("mime_type") @db.VarChar(100)
+  htmlContent    String?   @map("html_content") @db.Text
+  fields         Json?     @db.JsonB
+  version        Int       @default(1)
+  isPublished    Boolean   @default(false) @map("is_published")
+  publishedAt    DateTime? @map("published_at") @db.Timestamptz()
+  isArchived     Boolean   @default(false) @map("is_archived")
+  archivedAt     DateTime? @map("archived_at") @db.Timestamptz()
+  tags           Json?     @db.JsonB
+  metadata       Json?     @db.JsonB
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
+  deletedAt      DateTime? @map("deleted_at") @db.Timestamptz()
+
+  organisation Organisation       @relation(fields: [organisationId], references: [id])
+  author       User               @relation(fields: [authorId], references: [id])
+  versions     TemplateVersion[]
+  shares       TemplateShare[]
+
+  @@index([organisationId])
+  @@index([authorId])
+  @@index([isPublished])
+  @@index([isArchived])
+  @@map("templates")
+}
+
+/// Template version history model.
+model TemplateVersion {
+  id            String   @id @db.Uuid
+  templateId    String   @map("template_id") @db.Uuid
+  version       Int
+  title         String   @db.VarChar(255)
+  fileUrl       String?  @map("file_url") @db.VarChar(512)
+  htmlContent   String?  @map("html_content") @db.Text
+  fields        Json?    @db.JsonB
+  changeSummary String?  @map("change_summary") @db.VarChar(512)
+  authorId      String   @map("author_id") @db.Uuid
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  template Template @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@unique([templateId, version])
+  @@map("template_versions")
+}
+
+/// Template ACL sharing model (share with user or team).
+model TemplateShare {
+  id          String   @id @db.Uuid
+  templateId  String   @map("template_id") @db.Uuid
+  targetType  String   @map("target_type") @db.VarChar(20)
+  targetId    String   @map("target_id") @db.Uuid
+  accessLevel String   @map("access_level") @db.VarChar(20)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  template Template @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@unique([templateId, targetType, targetId])
+  @@index([templateId])
+  @@index([targetId])
+  @@map("template_shares")
 }
 
 /// Immutable, append-only, hash-chained audit trail.
