@@ -747,12 +747,18 @@ function OrganisationSettingsContent() {
                       value={inviteRole}
                       onChange={(e) => setInviteRole(e.target.value)}
                       className="rounded-lg border px-3 py-1.5 text-xs bg-white"
+                      data-testid="role-select-dropdown"
                     >
                       <option value="user">User</option>
-                      <option value="author">Author</option>
+                      <option value="sender">Sender / Author</option>
                       <option value="reviewer">Reviewer</option>
+                      <option value="approver">Approver</option>
                       <option value="signer">Signer</option>
-                      <option value="org_admin">Org Admin</option>
+                      <option value="auditor">Auditor</option>
+                      <option value="org_admin">Organisation Admin</option>
+                      <option value="super_admin">
+                        Super Admin (Restricted to kunal@graphomy.com)
+                      </option>
                     </select>
                   </div>
                   <button
