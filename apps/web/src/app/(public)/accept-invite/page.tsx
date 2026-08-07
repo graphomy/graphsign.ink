@@ -26,13 +26,13 @@ function AcceptInviteContent() {
   const [successMessage, setSuccessMessage] = useState<string>('');
 
   useEffect(() => {
-    if (!token) {
-      setError('Missing invitation token.');
-      setIsLoading(false);
-      return;
-    }
-
     async function loadInvitationDetails() {
+      if (!token) {
+        setError('Missing invitation token.');
+        setIsLoading(false);
+        return;
+      }
+
       try {
         setIsLoading(true);
         const apiUrl = getApiUrl();
@@ -136,7 +136,11 @@ function AcceptInviteContent() {
               Verifying invitation link...
             </div>
           ) : details ? (
-            <form onSubmit={handleAcceptInvite} className="space-y-5" data-testid="accept-invite-form">
+            <form
+              onSubmit={handleAcceptInvite}
+              className="space-y-5"
+              data-testid="accept-invite-form"
+            >
               <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-4 space-y-2 text-xs text-neutral-700">
                 <div className="flex justify-between">
                   <span className="font-semibold text-neutral-500">Organisation:</span>
@@ -207,10 +211,7 @@ function AcceptInviteContent() {
   );
 }
 
-export default function AcceptInvitePage(_props: {
-  params?: Promise<Record<string, string | string[] | undefined>>;
-  searchParams?: Promise<Record<string, string | string[] | undefined>>;
-}) {
+export default function AcceptInvitePage() {
   return (
     <Suspense fallback={<div className="p-8 text-center text-neutral-500">Loading page...</div>}>
       <AcceptInviteContent />

@@ -232,7 +232,9 @@ export class OrganisationService {
     });
 
     if (existingTeam) {
-      throw new ConflictError(`A team with name "${data.name}" already exists in this organisation.`);
+      throw new ConflictError(
+        `A team with name "${data.name}" already exists in this organisation.`,
+      );
     }
 
     const team = await this.prisma.team.create({
@@ -634,8 +636,7 @@ export class OrganisationService {
 
     const storageQuota = org.storageQuotaBytes;
     const storageUsed = org.storageUsedBytes;
-    const storageUsagePercent =
-      storageQuota > 0n ? Number((storageUsed * 100n) / storageQuota) : 0;
+    const storageUsagePercent = storageQuota > 0n ? Number((storageUsed * 100n) / storageQuota) : 0;
 
     const documentUsagePercent =
       org.maxDocuments > 0 ? Math.round((org.documentCount / org.maxDocuments) * 100) : 0;
@@ -712,12 +713,7 @@ export class OrganisationService {
       }
     }
 
-    await this.mailerService.sendOrganisationInvitationEmail(
-      email,
-      org.name,
-      data.role,
-      rawToken,
-    );
+    await this.mailerService.sendOrganisationInvitationEmail(email, org.name, data.role, rawToken);
 
     await this.auditService.log({
       organisationId: orgId,
@@ -868,11 +864,7 @@ export class OrganisationService {
   /**
    * Revokes a pending invitation.
    */
-  async revokeInvitation(
-    orgId: string,
-    invitationId: string,
-    actorUserId: string,
-  ): Promise<void> {
+  async revokeInvitation(orgId: string, invitationId: string, actorUserId: string): Promise<void> {
     const invitation = await this.prisma.organisationInvitation.findFirst({
       where: { id: invitationId, organisationId: orgId },
     });

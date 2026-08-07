@@ -169,11 +169,7 @@ export function createOrganisationRoutes(deps?: OrganisationDeps) {
     const targetOrg = userOrgs.find((o) => o.id === parsed.data.targetOrganisationId);
 
     if (!targetOrg) {
-      throw new AppError(
-        'FORBIDDEN',
-        'You do not have access to the target organisation.',
-        403,
-      );
+      throw new AppError('FORBIDDEN', 'You do not have access to the target organisation.', 403);
     }
 
     // Issue updated JWT with new org context
@@ -185,10 +181,7 @@ export function createOrganisationRoutes(deps?: OrganisationDeps) {
       jti: crypto.randomUUID(),
     });
 
-    c.header(
-      'Set-Cookie',
-      `graphsign_session=${token}; HttpOnly; Path=/; SameSite=Strict; Secure`,
-    );
+    c.header('Set-Cookie', `graphsign_session=${token}; HttpOnly; Path=/; SameSite=Strict; Secure`);
 
     return c.json({
       token,
@@ -351,11 +344,7 @@ export function createOrganisationRoutes(deps?: OrganisationDeps) {
 
     const payload = c.get('userPayload');
     const service = getService(c);
-    const updated = await service.updateComplianceSettings(
-      payload.orgId,
-      payload.sub,
-      parsed.data,
-    );
+    const updated = await service.updateComplianceSettings(payload.orgId, payload.sub, parsed.data);
 
     return c.json({
       allowedEsignStandards: updated.allowedEsignStandards,

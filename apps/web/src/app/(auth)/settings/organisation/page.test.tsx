@@ -30,14 +30,15 @@ describe('OrganisationSettingsPage', () => {
   });
 
   it('renders organisation settings header and tabs', async () => {
-    (global.fetch as any).mockImplementation((url: string) => {
-      if (url.includes('/organisations/me/branding')) {
+    vi.mocked(global.fetch).mockImplementation((url: RequestInfo | URL) => {
+      const urlStr = url.toString();
+      if (urlStr.includes('/organisations/me/branding')) {
         return Promise.resolve({
           ok: true,
           json: () => Promise.resolve({ logoUrl: null, primaryColor: '#ba0000' }),
-        });
+        } as Response);
       }
-      if (url.includes('/organisations/me/usage')) {
+      if (urlStr.includes('/organisations/me/usage')) {
         return Promise.resolve({
           ok: true,
           json: () =>
@@ -48,9 +49,9 @@ describe('OrganisationSettingsPage', () => {
               documentCount: 0,
               maxDocuments: 1000,
             }),
-        });
+        } as Response);
       }
-      if (url.includes('/organisations/me/compliance')) {
+      if (urlStr.includes('/organisations/me/compliance')) {
         return Promise.resolve({
           ok: true,
           json: () =>
@@ -58,13 +59,13 @@ describe('OrganisationSettingsPage', () => {
               allowedEsignStandards: ['ESIGN'],
               signatureReasonRequired: false,
             }),
-        });
+        } as Response);
       }
-      if (url.includes('/organisations/invitations')) {
+      if (urlStr.includes('/organisations/invitations')) {
         return Promise.resolve({
           ok: true,
           json: () => Promise.resolve([]),
-        });
+        } as Response);
       }
       return Promise.resolve({
         ok: true,
@@ -76,7 +77,7 @@ describe('OrganisationSettingsPage', () => {
             sessionTimeoutMinutes: 15,
             mfaRequired: false,
           }),
-      });
+      } as Response);
     });
 
     render(<OrganisationSettingsPage />);
@@ -93,10 +94,10 @@ describe('OrganisationSettingsPage', () => {
   });
 
   it('switches between tabs cleanly', async () => {
-    (global.fetch as any).mockResolvedValue({
+    vi.mocked(global.fetch).mockResolvedValue({
       ok: true,
       json: () => Promise.resolve({ name: 'Acme' }),
-    });
+    } as Response);
 
     render(<OrganisationSettingsPage />);
 
