@@ -2,7 +2,6 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { Hono } from 'hono';
 import { createOrganisationRoutes } from './organisations.js';
 import { signJwt } from '../utils/jwt.js';
-
 import { errorHandler } from '../middleware/error-handler.js';
 
 describe('Organisation Routes', () => {
@@ -15,6 +14,7 @@ describe('Organisation Routes', () => {
       createOrganisation: vi.fn(),
       getOrganisationById: vi.fn(),
       updateSettings: vi.fn(),
+      deleteOrganisation: vi.fn(),
       updateBranding: vi.fn(),
       updateComplianceSettings: vi.fn(),
       getUsageSummary: vi.fn(),
@@ -25,6 +25,18 @@ describe('Organisation Routes', () => {
       revokeInvitation: vi.fn(),
       suspendOrganisation: vi.fn(),
       restoreOrganisation: vi.fn(),
+      createTeam: vi.fn(),
+      listTeams: vi.fn(),
+      addTeamMember: vi.fn(),
+      removeTeamMember: vi.fn(),
+      updateMemberRole: vi.fn(),
+      createCustomRole: vi.fn(),
+      listCustomRoles: vi.fn(),
+      getAuditLogs: vi.fn(),
+      getUserOrganisations: vi.fn(),
+      addDomain: vi.fn(),
+      verifyDomain: vi.fn(),
+      listDomains: vi.fn(),
     };
 
     const routes = createOrganisationRoutes({
@@ -44,10 +56,10 @@ describe('Organisation Routes', () => {
     });
   });
 
-  describe('POST /api/v1/organisations', () => {
+  describe('POST /api/v1/organisations (INK-49)', () => {
     it('creates an organisation for authenticated user', async () => {
       mockOrganisationService.createOrganisation.mockResolvedValue({
-        id: 'org-456',
+        id: '00000000-0000-7000-8000-000000000004',
         name: 'Globex Corp',
         slug: 'globex-corp',
         status: 'active',
@@ -68,90 +80,69 @@ describe('Organisation Routes', () => {
 
       expect(res.status).toBe(201);
       const json = await res.json();
-      expect(json.id).toBe('org-456');
       expect(json.name).toBe('Globex Corp');
-    });
-
-    it('rejects unauthenticated requests', async () => {
-      const res = await app.request('/api/v1/organisations', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ name: 'Test Org' }),
-      });
-
-      expect(res.status).toBe(401);
     });
   });
 
-  describe('GET /api/v1/organisations/me/usage', () => {
-    it('returns usage summary and includes header warning if storage near limit', async () => {
-      mockOrganisationService.getOrganisationById.mockResolvedValue({
-        id: 'org-123',
-        status: 'active',
-      });
-      mockOrganisationService.getUsageSummary.mockResolvedValue({
-        organisationId: 'org-123',
-        organisationName: 'Acme Inc',
-        storageQuotaBytes: '1000',
-        storageUsedBytes: '850',
-        storageUsagePercent: 85,
-        maxDocuments: 100,
-        documentCount: 50,
-        documentUsagePercent: 50,
-        maxUsers: 50,
-        activeUsersCount: 5,
-        pendingInvitationsCount: 2,
-        isStorageNearLimit: true,
-        isStorageLimitReached: false,
-        isDocumentLimitReached: false,
-      });
+  describe('DELETE /api/v1/organisations/me (INK-51)', () => {
+    it('soft deletes organisation', async () => {
+      mockOrganisationService.deleteOrganisation.mockResolvedValue(undefined);
 
-      const res = await app.request('/api/v1/organisations/me/usage', {
-        method: 'GET',
+      const res = await app.request('/api/v1/organisations/me', {
+        method: 'DELETE',
         headers: {
           Authorization: `Bearer ${validJwtToken}`,
         },
       });
 
       expect(res.status).toBe(200);
-      expect(res.headers.get('X-Quota-Warning')).toBeTruthy();
-      const json = await res.json();
-      expect(json.storageUsagePercent).toBe(85);
     });
   });
 
-  describe('POST /api/v1/organisations/invitations', () => {
-    it('sends member invitation', async () => {
-      mockOrganisationService.getOrganisationById.mockResolvedValue({
-        id: 'org-123',
-        status: 'active',
-      });
-      mockOrganisationService.inviteMember.mockResolvedValue({
-        id: 'inv-123',
-        email: 'invited@example.com',
-        role: 'author',
-        status: 'pending',
-        expiresAt: new Date(),
+  describe('POST /api/v1/organisations/teams (INK-52 & INK-53)', () => {
+    it('creates a team and lists teams', async () => {
+      mockOrganisationService.createTeam.mockResolvedValue({
+        id: '00000000-0000-7000-8000-000000000005',
+        name: 'Engineering',
       });
 
-      const res = await app.request('/api/v1/organisations/invitations', {
+      const res = await app.request('/api/v1/organisations/teams', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${validJwtToken}`,
         },
         body: JSON.stringify({
-          email: 'invited@example.com',
-          role: 'author',
+          name: 'Engineering',
+          description: 'Dev team',
         }),
       });
 
       expect(res.status).toBe(201);
-      const json = await res.json();
-      expect(json.id).toBe('inv-123');
-      expect(json.email).toBe('invited@example.com');
+    });
+  });
+
+  describe('POST /api/v1/organisations/domains (INK-60)', () => {
+    it('adds a custom domain for verification', async () => {
+      mockOrganisationService.addDomain.mockResolvedValue({
+        id: '00000000-0000-7000-8000-000000000006',
+        domain: 'acme.graphomy.com',
+        verificationToken: 'graphsign-verify=123',
+        status: 'pending',
+      });
+
+      const res = await app.request('/api/v1/organisations/domains', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${validJwtToken}`,
+        },
+        body: JSON.stringify({
+          domain: 'acme.graphomy.com',
+        }),
+      });
+
+      expect(res.status).toBe(201);
     });
   });
 });

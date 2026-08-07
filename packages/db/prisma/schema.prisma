@@ -47,9 +47,13 @@ model Organisation {
   updatedAt             DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
   deletedAt             DateTime? @map("deleted_at") @db.Timestamptz()
 
-  users       User[]
-  invitations OrganisationInvitation[]
-  auditLogs   AuditLog[]
+  users        User[]
+  memberships  UserOrganisation[]
+  invitations  OrganisationInvitation[]
+  teams        Team[]
+  customRoles  CustomRole[]
+  domains      OrganisationDomain[]
+  auditLogs    AuditLog[]
 
   @@index([slug])
   @@index([status])
@@ -84,12 +88,31 @@ model User {
   deletedAt                       DateTime? @map("deleted_at") @db.Timestamptz()
 
   organisation    Organisation             @relation(fields: [organisationId], references: [id])
+  memberships     UserOrganisation[]
   sentInvitations OrganisationInvitation[]
+  ledTeams        Team[]                   @relation("TeamLead")
+  teamMemberships TeamMember[]
   auditLogs       AuditLog[]
 
   @@unique([organisationId, email])
   @@index([status])
   @@map("users")
+}
+
+/// Multi-tenant membership link between Users and Organisations
+model UserOrganisation {
+  id             String   @id @db.Uuid
+  userId         String   @map("user_id") @db.Uuid
+  organisationId String   @map("organisation_id") @db.Uuid
+  role           String   @default("user") @db.VarChar(50)
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz()
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organisation Organisation @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+
+  @@unique([organisationId, userId])
+  @@map("user_organisations")
 }
 
 /// Member invitation to join an organisation
@@ -112,6 +135,73 @@ model OrganisationInvitation {
   @@index([organisationId, email])
   @@index([status])
   @@map("organisation_invitations")
+}
+
+/// Teams within an organisation
+model Team {
+  id             String    @id @db.Uuid
+  organisationId String    @map("organisation_id") @db.Uuid
+  name           String    @db.VarChar(255)
+  description    String?   @db.VarChar(512)
+  leadId         String?   @map("lead_id") @db.Uuid
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
+  deletedAt      DateTime? @map("deleted_at") @db.Timestamptz()
+
+  organisation Organisation @relation(fields: [organisationId], references: [id])
+  lead         User?        @relation("TeamLead", fields: [leadId], references: [id])
+  members      TeamMember[]
+
+  @@unique([organisationId, name])
+  @@index([organisationId])
+  @@map("teams")
+}
+
+/// Team memberships
+model TeamMember {
+  id        String   @id @db.Uuid
+  teamId    String   @map("team_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, userId])
+  @@map("team_members")
+}
+
+/// Custom roles with granular permission arrays
+model CustomRole {
+  id             String   @id @db.Uuid
+  organisationId String   @map("organisation_id") @db.Uuid
+  name           String   @db.VarChar(100)
+  description    String?  @db.VarChar(255)
+  permissions    Json     @db.JsonB
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz()
+
+  organisation Organisation @relation(fields: [organisationId], references: [id])
+
+  @@unique([organisationId, name])
+  @@map("custom_roles")
+}
+
+/// Organisation custom domain verification
+model OrganisationDomain {
+  id                String    @id @db.Uuid
+  organisationId    String    @map("organisation_id") @db.Uuid
+  domain            String    @unique @db.VarChar(255)
+  verificationToken String    @map("verification_token") @db.VarChar(255)
+  status            String    @default("pending") @db.VarChar(20)
+  verifiedAt        DateTime? @map("verified_at") @db.Timestamptz()
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
+
+  organisation Organisation @relation(fields: [organisationId], references: [id])
+
+  @@index([organisationId])
+  @@map("organisation_domains")
 }
 
 /// Immutable, append-only, hash-chained audit trail.

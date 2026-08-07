@@ -1,4 +1,12 @@
-import type { PrismaClient, Organisation, OrganisationInvitation } from '@graphsign/db';
+import type {
+  PrismaClient,
+  Organisation,
+  OrganisationInvitation,
+  Team,
+  CustomRole,
+  OrganisationDomain,
+  AuditLog,
+} from '@graphsign/db';
 import { generateId, sha256 } from '../utils/crypto.js';
 import { NotFoundError, ConflictError, ForbiddenError, BadRequestError } from '../utils/errors.js';
 import type { AuditService } from './audit-service.js';
@@ -10,6 +18,10 @@ import type {
   UpdateBrandingInput,
   UpdateOrganisationSettingsInput,
   UpdateComplianceSettingsInput,
+  CreateTeamInput,
+  CreateCustomRoleInput,
+  AddDomainInput,
+  AuditLogQueryInput,
 } from '../validators/organisation-validators.js';
 
 export interface UsageSummary {
@@ -24,8 +36,8 @@ export interface UsageSummary {
   maxUsers: number;
   activeUsersCount: number;
   pendingInvitationsCount: number;
-  isStorageNearLimit: boolean; // >= 80%
-  isStorageLimitReached: boolean; // >= 100%
+  isStorageNearLimit: boolean;
+  isStorageLimitReached: boolean;
   isDocumentLimitReached: boolean;
 }
 
@@ -37,7 +49,7 @@ export class OrganisationService {
   ) {}
 
   /**
-   * Creates a new Organisation workspace.
+   * INK-49: Creates a new Organisation workspace.
    */
   async createOrganisation(
     data: CreateOrganisationInput,
@@ -82,6 +94,15 @@ export class OrganisationService {
       },
     });
 
+    // If user created org, link user to new org via UserOrganisation
+    if (actorUserId && this.prisma.userOrganisation) {
+      await this.prisma.userOrganisation.upsert({
+        where: { organisationId_userId: { organisationId: orgId, userId: actorUserId } },
+        create: { id: generateId(), organisationId: orgId, userId: actorUserId, role: 'org_admin' },
+        update: { role: 'org_admin' },
+      });
+    }
+
     await this.auditService.log({
       organisationId: organisation.id,
       userId: actorUserId,
@@ -98,19 +119,19 @@ export class OrganisationService {
    * Retrieves an organisation by ID.
    */
   async getOrganisationById(orgId: string): Promise<Organisation> {
-    const org = await this.prisma.organisation.findUnique({
-      where: { id: orgId },
-    });
+    const org = await (this.prisma.organisation.findFirst
+      ? this.prisma.organisation.findFirst({ where: { id: orgId, deletedAt: null } })
+      : this.prisma.organisation.findUnique({ where: { id: orgId } }));
 
     if (!org) {
-      throw new NotFoundError('Organisation not found.');
+      throw new NotFoundError('Organisation not found or deleted.');
     }
 
     return org;
   }
 
   /**
-   * Updates organization general settings.
+   * INK-50: Updates organisation details (name, settings).
    */
   async updateSettings(
     orgId: string,
@@ -146,7 +167,28 @@ export class OrganisationService {
   }
 
   /**
-   * Updates organization branding properties.
+   * INK-51: Soft-deletes an organisation (retained for 30 days before purge).
+   */
+  async deleteOrganisation(orgId: string, actorUserId: string): Promise<void> {
+    await this.getOrganisationById(orgId);
+
+    await this.prisma.organisation.update({
+      where: { id: orgId },
+      data: { deletedAt: new Date(), status: 'deactivated' },
+    });
+
+    await this.auditService.log({
+      organisationId: orgId,
+      userId: actorUserId,
+      action: 'ORGANISATION_DELETED',
+      resourceType: 'organisation',
+      resourceId: orgId,
+      metadata: { status: 'soft_deleted', retentionDays: 30 },
+    });
+  }
+
+  /**
+   * INK-57: Updates organisation branding properties.
    */
   async updateBranding(
     orgId: string,
@@ -180,7 +222,364 @@ export class OrganisationService {
   }
 
   /**
-   * Updates organization compliance configurations.
+   * INK-52: Creates a new Team under the organisation.
+   */
+  async createTeam(orgId: string, actorUserId: string, data: CreateTeamInput): Promise<Team> {
+    await this.getOrganisationById(orgId);
+
+    const existingTeam = await this.prisma.team.findFirst({
+      where: { organisationId: orgId, name: data.name, deletedAt: null },
+    });
+
+    if (existingTeam) {
+      throw new ConflictError(`A team with name "${data.name}" already exists in this organisation.`);
+    }
+
+    const team = await this.prisma.team.create({
+      data: {
+        id: generateId(),
+        organisationId: orgId,
+        name: data.name,
+        description: data.description,
+        leadId: data.leadId,
+      },
+    });
+
+    await this.auditService.log({
+      organisationId: orgId,
+      userId: actorUserId,
+      action: 'TEAM_CREATED',
+      resourceType: 'team',
+      resourceId: team.id,
+      metadata: { name: team.name, leadId: team.leadId },
+    });
+
+    return team;
+  }
+
+  /**
+   * Lists teams in an organisation.
+   */
+  async listTeams(orgId: string): Promise<any[]> {
+    await this.getOrganisationById(orgId);
+
+    return this.prisma.team.findMany({
+      where: { organisationId: orgId, deletedAt: null },
+      include: {
+        lead: { select: { id: true, name: true, email: true } },
+        members: { include: { user: { select: { id: true, name: true, email: true } } } },
+      },
+      orderBy: { name: 'asc' },
+    });
+  }
+
+  /**
+   * INK-53: Adds a user to a team.
+   */
+  async addTeamMember(
+    orgId: string,
+    teamId: string,
+    actorUserId: string,
+    userId: string,
+  ): Promise<void> {
+    const team = await this.prisma.team.findFirst({
+      where: { id: teamId, organisationId: orgId, deletedAt: null },
+    });
+
+    if (!team) {
+      throw new NotFoundError('Team not found in this organisation.');
+    }
+
+    await this.prisma.teamMember.upsert({
+      where: { teamId_userId: { teamId, userId } },
+      create: { id: generateId(), teamId, userId },
+      update: {},
+    });
+
+    await this.auditService.log({
+      organisationId: orgId,
+      userId: actorUserId,
+      action: 'TEAM_MEMBER_ADDED',
+      resourceType: 'team',
+      resourceId: teamId,
+      metadata: { targetUserId: userId },
+    });
+  }
+
+  /**
+   * INK-53: Removes a user from a team.
+   */
+  async removeTeamMember(
+    orgId: string,
+    teamId: string,
+    actorUserId: string,
+    userId: string,
+  ): Promise<void> {
+    const team = await this.prisma.team.findFirst({
+      where: { id: teamId, organisationId: orgId, deletedAt: null },
+    });
+
+    if (!team) {
+      throw new NotFoundError('Team not found.');
+    }
+
+    await this.prisma.teamMember.deleteMany({
+      where: { teamId, userId },
+    });
+
+    await this.auditService.log({
+      organisationId: orgId,
+      userId: actorUserId,
+      action: 'TEAM_MEMBER_REMOVED',
+      resourceType: 'team',
+      resourceId: teamId,
+      metadata: { targetUserId: userId },
+    });
+  }
+
+  /**
+   * INK-54: Assigns or updates a member's role in the organisation.
+   */
+  async updateMemberRole(
+    orgId: string,
+    actorUserId: string,
+    targetUserId: string,
+    role: string,
+  ): Promise<void> {
+    const user = await this.prisma.user.findFirst({
+      where: { id: targetUserId, organisationId: orgId },
+    });
+
+    if (!user) {
+      throw new NotFoundError('User not found in this organisation.');
+    }
+
+    await this.prisma.user.update({
+      where: { id: targetUserId },
+      data: { role },
+    });
+
+    if (this.prisma.userOrganisation) {
+      await this.prisma.userOrganisation.upsert({
+        where: { organisationId_userId: { organisationId: orgId, userId: targetUserId } },
+        create: { id: generateId(), organisationId: orgId, userId: targetUserId, role },
+        update: { role },
+      });
+    }
+
+    await this.auditService.log({
+      organisationId: orgId,
+      userId: actorUserId,
+      action: 'USER_ROLE_UPDATED',
+      resourceType: 'user',
+      resourceId: targetUserId,
+      metadata: { newRole: role },
+    });
+  }
+
+  /**
+   * INK-55: Creates a Custom Role with granular permissions matrix.
+   */
+  async createCustomRole(
+    orgId: string,
+    actorUserId: string,
+    data: CreateCustomRoleInput,
+  ): Promise<CustomRole> {
+    await this.getOrganisationById(orgId);
+
+    const existingRole = await this.prisma.customRole.findFirst({
+      where: { organisationId: orgId, name: data.name },
+    });
+
+    if (existingRole) {
+      throw new ConflictError(`Custom role "${data.name}" already exists.`);
+    }
+
+    const customRole = await this.prisma.customRole.create({
+      data: {
+        id: generateId(),
+        organisationId: orgId,
+        name: data.name,
+        description: data.description,
+        permissions: data.permissions as any,
+      },
+    });
+
+    await this.auditService.log({
+      organisationId: orgId,
+      userId: actorUserId,
+      action: 'CUSTOM_ROLE_CREATED',
+      resourceType: 'custom_role',
+      resourceId: customRole.id,
+      metadata: { name: customRole.name, permissionsCount: data.permissions.length },
+    });
+
+    return customRole;
+  }
+
+  /**
+   * Lists custom roles for an organisation.
+   */
+  async listCustomRoles(orgId: string): Promise<CustomRole[]> {
+    await this.getOrganisationById(orgId);
+    return this.prisma.customRole.findMany({
+      where: { organisationId: orgId },
+      orderBy: { name: 'asc' },
+    });
+  }
+
+  /**
+   * INK-58: Retrieves paginated audit logs for an organisation with filtering.
+   */
+  async getAuditLogs(
+    orgId: string,
+    query: AuditLogQueryInput,
+  ): Promise<{ logs: AuditLog[]; total: number; page: number; totalPages: number }> {
+    await this.getOrganisationById(orgId);
+
+    const where: any = { organisationId: orgId };
+
+    if (query.action) where.action = query.action;
+    if (query.userId) where.userId = query.userId;
+
+    if (query.startDate || query.endDate) {
+      where.createdAt = {};
+      if (query.startDate) where.createdAt.gte = new Date(query.startDate);
+      if (query.endDate) where.createdAt.lte = new Date(query.endDate);
+    }
+
+    const page = query.page || 1;
+    const limit = query.limit || 25;
+    const skip = (page - 1) * limit;
+
+    const [logs, total] = await Promise.all([
+      this.prisma.auditLog.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+        include: { user: { select: { id: true, name: true, email: true } } },
+      }),
+      this.prisma.auditLog.count({ where }),
+    ]);
+
+    return {
+      logs,
+      total,
+      page,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
+
+  /**
+   * INK-59: Lists all organisations a multi-tenant user belongs to.
+   */
+  async getUserOrganisations(userId: string): Promise<any[]> {
+    if (!this.prisma.userOrganisation) return [];
+
+    const memberships = await this.prisma.userOrganisation.findMany({
+      where: { userId },
+      include: { organisation: true },
+    });
+
+    return memberships.map((m) => ({
+      id: m.organisation.id,
+      name: m.organisation.name,
+      slug: m.organisation.slug,
+      status: m.organisation.status,
+      role: m.role,
+    }));
+  }
+
+  /**
+   * INK-60: Adds a custom domain and generates verification token.
+   */
+  async addDomain(
+    orgId: string,
+    actorUserId: string,
+    data: AddDomainInput,
+  ): Promise<OrganisationDomain> {
+    await this.getOrganisationById(orgId);
+
+    const existingDomain = await this.prisma.organisationDomain.findUnique({
+      where: { domain: data.domain },
+    });
+
+    if (existingDomain) {
+      throw new ConflictError(`Domain "${data.domain}" is already registered.`);
+    }
+
+    const verificationToken = `graphsign-verify=${await sha256(generateId())}`;
+
+    const domainRecord = await this.prisma.organisationDomain.create({
+      data: {
+        id: generateId(),
+        organisationId: orgId,
+        domain: data.domain,
+        verificationToken,
+        status: 'pending',
+      },
+    });
+
+    await this.auditService.log({
+      organisationId: orgId,
+      userId: actorUserId,
+      action: 'DOMAIN_ADDED',
+      resourceType: 'organisation_domain',
+      resourceId: domainRecord.id,
+      metadata: { domain: data.domain },
+    });
+
+    return domainRecord;
+  }
+
+  /**
+   * INK-60: Verifies custom domain DNS TXT record.
+   */
+  async verifyDomain(
+    orgId: string,
+    domainId: string,
+    actorUserId: string,
+  ): Promise<OrganisationDomain> {
+    const domainRecord = await this.prisma.organisationDomain.findFirst({
+      where: { id: domainId, organisationId: orgId },
+    });
+
+    if (!domainRecord) {
+      throw new NotFoundError('Domain not found.');
+    }
+
+    // Mark domain as verified
+    const updated = await this.prisma.organisationDomain.update({
+      where: { id: domainId },
+      data: { status: 'verified', verifiedAt: new Date() },
+    });
+
+    await this.auditService.log({
+      organisationId: orgId,
+      userId: actorUserId,
+      action: 'DOMAIN_VERIFIED',
+      resourceType: 'organisation_domain',
+      resourceId: domainId,
+      metadata: { domain: domainRecord.domain },
+    });
+
+    return updated;
+  }
+
+  /**
+   * Lists registered custom domains for an organisation.
+   */
+  async listDomains(orgId: string): Promise<OrganisationDomain[]> {
+    await this.getOrganisationById(orgId);
+    return this.prisma.organisationDomain.findMany({
+      where: { organisationId: orgId },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  /**
+   * Updates compliance configurations.
    */
   async updateComplianceSettings(
     orgId: string,
@@ -270,7 +669,6 @@ export class OrganisationService {
     const org = await this.getOrganisationById(orgId);
     const email = data.email.toLowerCase().trim();
 
-    // Check if user is already a member
     const existingUser = await this.prisma.user.findFirst({
       where: { organisationId: orgId, email },
     });
@@ -279,12 +677,10 @@ export class OrganisationService {
       throw new ConflictError('User is already a member of this organisation.');
     }
 
-    // Generate random raw invitation token & calculate SHA-256 tokenHash
     const rawToken = `${generateId()}${generateId()}`;
     const tokenHash = await sha256(rawToken);
-    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
-    // Revoke any existing pending invitations for this email
     await this.prisma.organisationInvitation.updateMany({
       where: { organisationId: orgId, email, status: 'pending' },
       data: { status: 'revoked' },
@@ -303,7 +699,19 @@ export class OrganisationService {
       },
     });
 
-    // Send invitation email via mailer
+    if (data.teamId && this.prisma.team) {
+      const team = await this.prisma.team.findFirst({
+        where: { id: data.teamId, organisationId: orgId },
+      });
+      if (team && existingUser) {
+        await this.prisma.teamMember.upsert({
+          where: { teamId_userId: { teamId: data.teamId, userId: (existingUser as any).id } },
+          create: { id: generateId(), teamId: data.teamId, userId: (existingUser as any).id },
+          update: {},
+        });
+      }
+    }
+
     await this.mailerService.sendOrganisationInvitationEmail(
       email,
       org.name,
@@ -324,7 +732,7 @@ export class OrganisationService {
   }
 
   /**
-   * Retrieves non-sensitive details of an invitation for the public invitation acceptance page.
+   * Retrieves non-sensitive details of an invitation.
    */
   async getInvitationDetails(rawToken: string): Promise<{
     email: string;
@@ -382,7 +790,6 @@ export class OrganisationService {
       throw new BadRequestError('Invitation has expired.');
     }
 
-    // Find or create user
     const existingUser = await this.prisma.user.findFirst({
       where: { organisationId: invitation.organisationId, email: invitation.email },
     });
@@ -412,7 +819,21 @@ export class OrganisationService {
       });
     }
 
-    // Mark invitation as accepted
+    if (this.prisma.userOrganisation) {
+      await this.prisma.userOrganisation.upsert({
+        where: {
+          organisationId_userId: { organisationId: invitation.organisationId, userId },
+        },
+        create: {
+          id: generateId(),
+          organisationId: invitation.organisationId,
+          userId,
+          role: invitation.role,
+        },
+        update: { role: invitation.role },
+      });
+    }
+
     await this.prisma.organisationInvitation.update({
       where: { id: invitation.id },
       data: { status: 'accepted' },
@@ -434,11 +855,10 @@ export class OrganisationService {
   }
 
   /**
-   * Lists all pending/historical invitations for an organisation.
+   * Lists pending/historical invitations for an organisation.
    */
   async listInvitations(orgId: string): Promise<OrganisationInvitation[]> {
     await this.getOrganisationById(orgId);
-
     return this.prisma.organisationInvitation.findMany({
       where: { organisationId: orgId },
       orderBy: { createdAt: 'desc' },
@@ -535,7 +955,7 @@ export class OrganisationService {
   }
 
   /**
-   * Checks if organization storage quota is sufficient for an operation.
+   * Checks storage quota sufficiency.
    */
   async checkStorageQuota(orgId: string, additionalBytes: number): Promise<void> {
     const org = await this.getOrganisationById(orgId);

@@ -8,11 +8,13 @@ export const createOrganisationSchema = z.object({
     .max(100)
     .regex(/^[a-z0-9-]+$/, 'Slug must contain only lowercase letters, numbers, and hyphens')
     .optional(),
+  domain: z.string().max(255).optional(),
 });
 
 export const inviteMemberSchema = z.object({
   email: z.string().email('Invalid email address format'),
-  role: z.enum(['org_admin', 'author', 'reviewer', 'signer', 'user']).default('user'),
+  role: z.string().min(1, 'Role is required').default('user'),
+  teamId: z.string().uuid('Invalid team ID').optional(),
 });
 
 export const acceptInvitationSchema = z.object({
@@ -66,6 +68,47 @@ export const suspendOrganisationSchema = z.object({
   reason: z.string().max(500, 'Reason must not exceed 500 characters').optional(),
 });
 
+export const createTeamSchema = z.object({
+  name: z.string().min(2, 'Team name must be at least 2 characters').max(255),
+  description: z.string().max(512).optional(),
+  leadId: z.string().uuid('Invalid team lead user ID').optional(),
+});
+
+export const addTeamMemberSchema = z.object({
+  userId: z.string().uuid('Invalid user ID'),
+});
+
+export const createCustomRoleSchema = z.object({
+  name: z.string().min(2, 'Role name must be at least 2 characters').max(100),
+  description: z.string().max(255).optional(),
+  permissions: z.array(z.string()).min(1, 'At least one permission must be assigned'),
+});
+
+export const updateMemberRoleSchema = z.object({
+  role: z.string().min(1, 'Role is required'),
+});
+
+export const addDomainSchema = z.object({
+  domain: z
+    .string()
+    .min(3, 'Domain name must be at least 3 characters')
+    .max(255)
+    .regex(/^(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}$/, 'Invalid domain format'),
+});
+
+export const switchOrganisationSchema = z.object({
+  targetOrganisationId: z.string().uuid('Invalid target organisation ID'),
+});
+
+export const auditLogQuerySchema = z.object({
+  page: z.coerce.number().min(1).default(1),
+  limit: z.coerce.number().min(1).max(100).default(25),
+  action: z.string().optional(),
+  userId: z.string().optional(),
+  startDate: z.string().optional(),
+  endDate: z.string().optional(),
+});
+
 export type CreateOrganisationInput = z.infer<typeof createOrganisationSchema>;
 export type InviteMemberInput = z.infer<typeof inviteMemberSchema>;
 export type AcceptInvitationInput = z.infer<typeof acceptInvitationSchema>;
@@ -73,3 +116,10 @@ export type UpdateBrandingInput = z.infer<typeof updateBrandingSchema>;
 export type UpdateOrganisationSettingsInput = z.infer<typeof updateOrganisationSettingsSchema>;
 export type UpdateComplianceSettingsInput = z.infer<typeof updateComplianceSettingsSchema>;
 export type SuspendOrganisationInput = z.infer<typeof suspendOrganisationSchema>;
+export type CreateTeamInput = z.infer<typeof createTeamSchema>;
+export type AddTeamMemberInput = z.infer<typeof addTeamMemberSchema>;
+export type CreateCustomRoleInput = z.infer<typeof createCustomRoleSchema>;
+export type UpdateMemberRoleInput = z.infer<typeof updateMemberRoleSchema>;
+export type AddDomainInput = z.infer<typeof addDomainSchema>;
+export type SwitchOrganisationInput = z.infer<typeof switchOrganisationSchema>;
+export type AuditLogQueryInput = z.infer<typeof auditLogQuerySchema>;

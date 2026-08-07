@@ -9,6 +9,13 @@ import {
   updateOrganisationSettingsSchema,
   updateComplianceSettingsSchema,
   suspendOrganisationSchema,
+  createTeamSchema,
+  addTeamMemberSchema,
+  createCustomRoleSchema,
+  updateMemberRoleSchema,
+  addDomainSchema,
+  switchOrganisationSchema,
+  auditLogQuerySchema,
 } from '../validators/organisation-validators.js';
 import { OrganisationService } from '../services/organisation-service.js';
 import type { MailerService } from '../services/mailer-service.js';
@@ -18,7 +25,8 @@ import { PrismaAuditService } from '../services/audit-service.js';
 import { AppError, ValidationError } from '../utils/errors.js';
 import { createRateLimiter } from '../middleware/rate-limiter.js';
 import { jwtAuth } from '../middleware/jwt-auth.js';
-import { enforceTenantActiveStatus } from '../middleware/tenant-status-middleware.ts';
+import { enforceTenantActiveStatus } from '../middleware/tenant-status-middleware.js';
+import { signJwt } from '../utils/jwt.js';
 import type { Env } from '../index.js';
 
 export interface OrganisationDeps {
@@ -29,13 +37,11 @@ export interface OrganisationDeps {
 }
 
 /**
- * Organisation router factory.
- * Provides REST v1 endpoints for FR-002 Organisation Management.
+ * Organisation router factory providing endpoints for INK-49 through INK-60.
  */
 export function createOrganisationRoutes(deps?: OrganisationDeps) {
   const orgs = new Hono<{ Bindings: Env }>();
 
-  // General API rate limiter
   orgs.use('/*', createRateLimiter(100, 60_000));
 
   function getService(c: any): OrganisationService {
@@ -78,10 +84,8 @@ export function createOrganisationRoutes(deps?: OrganisationDeps) {
   }
 
   /**
-   * Public invitation endpoints (No JWT required)
+   * Public invitation endpoints
    */
-
-  // GET /api/v1/organisations/invitations/details/:token
   orgs.get('/invitations/details/:token', async (c) => {
     const token = c.req.param('token');
     const service = getService(c);
@@ -89,7 +93,6 @@ export function createOrganisationRoutes(deps?: OrganisationDeps) {
     return c.json(details);
   });
 
-  // POST /api/v1/organisations/invitations/accept
   orgs.post('/invitations/accept', async (c) => {
     const body = await c.req.json().catch(() => null);
     if (!body) throw new ValidationError('Request body is required.');
@@ -109,10 +112,8 @@ export function createOrganisationRoutes(deps?: OrganisationDeps) {
   });
 
   /**
-   * Protected endpoints requiring JWT authentication
+   * INK-49: Create organisation
    */
-
-  // POST /api/v1/organisations (Create new organization workspace)
   orgs.post('/', jwtAuth(), async (c) => {
     const body = await c.req.json().catch(() => null);
     if (!body) throw new ValidationError('Request body is required.');
@@ -143,10 +144,66 @@ export function createOrganisationRoutes(deps?: OrganisationDeps) {
   });
 
   /**
-   * Organisation Admin / Member Endpoints (requires JWT & Tenant Active Status)
+   * INK-59: Multi-tenant Organisation Switching & Listing
+   */
+  orgs.get('/my-organisations', jwtAuth(), async (c) => {
+    const payload = c.get('userPayload');
+    const service = getService(c);
+    const list = await service.getUserOrganisations(payload.sub);
+    return c.json(list);
+  });
+
+  orgs.post('/switch', jwtAuth(), async (c) => {
+    const body = await c.req.json().catch(() => null);
+    if (!body) throw new ValidationError('Request body is required.');
+
+    const parsed = switchOrganisationSchema.safeParse(body);
+    if (!parsed.success) {
+      const firstError = parsed.error.errors[0];
+      throw new ValidationError(firstError?.message ?? 'Invalid input.');
+    }
+
+    const payload = c.get('userPayload');
+    const service = getService(c);
+    const userOrgs = await service.getUserOrganisations(payload.sub);
+    const targetOrg = userOrgs.find((o) => o.id === parsed.data.targetOrganisationId);
+
+    if (!targetOrg) {
+      throw new AppError(
+        'FORBIDDEN',
+        'You do not have access to the target organisation.',
+        403,
+      );
+    }
+
+    // Issue updated JWT with new org context
+    const token = await signJwt({
+      sub: payload.sub,
+      orgId: targetOrg.id,
+      email: payload.email,
+      role: targetOrg.role,
+      jti: crypto.randomUUID(),
+    });
+
+    c.header(
+      'Set-Cookie',
+      `graphsign_session=${token}; HttpOnly; Path=/; SameSite=Strict; Secure`,
+    );
+
+    return c.json({
+      token,
+      organisationId: targetOrg.id,
+      organisationName: targetOrg.name,
+      role: targetOrg.role,
+      message: `Switched active workspace to ${targetOrg.name}.`,
+    });
+  });
+
+  /**
+   * Protected Organisation Administration Endpoints
    */
 
-  // GET /api/v1/organisations/me (Get current organisation profile)
+  // GET /api/v1/organisations/me
   orgs.get('/me', jwtAuth(), enforceTenantActiveStatus(), async (c) => {
     const payload = c.get('userPayload');
     const service = getService(c);
@@ -164,7 +221,7 @@ export function createOrganisationRoutes(deps?: OrganisationDeps) {
     });
   });
 
-  // PATCH /api/v1/organisations/me/settings (Update organisation general settings)
+  // INK-50: PATCH /api/v1/organisations/me/settings
   orgs.patch('/me/settings', jwtAuth(), enforceTenantActiveStatus(), async (c) => {
     const body = await c.req.json().catch(() => null);
     if (!body) throw new ValidationError('Request body is required.');
@@ -172,10 +229,7 @@ export function createOrganisationRoutes(deps?: OrganisationDeps) {
     const parsed = updateOrganisationSettingsSchema.safeParse(body);
     if (!parsed.success) {
       const firstError = parsed.error.errors[0];
-      throw new ValidationError(firstError?.message ?? 'Invalid input.', {
-        field: firstError?.path.join('.') ?? 'unknown',
-        issue: firstError?.message ?? 'validation_failed',
-      });
+      throw new ValidationError(firstError?.message ?? 'Invalid input.');
     }
 
     const payload = c.get('userPayload');
@@ -187,12 +241,22 @@ export function createOrganisationRoutes(deps?: OrganisationDeps) {
       name: updated.name,
       sessionTimeoutMinutes: updated.sessionTimeoutMinutes,
       mfaRequired: updated.mfaRequired,
-      mfaRequiredRoles: updated.mfaRequiredRoles,
       message: 'Organisation settings updated successfully.',
     });
   });
 
-  // GET /api/v1/organisations/me/branding (Get organisation branding)
+  // INK-51: DELETE /api/v1/organisations/me (Soft delete)
+  orgs.delete('/me', jwtAuth(), enforceTenantActiveStatus(), async (c) => {
+    const payload = c.get('userPayload');
+    const service = getService(c);
+    await service.deleteOrganisation(payload.orgId, payload.sub);
+
+    return c.json({
+      message: 'Organisation soft-deleted successfully. Retained for 30 days.',
+    });
+  });
+
+  // INK-57: GET & PUT branding
   orgs.get('/me/branding', jwtAuth(), enforceTenantActiveStatus(), async (c) => {
     const payload = c.get('userPayload');
     const service = getService(c);
@@ -208,7 +272,6 @@ export function createOrganisationRoutes(deps?: OrganisationDeps) {
     });
   });
 
-  // PUT /api/v1/organisations/me/branding (Update organisation branding)
   orgs.put('/me/branding', jwtAuth(), enforceTenantActiveStatus(), async (c) => {
     const body = await c.req.json().catch(() => null);
     if (!body) throw new ValidationError('Request body is required.');
@@ -216,10 +279,7 @@ export function createOrganisationRoutes(deps?: OrganisationDeps) {
     const parsed = updateBrandingSchema.safeParse(body);
     if (!parsed.success) {
       const firstError = parsed.error.errors[0];
-      throw new ValidationError(firstError?.message ?? 'Invalid input.', {
-        field: firstError?.path.join('.') ?? 'unknown',
-        issue: firstError?.message ?? 'validation_failed',
-      });
+      throw new ValidationError(firstError?.message ?? 'Invalid input.');
     }
 
     const payload = c.get('userPayload');
@@ -237,7 +297,7 @@ export function createOrganisationRoutes(deps?: OrganisationDeps) {
     });
   });
 
-  // GET /api/v1/organisations/me/usage (Get organisation usage & storage summary)
+  // GET /api/v1/organisations/me/usage
   orgs.get('/me/usage', jwtAuth(), enforceTenantActiveStatus(), async (c) => {
     const payload = c.get('userPayload');
     const service = getService(c);
@@ -250,7 +310,22 @@ export function createOrganisationRoutes(deps?: OrganisationDeps) {
     return c.json(summary);
   });
 
-  // GET /api/v1/organisations/me/compliance (Get organisation compliance settings)
+  // INK-58: GET /api/v1/organisations/me/audit-logs (Paginated audit logs)
+  orgs.get('/me/audit-logs', jwtAuth(), enforceTenantActiveStatus(), async (c) => {
+    const queryParams = c.req.query();
+    const parsed = auditLogQuerySchema.safeParse(queryParams);
+    if (!parsed.success) {
+      throw new ValidationError('Invalid query parameters for audit log filter.');
+    }
+
+    const payload = c.get('userPayload');
+    const service = getService(c);
+    const result = await service.getAuditLogs(payload.orgId, parsed.data);
+
+    return c.json(result);
+  });
+
+  // GET & PUT compliance
   orgs.get('/me/compliance', jwtAuth(), enforceTenantActiveStatus(), async (c) => {
     const payload = c.get('userPayload');
     const service = getService(c);
@@ -264,7 +339,6 @@ export function createOrganisationRoutes(deps?: OrganisationDeps) {
     });
   });
 
-  // PUT /api/v1/organisations/me/compliance (Update organisation compliance settings)
   orgs.put('/me/compliance', jwtAuth(), enforceTenantActiveStatus(), async (c) => {
     const body = await c.req.json().catch(() => null);
     if (!body) throw new ValidationError('Request body is required.');
@@ -272,10 +346,7 @@ export function createOrganisationRoutes(deps?: OrganisationDeps) {
     const parsed = updateComplianceSettingsSchema.safeParse(body);
     if (!parsed.success) {
       const firstError = parsed.error.errors[0];
-      throw new ValidationError(firstError?.message ?? 'Invalid input.', {
-        field: firstError?.path.join('.') ?? 'unknown',
-        issue: firstError?.message ?? 'validation_failed',
-      });
+      throw new ValidationError(firstError?.message ?? 'Invalid input.');
     }
 
     const payload = c.get('userPayload');
@@ -295,7 +366,103 @@ export function createOrganisationRoutes(deps?: OrganisationDeps) {
     });
   });
 
-  // POST /api/v1/organisations/invitations (Invite member)
+  /**
+   * INK-52 & INK-53: Team Management Endpoints
+   */
+  orgs.get('/teams', jwtAuth(), enforceTenantActiveStatus(), async (c) => {
+    const payload = c.get('userPayload');
+    const service = getService(c);
+    const teams = await service.listTeams(payload.orgId);
+    return c.json(teams);
+  });
+
+  orgs.post('/teams', jwtAuth(), enforceTenantActiveStatus(), async (c) => {
+    const body = await c.req.json().catch(() => null);
+    if (!body) throw new ValidationError('Request body is required.');
+
+    const parsed = createTeamSchema.safeParse(body);
+    if (!parsed.success) {
+      const firstError = parsed.error.errors[0];
+      throw new ValidationError(firstError?.message ?? 'Invalid input.');
+    }
+
+    const payload = c.get('userPayload');
+    const service = getService(c);
+    const team = await service.createTeam(payload.orgId, payload.sub, parsed.data);
+
+    return c.json(team, 201);
+  });
+
+  orgs.post('/teams/:id/members', jwtAuth(), enforceTenantActiveStatus(), async (c) => {
+    const teamId = c.req.param('id');
+    const body = await c.req.json().catch(() => null);
+    if (!body) throw new ValidationError('Request body is required.');
+
+    const parsed = addTeamMemberSchema.safeParse(body);
+    if (!parsed.success) throw new ValidationError('Invalid user ID.');
+
+    const payload = c.get('userPayload');
+    const service = getService(c);
+    await service.addTeamMember(payload.orgId, teamId, payload.sub, parsed.data.userId);
+
+    return c.json({ message: 'Team member added successfully.' }, 201);
+  });
+
+  orgs.delete('/teams/:id/members/:userId', jwtAuth(), enforceTenantActiveStatus(), async (c) => {
+    const teamId = c.req.param('id');
+    const userId = c.req.param('userId');
+    const payload = c.get('userPayload');
+    const service = getService(c);
+    await service.removeTeamMember(payload.orgId, teamId, payload.sub, userId);
+
+    return c.json({ message: 'Team member removed successfully.' });
+  });
+
+  /**
+   * INK-54 & INK-55: Roles & Custom Roles Endpoints
+   */
+  orgs.patch('/members/:userId/role', jwtAuth(), enforceTenantActiveStatus(), async (c) => {
+    const targetUserId = c.req.param('userId');
+    const body = await c.req.json().catch(() => null);
+    if (!body) throw new ValidationError('Request body is required.');
+
+    const parsed = updateMemberRoleSchema.safeParse(body);
+    if (!parsed.success) throw new ValidationError('Invalid role payload.');
+
+    const payload = c.get('userPayload');
+    const service = getService(c);
+    await service.updateMemberRole(payload.orgId, payload.sub, targetUserId, parsed.data.role);
+
+    return c.json({ message: 'Member role updated successfully.' });
+  });
+
+  orgs.get('/roles', jwtAuth(), enforceTenantActiveStatus(), async (c) => {
+    const payload = c.get('userPayload');
+    const service = getService(c);
+    const roles = await service.listCustomRoles(payload.orgId);
+    return c.json(roles);
+  });
+
+  orgs.post('/roles', jwtAuth(), enforceTenantActiveStatus(), async (c) => {
+    const body = await c.req.json().catch(() => null);
+    if (!body) throw new ValidationError('Request body is required.');
+
+    const parsed = createCustomRoleSchema.safeParse(body);
+    if (!parsed.success) {
+      const firstError = parsed.error.errors[0];
+      throw new ValidationError(firstError?.message ?? 'Invalid custom role data.');
+    }
+
+    const payload = c.get('userPayload');
+    const service = getService(c);
+    const customRole = await service.createCustomRole(payload.orgId, payload.sub, parsed.data);
+
+    return c.json(customRole, 201);
+  });
+
+  /**
+   * INK-56: Invitations Endpoints
+   */
   orgs.post('/invitations', jwtAuth(), enforceTenantActiveStatus(), async (c) => {
     const body = await c.req.json().catch(() => null);
     if (!body) throw new ValidationError('Request body is required.');
@@ -303,10 +470,7 @@ export function createOrganisationRoutes(deps?: OrganisationDeps) {
     const parsed = inviteMemberSchema.safeParse(body);
     if (!parsed.success) {
       const firstError = parsed.error.errors[0];
-      throw new ValidationError(firstError?.message ?? 'Invalid input.', {
-        field: firstError?.path.join('.') ?? 'unknown',
-        issue: firstError?.message ?? 'validation_failed',
-      });
+      throw new ValidationError(firstError?.message ?? 'Invalid input.');
     }
 
     const payload = c.get('userPayload');
@@ -326,7 +490,6 @@ export function createOrganisationRoutes(deps?: OrganisationDeps) {
     );
   });
 
-  // GET /api/v1/organisations/invitations (List pending & historical invitations)
   orgs.get('/invitations', jwtAuth(), enforceTenantActiveStatus(), async (c) => {
     const payload = c.get('userPayload');
     const service = getService(c);
@@ -344,7 +507,6 @@ export function createOrganisationRoutes(deps?: OrganisationDeps) {
     );
   });
 
-  // DELETE /api/v1/organisations/invitations/:id (Revoke pending invitation)
   orgs.delete('/invitations/:id', jwtAuth(), enforceTenantActiveStatus(), async (c) => {
     const invitationId = c.req.param('id');
     const payload = c.get('userPayload');
@@ -355,10 +517,50 @@ export function createOrganisationRoutes(deps?: OrganisationDeps) {
   });
 
   /**
-   * Super Admin / System Endpoints
+   * INK-60: Domain Verification Endpoints
    */
+  orgs.get('/domains', jwtAuth(), enforceTenantActiveStatus(), async (c) => {
+    const payload = c.get('userPayload');
+    const service = getService(c);
+    const domains = await service.listDomains(payload.orgId);
+    return c.json(domains);
+  });
 
-  // POST /api/v1/organisations/:id/suspend
+  orgs.post('/domains', jwtAuth(), enforceTenantActiveStatus(), async (c) => {
+    const body = await c.req.json().catch(() => null);
+    if (!body) throw new ValidationError('Request body is required.');
+
+    const parsed = addDomainSchema.safeParse(body);
+    if (!parsed.success) {
+      const firstError = parsed.error.errors[0];
+      throw new ValidationError(firstError?.message ?? 'Invalid domain name.');
+    }
+
+    const payload = c.get('userPayload');
+    const service = getService(c);
+    const domainRecord = await service.addDomain(payload.orgId, payload.sub, parsed.data);
+
+    return c.json(domainRecord, 201);
+  });
+
+  orgs.post('/domains/:id/verify', jwtAuth(), enforceTenantActiveStatus(), async (c) => {
+    const domainId = c.req.param('id');
+    const payload = c.get('userPayload');
+    const service = getService(c);
+    const verified = await service.verifyDomain(payload.orgId, domainId, payload.sub);
+
+    return c.json({
+      id: verified.id,
+      domain: verified.domain,
+      status: verified.status,
+      verifiedAt: verified.verifiedAt?.toISOString(),
+      message: 'Domain verification successful.',
+    });
+  });
+
+  /**
+   * System Super Admin Endpoints
+   */
   orgs.post('/:id/suspend', jwtAuth(), async (c) => {
     const orgId = c.req.param('id');
     const body = await c.req.json().catch(() => ({}));
@@ -375,7 +577,6 @@ export function createOrganisationRoutes(deps?: OrganisationDeps) {
     });
   });
 
-  // POST /api/v1/organisations/:id/restore
   orgs.post('/:id/restore', jwtAuth(), async (c) => {
     const orgId = c.req.param('id');
     const payload = c.get('userPayload');
