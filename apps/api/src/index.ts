@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { errorHandler } from './middleware/error-handler.js';
 import { createAuthRoutes } from './routes/auth.js';
+import { createOrganisationRoutes } from './routes/organisations.js';
 
 /** Cloudflare Worker environment bindings. */
 export type Env = {
@@ -61,6 +62,7 @@ app.get('/health', (c) => c.json({ status: 'ok', timestamp: new Date().toISOStri
 
 // API v1 routes
 app.route('/api/v1/auth', createAuthRoutes());
+app.route('/api/v1/organisations', createOrganisationRoutes());
 
 // Workers export — no serve() call needed
 export default app;

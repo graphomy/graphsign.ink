@@ -48,4 +48,14 @@ export function getLegacyPrisma(): PrismaClient {
 }
 
 export { PrismaClient };
-export type { Organisation, User, AuditLog } from '@prisma/client';
+export type {
+  Organisation,
+  User,
+  AuditLog,
+  OrganisationInvitation,
+  Team,
+  TeamMember,
+  CustomRole,
+  OrganisationDomain,
+  UserOrganisation,
+} from '@prisma/client';
