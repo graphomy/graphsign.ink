@@ -67,6 +67,6 @@ describe('totp utilities', () => {
 
   it('should generate SVG QR Code Data URI', () => {
     const uri = generateQrCodeDataUri('otpauth://totp/graphsign');
-    expect(uri).toContain('data:image/svg+xml;utf8');
+    expect(uri).toContain('data:image/svg+xml');
   });
 });

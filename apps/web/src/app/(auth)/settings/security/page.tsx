@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import Link from 'next/link';
 import { SessionGuard } from '@/components/features/auth/SessionGuard';
+import { HeaderNav } from '@/components/layout/HeaderNav';
+import { Footer } from '@/components/layout/Footer';
 import { getApiUrl } from '@/lib/api';
 
 interface ProfileData {
@@ -262,27 +263,7 @@ function SecuritySettingsContent() {
       className="min-h-screen bg-neutral-50 flex flex-col font-sans"
       data-testid="security-settings-container"
     >
-      {/* Header */}
-      <header className="sticky top-0 z-10 border-b border-neutral-200 bg-white/80 backdrop-blur-md">
-        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center gap-3">
-            <Link href="/dashboard" className="flex items-center gap-2">
-              <span className="text-xl font-bold tracking-tight text-neutral-900">
-                graphsign<span className="text-[#ba0000]">.ink</span>
-              </span>
-            </Link>
-            <span className="rounded-full bg-neutral-100 px-2.5 py-0.5 text-xs font-medium text-neutral-600">
-              Security Settings
-            </span>
-          </div>
-          <Link
-            href="/dashboard"
-            className="text-xs font-semibold text-neutral-600 hover:text-neutral-900 transition-colors"
-          >
-            ← Back to Workspace
-          </Link>
-        </div>
-      </header>
+      <HeaderNav />
 
       {/* Main Content */}
       <main className="flex-1 py-8 px-4 sm:px-6 lg:px-8 max-w-4xl mx-auto w-full space-y-6">
@@ -574,6 +555,7 @@ function SecuritySettingsContent() {
           </form>
         </div>
       </main>
+      <Footer />
     </div>
   );
 }

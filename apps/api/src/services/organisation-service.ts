@@ -787,7 +787,7 @@ export class OrganisationService {
     }
 
     const existingUser = await this.prisma.user.findFirst({
-      where: { organisationId: invitation.organisationId, email: invitation.email },
+      where: { email: invitation.email },
     });
 
     let userId: string;
@@ -886,6 +886,53 @@ export class OrganisationService {
       resourceId: invitationId,
       metadata: { email: invitation.email },
     });
+  }
+
+  /**
+   * Resends an invitation with a fresh token and 7-day expiration.
+   */
+  async resendInvitation(orgId: string, invitationId: string, actorUserId: string) {
+    const org = await this.getOrganisationById(orgId);
+    const existing = await this.prisma.organisationInvitation.findFirst({
+      where: { id: invitationId, organisationId: orgId },
+    });
+
+    if (!existing) {
+      throw new NotFoundError('Invitation not found.');
+    }
+
+    const rawToken = `${generateId()}${generateId()}`;
+    const tokenHash = await sha256(rawToken);
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+    const updated = await this.prisma.organisationInvitation.update({
+      where: { id: invitationId },
+      data: {
+        tokenHash,
+        expiresAt,
+        status: 'pending',
+      },
+    });
+
+    await this.mailerService.sendOrganisationInvitationEmail(
+      existing.email,
+      org.name,
+      existing.role,
+      rawToken,
+    );
+
+    if (this.auditService) {
+      await this.auditService.log({
+        organisationId: orgId,
+        userId: actorUserId,
+        action: 'ORGANISATION_INVITATION_RESENT',
+        resourceType: 'organisation_invitation',
+        resourceId: invitationId,
+        metadata: { email: existing.email, role: existing.role },
+      });
+    }
+
+    return updated;
   }
 
   /**

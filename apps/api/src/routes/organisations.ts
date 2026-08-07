@@ -558,6 +558,22 @@ export function createOrganisationRoutes(deps?: OrganisationDeps) {
     return c.json({ message: 'Invitation revoked successfully.' });
   });
 
+  orgs.post('/invitations/:id/resend', jwtAuth(), enforceTenantActiveStatus(), async (c) => {
+    const invitationId = c.req.param('id');
+    const payload = c.get('userPayload');
+    const service = getService(c);
+    const updated = await service.resendInvitation(payload.orgId, invitationId, payload.sub);
+
+    return c.json({
+      id: updated.id,
+      email: updated.email,
+      role: updated.role,
+      status: updated.status,
+      expiresAt: updated.expiresAt.toISOString(),
+      message: 'Invitation resent successfully.',
+    });
+  });
+
   /**
    * INK-60: Domain Verification Endpoints
    */
