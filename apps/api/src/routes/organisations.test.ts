@@ -79,7 +79,7 @@ describe('Organisation Routes', () => {
       });
 
       expect(res.status).toBe(201);
-      const json = await res.json();
+      const json = (await res.json()) as any;
       expect(json.name).toBe('Globex Corp');
     });
   });

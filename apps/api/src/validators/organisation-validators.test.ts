@@ -127,4 +127,11 @@ describe('Organisation Validators', () => {
       expect(result.success).toBe(true);
     });
   });
+
+  describe('suspendOrganisationSchema', () => {
+    it('validates optional suspension reason', () => {
+      const result = suspendOrganisationSchema.safeParse({ reason: 'Terms violation' });
+      expect(result.success).toBe(true);
+    });
+  });
 });

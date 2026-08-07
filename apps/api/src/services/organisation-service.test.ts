@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { OrganisationService } from './organisation-service.js';
 import type { AuditService } from './audit-service.js';
 import type { MailerService } from './mailer-service.js';
-import { ConflictError, NotFoundError, BadRequestError, ForbiddenError } from '../utils/errors.js';
+import { ConflictError, ForbiddenError } from '../utils/errors.js';
 
 describe('OrganisationService', () => {
   let mockPrisma: any;
