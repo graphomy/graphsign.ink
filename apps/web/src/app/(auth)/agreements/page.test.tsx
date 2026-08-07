@@ -25,8 +25,8 @@ describe('AgreementManagementPage Unit Tests (Epic INK-8)', () => {
       expect(screen.getByText('Agreement Management')).toBeInTheDocument();
     });
 
-    expect(screen.getByText(/Upload PDF\/DOCX/i)).toBeInTheDocument();
-    expect(screen.getByText(/Create from Scratch/i)).toBeInTheDocument();
+    expect(screen.getByText('Upload Document')).toBeInTheDocument();
+    expect(screen.getByText('Create from Scratch')).toBeInTheDocument();
   });
 
   it('renders tab buttons for Active, Drafts, and Archived', async () => {
@@ -36,7 +36,7 @@ describe('AgreementManagementPage Unit Tests (Epic INK-8)', () => {
       expect(screen.getByText('Active Agreements')).toBeInTheDocument();
     });
 
-    expect(screen.getByText('Drafts')).toBeInTheDocument();
+    expect(screen.getByText(/Drafts/i)).toBeInTheDocument();
     expect(screen.getByText('Archived')).toBeInTheDocument();
   });
 });
