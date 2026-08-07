@@ -207,7 +207,10 @@ function AcceptInviteContent() {
   );
 }
 
-export default function AcceptInvitePage() {
+export default function AcceptInvitePage(_props: {
+  params?: Promise<Record<string, string | string[] | undefined>>;
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+}) {
   return (
     <Suspense fallback={<div className="p-8 text-center text-neutral-500">Loading page...</div>}>
       <AcceptInviteContent />

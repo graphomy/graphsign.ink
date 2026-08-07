@@ -721,7 +721,10 @@ function OrganisationSettingsContent() {
   );
 }
 
-export default function OrganisationSettingsPage() {
+export default function OrganisationSettingsPage(_props: {
+  params?: Promise<Record<string, string | string[] | undefined>>;
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+}) {
   return (
     <SessionGuard>
       <Suspense fallback={<div className="p-8 text-center text-neutral-500">Loading page...</div>}>
