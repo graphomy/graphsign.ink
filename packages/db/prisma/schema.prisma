@@ -1,6 +1,3 @@
-// Prisma schema for graphsign.ink
-// Source of truth: .claude/docs/database.md and .claude/docs/domain-model.md
-
 generator client {
   provider        = "prisma-client-js"
   previewFeatures = ["driverAdapters"]
@@ -11,21 +8,22 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-/// Tenant container — every business table references this via organisation_id.
+/// Tenant organisation model — multi-tenant isolation unit.
 model Organisation {
   id                    String    @id @db.Uuid
   name                  String    @db.VarChar(255)
   slug                  String    @unique @db.VarChar(100)
-  tenantId              String    @unique @map("tenant_id") @db.Uuid
+  tenantId              String    @unique @default(uuid()) @map("tenant_id") @db.Uuid
   status                String    @default("active") @db.VarChar(20)
+  domain                String?   @db.VarChar(255)
   sessionTimeoutMinutes Int       @default(15) @map("session_timeout_minutes")
   mfaRequired           Boolean   @default(false) @map("mfa_required")
   mfaRequiredRoles      Json?     @map("mfa_required_roles") @db.JsonB
-  
-  // Branding
+
+  // Branding Customisations
   logoUrl               String?   @map("logo_url") @db.VarChar(512)
-  primaryColor          String?   @map("primary_color") @db.VarChar(50)
-  secondaryColor        String?   @map("secondary_color") @db.VarChar(50)
+  primaryColor          String?   @default("#ba0000") @map("primary_color") @db.VarChar(7)
+  secondaryColor        String?   @default("#1e293b") @map("secondary_color") @db.VarChar(7)
   companyAddress        String?   @map("company_address") @db.VarChar(512)
   defaultSenderName     String?   @map("default_sender_name") @db.VarChar(255)
   emailFooterText       String?   @map("email_footer_text") @db.VarChar(1000)
@@ -53,6 +51,7 @@ model Organisation {
   teams        Team[]
   customRoles  CustomRole[]
   domains      OrganisationDomain[]
+  agreements   Agreement[]
   auditLogs    AuditLog[]
 
   @@index([slug])
@@ -92,6 +91,7 @@ model User {
   sentInvitations OrganisationInvitation[]
   ledTeams        Team[]                   @relation("TeamLead")
   teamMemberships TeamMember[]
+  agreements      Agreement[]
   auditLogs       AuditLog[]
 
   @@unique([organisationId, email])
@@ -99,65 +99,67 @@ model User {
   @@map("users")
 }
 
-/// Multi-tenant membership link between Users and Organisations
+/// UserOrganisation junction for multi-tenant users.
 model UserOrganisation {
   id             String   @id @db.Uuid
   userId         String   @map("user_id") @db.Uuid
   organisationId String   @map("organisation_id") @db.Uuid
   role           String   @default("user") @db.VarChar(50)
+  isDefault      Boolean  @default(false) @map("is_default")
   createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz()
   updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz()
 
   user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   organisation Organisation @relation(fields: [organisationId], references: [id], onDelete: Cascade)
 
-  @@unique([organisationId, userId])
+  @@unique([userId, organisationId])
+  @@index([userId])
+  @@index([organisationId])
   @@map("user_organisations")
 }
 
-/// Member invitation to join an organisation
+/// Organisation member invitation.
 model OrganisationInvitation {
   id             String    @id @db.Uuid
   organisationId String    @map("organisation_id") @db.Uuid
   email          String    @db.VarChar(255)
   role           String    @default("user") @db.VarChar(50)
-  tokenHash      String    @unique @map("token_hash") @db.VarChar(255)
-  expiresAt      DateTime  @map("expires_at") @db.Timestamptz()
+  teamId         String?   @map("team_id") @db.Uuid
+  tokenHash      String    @map("token_hash") @db.VarChar(255)
   invitedById    String    @map("invited_by_id") @db.Uuid
   status         String    @default("pending") @db.VarChar(20)
+  expiresAt      DateTime  @map("expires_at") @db.Timestamptz()
+  acceptedAt     DateTime? @map("accepted_at") @db.Timestamptz()
   createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz()
   updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
 
   organisation Organisation @relation(fields: [organisationId], references: [id])
   invitedBy    User         @relation(fields: [invitedById], references: [id])
 
-  @@index([tokenHash])
-  @@index([organisationId, email])
-  @@index([status])
+  @@index([organisationId])
+  @@index([email])
   @@map("organisation_invitations")
 }
 
-/// Teams within an organisation
+/// Team model for grouping users within an organisation.
 model Team {
-  id             String    @id @db.Uuid
-  organisationId String    @map("organisation_id") @db.Uuid
-  name           String    @db.VarChar(255)
-  description    String?   @db.VarChar(512)
-  leadId         String?   @map("lead_id") @db.Uuid
-  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz()
-  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
-  deletedAt      DateTime? @map("deleted_at") @db.Timestamptz()
+  id             String   @id @db.Uuid
+  organisationId String   @map("organisation_id") @db.Uuid
+  name           String   @db.VarChar(255)
+  description    String?  @db.VarChar(512)
+  leadId         String?  @map("lead_id") @db.Uuid
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz()
 
   organisation Organisation @relation(fields: [organisationId], references: [id])
   lead         User?        @relation("TeamLead", fields: [leadId], references: [id])
   members      TeamMember[]
 
   @@unique([organisationId, name])
-  @@index([organisationId])
   @@map("teams")
 }
 
-/// Team memberships
+/// TeamMember junction table
 model TeamMember {
   id        String   @id @db.Uuid
   teamId    String   @map("team_id") @db.Uuid
@@ -202,6 +204,57 @@ model OrganisationDomain {
 
   @@index([organisationId])
   @@map("organisation_domains")
+}
+
+/// Agreement model — lifecycle, document uploads, drafts, metadata, and archiving.
+model Agreement {
+  id             String    @id @db.Uuid
+  organisationId String    @map("organisation_id") @db.Uuid
+  authorId       String    @map("author_id") @db.Uuid
+  title          String    @db.VarChar(255)
+  description    String?   @db.VarChar(1000)
+  status         String    @default("DRAFT") @db.VarChar(50)
+  fileUrl        String?   @map("file_url") @db.VarChar(512)
+  fileName       String?   @map("file_name") @db.VarChar(255)
+  fileSize       Int?      @map("file_size")
+  mimeType       String?   @map("mime_type") @db.VarChar(100)
+  htmlContent    String?   @map("html_content") @db.Text
+  version        Int       @default(1)
+  isArchived     Boolean   @default(false) @map("is_archived")
+  archivedAt     DateTime? @map("archived_at") @db.Timestamptz()
+  tags           Json?     @db.JsonB
+  metadata       Json?     @db.JsonB
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
+  deletedAt      DateTime? @map("deleted_at") @db.Timestamptz()
+
+  organisation Organisation       @relation(fields: [organisationId], references: [id])
+  author       User               @relation(fields: [authorId], references: [id])
+  versions     AgreementVersion[]
+
+  @@index([organisationId])
+  @@index([authorId])
+  @@index([status])
+  @@index([isArchived])
+  @@map("agreements")
+}
+
+/// Agreement version history model.
+model AgreementVersion {
+  id            String   @id @db.Uuid
+  agreementId   String   @map("agreement_id") @db.Uuid
+  version       Int
+  title         String   @db.VarChar(255)
+  fileUrl       String?  @map("file_url") @db.VarChar(512)
+  htmlContent   String?  @map("html_content") @db.Text
+  changeSummary String?  @map("change_summary") @db.VarChar(512)
+  authorId      String   @map("author_id") @db.Uuid
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  agreement Agreement @relation(fields: [agreementId], references: [id], onDelete: Cascade)
+
+  @@unique([agreementId, version])
+  @@map("agreement_versions")
 }
 
 /// Immutable, append-only, hash-chained audit trail.

@@ -58,4 +58,6 @@ export type {
   CustomRole,
   OrganisationDomain,
   UserOrganisation,
+  Agreement,
+  AgreementVersion,
 } from '@prisma/client';

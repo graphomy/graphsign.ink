@@ -97,7 +97,7 @@ export class OrganisationService {
     // If user created org, link user to new org via UserOrganisation
     if (actorUserId && this.prisma.userOrganisation) {
       await this.prisma.userOrganisation.upsert({
-        where: { organisationId_userId: { organisationId: orgId, userId: actorUserId } },
+        where: { userId_organisationId: { userId: actorUserId, organisationId: orgId } },
         create: { id: generateId(), organisationId: orgId, userId: actorUserId, role: 'org_admin' },
         update: { role: 'org_admin' },
       });
@@ -228,7 +228,7 @@ export class OrganisationService {
     await this.getOrganisationById(orgId);
 
     const existingTeam = await this.prisma.team.findFirst({
-      where: { organisationId: orgId, name: data.name, deletedAt: null },
+      where: { organisationId: orgId, name: data.name },
     });
 
     if (existingTeam) {
@@ -266,7 +266,7 @@ export class OrganisationService {
     await this.getOrganisationById(orgId);
 
     return this.prisma.team.findMany({
-      where: { organisationId: orgId, deletedAt: null },
+      where: { organisationId: orgId },
       include: {
         lead: { select: { id: true, name: true, email: true } },
         members: { include: { user: { select: { id: true, name: true, email: true } } } },
@@ -285,7 +285,7 @@ export class OrganisationService {
     userId: string,
   ): Promise<void> {
     const team = await this.prisma.team.findFirst({
-      where: { id: teamId, organisationId: orgId, deletedAt: null },
+      where: { id: teamId, organisationId: orgId },
     });
 
     if (!team) {
@@ -318,7 +318,7 @@ export class OrganisationService {
     userId: string,
   ): Promise<void> {
     const team = await this.prisma.team.findFirst({
-      where: { id: teamId, organisationId: orgId, deletedAt: null },
+      where: { id: teamId, organisationId: orgId },
     });
 
     if (!team) {
@@ -363,7 +363,7 @@ export class OrganisationService {
 
     if (this.prisma.userOrganisation) {
       await this.prisma.userOrganisation.upsert({
-        where: { organisationId_userId: { organisationId: orgId, userId: targetUserId } },
+        where: { userId_organisationId: { userId: targetUserId, organisationId: orgId } },
         create: { id: generateId(), organisationId: orgId, userId: targetUserId, role },
         update: { role },
       });
@@ -737,7 +737,7 @@ export class OrganisationService {
     expiresAt: string;
   }> {
     const tokenHash = await sha256(rawToken);
-    const invitation = await this.prisma.organisationInvitation.findUnique({
+    const invitation = await this.prisma.organisationInvitation.findFirst({
       where: { tokenHash },
       include: { organisation: true },
     });
@@ -769,7 +769,7 @@ export class OrganisationService {
     data: AcceptInvitationInput,
   ): Promise<{ message: string; organisationId: string }> {
     const tokenHash = await sha256(data.token);
-    const invitation = await this.prisma.organisationInvitation.findUnique({
+    const invitation = await this.prisma.organisationInvitation.findFirst({
       where: { tokenHash },
       include: { organisation: true },
     });
@@ -818,7 +818,7 @@ export class OrganisationService {
     if (this.prisma.userOrganisation) {
       await this.prisma.userOrganisation.upsert({
         where: {
-          organisationId_userId: { organisationId: invitation.organisationId, userId },
+          userId_organisationId: { userId, organisationId: invitation.organisationId },
         },
         create: {
           id: generateId(),
