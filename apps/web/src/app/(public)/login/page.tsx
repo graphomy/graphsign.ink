@@ -82,6 +82,7 @@ function LoginContent() {
       }
 
       if (data?.token) {
+        localStorage.setItem('token', data.token);
         localStorage.setItem('graphsign_session_token', data.token);
         localStorage.setItem('graphsign_user_email', data.email);
         localStorage.setItem('graphsign_org_id', data.organisationId);

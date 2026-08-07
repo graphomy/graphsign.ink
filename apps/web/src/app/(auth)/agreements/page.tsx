@@ -33,6 +33,11 @@ interface VersionItem {
   createdAt: string;
 }
 
+function getToken(): string {
+  if (typeof window === 'undefined') return '';
+  return localStorage.getItem('token') || localStorage.getItem('graphsign_session_token') || '';
+}
+
 function AgreementManagementContent() {
   const [activeTab, setActiveTab] = useState<'active' | 'drafts' | 'archived'>('active');
   const [agreements, setAgreements] = useState<AgreementItem[]>([]);
@@ -52,7 +57,9 @@ function AgreementManagementContent() {
   const [uploadTitle, setUploadTitle] = useState('');
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [scratchTitle, setScratchTitle] = useState('');
-  const [scratchHtml, setScratchHtml] = useState('<p>Enter agreement terms here...</p>');
+  const [scratchHtml, setScratchHtml] = useState(
+    '<h1>Agreement Terms</h1><p>Enter agreement details and variables here...</p>',
+  );
   const [autosaveStatus, setAutosaveStatus] = useState<string>('');
   const [versions, setVersions] = useState<VersionItem[]>([]);
   const [tagInput, setTagInput] = useState('');
@@ -85,7 +92,7 @@ function AgreementManagementContent() {
 
         const res = await fetch(url, {
           headers: {
-            Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
+            Authorization: `Bearer ${getToken()}`,
           },
         });
 
@@ -124,6 +131,9 @@ function AgreementManagementContent() {
 
   async function handleUploadSubmit(e: React.FormEvent) {
     e.preventDefault();
+    setActionError(null);
+    setActionMessage(null);
+
     if (!uploadFile) {
       setActionError('Please select a file (PDF or DOCX)');
       return;
@@ -134,7 +144,7 @@ function AgreementManagementContent() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
+          Authorization: `Bearer ${getToken()}`,
         },
         body: JSON.stringify({
           title: uploadTitle || uploadFile.name,
@@ -145,8 +155,8 @@ function AgreementManagementContent() {
       });
 
       if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.message || 'Upload failed');
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.message || data?.error?.message || 'Upload failed');
       }
 
       setActionMessage('Agreement uploaded successfully as Draft.');
@@ -161,25 +171,33 @@ function AgreementManagementContent() {
 
   async function handleScratchSubmit(e: React.FormEvent) {
     e.preventDefault();
+    setActionError(null);
+    setActionMessage(null);
+
+    if (!scratchTitle || scratchTitle.trim().length < 2) {
+      setActionError('Agreement title must be at least 2 characters long.');
+      return;
+    }
+
     try {
       const res = await fetch(`${getApiUrl()}/api/v1/agreements/scratch`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
+          Authorization: `Bearer ${getToken()}`,
         },
         body: JSON.stringify({
-          title: scratchTitle,
+          title: scratchTitle.trim(),
           htmlContent: scratchHtml,
         }),
       });
 
       if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.message || 'Failed to create agreement');
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.message || data?.error?.message || 'Failed to create agreement');
       }
 
-      setActionMessage('Agreement created from scratch.');
+      setActionMessage('Agreement created from scratch successfully.');
       setShowScratchModal(false);
       setScratchTitle('');
       setRefreshTrigger((prev) => prev + 1);
@@ -189,34 +207,37 @@ function AgreementManagementContent() {
   }
 
   async function handleClone(id: string) {
+    setActionError(null);
     try {
       const res = await fetch(`${getApiUrl()}/api/v1/agreements/${id}/clone`, {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
+          Authorization: `Bearer ${getToken()}`,
         },
       });
 
       if (!res.ok) throw new Error('Failed to clone agreement');
-      setActionMessage('Agreement cloned into a new draft.');
+      setActionMessage('Agreement cloned successfully.');
       setRefreshTrigger((prev) => prev + 1);
     } catch (err: unknown) {
       setActionError((err as Error).message);
     }
   }
 
-  async function handleArchiveToggle(id: string, archive: boolean) {
+  async function handleArchiveToggle(id: string, isArchived: boolean) {
+    setActionError(null);
     try {
-      const endpoint = archive ? 'archive' : 'unarchive';
-      const res = await fetch(`${getApiUrl()}/api/v1/agreements/${id}/${endpoint}`, {
+      const res = await fetch(`${getApiUrl()}/api/v1/agreements/${id}/archive`, {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${getToken()}`,
         },
+        body: JSON.stringify({ isArchived }),
       });
 
-      if (!res.ok) throw new Error(`Failed to ${endpoint} agreement`);
-      setActionMessage(`Agreement ${archive ? 'archived' : 'unarchived'} successfully.`);
+      if (!res.ok) throw new Error('Failed to update archive status');
+      setActionMessage(`Agreement ${isArchived ? 'archived' : 'unarchived'} successfully.`);
       setRefreshTrigger((prev) => prev + 1);
     } catch (err: unknown) {
       setActionError((err as Error).message);
@@ -229,7 +250,7 @@ function AgreementManagementContent() {
     try {
       const res = await fetch(`${getApiUrl()}/api/v1/agreements/${agreement.id}/versions`, {
         headers: {
-          Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
+          Authorization: `Bearer ${getToken()}`,
         },
       });
       if (res.ok) {
@@ -241,22 +262,39 @@ function AgreementManagementContent() {
     }
   }
 
-  async function openMetadataModal(agreement: AgreementItem) {
+  function openMetadataModal(agreement: AgreementItem) {
     setSelectedAgreement(agreement);
     setTagsList(agreement.tags || []);
+    setTagInput('');
     setShowMetadataModal(true);
+  }
+
+  function handleAddTag() {
+    if (!tagInput.trim()) return;
+    const cleanTag = tagInput.trim().toLowerCase();
+    if (!tagsList.includes(cleanTag)) {
+      setTagsList([...tagsList, cleanTag]);
+    }
+    setTagInput('');
+  }
+
+  function handleRemoveTag(tagToRemove: string) {
+    setTagsList(tagsList.filter((t) => t !== tagToRemove));
   }
 
   async function handleSaveTags() {
     if (!selectedAgreement) return;
+    setActionError(null);
     try {
       const res = await fetch(`${getApiUrl()}/api/v1/agreements/${selectedAgreement.id}/metadata`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
+          Authorization: `Bearer ${getToken()}`,
         },
-        body: JSON.stringify({ tags: tagsList }),
+        body: JSON.stringify({
+          tags: tagsList,
+        }),
       });
 
       if (!res.ok) throw new Error('Failed to update tags');
@@ -271,30 +309,36 @@ function AgreementManagementContent() {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 p-6 md:p-12">
       <div className="max-w-7xl mx-auto space-y-8">
-        {/* Top Header */}
+        {/* Header */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800 pb-6">
           <div>
             <h1 className="text-3xl font-extrabold tracking-tight text-white flex items-center gap-3">
               <span className="p-2 rounded-xl bg-red-500/10 text-red-400 border border-red-500/20">
-                📄
+                📑
               </span>
               Agreement Management
             </h1>
             <p className="text-sm text-slate-400 mt-1">
-              Upload, draft, version, clone, archive, and manage contract lifecycles.
+              Upload documents, create agreements from scratch, manage versions and audit trails.
             </p>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 self-start md:self-auto">
             <button
-              onClick={() => setShowUploadModal(true)}
+              onClick={() => {
+                setActionError(null);
+                setShowUploadModal(true);
+              }}
               className="px-4 py-2.5 bg-red-600 hover:bg-red-500 text-white text-sm font-semibold rounded-xl transition-all shadow-lg shadow-red-600/20 flex items-center gap-2"
             >
-              <span>📤</span> Upload PDF/DOCX
+              <span>📄</span> Upload Document
             </button>
             <button
-              onClick={() => setShowScratchModal(true)}
-              className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-semibold rounded-xl border border-slate-700 transition-all flex items-center gap-2"
+              onClick={() => {
+                setActionError(null);
+                setShowScratchModal(true);
+              }}
+              className="px-4 py-2.5 border border-slate-700 bg-slate-800 hover:bg-slate-700 text-white text-sm font-semibold rounded-xl transition-all flex items-center gap-2"
             >
               <span>✏️</span> Create from Scratch
             </button>
@@ -319,7 +363,7 @@ function AgreementManagementContent() {
           </div>
         )}
 
-        {/* Navigation Tabs & Search */}
+        {/* Tabs & Search Filter */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-900/60 p-2 rounded-2xl border border-slate-800 backdrop-blur-md">
           <div className="flex items-center gap-2">
             <button
@@ -340,7 +384,7 @@ function AgreementManagementContent() {
                   : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
               }`}
             >
-              Drafts
+              Drafts Only
             </button>
             <button
               onClick={() => setActiveTab('archived')}
@@ -357,22 +401,22 @@ function AgreementManagementContent() {
           <div className="flex items-center gap-3">
             <input
               type="text"
-              placeholder="Search agreements..."
+              placeholder="Search title..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-sm text-slate-200 focus:outline-none focus:border-red-500"
             />
             <input
               type="text"
-              placeholder="Filter by tag..."
+              placeholder="Filter tag..."
               value={tagFilter}
               onChange={(e) => setTagFilter(e.target.value)}
-              className="bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-sm text-slate-200 focus:outline-none focus:border-red-500 w-36"
+              className="bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-sm text-slate-200 focus:outline-none focus:border-red-500 w-32"
             />
           </div>
         </div>
 
-        {/* Agreement Cards Grid */}
+        {/* Agreements Grid */}
         {loading ? (
           <div className="text-center py-16 text-slate-400">Loading agreements...</div>
         ) : agreements.length === 0 ? (
@@ -392,9 +436,9 @@ function AgreementManagementContent() {
                   <div className="flex items-center justify-between gap-2 mb-3">
                     <span
                       className={`text-xs font-semibold px-2.5 py-1 rounded-lg ${
-                        agreement.status === 'DRAFT'
-                          ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
-                          : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                        agreement.status === 'COMPLETED' || agreement.status === 'SEALED'
+                          ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                          : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
                       }`}
                     >
                       {agreement.status}
@@ -408,7 +452,7 @@ function AgreementManagementContent() {
                     {agreement.title}
                   </h3>
                   <p className="text-xs text-slate-400 mb-4 line-clamp-2">
-                    {agreement.description || 'No description provided.'}
+                    {agreement.description || agreement.fileName || 'No description provided.'}
                   </p>
 
                   {/* Tags */}
@@ -469,6 +513,11 @@ function AgreementManagementContent() {
           <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
             <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-lg w-full">
               <h2 className="text-xl font-bold text-white mb-4">Upload Agreement (PDF / DOCX)</h2>
+              {actionError && (
+                <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-xs">
+                  {actionError}
+                </div>
+              )}
               <form onSubmit={handleUploadSubmit} className="space-y-4">
                 <div>
                   <label className="block text-xs font-semibold text-slate-400 mb-1">
@@ -498,7 +547,10 @@ function AgreementManagementContent() {
                 <div className="flex justify-end gap-3 pt-4 border-t border-slate-800">
                   <button
                     type="button"
-                    onClick={() => setShowUploadModal(false)}
+                    onClick={() => {
+                      setActionError(null);
+                      setShowUploadModal(false);
+                    }}
                     className="px-4 py-2 text-sm text-slate-400 hover:text-white"
                   >
                     Cancel
@@ -525,13 +577,22 @@ function AgreementManagementContent() {
                   <span className="text-xs text-amber-400 italic">{autosaveStatus}</span>
                 )}
               </div>
+
+              {actionError && (
+                <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-xs">
+                  {actionError}
+                </div>
+              )}
+
               <form onSubmit={handleScratchSubmit} className="space-y-4">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-400 mb-1">Title</label>
+                  <label className="block text-xs font-semibold text-slate-400 mb-1">
+                    Agreement Title
+                  </label>
                   <input
                     type="text"
                     required
-                    placeholder="Agreement Title"
+                    placeholder="Enter agreement title (e.g. Consulting Services Agreement)"
                     value={scratchTitle}
                     onChange={(e) => setScratchTitle(e.target.value)}
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-slate-200"
@@ -551,7 +612,10 @@ function AgreementManagementContent() {
                 <div className="flex justify-end gap-3 pt-4 border-t border-slate-800">
                   <button
                     type="button"
-                    onClick={() => setShowScratchModal(false)}
+                    onClick={() => {
+                      setActionError(null);
+                      setShowScratchModal(false);
+                    }}
                     className="px-4 py-2 text-sm text-slate-400 hover:text-white"
                   >
                     Cancel
@@ -560,7 +624,7 @@ function AgreementManagementContent() {
                     type="submit"
                     className="px-5 py-2 bg-red-600 hover:bg-red-500 text-white text-sm font-semibold rounded-xl"
                   >
-                    Save & Create PDF
+                    Save & Create Draft
                   </button>
                 </div>
               </form>
@@ -568,11 +632,11 @@ function AgreementManagementContent() {
           </div>
         )}
 
-        {/* Version History Drawer/Modal (INK-69) */}
+        {/* Version History Modal (INK-72) */}
         {showVersionModal && selectedAgreement && (
           <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
             <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-lg w-full max-h-[80vh] overflow-y-auto">
-              <h2 className="text-xl font-bold text-white mb-2">Version History</h2>
+              <h2 className="text-xl font-bold text-white mb-2">Agreement Version History</h2>
               <p className="text-xs text-slate-400 mb-4">{selectedAgreement.title}</p>
 
               <div className="space-y-3">
@@ -585,7 +649,7 @@ function AgreementManagementContent() {
                       </span>
                     </div>
                     <p className="text-xs text-slate-400">
-                      {ver.changeSummary || 'No change summary'}
+                      {ver.changeSummary || 'Initial draft version.'}
                     </p>
                   </div>
                 ))}
@@ -603,61 +667,70 @@ function AgreementManagementContent() {
           </div>
         )}
 
-        {/* Metadata & Tag Editor Modal (INK-72) */}
+        {/* Metadata Modal (INK-69 Tags) */}
         {showMetadataModal && selectedAgreement && (
           <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-md w-full">
-              <h2 className="text-xl font-bold text-white mb-4">Edit Agreement Tags</h2>
+            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-lg w-full">
+              <h2 className="text-xl font-bold text-white mb-2">Edit Agreement Tags</h2>
+              <p className="text-xs text-slate-400 mb-4">{selectedAgreement.title}</p>
+
+              {actionError && (
+                <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-xs">
+                  {actionError}
+                </div>
+              )}
+
               <div className="space-y-4">
                 <div className="flex gap-2">
                   <input
                     type="text"
-                    placeholder="Add tag..."
+                    placeholder="Enter tag (e.g. hr, confidential)"
                     value={tagInput}
                     onChange={(e) => setTagInput(e.target.value)}
                     className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-sm text-slate-200"
                   />
                   <button
-                    type="button"
-                    onClick={() => {
-                      if (tagInput.trim() && !tagsList.includes(tagInput.trim())) {
-                        setTagsList([...tagsList, tagInput.trim()]);
-                        setTagInput('');
-                      }
-                    }}
-                    className="px-4 py-2 bg-red-600 text-white text-sm font-semibold rounded-xl"
+                    onClick={handleAddTag}
+                    className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold rounded-xl"
                   >
                     Add
                   </button>
                 </div>
 
-                <div className="flex flex-wrap gap-2">
-                  {tagsList.map((t, idx) => (
-                    <span
-                      key={idx}
-                      className="bg-slate-800 text-slate-200 px-3 py-1 rounded-lg text-xs flex items-center gap-2"
-                    >
-                      #{t}
-                      <button
-                        onClick={() => setTagsList(tagsList.filter((_, i) => i !== idx))}
-                        className="text-red-400 font-bold"
+                <div className="flex flex-wrap gap-2 min-h-[40px] p-3 bg-slate-950 rounded-xl border border-slate-800">
+                  {tagsList.length === 0 ? (
+                    <span className="text-xs text-slate-500 italic">No tags attached.</span>
+                  ) : (
+                    tagsList.map((tag) => (
+                      <span
+                        key={tag}
+                        className="inline-flex items-center gap-1.5 bg-slate-800 text-slate-200 px-3 py-1 rounded-lg text-xs"
                       >
-                        ×
-                      </button>
-                    </span>
-                  ))}
+                        #{tag}
+                        <button
+                          onClick={() => handleRemoveTag(tag)}
+                          className="text-slate-400 hover:text-white font-bold text-xs"
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))
+                  )}
                 </div>
 
                 <div className="flex justify-end gap-3 pt-4 border-t border-slate-800">
                   <button
-                    onClick={() => setShowMetadataModal(false)}
+                    onClick={() => {
+                      setActionError(null);
+                      setShowMetadataModal(false);
+                    }}
                     className="px-4 py-2 text-sm text-slate-400"
                   >
                     Cancel
                   </button>
                   <button
                     onClick={handleSaveTags}
-                    className="px-5 py-2 bg-red-600 text-white text-sm font-semibold rounded-xl"
+                    className="px-5 py-2 bg-red-600 hover:bg-red-500 text-white text-sm font-semibold rounded-xl"
                   >
                     Save Tags
                   </button>
