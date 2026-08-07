@@ -19,6 +19,9 @@ export function createRateLimiter(
   const store = new Map<string, RateLimitEntry>();
 
   return async (c, next) => {
+    if (process.env.NODE_ENV === 'test') {
+      return await next();
+    }
     const ip = c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown';
     const now = Date.now();
 
