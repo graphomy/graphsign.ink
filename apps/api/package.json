@@ -26,7 +26,7 @@
     "@cloudflare/workers-types": "^5.20260729.1",
     "@types/node": "^26.1.2",
     "@types/uuid": "^11.0.0",
-    "typescript": "^5.5.0",
+    "typescript": "^7.0.2",
     "vitest": "^3.2.6",
     "wrangler": "^4.115.0"
   }
