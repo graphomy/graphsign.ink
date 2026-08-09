@@ -108,7 +108,7 @@ describe('OrganisationSettingsPage', () => {
     fireEvent.click(screen.getByTestId('tab-branding'));
     expect(screen.getByTestId('branding-form')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByTestId('tab-[#members]' ? 'tab-members' : 'tab-members'));
+    fireEvent.click(screen.getByTestId('tab-members'));
     expect(screen.getByTestId('members-section')).toBeInTheDocument();
   });
 });

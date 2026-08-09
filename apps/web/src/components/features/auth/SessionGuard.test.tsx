@@ -11,10 +11,8 @@ describe('SessionGuard', () => {
     localStorage.setItem('graphsign_session_token', 'test-token');
 
     // Mock window.location
-    // @ts-expect-error Mocking window.location for test environment
-    delete window.location;
-    // @ts-expect-error Mocking window.location for test environment
-    window.location = {
+    delete (window as unknown as Record<string, unknown>).location;
+    (window as unknown as Record<string, unknown>).location = {
       href: '',
       pathname: '/dashboard',
       search: '?tab=settings',

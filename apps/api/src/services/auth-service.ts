@@ -647,6 +647,7 @@ export class AuthService {
   }
 
   /**
+<<<<<<< HEAD
    * Logs out a user and records an audit log event.
    *
    * Flow:
@@ -1251,7 +1252,6 @@ export class AuthService {
       message: 'MFA enforcement settings updated successfully.',
     };
   }
-
   /**
    * Gets or creates the default organisation for MVP.
 
