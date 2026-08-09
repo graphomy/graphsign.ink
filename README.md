@@ -4,17 +4,42 @@ Open-source, globally compliant document generation, agreement workflow, and ele
 
 ---
 
-## 🌟 Quick Links
+## 🌟 Quick Links & Documentation
 
-- 📖 **[Wiki — Home](wiki/Home.md)**: Product vision, architecture, compliance, and V1 scope.
-- 🚀 **[Wiki — Getting Started](wiki/Getting-Started.md)**: Step-by-step instructions to setup and run graphsign.ink locally.
+- 🤖 **[CLAUDE.md](CLAUDE.md)**: Master AI agent & developer reference guide.
+- 📖 **[Product Overview](.claude/docs/product.md)**: Product mission, core principles, compliance scope (ESIGN, UETA, eIDAS, 21 CFR Part 11), and V1 feature scope.
+- 🏗️ **[System Architecture](.claude/docs/architecture.md)**: Component layers, edge/JVM deployment topology, trust boundaries.
+- ⚡ **[Tech Stack Specifications](.claude/docs/tech-stack.md)**: Approved technologies, frameworks, and dependency constraints.
+- 🔒 **[Security Architecture](.claude/docs/security.md)**: Encryption, KMS key management, OWASP mitigations, and RLS multi-tenant isolation.
+- 🗄️ **[Database & Schema](.claude/docs/database.md)**: PostgreSQL 15+, Prisma ORM, RLS tenant isolation, and migrations.
+- 🌐 **[REST API Specifications](.claude/docs/api.md)**: URI versioning (`/api/v1/`), standard HTTP status codes, error payload schema, and rate limits.
+- 🧪 **[Testing Pyramid & Standards](.claude/docs/testing.md)**: 70/20/10 testing pyramid, coverage thresholds (80%-100%), and domain tests.
+- 📚 **[Wiki — Home](wiki/Home.md)**: Product architecture and compliance overview.
+- 🚀 **[Wiki — Getting Started](wiki/Getting-Started.md)**: Detailed instructions for setting up and running graphsign.ink locally.
+
+---
+
+## 📦 Monorepo Layout
+
+```
+graphsign.ink/
+├── apps/
+│   ├── web/            # Next.js (Cloudflare Pages) — editor, signer, dashboards
+│   └── api/            # Hono on Cloudflare Workers — REST API, workflow state machine, auth
+├── packages/
+│   └── db/             # Prisma schema, migrations, RLS tenant isolation policies
+├── services/
+│   └── signing/        # JVM container (EU DSS / PDFBox) — PAdES B-LTA sealing & CSC protocol
+├── .claude/            # AI agent instructions, personas, commands, and skills
+└── CLAUDE.md           # Master AI agent navigation guide
+```
 
 ---
 
 ## 🚀 Running Locally
 
 ```bash
-# 1. Install dependencies
+# 1. Install workspace dependencies
 pnpm install
 
 # 2. Setup database schema & client
@@ -25,15 +50,31 @@ pnpm --filter @graphsign/db exec prisma db push
 pnpm dev
 ```
 
-- Web App: [http://localhost:3000](http://localhost:3000)
-- API Worker: [http://localhost:8787](http://localhost:8787)
+- **Web App**: [http://localhost:3000](http://localhost:3000)
+- **API Worker**: [http://localhost:8787](http://localhost:8787)
 
 ---
 
-## 🧪 Testing
+## 🧪 Verification & Testing Commands
 
 ```bash
+# Run unit & integration test suites
 pnpm test
+
+# Run TypeScript type check across all workspace projects
+pnpm typecheck
+
+# Run ESLint check
+pnpm lint
+
+# Check code formatting (Prettier)
+pnpm format:check
+
+# Format code automatically
+pnpm format
+
+# Production build test
+pnpm build
 ```
 
 ---
