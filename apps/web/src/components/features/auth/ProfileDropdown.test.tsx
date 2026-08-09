@@ -43,7 +43,7 @@ describe('ProfileDropdown', () => {
     expect(screen.getByTestId('profile-dropdown-menu')).toBeInTheDocument();
     expect(screen.getByTestId('profile-settings-link')).toBeInTheDocument();
     expect(screen.getByTestId('security-settings-link')).toBeInTheDocument();
-    expect(screen.getByTestId('session-settings-link')).toBeInTheDocument();
+    expect(screen.getByTestId('organisation-settings-link')).toBeInTheDocument();
     expect(screen.getByTestId('sign-out-button')).toBeInTheDocument();
 
     // Click to close

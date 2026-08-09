@@ -53,6 +53,7 @@ export function SessionGuard({
   const handleSignOutDueToTimeout = useCallback(() => {
     const currentPath = window.location.pathname + window.location.search;
 
+    localStorage.removeItem('token');
     localStorage.removeItem('graphsign_session_token');
     localStorage.removeItem('graphsign_user_email');
     localStorage.removeItem('graphsign_org_id');

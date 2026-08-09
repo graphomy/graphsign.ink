@@ -180,6 +180,20 @@ export const updateProfileRequestSchema = z.object({
 
 export type UpdateProfileRequest = z.infer<typeof updateProfileRequestSchema>;
 
+export const changePasswordRequestSchema = z.object({
+  currentPassword: z.string().min(1, 'Current password is required.'),
+  newPassword: z
+    .string()
+    .min(PASSWORD_MIN_LENGTH, `Password must be at least ${PASSWORD_MIN_LENGTH} characters.`)
+    .max(128, 'Password must be 128 characters or fewer.')
+    .regex(/[A-Z]/, 'Password must contain at least one uppercase letter.')
+    .regex(/[a-z]/, 'Password must contain at least one lowercase letter.')
+    .regex(/[0-9]/, 'Password must contain at least one digit.')
+    .regex(/[^A-Za-z0-9]/, 'Password must contain at least one special character.'),
+});
+
+export type ChangePasswordRequest = z.infer<typeof changePasswordRequestSchema>;
+
 export const verifyEmailChangeRequestSchema = z.object({
   token: z.string().min(1, 'Verification token is required.'),
 });

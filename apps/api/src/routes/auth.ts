@@ -11,6 +11,7 @@ import {
   updateSessionSettingsSchema,
   validateSessionRequestSchema,
   updateProfileRequestSchema,
+  changePasswordRequestSchema,
   verifyEmailChangeRequestSchema,
   verifyMfaSetupRequestSchema,
   loginMfaRequestSchema,
@@ -538,6 +539,39 @@ export function createAuthRoutes(deps?: AuthDeps) {
     const authService = getAuthService(c);
 
     const result = await authService.verifyEmailChange(parsed.data.token, {
+      ipAddress: c.req.header('x-forwarded-for')?.split(',')[0]?.trim(),
+      userAgent: c.req.header('user-agent'),
+    });
+
+    return c.json(result);
+  });
+
+  /**
+   * POST /api/v1/auth/profile/change-password
+   *
+   * Changes the authenticated user's password.
+   */
+  auth.post('/profile/change-password', async (c) => {
+    const body = await c.req.json().catch(() => null);
+
+    if (!body) {
+      throw new ValidationError('Request body is required.');
+    }
+
+    const parsed = changePasswordRequestSchema.safeParse(body);
+
+    if (!parsed.success) {
+      const firstError = parsed.error.errors[0];
+      throw new ValidationError(firstError?.message ?? 'Invalid input.', {
+        field: firstError?.path.join('.') ?? 'unknown',
+        issue: firstError?.message ?? 'validation_failed',
+      });
+    }
+
+    const userId = c.req.header('x-user-id') ?? '00000000-0000-7000-8000-000000000001';
+    const authService = getAuthService(c);
+
+    const result = await authService.changePassword(userId, parsed.data, {
       ipAddress: c.req.header('x-forwarded-for')?.split(',')[0]?.trim(),
       userAgent: c.req.header('user-agent'),
     });

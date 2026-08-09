@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { getApiUrl } from '@/lib/api';
+import { ProfileDropdown } from '@/components/features/auth/ProfileDropdown';
 
 export function HeaderNav() {
   const pathname = usePathname();
@@ -17,7 +18,7 @@ export function HeaderNav() {
     async function fetchOrg() {
       try {
         const token =
-          localStorage.getItem('token') || localStorage.getItem('graphsign_session_token') || '';
+          localStorage.getItem('graphsign_session_token') || localStorage.getItem('token') || '';
         if (!token) return;
         const res = await fetch(`${getApiUrl()}/api/v1/organisations/me`, {
           headers: { Authorization: `Bearer ${token}` },
@@ -33,21 +34,19 @@ export function HeaderNav() {
     fetchOrg();
   }, []);
 
-  function handleLogout() {
-    localStorage.removeItem('token');
-    localStorage.removeItem('graphsign_session_token');
-    localStorage.removeItem('graphsign_user_email');
-    localStorage.removeItem('graphsign_org_id');
-    localStorage.removeItem('graphsign_user_id');
-    window.location.href = '/login';
-  }
-
   const navItems = [
     { label: 'Dashboard', href: '/dashboard' },
     { label: 'Agreements', href: '/agreements' },
     { label: 'Templates', href: '/templates' },
+  ];
+
+  const mobileNavItems = [
+    { label: 'Dashboard', href: '/dashboard' },
+    { label: 'Agreements', href: '/agreements' },
+    { label: 'Templates', href: '/templates' },
+    { label: 'Profile', href: '/settings/profile' },
+    { label: 'Security', href: '/settings/security' },
     { label: 'Organisation Settings', href: '/settings/organisation' },
-    { label: 'Security & Profile', href: '/settings/security' },
   ];
 
   return (
@@ -88,7 +87,7 @@ export function HeaderNav() {
                 <Link
                   key={item.href}
                   href={item.href}
-                  className={`px-3 py-2 rounded-lg text-xs font-semibold transition-all ${
+                  className={`px-3.5 py-2 rounded-lg text-xs font-semibold transition-all ${
                     isActive
                       ? 'bg-red-50 text-[#ba0000] border border-red-200/60'
                       : 'text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100'
@@ -100,25 +99,15 @@ export function HeaderNav() {
             })}
           </nav>
 
-          {/* User Email & Logout */}
+          {/* Profile Section on Top Right */}
           <div className="flex items-center gap-3">
-            {userEmail && (
-              <span className="hidden sm:inline-block text-xs font-medium text-neutral-600 bg-neutral-100 px-2.5 py-1 rounded-md border border-neutral-200">
-                {userEmail}
-              </span>
-            )}
-            <button
-              onClick={handleLogout}
-              className="text-xs font-semibold text-neutral-600 hover:text-red-600 hover:bg-red-50 border border-neutral-200 px-3 py-1.5 rounded-lg transition-all"
-            >
-              Sign Out
-            </button>
+            <ProfileDropdown email={userEmail} />
           </div>
         </div>
 
         {/* Mobile Navigation bar */}
         <div className="lg:hidden flex items-center justify-between border-t border-neutral-100 py-2.5 overflow-x-auto gap-2">
-          {navItems.map((item) => {
+          {mobileNavItems.map((item) => {
             const isActive = pathname === item.href;
             return (
               <Link

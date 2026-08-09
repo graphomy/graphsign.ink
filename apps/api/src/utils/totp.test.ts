@@ -65,8 +65,8 @@ describe('totp utilities', () => {
     expect(await verifyTotpToken(secret, '000000')).toBe(false);
   });
 
-  it('should generate SVG QR Code Data URI', () => {
-    const uri = generateQrCodeDataUri('otpauth://totp/graphsign');
+  it('should generate SVG QR Code Data URI', async () => {
+    const uri = await generateQrCodeDataUri('otpauth://totp/graphsign');
     expect(uri).toContain('data:image/svg+xml');
   });
 });

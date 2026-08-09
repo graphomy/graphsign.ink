@@ -2,18 +2,25 @@
 
 import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
-import Link from 'next/link';
 import { SessionGuard } from '@/components/features/auth/SessionGuard';
+import { HeaderNav } from '@/components/layout/HeaderNav';
+import { Footer } from '@/components/layout/Footer';
 import { getApiUrl } from '@/lib/api';
 
 interface UserProfile {
   id: string;
   email: string;
   name?: string | null;
+  username?: string | null;
   timezone?: string | null;
   status: string;
   pendingEmail?: string | null;
   createdAt?: string;
+}
+
+function getToken(): string {
+  if (typeof window === 'undefined') return '';
+  return localStorage.getItem('graphsign_session_token') || localStorage.getItem('token') || '';
 }
 
 function ProfileContent() {
@@ -22,12 +29,23 @@ function ProfileContent() {
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [name, setName] = useState<string>('');
+  const [username, setUsername] = useState<string>('');
   const [email, setEmail] = useState<string>('');
   const [timezone, setTimezone] = useState<string>('UTC');
+
+  // Password Change state
+  const [currentPassword, setCurrentPassword] = useState<string>('');
+  const [newPassword, setNewPassword] = useState<string>('');
+  const [confirmPassword, setConfirmPassword] = useState<string>('');
+
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isSaving, setIsSaving] = useState<boolean>(false);
+  const [isChangingPassword, setIsChangingPassword] = useState<boolean>(false);
+
   const [message, setMessage] = useState<string>('');
   const [error, setError] = useState<string>('');
+  const [passwordMessage, setPasswordMessage] = useState<string>('');
+  const [passwordError, setPasswordError] = useState<string>('');
 
   // Handle email verification token if present in URL
   useEffect(() => {
@@ -63,7 +81,7 @@ function ProfileContent() {
     async function loadProfile() {
       try {
         setIsLoading(true);
-        const token = localStorage.getItem('graphsign_session_token') ?? '';
+        const token = getToken();
         const apiUrl = getApiUrl();
 
         const res = await fetch(`${apiUrl}/api/v1/auth/profile`, {
@@ -77,7 +95,9 @@ function ProfileContent() {
           const data = await res.json();
           setProfile(data);
           setName(data.name ?? '');
-          setEmail(data.email ?? '');
+          const initialEmail = data.email ?? '';
+          setEmail(initialEmail);
+          setUsername(data.username ?? (initialEmail ? initialEmail.split('@')[0] : ''));
           setTimezone(data.timezone ?? 'UTC');
         }
       } catch {
@@ -97,7 +117,7 @@ function ProfileContent() {
     setError('');
 
     try {
-      const token = localStorage.getItem('graphsign_session_token') ?? '';
+      const token = getToken();
       const apiUrl = getApiUrl();
 
       const payload: { name?: string; timezone?: string; email?: string } = {
@@ -138,6 +158,57 @@ function ProfileContent() {
     }
   }
 
+  async function handleChangePassword(e: React.FormEvent) {
+    e.preventDefault();
+    setPasswordMessage('');
+    setPasswordError('');
+
+    if (newPassword !== confirmPassword) {
+      setPasswordError('New password and confirmation do not match.');
+      return;
+    }
+
+    if (newPassword.length < 8) {
+      setPasswordError('New password must be at least 8 characters long.');
+      return;
+    }
+
+    setIsChangingPassword(true);
+    try {
+      const token = getToken();
+      const apiUrl = getApiUrl();
+
+      const res = await fetch(`${apiUrl}/api/v1/auth/profile/change-password`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+          'x-user-id': localStorage.getItem('graphsign_user_id') ?? '',
+        },
+        body: JSON.stringify({
+          currentPassword,
+          newPassword,
+        }),
+      });
+
+      const data = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        setPasswordError(data?.error?.message ?? 'Failed to update password.');
+        return;
+      }
+
+      setPasswordMessage(data.message ?? 'Password updated successfully.');
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+    } catch {
+      setPasswordError('Unable to update password. Please try again.');
+    } finally {
+      setIsChangingPassword(false);
+    }
+  }
+
   const commonTimezones = [
     'UTC',
     'America/New_York',
@@ -153,44 +224,26 @@ function ProfileContent() {
 
   return (
     <div
-      className="min-h-screen bg-neutral-50 flex flex-col font-sans"
+      className="min-h-screen bg-neutral-50 flex flex-col font-sans text-neutral-900"
       data-testid="profile-settings-container"
     >
-      {/* Header */}
-      <header className="sticky top-0 z-10 border-b border-neutral-200 bg-white/80 backdrop-blur-md">
-        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center gap-3">
-            <Link href="/dashboard" className="flex items-center gap-2">
-              <span className="text-xl font-bold tracking-tight text-neutral-900">
-                graphsign<span className="text-[#ba0000]">.ink</span>
-              </span>
-            </Link>
-            <span className="rounded-full bg-neutral-100 px-2.5 py-0.5 text-xs font-medium text-neutral-600">
-              Profile Settings
-            </span>
-          </div>
-          <Link
-            href="/dashboard"
-            className="text-xs font-semibold text-neutral-600 hover:text-neutral-900 transition-colors"
-          >
-            ← Back to Workspace
-          </Link>
-        </div>
-      </header>
+      <HeaderNav />
 
       {/* Main Content */}
-      <main className="flex-1 py-8 px-4 sm:px-6 lg:px-8 max-w-3xl mx-auto w-full space-y-6">
+      <main className="flex-1 py-8 px-4 sm:px-6 lg:px-8 max-w-4xl mx-auto w-full space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-neutral-900 tracking-tight">Account Profile</h1>
-          <p className="text-sm text-neutral-600 mt-1">
-            Manage your personal details, email preferences, and display settings.
+          <h1 className="text-2xl font-bold text-neutral-900 tracking-tight">
+            User Profile & Account
+          </h1>
+          <p className="text-xs text-neutral-600 mt-1">
+            Manage your personal profile details, email address, timezone, and account password.
           </p>
         </div>
 
         {/* Feedback Alerts */}
         {message && (
           <div
-            className="rounded-xl border border-green-200 bg-green-50 p-4 text-sm text-green-800"
+            className="rounded-xl border border-green-200 bg-green-50 p-4 text-xs font-semibold text-green-800"
             role="status"
             data-testid="success-message"
           >
@@ -200,7 +253,7 @@ function ProfileContent() {
 
         {error && (
           <div
-            className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700"
+            className="rounded-xl border border-red-200 bg-red-50 p-4 text-xs font-semibold text-red-700"
             role="alert"
             data-testid="error-message"
           >
@@ -210,7 +263,7 @@ function ProfileContent() {
 
         {/* Pending Email Notice Banner */}
         {profile?.pendingEmail && (
-          <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 space-y-1">
+          <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs text-amber-900 space-y-1">
             <div className="flex items-center gap-2 font-semibold">
               <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
               Email Change Pending Verification
@@ -218,38 +271,73 @@ function ProfileContent() {
             <p className="text-xs text-amber-800">
               A verification link was sent to{' '}
               <strong className="font-medium">{profile.pendingEmail}</strong>. Please check your
-              inbox to confirm this email update.
+              inbox to confirm this email update. If user changes the Email ID, it needs to be
+              reverified again.
             </p>
           </div>
         )}
 
-        {/* Form Card */}
-        <div className="rounded-2xl border border-neutral-200 bg-white p-6 sm:p-8 shadow-sm">
+        {/* Personal Details Form Card */}
+        <div className="rounded-2xl border border-neutral-200 bg-white p-6 sm:p-8 shadow-sm space-y-6">
+          <div className="border-b border-neutral-100 pb-4">
+            <h2 className="text-base font-bold text-neutral-900">Personal Information</h2>
+            <p className="text-xs text-neutral-500">
+              Update your account name, username, and email address.
+            </p>
+          </div>
+
           {isLoading ? (
-            <div className="py-12 text-center text-neutral-500 text-sm animate-pulse">
+            <div className="py-12 text-center text-neutral-500 text-xs animate-pulse">
               Loading profile details...
             </div>
           ) : (
-            <form onSubmit={handleSaveProfile} className="space-y-6" data-testid="profile-form">
-              {/* Full Name */}
-              <div>
-                <label htmlFor="name" className="block text-sm font-medium text-neutral-700">
-                  Full Name
-                </label>
-                <input
-                  id="name"
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="mt-1.5 block w-full rounded-lg border border-neutral-300 px-3.5 py-2.5 text-sm shadow-sm focus:border-[#ba0000] focus:ring-2 focus:ring-[#ba0000]/20"
-                  placeholder="e.g. Alice Vance"
-                  data-testid="name-input"
-                />
+            <form onSubmit={handleSaveProfile} className="space-y-5" data-testid="profile-form">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                {/* Full Name */}
+                <div>
+                  <label
+                    htmlFor="name"
+                    className="block text-xs font-semibold text-neutral-700 uppercase tracking-wider"
+                  >
+                    Full Name
+                  </label>
+                  <input
+                    id="name"
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className="mt-1.5 block w-full rounded-lg border border-neutral-300 px-3.5 py-2.5 text-xs shadow-sm focus:border-[#ba0000] focus:ring-2 focus:ring-[#ba0000]/20"
+                    placeholder="e.g. John Doe"
+                    data-testid="name-input"
+                  />
+                </div>
+
+                {/* Username */}
+                <div>
+                  <label
+                    htmlFor="username"
+                    className="block text-xs font-semibold text-neutral-700 uppercase tracking-wider"
+                  >
+                    Username
+                  </label>
+                  <input
+                    id="username"
+                    type="text"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    className="mt-1.5 block w-full rounded-lg border border-neutral-300 px-3.5 py-2.5 text-xs shadow-sm focus:border-[#ba0000] focus:ring-2 focus:ring-[#ba0000]/20"
+                    placeholder="e.g. johndoe"
+                    data-testid="username-input"
+                  />
+                </div>
               </div>
 
               {/* Email */}
               <div>
-                <label htmlFor="email" className="block text-sm font-medium text-neutral-700">
+                <label
+                  htmlFor="email"
+                  className="block text-xs font-semibold text-neutral-700 uppercase tracking-wider"
+                >
                   Email Address
                 </label>
                 <input
@@ -258,26 +346,29 @@ function ProfileContent() {
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="mt-1.5 block w-full rounded-lg border border-neutral-300 px-3.5 py-2.5 text-sm shadow-sm focus:border-[#ba0000] focus:ring-2 focus:ring-[#ba0000]/20"
+                  className="mt-1.5 block w-full rounded-lg border border-neutral-300 px-3.5 py-2.5 text-xs shadow-sm focus:border-[#ba0000] focus:ring-2 focus:ring-[#ba0000]/20"
                   placeholder="you@company.com"
                   data-testid="email-input"
                 />
-                <p className="mt-1 text-xs text-neutral-500">
-                  Changing your email address requires clicking a verification link sent to your new
-                  email.
+                <p className="mt-1 text-[11px] text-neutral-500">
+                  Changing your email address requires reverifying through a link sent to your new
+                  email ID.
                 </p>
               </div>
 
               {/* Timezone */}
               <div>
-                <label htmlFor="timezone" className="block text-sm font-medium text-neutral-700">
+                <label
+                  htmlFor="timezone"
+                  className="block text-xs font-semibold text-neutral-700 uppercase tracking-wider"
+                >
                   Preferred Timezone
                 </label>
                 <select
                   id="timezone"
                   value={timezone}
                   onChange={(e) => setTimezone(e.target.value)}
-                  className="mt-1.5 block w-full rounded-lg border border-neutral-300 px-3.5 py-2.5 text-sm shadow-sm focus:border-[#ba0000] focus:ring-2 focus:ring-[#ba0000]/20 bg-white"
+                  className="mt-1.5 block w-full rounded-lg border border-neutral-300 px-3.5 py-2.5 text-xs shadow-sm focus:border-[#ba0000] focus:ring-2 focus:ring-[#ba0000]/20 bg-white"
                   data-testid="timezone-select"
                 >
                   {commonTimezones.map((tz) => (
@@ -286,26 +377,123 @@ function ProfileContent() {
                     </option>
                   ))}
                 </select>
-                <p className="mt-1 text-xs text-neutral-500">
-                  Timestamps on agreements and audit logs will be displayed in this timezone.
-                </p>
               </div>
 
               {/* Save Button */}
-              <div className="pt-4 border-t border-neutral-100 flex justify-end">
+              <div className="pt-3 border-t border-neutral-100 flex justify-end">
                 <button
                   type="submit"
                   disabled={isSaving}
-                  className="rounded-lg bg-[#ba0000] px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-[#a00000] focus:outline-none focus:ring-2 focus:ring-[#ba0000] disabled:opacity-60 transition-colors"
+                  className="rounded-lg bg-[#ba0000] px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-[#a00000] focus:outline-none focus:ring-2 focus:ring-[#ba0000] disabled:opacity-60 transition-colors"
                   data-testid="save-profile-button"
                 >
-                  {isSaving ? 'Saving...' : 'Save Profile Changes'}
+                  {isSaving ? 'Saving Profile...' : 'Save Details'}
                 </button>
               </div>
             </form>
           )}
         </div>
+
+        {/* Change Password Card */}
+        <div className="rounded-2xl border border-neutral-200 bg-white p-6 sm:p-8 shadow-sm space-y-5">
+          <div className="border-b border-neutral-100 pb-4">
+            <h2 className="text-base font-bold text-neutral-900">Change Password</h2>
+            <p className="text-xs text-neutral-500">
+              Ensure your account is using a strong, unique password.
+            </p>
+          </div>
+
+          {passwordMessage && (
+            <div className="rounded-xl border border-green-200 bg-green-50 p-4 text-xs font-semibold text-green-800">
+              {passwordMessage}
+            </div>
+          )}
+
+          {passwordError && (
+            <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-xs font-semibold text-red-700">
+              {passwordError}
+            </div>
+          )}
+
+          <form
+            onSubmit={handleChangePassword}
+            className="space-y-4"
+            data-testid="change-password-form"
+          >
+            <div>
+              <label
+                htmlFor="currentPassword"
+                className="block text-xs font-semibold text-neutral-700 uppercase tracking-wider"
+              >
+                Current Password
+              </label>
+              <input
+                id="currentPassword"
+                type="password"
+                required
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+                className="mt-1.5 block w-full rounded-lg border border-neutral-300 px-3.5 py-2.5 text-xs shadow-sm focus:border-[#ba0000] focus:ring-2 focus:ring-[#ba0000]/20"
+                placeholder="••••••••"
+                data-testid="current-password-input"
+              />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label
+                  htmlFor="newPassword"
+                  className="block text-xs font-semibold text-neutral-700 uppercase tracking-wider"
+                >
+                  New Password
+                </label>
+                <input
+                  id="newPassword"
+                  type="password"
+                  required
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  className="mt-1.5 block w-full rounded-lg border border-neutral-300 px-3.5 py-2.5 text-xs shadow-sm focus:border-[#ba0000] focus:ring-2 focus:ring-[#ba0000]/20"
+                  placeholder="••••••••"
+                  data-testid="new-password-input"
+                />
+              </div>
+
+              <div>
+                <label
+                  htmlFor="confirmPassword"
+                  className="block text-xs font-semibold text-neutral-700 uppercase tracking-wider"
+                >
+                  Confirm New Password
+                </label>
+                <input
+                  id="confirmPassword"
+                  type="password"
+                  required
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className="mt-1.5 block w-full rounded-lg border border-neutral-300 px-3.5 py-2.5 text-xs shadow-sm focus:border-[#ba0000] focus:ring-2 focus:ring-[#ba0000]/20"
+                  placeholder="••••••••"
+                  data-testid="confirm-password-input"
+                />
+              </div>
+            </div>
+
+            <div className="pt-3 border-t border-neutral-100 flex justify-end">
+              <button
+                type="submit"
+                disabled={isChangingPassword}
+                className="rounded-lg bg-neutral-900 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-neutral-800 focus:outline-none focus:ring-2 focus:ring-neutral-900 disabled:opacity-60 transition-colors"
+                data-testid="change-password-button"
+              >
+                {isChangingPassword ? 'Updating Password...' : 'Update Password'}
+              </button>
+            </div>
+          </form>
+        </div>
       </main>
+
+      <Footer />
     </div>
   );
 }
@@ -313,7 +501,13 @@ function ProfileContent() {
 export default function ProfilePage() {
   return (
     <SessionGuard>
-      <Suspense fallback={<div className="p-8 text-center text-neutral-500">Loading page...</div>}>
+      <Suspense
+        fallback={
+          <div className="p-8 text-center text-neutral-500 text-xs">
+            Loading profile settings...
+          </div>
+        }
+      >
         <ProfileContent />
       </Suspense>
     </SessionGuard>
