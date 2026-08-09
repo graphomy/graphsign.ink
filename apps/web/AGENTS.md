@@ -1,6 +1,10 @@
+# Web Subsystem — AI Agent Guidelines
+
+Read the root [/CLAUDE.md](../../CLAUDE.md) file before making any changes.
+
 <!-- BEGIN:nextjs-agent-rules -->
 
-# This is NOT the Next.js you know
+# Next.js App Router Guidelines
 
-This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices.
+This codebase uses Next.js App Router (Turbopack). Read the relevant guide in `node_modules/next/dist/docs/` before writing code. Heed deprecation notices.
 <!-- END:nextjs-agent-rules -->
