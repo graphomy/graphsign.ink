@@ -193,7 +193,8 @@ function DashboardContent() {
                 No agreements found in workspace yet.
               </p>
               <p className="text-xs text-neutral-500 max-w-sm mx-auto">
-                There is currently no agreement data to display. Upload a PDF/DOCX or create a new contract from scratch to get started.
+                There is currently no agreement data to display. Upload a PDF/DOCX or create a new
+                contract from scratch to get started.
               </p>
               <div className="flex justify-center gap-3 pt-2">
                 <Link

@@ -232,7 +232,9 @@ function ProfileContent() {
       {/* Main Content */}
       <main className="flex-1 py-8 px-4 sm:px-6 lg:px-8 max-w-4xl mx-auto w-full space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-neutral-900 tracking-tight">User Profile & Account</h1>
+          <h1 className="text-2xl font-bold text-neutral-900 tracking-tight">
+            User Profile & Account
+          </h1>
           <p className="text-xs text-neutral-600 mt-1">
             Manage your personal profile details, email address, timezone, and account password.
           </p>
@@ -269,7 +271,8 @@ function ProfileContent() {
             <p className="text-xs text-amber-800">
               A verification link was sent to{' '}
               <strong className="font-medium">{profile.pendingEmail}</strong>. Please check your
-              inbox to confirm this email update. If user changes the Email ID, it needs to be reverified again.
+              inbox to confirm this email update. If user changes the Email ID, it needs to be
+              reverified again.
             </p>
           </div>
         )}
@@ -278,7 +281,9 @@ function ProfileContent() {
         <div className="rounded-2xl border border-neutral-200 bg-white p-6 sm:p-8 shadow-sm space-y-6">
           <div className="border-b border-neutral-100 pb-4">
             <h2 className="text-base font-bold text-neutral-900">Personal Information</h2>
-            <p className="text-xs text-neutral-500">Update your account name, username, and email address.</p>
+            <p className="text-xs text-neutral-500">
+              Update your account name, username, and email address.
+            </p>
           </div>
 
           {isLoading ? (
@@ -290,7 +295,10 @@ function ProfileContent() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                 {/* Full Name */}
                 <div>
-                  <label htmlFor="name" className="block text-xs font-semibold text-neutral-700 uppercase tracking-wider">
+                  <label
+                    htmlFor="name"
+                    className="block text-xs font-semibold text-neutral-700 uppercase tracking-wider"
+                  >
                     Full Name
                   </label>
                   <input
@@ -306,7 +314,10 @@ function ProfileContent() {
 
                 {/* Username */}
                 <div>
-                  <label htmlFor="username" className="block text-xs font-semibold text-neutral-700 uppercase tracking-wider">
+                  <label
+                    htmlFor="username"
+                    className="block text-xs font-semibold text-neutral-700 uppercase tracking-wider"
+                  >
                     Username
                   </label>
                   <input
@@ -323,7 +334,10 @@ function ProfileContent() {
 
               {/* Email */}
               <div>
-                <label htmlFor="email" className="block text-xs font-semibold text-neutral-700 uppercase tracking-wider">
+                <label
+                  htmlFor="email"
+                  className="block text-xs font-semibold text-neutral-700 uppercase tracking-wider"
+                >
                   Email Address
                 </label>
                 <input
@@ -337,13 +351,17 @@ function ProfileContent() {
                   data-testid="email-input"
                 />
                 <p className="mt-1 text-[11px] text-neutral-500">
-                  Changing your email address requires reverifying through a link sent to your new email ID.
+                  Changing your email address requires reverifying through a link sent to your new
+                  email ID.
                 </p>
               </div>
 
               {/* Timezone */}
               <div>
-                <label htmlFor="timezone" className="block text-xs font-semibold text-neutral-700 uppercase tracking-wider">
+                <label
+                  htmlFor="timezone"
+                  className="block text-xs font-semibold text-neutral-700 uppercase tracking-wider"
+                >
                   Preferred Timezone
                 </label>
                 <select
@@ -397,9 +415,16 @@ function ProfileContent() {
             </div>
           )}
 
-          <form onSubmit={handleChangePassword} className="space-y-4" data-testid="change-password-form">
+          <form
+            onSubmit={handleChangePassword}
+            className="space-y-4"
+            data-testid="change-password-form"
+          >
             <div>
-              <label htmlFor="currentPassword" className="block text-xs font-semibold text-neutral-700 uppercase tracking-wider">
+              <label
+                htmlFor="currentPassword"
+                className="block text-xs font-semibold text-neutral-700 uppercase tracking-wider"
+              >
                 Current Password
               </label>
               <input
@@ -416,7 +441,10 @@ function ProfileContent() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label htmlFor="newPassword" className="block text-xs font-semibold text-neutral-700 uppercase tracking-wider">
+                <label
+                  htmlFor="newPassword"
+                  className="block text-xs font-semibold text-neutral-700 uppercase tracking-wider"
+                >
                   New Password
                 </label>
                 <input
@@ -432,7 +460,10 @@ function ProfileContent() {
               </div>
 
               <div>
-                <label htmlFor="confirmPassword" className="block text-xs font-semibold text-neutral-700 uppercase tracking-wider">
+                <label
+                  htmlFor="confirmPassword"
+                  className="block text-xs font-semibold text-neutral-700 uppercase tracking-wider"
+                >
                   Confirm New Password
                 </label>
                 <input
@@ -470,7 +501,13 @@ function ProfileContent() {
 export default function ProfilePage() {
   return (
     <SessionGuard>
-      <Suspense fallback={<div className="p-8 text-center text-neutral-500 text-xs">Loading profile settings...</div>}>
+      <Suspense
+        fallback={
+          <div className="p-8 text-center text-neutral-500 text-xs">
+            Loading profile settings...
+          </div>
+        }
+      >
         <ProfileContent />
       </Suspense>
     </SessionGuard>
