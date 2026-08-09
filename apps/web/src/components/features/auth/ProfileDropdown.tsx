@@ -67,6 +67,7 @@ export function ProfileDropdown({ email, token }: ProfileDropdownProps) {
         },
       }).catch(() => null);
     } finally {
+      localStorage.removeItem('token');
       localStorage.removeItem('graphsign_session_token');
       localStorage.removeItem('graphsign_user_email');
       localStorage.removeItem('graphsign_org_id');
@@ -176,14 +177,14 @@ export function ProfileDropdown({ email, token }: ProfileDropdownProps) {
                   d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z"
                 />
               </svg>
-              Security (MFA)
+              Security
             </Link>
 
             <Link
-              href="/settings/session"
+              href="/settings/organisation"
               onClick={() => setIsOpen(false)}
               className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-medium text-neutral-700 hover:bg-neutral-100 hover:text-neutral-900 transition-colors"
-              data-testid="session-settings-link"
+              data-testid="organisation-settings-link"
             >
               <svg
                 className="h-4 w-4 text-neutral-500 shrink-0"
@@ -195,10 +196,10 @@ export function ProfileDropdown({ email, token }: ProfileDropdownProps) {
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
-                  d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z"
+                  d="M2.25 21h19.5m-18-18v18m10.5-18v18m6-13.5V21M6.75 6.75h.75m-.75 3h.75m-.75 3h.75m3-6h.75m-.75 3h.75m-.75 3h.75M6.75 21v-3.375c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21"
                 />
               </svg>
-              Session Settings
+              Organisation Settings
             </Link>
           </div>
 

@@ -38,7 +38,7 @@ interface VersionItem {
 
 function getToken(): string {
   if (typeof window === 'undefined') return '';
-  return localStorage.getItem('token') || localStorage.getItem('graphsign_session_token') || '';
+  return localStorage.getItem('graphsign_session_token') || localStorage.getItem('token') || '';
 }
 
 function AgreementManagementContent() {

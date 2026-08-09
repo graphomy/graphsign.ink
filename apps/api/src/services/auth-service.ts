@@ -6,6 +6,7 @@ import type {
   LoginRequest,
   UpdateSessionSettingsRequest,
   UpdateProfileRequest,
+  ChangePasswordRequest,
   LoginMfaRequest,
   UpdateMfaEnforcementRequest,
 } from '../validators/auth-validators.js';
@@ -695,7 +696,7 @@ export class AuthService {
 
     const secret = generateBase32Secret(20);
     const otpauthUrl = generateOtpauthUrl(user.email, secret);
-    const qrCode = generateQrCodeDataUri(otpauthUrl);
+    const qrCode = await generateQrCodeDataUri(otpauthUrl);
 
     await this.prisma.user.update({
       where: { id: userId },
@@ -1134,6 +1135,51 @@ export class AuthService {
       email: updatedUser.email,
       name: updatedUser.name,
       message: 'Email address updated successfully.',
+    };
+  }
+
+  /**
+   * Changes an authenticated user's password.
+   */
+  async changePassword(
+    userId: string,
+    data: ChangePasswordRequest,
+    meta: { ipAddress?: string; userAgent?: string } = {},
+  ): Promise<{ message: string }> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user || user.deletedAt !== null) {
+      throw new NotFoundError('User profile not found.');
+    }
+
+    const isValid = await verifyPassword(data.currentPassword, user.passwordHash);
+    if (!isValid) {
+      throw new UnauthorizedError('Current password is incorrect.');
+    }
+
+    const newHashedPassword = await hashPassword(data.newPassword);
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        passwordHash: newHashedPassword,
+      },
+    });
+
+    await this.audit.log({
+      organisationId: user.organisationId,
+      userId: user.id,
+      action: 'user.password_changed',
+      resourceType: 'user',
+      resourceId: user.id,
+      ipAddress: meta.ipAddress,
+      userAgent: meta.userAgent,
+    });
+
+    return {
+      message: 'Password changed successfully.',
     };
   }
 

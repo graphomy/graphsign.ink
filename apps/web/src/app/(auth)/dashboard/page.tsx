@@ -26,7 +26,7 @@ interface AgreementItem {
 
 function getToken(): string {
   if (typeof window === 'undefined') return '';
-  return localStorage.getItem('token') || localStorage.getItem('graphsign_session_token') || '';
+  return localStorage.getItem('graphsign_session_token') || localStorage.getItem('token') || '';
 }
 
 function DashboardContent() {
@@ -190,14 +190,23 @@ function DashboardContent() {
                 📑
               </div>
               <p className="text-xs font-semibold text-neutral-700">
-                No agreements in workspace yet.
+                No agreements found in workspace yet.
               </p>
-              <div className="flex justify-center gap-3 pt-1">
+              <p className="text-xs text-neutral-500 max-w-sm mx-auto">
+                There is currently no agreement data to display. Upload a PDF/DOCX or create a new contract from scratch to get started.
+              </p>
+              <div className="flex justify-center gap-3 pt-2">
                 <Link
                   href="/agreements?action=scratch"
-                  className="px-3 py-1.5 bg-[#ba0000] text-white text-xs font-semibold rounded-md shadow-sm"
+                  className="px-3.5 py-2 bg-[#ba0000] text-white text-xs font-semibold rounded-lg shadow-sm hover:bg-red-700 transition-colors"
                 >
                   Create Agreement from Scratch
+                </Link>
+                <Link
+                  href="/agreements?action=upload"
+                  className="px-3.5 py-2 bg-white border border-neutral-300 text-neutral-800 text-xs font-semibold rounded-lg shadow-sm hover:bg-neutral-100 transition-colors"
+                >
+                  Upload Agreement
                 </Link>
               </div>
             </div>
