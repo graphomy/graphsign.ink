@@ -34,10 +34,10 @@ export function AgreementEditModal({
   onSuccess,
   onActivateSuccess,
 }: AgreementEditModalProps) {
-  const [title, setTitle] = useState(initialTitle);
-  const [description, setDescription] = useState(initialDescription);
-  const [markdown, setMarkdown] = useState(initialMarkdown);
-  const [tags, setTags] = useState<string[]>(initialTags);
+  const [title, setTitle] = useState(initialTitle || '');
+  const [description, setDescription] = useState(initialDescription || '');
+  const [markdown, setMarkdown] = useState(initialMarkdown || '');
+  const [tags, setTags] = useState<string[]>(initialTags || []);
   const [tagInput, setTagInput] = useState('');
 
   const [saving, setSaving] = useState(false);
@@ -58,7 +58,7 @@ export function AgreementEditModal({
   }, [currentStatus]);
 
   function handleAddTag() {
-    if (!tagInput.trim()) return;
+    if (!tagInput || !tagInput.trim()) return;
     const clean = tagInput.trim().toLowerCase();
     if (!tags.includes(clean)) {
       setTags([...tags, clean]);
@@ -72,7 +72,8 @@ export function AgreementEditModal({
 
   async function handleSaveDraft(e?: React.FormEvent) {
     if (e) e.preventDefault();
-    if (!title.trim() || title.trim().length < 2) {
+    const cleanTitle = (title || '').trim();
+    if (!cleanTitle || cleanTitle.length < 2) {
       setError('Agreement title must be at least 2 characters long.');
       return;
     }
@@ -88,10 +89,10 @@ export function AgreementEditModal({
           Authorization: `Bearer ${getToken()}`,
         },
         body: JSON.stringify({
-          title: title.trim(),
-          description: description.trim() || undefined,
-          markdownContent: markdown,
-          tags,
+          title: cleanTitle,
+          description: (description || '').trim() || undefined,
+          markdownContent: markdown || '',
+          tags: tags || [],
         }),
       });
 
@@ -114,6 +115,13 @@ export function AgreementEditModal({
     setActivating(true);
     setError(null);
 
+    const cleanTitle = (title || '').trim();
+    if (!cleanTitle || cleanTitle.length < 2) {
+      setError('Agreement title must be at least 2 characters long.');
+      setActivating(false);
+      return;
+    }
+
     try {
       // First save current edits if any
       await fetch(`${getApiUrl()}/api/v1/agreements/${agreementId}/draft`, {
@@ -123,10 +131,10 @@ export function AgreementEditModal({
           Authorization: `Bearer ${getToken()}`,
         },
         body: JSON.stringify({
-          title: title.trim(),
-          description: description.trim() || undefined,
-          markdownContent: markdown,
-          tags,
+          title: cleanTitle,
+          description: (description || '').trim() || undefined,
+          markdownContent: markdown || '',
+          tags: tags || [],
         }),
       });
 

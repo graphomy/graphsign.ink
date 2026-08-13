@@ -14,8 +14,8 @@ interface MarkdownEditorProps {
  * Simple client-side Markdown to HTML renderer for live preview.
  * Converts headings, bold, italic, strikethrough, lists, code, tables, and blockquotes.
  */
-export function renderMarkdownToHtml(md: string): string {
-  if (!md) return '';
+export function renderMarkdownToHtml(md?: string | null): string {
+  if (!md || typeof md !== 'string') return '';
 
   let html = md
     // Escape HTML tags to prevent XSS
@@ -172,8 +172,9 @@ export function MarkdownEditor({
     insertFormatting('', tableTemplate, '');
   }
 
-  const wordCount = value.trim() ? value.trim().split(/\s+/).length : 0;
-  const charCount = value.length;
+  const safeValue = value ?? '';
+  const wordCount = safeValue.trim() ? safeValue.trim().split(/\s+/).length : 0;
+  const charCount = safeValue.length;
 
   return (
     <div className="flex flex-col border border-neutral-300 rounded-xl overflow-hidden bg-white shadow-sm">
@@ -382,10 +383,10 @@ export function MarkdownEditor({
             <div className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 mb-2 flex items-center gap-1">
               <span>👁️ Live Preview</span>
             </div>
-            {value.trim() ? (
+            {safeValue.trim() ? (
               <div
                 className="prose prose-sm max-w-none text-neutral-800 font-sans"
-                dangerouslySetInnerHTML={{ __html: renderMarkdownToHtml(value) }}
+                dangerouslySetInnerHTML={{ __html: renderMarkdownToHtml(safeValue) }}
               />
             ) : (
               <div className="text-xs text-neutral-400 italic py-8 text-center">

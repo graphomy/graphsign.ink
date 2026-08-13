@@ -859,10 +859,10 @@ function AgreementManagementContent() {
         {showEditModal && selectedAgreement && (
           <AgreementEditModal
             agreementId={selectedAgreement.id}
-            initialTitle={selectedAgreement.title}
-            initialDescription={selectedAgreement.description}
-            initialMarkdown={selectedAgreement.markdownContent || ''}
-            initialTags={selectedAgreement.tags || []}
+            initialTitle={selectedAgreement.title ?? ''}
+            initialDescription={selectedAgreement.description ?? ''}
+            initialMarkdown={selectedAgreement.markdownContent ?? ''}
+            initialTags={selectedAgreement.tags ?? []}
             currentVersion={selectedAgreement.version}
             currentStatus={selectedAgreement.status}
             onClose={() => {
