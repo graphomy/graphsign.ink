@@ -1,17 +1,33 @@
 import type { PrismaClient } from '@graphsign/db';
 import { generateId } from '../utils/crypto.js';
-import { NotFoundError, ForbiddenError } from '../utils/errors.js';
+import { NotFoundError, ForbiddenError, BadRequestError } from '../utils/errors.js';
 import type { AuditService } from './audit-service.js';
+import { incrementMinorVersion, bumpToMajorVersion } from '../utils/version-utils.js';
 import type {
   CreateUploadAgreementInput,
   CreateScratchAgreementInput,
   UpdateDraftInput,
+  ActivateAgreementInput,
   UpdateMetadataTagsInput,
   QueryAgreementsInput,
 } from '../validators/agreement-validators.js';
 
-/** Default estimated size for scratch/HTML-created agreements (10 KB). */
+/** Default estimated size for scratch/markdown-created agreements (10 KB). */
 const DEFAULT_SCRATCH_SIZE_BYTES = 10 * 1024;
+
+export interface HistoryItem {
+  id: string;
+  action: string;
+  summary: string;
+  version?: string;
+  user: {
+    id?: string;
+    name?: string;
+    email?: string;
+  };
+  createdAt: string;
+  metadata?: Record<string, unknown>;
+}
 
 export class AgreementService {
   constructor(
@@ -64,18 +80,41 @@ export class AgreementService {
   }
 
   /**
-   * Upload PDF/DOCX agreement file (FR-004.001 / INK-66)
+   * Upload PDF/DOCX or MD agreement file (FR-004.001 / INK-66)
+   * - PDF/DOCX: Active agreement with version 1.0 (converted to PDF representation)
+   * - MD: Draft agreement with version 0.1
    */
   async uploadAgreementFile(orgId: string, authorId: string, input: CreateUploadAgreementInput) {
+    if (input.isEncrypted) {
+      throw new BadRequestError(
+        'The uploaded document is encrypted or password-protected. Please unlock or decrypt the document before uploading.',
+      );
+    }
+
     // Enforce user storage quota (INK-206)
     if (authorId !== 'unknown') {
       await this.checkUserStorageQuota(authorId, input.fileSize);
     }
 
-    const agreementId = generateId();
+    const isMarkdown =
+      input.mimeType === 'text/markdown' ||
+      input.mimeType === 'text/plain' ||
+      input.fileName.toLowerCase().endsWith('.md');
 
-    // Simulated storage URL (e.g. S3 / R2 Bucket)
-    const fileUrl = `https://storage.graphsign.ink/${orgId}/agreements/${agreementId}-${input.fileName}`;
+    // PDF / DOCX are active documents at version 1.0; MD is draft at version 0.1
+    const status = isMarkdown ? 'DRAFT' : 'ACTIVE';
+    const version = isMarkdown ? '0.1' : '1.0';
+
+    const agreementId = generateId();
+    // Simulated storage / PDF conversion URL
+    const cleanFileName = input.fileName.toLowerCase().replace(/[^a-z0-9.]/g, '-');
+    const pdfFileName = isMarkdown
+      ? `${cleanFileName.replace(/\.md$/i, '')}.pdf`
+      : cleanFileName.endsWith('.pdf')
+        ? cleanFileName
+        : `${cleanFileName.replace(/\.[^/.]+$/, '')}.pdf`;
+
+    const fileUrl = `https://storage.graphsign.ink/${orgId}/agreements/${agreementId}-${pdfFileName}`;
 
     const agreement = await this.prisma.agreement.create({
       data: {
@@ -84,21 +123,25 @@ export class AgreementService {
         authorId,
         title: input.title,
         description: input.description,
-        status: 'DRAFT',
+        status,
         fileUrl,
         fileName: input.fileName,
         fileSize: input.fileSize,
-        mimeType: input.mimeType,
+        mimeType: isMarkdown ? 'text/markdown' : 'application/pdf',
+        markdownContent: input.markdownContent,
         tags: input.tags ? (input.tags as any) : [],
         metadata: input.metadata ? (input.metadata as any) : {},
-        version: 1,
+        version,
         versions: {
           create: {
             id: generateId(),
-            version: 1,
+            version,
             title: input.title,
             fileUrl,
-            changeSummary: 'Initial file upload v1.0',
+            markdownContent: input.markdownContent,
+            changeSummary: isMarkdown
+              ? 'Uploaded markdown draft v0.1'
+              : 'Uploaded active document v1.0',
             authorId,
           },
         },
@@ -116,7 +159,12 @@ export class AgreementService {
         action: 'AGREEMENT_UPLOADED',
         resourceType: 'Agreement',
         resourceId: agreementId,
-        metadata: { fileName: input.fileName, fileSize: input.fileSize },
+        metadata: {
+          fileName: input.fileName,
+          fileSize: input.fileSize,
+          version,
+          status,
+        },
       });
     }
 
@@ -124,11 +172,12 @@ export class AgreementService {
   }
 
   /**
-   * Create agreement from scratch using rich text HTML (FR-004.002 / INK-67)
+   * Create agreement from scratch using Markdown format (FR-004.002 / INK-67)
+   * Initial version: 0.1, status: DRAFT
    */
   async createFromScratch(orgId: string, authorId: string, input: CreateScratchAgreementInput) {
-    const estimatedSizeBytes = input.htmlContent
-      ? Buffer.byteLength(input.htmlContent, 'utf8')
+    const estimatedSizeBytes = input.markdownContent
+      ? Buffer.byteLength(input.markdownContent, 'utf8')
       : DEFAULT_SCRATCH_SIZE_BYTES;
 
     if (authorId !== 'unknown') {
@@ -136,7 +185,8 @@ export class AgreementService {
     }
 
     const agreementId = generateId();
-    const fileUrl = `https://storage.graphsign.ink/${orgId}/agreements/${agreementId}-scratch.pdf`;
+    const cleanTitle = input.title.toLowerCase().replace(/[^a-z0-9]/g, '-');
+    const fileUrl = `https://storage.graphsign.ink/${orgId}/agreements/${agreementId}-${cleanTitle}.pdf`;
 
     const agreement = await this.prisma.agreement.create({
       data: {
@@ -146,22 +196,22 @@ export class AgreementService {
         title: input.title,
         description: input.description,
         status: 'DRAFT',
-        htmlContent: input.htmlContent,
+        markdownContent: input.markdownContent,
         fileUrl,
-        fileName: `${input.title.toLowerCase().replace(/[^a-z0-9]/g, '-')}.pdf`,
+        fileName: `${cleanTitle}.pdf`,
         fileSize: estimatedSizeBytes,
         mimeType: 'application/pdf',
         tags: input.tags ? (input.tags as any) : [],
         metadata: input.metadata ? (input.metadata as any) : {},
-        version: 1,
+        version: '0.1',
         versions: {
           create: {
             id: generateId(),
-            version: 1,
+            version: '0.1',
             title: input.title,
-            htmlContent: input.htmlContent,
+            markdownContent: input.markdownContent,
             fileUrl,
-            changeSummary: 'Initial draft created from scratch v1.0',
+            changeSummary: 'Initial draft created from scratch v0.1',
             authorId,
           },
         },
@@ -179,7 +229,7 @@ export class AgreementService {
         action: 'AGREEMENT_CREATED',
         resourceType: 'Agreement',
         resourceId: agreementId,
-        metadata: { title: input.title },
+        metadata: { title: input.title, version: '0.1' },
       });
     }
 
@@ -188,6 +238,7 @@ export class AgreementService {
 
   /**
    * Save and autosave agreement draft (FR-004.003 / INK-68)
+   * Automatically increments minor version (e.g. 0.1 -> 0.2)
    */
   async saveDraft(orgId: string, authorId: string, agreementId: string, input: UpdateDraftInput) {
     const existing = await this.prisma.agreement.findFirst({
@@ -204,14 +255,31 @@ export class AgreementService {
       );
     }
 
+    const nextVersion = incrementMinorVersion(existing.version);
+
     const updated = await this.prisma.agreement.update({
       where: { id: agreementId },
       data: {
         title: input.title ?? existing.title,
         description: input.description ?? existing.description,
-        htmlContent: input.htmlContent ?? existing.htmlContent,
+        markdownContent: input.markdownContent ?? existing.markdownContent,
         tags: input.tags ? (input.tags as any) : existing.tags,
         metadata: input.metadata ? (input.metadata as any) : existing.metadata,
+        version: nextVersion,
+      },
+    });
+
+    // Create version snapshot
+    await this.prisma.agreementVersion.create({
+      data: {
+        id: generateId(),
+        agreementId,
+        version: nextVersion,
+        title: updated.title,
+        fileUrl: updated.fileUrl,
+        markdownContent: updated.markdownContent,
+        changeSummary: `Draft updated to v${nextVersion}`,
+        authorId,
       },
     });
 
@@ -222,10 +290,182 @@ export class AgreementService {
         action: 'AGREEMENT_DRAFT_UPDATED',
         resourceType: 'Agreement',
         resourceId: agreementId,
+        metadata: {
+          version: nextVersion,
+          prevVersion: existing.version,
+        },
       });
     }
 
     return updated;
+  }
+
+  /**
+   * Move agreement from DRAFT to ACTIVE
+   * Bumps version to next major version (e.g., 0.1/0.2 -> 1.0, 1.3 -> 2.0)
+   */
+  async activateAgreement(
+    orgId: string,
+    authorId: string,
+    agreementId: string,
+    input?: ActivateAgreementInput,
+  ) {
+    const existing = await this.prisma.agreement.findFirst({
+      where: { id: agreementId, organisationId: orgId, deletedAt: null },
+    });
+
+    if (!existing) {
+      throw new NotFoundError('Agreement not found.');
+    }
+
+    if (existing.status === 'ACTIVE') {
+      return existing;
+    }
+
+    const nextMajor = bumpToMajorVersion(existing.version);
+
+    const updated = await this.prisma.agreement.update({
+      where: { id: agreementId },
+      data: {
+        status: 'ACTIVE',
+        version: nextMajor,
+      },
+    });
+
+    await this.prisma.agreementVersion.create({
+      data: {
+        id: generateId(),
+        agreementId,
+        version: nextMajor,
+        title: updated.title,
+        fileUrl: updated.fileUrl,
+        markdownContent: updated.markdownContent,
+        changeSummary: input?.comment || `Moved to active (v${nextMajor})`,
+        authorId,
+      },
+    });
+
+    if (this.audit) {
+      await this.audit.log({
+        organisationId: orgId,
+        userId: authorId,
+        action: 'AGREEMENT_ACTIVATED',
+        resourceType: 'Agreement',
+        resourceId: agreementId,
+        metadata: {
+          version: nextMajor,
+          prevVersion: existing.version,
+          comment: input?.comment,
+        },
+      });
+    }
+
+    return updated;
+  }
+
+  /**
+   * Get single agreement by ID
+   */
+  async getAgreementById(orgId: string, agreementId: string) {
+    const agreement = await this.prisma.agreement.findFirst({
+      where: { id: agreementId, organisationId: orgId, deletedAt: null },
+      include: { author: { select: { id: true, name: true, email: true } } },
+    });
+
+    if (!agreement) {
+      throw new NotFoundError('Agreement not found.');
+    }
+
+    return agreement;
+  }
+
+  /**
+   * Get concise history timeline for an agreement
+   */
+  async getAgreementHistory(orgId: string, agreementId: string): Promise<HistoryItem[]> {
+    const agreement = await this.prisma.agreement.findFirst({
+      where: { id: agreementId, organisationId: orgId, deletedAt: null },
+    });
+
+    if (!agreement) {
+      throw new NotFoundError('Agreement not found.');
+    }
+
+    const auditLogs = await this.prisma.auditLog.findMany({
+      where: {
+        organisationId: orgId,
+        resourceType: 'Agreement',
+        resourceId: agreementId,
+      },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        user: {
+          select: { id: true, name: true, email: true },
+        },
+      },
+    });
+
+    const history: HistoryItem[] = auditLogs.map((log) => {
+      const meta = (log.metadata as Record<string, any>) || {};
+      let summary = 'Updated agreement';
+
+      switch (log.action) {
+        case 'AGREEMENT_CREATED':
+          summary = `Created draft v${meta.version || '0.1'}`;
+          break;
+        case 'AGREEMENT_UPLOADED':
+          summary =
+            meta.status === 'ACTIVE'
+              ? `Uploaded active document v${meta.version || '1.0'}`
+              : `Uploaded markdown draft v${meta.version || '0.1'}`;
+          break;
+        case 'AGREEMENT_DRAFT_UPDATED':
+          summary = `Updated to v${meta.version || '0.2'}`;
+          break;
+        case 'AGREEMENT_ACTIVATED':
+          summary = `Moved to active (v${meta.version || '1.0'})`;
+          break;
+        case 'AGREEMENT_ARCHIVED':
+          summary = 'Moved to archive';
+          break;
+        case 'AGREEMENT_UNARCHIVED':
+          summary = 'Unarchived agreement';
+          break;
+        case 'AGREEMENT_CLONED':
+          summary = 'Cloned agreement';
+          break;
+        case 'AGREEMENT_METADATA_UPDATED':
+          if (meta.addedTags?.length && meta.removedTags?.length) {
+            summary = `Added #${meta.addedTags.join(', #')}, removed #${meta.removedTags.join(', #')}`;
+          } else if (meta.addedTags?.length) {
+            summary = `Added label #${meta.addedTags.join(', #')}`;
+          } else if (meta.removedTags?.length) {
+            summary = `Removed label #${meta.removedTags.join(', #')}`;
+          } else {
+            summary = 'Updated labels';
+          }
+          break;
+        default:
+          summary = log.action.replace('AGREEMENT_', '').toLowerCase().replace(/_/g, ' ');
+          break;
+      }
+
+      return {
+        id: log.id,
+        action: log.action,
+        summary,
+        version: meta.version ? String(meta.version) : undefined,
+        user: {
+          id: log.user?.id,
+          name: log.user?.name || log.user?.email?.split('@')[0] || 'System',
+          email: log.user?.email || 'system@graphsign.ink',
+        },
+        createdAt: log.createdAt.toISOString(),
+        metadata: meta,
+      };
+    });
+
+    return history;
   }
 
   /**
@@ -245,24 +485,24 @@ export class AgreementService {
       throw new NotFoundError('Agreement not found.');
     }
 
-    const nextVersionNum = existing.version + 1;
+    const nextVersion = incrementMinorVersion(existing.version);
 
     const newVersion = await this.prisma.agreementVersion.create({
       data: {
         id: generateId(),
         agreementId,
-        version: nextVersionNum,
+        version: nextVersion,
         title: existing.title,
         fileUrl: existing.fileUrl,
-        htmlContent: existing.htmlContent,
-        changeSummary: changeSummary || `Version ${nextVersionNum}.0 revision`,
+        markdownContent: existing.markdownContent,
+        changeSummary: changeSummary || `Version ${nextVersion} revision`,
         authorId,
       },
     });
 
     await this.prisma.agreement.update({
       where: { id: agreementId },
-      data: { version: nextVersionNum },
+      data: { version: nextVersion },
     });
 
     if (this.audit) {
@@ -272,7 +512,7 @@ export class AgreementService {
         action: 'AGREEMENT_VERSION_CREATED',
         resourceType: 'Agreement',
         resourceId: agreementId,
-        metadata: { version: nextVersionNum },
+        metadata: { version: nextVersion },
       });
     }
 
@@ -293,7 +533,7 @@ export class AgreementService {
 
     return this.prisma.agreementVersion.findMany({
       where: { agreementId },
-      orderBy: { version: 'desc' },
+      orderBy: { createdAt: 'desc' },
     });
   }
 
@@ -323,17 +563,17 @@ export class AgreementService {
         fileName: existing.fileName,
         fileSize: existing.fileSize,
         mimeType: existing.mimeType,
-        htmlContent: existing.htmlContent,
+        markdownContent: existing.markdownContent,
         tags: existing.tags ? (existing.tags as any) : [],
         metadata: existing.metadata ? (existing.metadata as any) : {},
-        version: 1,
+        version: '0.1',
         versions: {
           create: {
             id: generateId(),
-            version: 1,
+            version: '0.1',
             title: `[Copy] ${existing.title}`,
             fileUrl: existing.fileUrl,
-            htmlContent: existing.htmlContent,
+            markdownContent: existing.markdownContent,
             changeSummary: `Cloned from agreement '${existing.title}' (${existing.id})`,
             authorId,
           },
@@ -405,6 +645,12 @@ export class AgreementService {
       throw new NotFoundError('Agreement not found.');
     }
 
+    const currentTags: string[] = Array.isArray(existing.tags) ? (existing.tags as string[]) : [];
+    const newTags: string[] = input.tags || currentTags;
+
+    const addedTags = newTags.filter((t) => !currentTags.includes(t));
+    const removedTags = currentTags.filter((t) => !newTags.includes(t));
+
     const updated = await this.prisma.agreement.update({
       where: { id: agreementId },
       data: {
@@ -420,6 +666,11 @@ export class AgreementService {
         action: 'AGREEMENT_METADATA_UPDATED',
         resourceType: 'Agreement',
         resourceId: agreementId,
+        metadata: {
+          addedTags,
+          removedTags,
+          tags: newTags,
+        },
       });
     }
 
@@ -428,6 +679,8 @@ export class AgreementService {
 
   /**
    * List agreements with filtering, pagination, and tag search
+   * - ACTIVE tab: returns ACTIVE agreements with major versions
+   * - DRAFT tab: returns DRAFT agreements
    */
   async listAgreements(orgId: string, query: QueryAgreementsInput) {
     const page = query.page || 1;
@@ -456,7 +709,7 @@ export class AgreementService {
       where.tags = { array_contains: [query.tag] };
     }
 
-    const [items, total] = await Promise.all([
+    const [rawItems, total] = await Promise.all([
       this.prisma.agreement.findMany({
         where,
         skip,
@@ -468,7 +721,7 @@ export class AgreementService {
     ]);
 
     return {
-      items,
+      items: rawItems,
       pagination: {
         page,
         limit,

@@ -9,6 +9,7 @@ import {
   createUploadAgreementSchema,
   createScratchAgreementSchema,
   updateDraftSchema,
+  activateAgreementSchema,
   updateMetadataTagsSchema,
   queryAgreementsSchema,
 } from '../validators/agreement-validators.js';
@@ -82,7 +83,7 @@ export function createAgreementRoutes(deps?: AgreementDeps) {
     },
   );
 
-  // POST /api/v1/agreements/upload (INK-66 Upload PDF/DOCX)
+  // POST /api/v1/agreements/upload (INK-66 Upload PDF/DOCX/MD)
   agreements.post(
     '/upload',
     jwtAuth(),
@@ -106,7 +107,7 @@ export function createAgreementRoutes(deps?: AgreementDeps) {
     },
   );
 
-  // POST /api/v1/agreements/scratch (INK-67 Create from scratch HTML)
+  // POST /api/v1/agreements/scratch (INK-67 Create from scratch Markdown)
   agreements.post(
     '/scratch',
     jwtAuth(),
@@ -132,7 +133,24 @@ export function createAgreementRoutes(deps?: AgreementDeps) {
     },
   );
 
-  // PATCH /api/v1/agreements/:id/draft (INK-68 Save draft & autosave)
+  // GET /api/v1/agreements/:id (Get single agreement details)
+  agreements.get(
+    '/:id',
+    jwtAuth(),
+    enforceTenantActiveStatus(),
+    requirePermission('documents:read'),
+    async (c) => {
+      const { service } = getServices(c);
+      const agreementId = c.req.param('id');
+      const userPayload = c.get('userPayload') as any;
+      const orgId = userPayload?.orgId || 'default-org-id';
+
+      const agreement = await service.getAgreementById(orgId, agreementId);
+      return c.json(agreement, 200);
+    },
+  );
+
+  // PATCH /api/v1/agreements/:id/draft (INK-68 Save draft & autosave, bump minor version)
   agreements.patch(
     '/:id/draft',
     jwtAuth(),
@@ -156,6 +174,48 @@ export function createAgreementRoutes(deps?: AgreementDeps) {
 
       const updated = await service.saveDraft(orgId, authorId, agreementId, parsed.data);
       return c.json(updated, 200);
+    },
+  );
+
+  // POST /api/v1/agreements/:id/activate (Move draft to ACTIVE and bump to major version)
+  agreements.post(
+    '/:id/activate',
+    jwtAuth(),
+    enforceTenantActiveStatus(),
+    requirePermission('documents:update'),
+    async (c) => {
+      const { service } = getServices(c);
+      const agreementId = c.req.param('id');
+      const userPayload = c.get('userPayload') as any;
+      const authorId = userPayload?.sub || 'unknown';
+      const orgId = userPayload?.orgId || 'default-org-id';
+
+      const body = await c.req.json().catch(() => ({}));
+      const parsed = activateAgreementSchema.safeParse(body);
+
+      if (!parsed.success) {
+        throw new BadRequestError(parsed.error.errors[0]?.message || 'Invalid activation payload');
+      }
+
+      const activated = await service.activateAgreement(orgId, authorId, agreementId, parsed.data);
+      return c.json(activated, 200);
+    },
+  );
+
+  // GET /api/v1/agreements/:id/history (Get concise audit history timeline)
+  agreements.get(
+    '/:id/history',
+    jwtAuth(),
+    enforceTenantActiveStatus(),
+    requirePermission('documents:read'),
+    async (c) => {
+      const { service } = getServices(c);
+      const agreementId = c.req.param('id');
+      const userPayload = c.get('userPayload') as any;
+      const orgId = userPayload?.orgId || 'default-org-id';
+
+      const history = await service.getAgreementHistory(orgId, agreementId);
+      return c.json(history, 200);
     },
   );
 
