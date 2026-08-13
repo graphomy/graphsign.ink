@@ -28,16 +28,22 @@ async function main() {
     });
   }
 
-  // Ensure super_admin seed user kunal@graphomy.com
-  const superAdminEmail = 'kunal@graphomy.com';
-  const existingUser = await prisma.user.findUnique({ where: { email: superAdminEmail } });
+  // Ensure super_admin seed users from SUPERADMIN_ID env var (INK-206)
+  const superAdminIds = (process.env.SUPERADMIN_ID || 'kunal@graphomy.com')
+    .split(',')
+    .map((e) => e.trim().toLowerCase())
+    .filter((e) => e.length > 0);
 
-  if (existingUser) {
-    await prisma.user.update({
-      where: { email: superAdminEmail },
-      data: { role: 'super_admin' },
-    });
-    console.log(`Updated user ${superAdminEmail} to super_admin role.`);
+  for (const superAdminEmail of superAdminIds) {
+    const existingUser = await prisma.user.findFirst({ where: { email: superAdminEmail } });
+
+    if (existingUser) {
+      await prisma.user.update({
+        where: { id: existingUser.id },
+        data: { role: 'super_admin' },
+      });
+      console.log(`Updated user ${superAdminEmail} to super_admin role.`);
+    }
   }
 
   console.log('Seeding completed successfully.');

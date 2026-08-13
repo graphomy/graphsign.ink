@@ -6,7 +6,7 @@ export const ALLOWED_MIME_TYPES = [
   'application/msword',
 ];
 
-export const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024; // 25 MB
+export const MAX_FILE_SIZE_BYTES = 15 * 1024 * 1024; // 15 MB (INK-206)
 export const MAX_HTML_CONTENT_LENGTH = 512 * 1024; // 512 KB
 
 /**
@@ -36,7 +36,10 @@ export const createUploadAgreementSchema = z.object({
   fileSize: z
     .number()
     .min(1, 'File size must be greater than 0')
-    .max(MAX_FILE_SIZE_BYTES, 'File size cannot exceed 25MB'),
+    .max(
+      MAX_FILE_SIZE_BYTES,
+      'This file exceeds the maximum allowed upload size of 15 MB. Please reduce the file size or contact your administrator to adjust the upload limit.',
+    ),
   mimeType: z
     .string()
     .refine(

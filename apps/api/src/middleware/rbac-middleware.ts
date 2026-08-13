@@ -1,5 +1,5 @@
 import type { MiddlewareHandler } from 'hono';
-import { SUPER_ADMIN_EMAIL } from '../config/roles.js';
+import { isSuperAdmin } from '../config/roles.js';
 import { hasPermission } from '../config/permissions.js';
 import { ForbiddenError, UnauthorizedError } from '../utils/errors.js';
 
@@ -25,7 +25,7 @@ export function requireRole(allowedRoles: string[]): MiddlewareHandler {
     }
 
     // Super Admin override — strictly email-only, never trust role claim alone
-    if (userEmail === SUPER_ADMIN_EMAIL) {
+    if (isSuperAdmin(userEmail)) {
       await next();
       return;
     }
@@ -54,7 +54,7 @@ export function requirePermission(permission: string): MiddlewareHandler {
     }
 
     // Super Admin override — strictly email-only, never trust role claim alone
-    if (userEmail === SUPER_ADMIN_EMAIL) {
+    if (isSuperAdmin(userEmail)) {
       await next();
       return;
     }
