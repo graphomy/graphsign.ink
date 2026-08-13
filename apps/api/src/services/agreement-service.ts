@@ -10,6 +10,9 @@ import type {
   QueryAgreementsInput,
 } from '../validators/agreement-validators.js';
 
+/** Default estimated size for scratch/HTML-created agreements (10 KB). */
+const DEFAULT_SCRATCH_SIZE_BYTES = 10 * 1024;
+
 export class AgreementService {
   constructor(
     private prisma: PrismaClient,
@@ -17,9 +20,58 @@ export class AgreementService {
   ) {}
 
   /**
+   * Checks per-user storage quota sufficiency (INK-206).
+   * Throws ForbiddenError with user-friendly message if quota would be exceeded.
+   */
+  private async checkUserStorageQuota(userId: string, additionalBytes: number): Promise<void> {
+    if (!this.prisma.user) return;
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { storageQuotaBytes: true, storageUsedBytes: true, email: true },
+    });
+
+    if (!user) {
+      return;
+    }
+
+    const quotaBytes = user.storageQuotaBytes ?? 262144000n;
+    const usedBytes = user.storageUsedBytes ?? 0n;
+    const newTotal = usedBytes + BigInt(additionalBytes);
+
+    if (quotaBytes > 0n && newTotal > quotaBytes) {
+      const quotaMB = Number(quotaBytes) / (1024 * 1024);
+      const usedMB = (Number(usedBytes) / (1024 * 1024)).toFixed(1);
+      throw new ForbiddenError(
+        `You have reached your storage limit of ${quotaMB} MB (${usedMB} MB used). ` +
+          'Please delete existing documents to free up space, or contact your administrator to increase your storage quota.',
+      );
+    }
+  }
+
+  /**
+   * Updates per-user storage usage after a successful upload (INK-206).
+   */
+  private async updateUserStorageUsage(userId: string, additionalBytes: number): Promise<void> {
+    if (!this.prisma.user) return;
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        storageUsedBytes: { increment: BigInt(additionalBytes) },
+      },
+    });
+  }
+
+  /**
    * Upload PDF/DOCX agreement file (FR-004.001 / INK-66)
    */
   async uploadAgreementFile(orgId: string, authorId: string, input: CreateUploadAgreementInput) {
+    // Enforce user storage quota (INK-206)
+    if (authorId !== 'unknown') {
+      await this.checkUserStorageQuota(authorId, input.fileSize);
+    }
+
     const agreementId = generateId();
 
     // Simulated storage URL (e.g. S3 / R2 Bucket)
@@ -53,6 +105,10 @@ export class AgreementService {
       },
     });
 
+    if (authorId !== 'unknown') {
+      await this.updateUserStorageUsage(authorId, input.fileSize);
+    }
+
     if (this.audit) {
       await this.audit.log({
         organisationId: orgId,
@@ -71,6 +127,14 @@ export class AgreementService {
    * Create agreement from scratch using rich text HTML (FR-004.002 / INK-67)
    */
   async createFromScratch(orgId: string, authorId: string, input: CreateScratchAgreementInput) {
+    const estimatedSizeBytes = input.htmlContent
+      ? Buffer.byteLength(input.htmlContent, 'utf8')
+      : DEFAULT_SCRATCH_SIZE_BYTES;
+
+    if (authorId !== 'unknown') {
+      await this.checkUserStorageQuota(authorId, estimatedSizeBytes);
+    }
+
     const agreementId = generateId();
     const fileUrl = `https://storage.graphsign.ink/${orgId}/agreements/${agreementId}-scratch.pdf`;
 
@@ -85,6 +149,7 @@ export class AgreementService {
         htmlContent: input.htmlContent,
         fileUrl,
         fileName: `${input.title.toLowerCase().replace(/[^a-z0-9]/g, '-')}.pdf`,
+        fileSize: estimatedSizeBytes,
         mimeType: 'application/pdf',
         tags: input.tags ? (input.tags as any) : [],
         metadata: input.metadata ? (input.metadata as any) : {},
@@ -102,6 +167,10 @@ export class AgreementService {
         },
       },
     });
+
+    if (authorId !== 'unknown') {
+      await this.updateUserStorageUsage(authorId, estimatedSizeBytes);
+    }
 
     if (this.audit) {
       await this.audit.log({

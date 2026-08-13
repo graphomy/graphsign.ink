@@ -7,6 +7,7 @@ import { createRoleRoutes } from './routes/roles.js';
 import { createUserRoutes } from './routes/users.js';
 import { createAgreementRoutes } from './routes/agreements.js';
 import { createTemplateRoutes } from './routes/templates.js';
+import { createAdminRoutes } from './routes/admin.js';
 
 /** Cloudflare Worker environment bindings. */
 export type Env = {
@@ -18,6 +19,7 @@ export type Env = {
   WEB_URL: string;
   API_URL: string;
   NODE_ENV: string;
+  SUPERADMIN_ID: string;
 };
 
 type Variables = {
@@ -71,6 +73,7 @@ app.route('/api/v1/roles', createRoleRoutes());
 app.route('/api/v1/users', createUserRoutes());
 app.route('/api/v1/agreements', createAgreementRoutes());
 app.route('/api/v1/templates', createTemplateRoutes());
+app.route('/api/v1/admin', createAdminRoutes());
 
 // Workers export — no serve() call needed
 export default app;

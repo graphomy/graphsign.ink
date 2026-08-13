@@ -14,6 +14,35 @@ export interface RoleDefinition {
 
 export const SUPER_ADMIN_EMAIL = 'kunal@graphomy.com';
 
+/**
+ * Resolves superadmin email(s) from environment variable SUPERADMIN_ID.
+ * Falls back to the hardcoded legacy email if env var is not set.
+ * Supports comma-separated multiple emails.
+ */
+export function getSuperAdminEmails(): string[] {
+  const envValue = process.env.SUPERADMIN_ID || '';
+  const emails = envValue
+    .split(',')
+    .map((e) => e.trim().toLowerCase())
+    .filter((e) => e.length > 0);
+
+  // Fallback to legacy hardcoded value if env var is not set
+  if (emails.length === 0 && SUPER_ADMIN_EMAIL) {
+    return [SUPER_ADMIN_EMAIL.toLowerCase()];
+  }
+
+  return emails;
+}
+
+/**
+ * Checks if the given email belongs to a platform super admin.
+ * Reads from SUPERADMIN_ID environment variable (comma-separated).
+ */
+export function isSuperAdmin(email: string): boolean {
+  if (!email) return false;
+  return getSuperAdminEmails().includes(email.toLowerCase());
+}
+
 export const DEFAULT_ROLES: RoleDefinition[] = [
   {
     id: 'super_admin',

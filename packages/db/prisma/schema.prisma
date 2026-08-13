@@ -83,6 +83,12 @@ model User {
   mfaPendingSecret                String?   @map("mfa_pending_secret") @db.VarChar(255)
   mfaBackupCodes                  Json?     @map("mfa_backup_codes") @db.JsonB
   status                          String    @default("pending_verification") @db.VarChar(20)
+
+  // Per-user storage quotas (INK-206)
+  storageQuotaBytes               BigInt    @default(262144000) @map("storage_quota_bytes")  // 250 MB
+  storageUsedBytes                BigInt    @default(0) @map("storage_used_bytes")
+  lastLoginAt                     DateTime? @map("last_login_at") @db.Timestamptz()
+
   createdAt                       DateTime  @default(now()) @map("created_at") @db.Timestamptz()
   updatedAt                       DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
   deletedAt                       DateTime? @map("deleted_at") @db.Timestamptz()
@@ -361,4 +367,16 @@ model AuditLog {
   @@index([userId])
   @@index([createdAt])
   @@map("audit_log")
+}
+
+/// Platform-wide configuration managed by super admin (INK-206).
+model PlatformConfig {
+  id        String   @id @db.Uuid
+  key       String   @unique @db.VarChar(100)
+  value     String   @db.VarChar(500)
+  updatedBy String?  @map("updated_by") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz()
+
+  @@map("platform_config")
 }

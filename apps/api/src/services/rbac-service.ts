@@ -1,5 +1,5 @@
 import type { PrismaClient } from '@graphsign/db';
-import { DEFAULT_ROLES, SUPER_ADMIN_EMAIL, type RoleDefinition } from '../config/roles.js';
+import { DEFAULT_ROLES, isSuperAdmin, type RoleDefinition } from '../config/roles.js';
 import { PERMISSIONS, DEFAULT_ROLE_PERMISSIONS, hasPermission } from '../config/permissions.js';
 import { ForbiddenError, NotFoundError, BadRequestError } from '../utils/errors.js';
 import type { AuditService } from './audit-service.js';
@@ -47,9 +47,9 @@ export class RbacService {
     }
 
     // Super Admin security constraint: strictly limited to kunal@graphomy.com
-    if (newRole === 'super_admin' && actorEmail !== SUPER_ADMIN_EMAIL) {
+    if (newRole === 'super_admin' && !isSuperAdmin(actorEmail)) {
       throw new ForbiddenError(
-        `Only ${SUPER_ADMIN_EMAIL} is authorized to assign the super_admin role.`,
+        'Only designated platform super admins are authorized to assign the super_admin role.',
       );
     }
 
@@ -119,8 +119,9 @@ export class RbacService {
       select: { role: true },
     });
 
-    const effectiveRole =
-      user.email === SUPER_ADMIN_EMAIL ? 'super_admin' : userOrg?.role || user.role || 'user';
+    const effectiveRole = isSuperAdmin(user.email)
+      ? 'super_admin'
+      : userOrg?.role || user.role || 'user';
     const permissions = DEFAULT_ROLE_PERMISSIONS[effectiveRole] ?? DEFAULT_ROLE_PERMISSIONS['user'];
 
     return {

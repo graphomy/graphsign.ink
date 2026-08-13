@@ -75,6 +75,6 @@ describe('User Role Assignment Routes Integration Tests (INK-62 & INK-64)', () =
 
     expect(res.status).toBe(403);
     const body = await res.json();
-    expect(body.error.message).toContain('kunal@graphomy.com');
+    expect(body.error.message).toContain('Only designated platform super admins');
   });
 });
