@@ -13,6 +13,9 @@ describe('Agreement Routes Integration Tests (Epic INK-8)', () => {
       uploadAgreementFile: vi.fn(),
       createFromScratch: vi.fn(),
       saveDraft: vi.fn(),
+      activateAgreement: vi.fn(),
+      getAgreementById: vi.fn(),
+      getAgreementHistory: vi.fn(),
       createVersion: vi.fn(),
       listVersions: vi.fn(),
       cloneAgreement: vi.fn(),
@@ -39,7 +42,8 @@ describe('Agreement Routes Integration Tests (Epic INK-8)', () => {
     mockAgreementService.uploadAgreementFile.mockResolvedValue({
       id: 'ag-1',
       title: 'Master Contract',
-      status: 'DRAFT',
+      status: 'ACTIVE',
+      version: '1.0',
       fileUrl: 'https://storage/contract.pdf',
     });
 
@@ -60,14 +64,16 @@ describe('Agreement Routes Integration Tests (Epic INK-8)', () => {
     expect(res.status).toBe(201);
     const body = (await res.json()) as any;
     expect(body.title).toBe('Master Contract');
+    expect(body.version).toBe('1.0');
   });
 
-  it('POST /api/v1/agreements/scratch - creates agreement from scratch HTML (INK-67)', async () => {
+  it('POST /api/v1/agreements/scratch - creates agreement from scratch Markdown (INK-67)', async () => {
     mockAgreementService.createFromScratch.mockResolvedValue({
       id: 'ag-2',
       title: 'Scratch Agreement',
       status: 'DRAFT',
-      htmlContent: '<h1>NDA</h1>',
+      version: '0.1',
+      markdownContent: '# NDA\n\n- Confidentiality',
     });
 
     const res = await app.request('/api/v1/agreements/scratch', {
@@ -78,13 +84,79 @@ describe('Agreement Routes Integration Tests (Epic INK-8)', () => {
       },
       body: JSON.stringify({
         title: 'Scratch Agreement',
-        htmlContent: '<h1>NDA</h1>',
+        markdownContent: '# NDA\n\n- Confidentiality',
       }),
     });
 
     expect(res.status).toBe(201);
     const body = (await res.json()) as any;
     expect(body.title).toBe('Scratch Agreement');
+    expect(body.version).toBe('0.1');
+  });
+
+  it('GET /api/v1/agreements/:id - gets agreement by ID', async () => {
+    mockAgreementService.getAgreementById.mockResolvedValue({
+      id: 'ag-1',
+      title: 'Service Agreement',
+      status: 'DRAFT',
+      version: '0.1',
+    });
+
+    const res = await app.request('/api/v1/agreements/ag-1', {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    expect(body.id).toBe('ag-1');
+  });
+
+  it('POST /api/v1/agreements/:id/activate - activates draft agreement', async () => {
+    mockAgreementService.activateAgreement.mockResolvedValue({
+      id: 'ag-1',
+      title: 'Service Agreement',
+      status: 'ACTIVE',
+      version: '1.0',
+    });
+
+    const res = await app.request('/api/v1/agreements/ag-1/activate', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ comment: 'Ready to sign' }),
+    });
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    expect(body.status).toBe('ACTIVE');
+    expect(body.version).toBe('1.0');
+  });
+
+  it('GET /api/v1/agreements/:id/history - gets concise history timeline', async () => {
+    mockAgreementService.getAgreementHistory.mockResolvedValue([
+      {
+        id: 'h-1',
+        action: 'AGREEMENT_CREATED',
+        summary: 'Created draft v0.1',
+        user: { name: 'Alice', email: 'alice@graphsign.ink' },
+        createdAt: '2026-08-14T00:00:00Z',
+      },
+    ]);
+
+    const res = await app.request('/api/v1/agreements/ag-1/history', {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    expect(body).toHaveLength(1);
+    expect(body[0].summary).toBe('Created draft v0.1');
   });
 
   it('POST /api/v1/agreements/:id/clone - clones agreement (INK-70)', async () => {
@@ -92,6 +164,7 @@ describe('Agreement Routes Integration Tests (Epic INK-8)', () => {
       id: 'ag-cloned',
       title: '[Copy] Original Agreement',
       status: 'DRAFT',
+      version: '0.1',
     });
 
     const res = await app.request('/api/v1/agreements/ag-orig/clone', {

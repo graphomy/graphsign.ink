@@ -4,61 +4,50 @@ export const ALLOWED_MIME_TYPES = [
   'application/pdf',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   'application/msword',
+  'text/markdown',
+  'text/plain',
 ];
 
 export const MAX_FILE_SIZE_BYTES = 15 * 1024 * 1024; // 15 MB (INK-206)
-export const MAX_HTML_CONTENT_LENGTH = 512 * 1024; // 512 KB
+export const MAX_MARKDOWN_CONTENT_LENGTH = 512 * 1024; // 512 KB
 
-/**
- * Strips dangerous HTML elements and attributes to prevent XSS.
- * Removes script/iframe/object/embed/link tags, on* event handlers,
- * and javascript: protocol URLs.
- */
-function sanitizeHtml(html: string): string {
-  return html
-    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
-    .replace(/<\/?script[^>]*>/gi, '')
-    .replace(/<iframe[^>]*>[\s\S]*?<\/iframe>/gi, '')
-    .replace(/<\/?iframe[^>]*>/gi, '')
-    .replace(/<object[^>]*>[\s\S]*?<\/object>/gi, '')
-    .replace(/<\/?object[^>]*>/gi, '')
-    .replace(/<embed[^>]*\/?>/gi, '')
-    .replace(/<link[^>]*\/?>/gi, '')
-    .replace(/\s+on\w+\s*=\s*["'][^"']*["']/gi, '')
-    .replace(/\s+on\w+\s*=\s*\S+/gi, '')
-    .replace(/javascript\s*:/gi, '');
-}
-
-export const createUploadAgreementSchema = z.object({
-  title: z.string().min(2, 'Agreement title must be at least 2 characters').max(255),
-  description: z.string().max(1000).optional(),
-  fileName: z.string().min(1, 'File name is required'),
-  fileSize: z
-    .number()
-    .min(1, 'File size must be greater than 0')
-    .max(
-      MAX_FILE_SIZE_BYTES,
-      'This file exceeds the maximum allowed upload size of 15 MB. Please reduce the file size or contact your administrator to adjust the upload limit.',
-    ),
-  mimeType: z
-    .string()
-    .refine(
-      (val) => ALLOWED_MIME_TYPES.includes(val),
-      'Invalid file format. Only PDF and DOCX files are allowed.',
-    ),
-  fileBase64: z.string().optional(),
-  tags: z.array(z.string()).optional(),
-  metadata: z.record(z.unknown()).optional(),
-});
+export const createUploadAgreementSchema = z
+  .object({
+    title: z.string().min(2, 'Agreement title must be at least 2 characters').max(255),
+    description: z.string().max(1000).optional(),
+    fileName: z.string().min(1, 'File name is required'),
+    fileSize: z
+      .number()
+      .min(1, 'File size must be greater than 0')
+      .max(
+        MAX_FILE_SIZE_BYTES,
+        'This file exceeds the maximum allowed upload size of 15 MB. Please reduce the file size or contact your administrator to adjust the upload limit.',
+      ),
+    mimeType: z
+      .string()
+      .refine(
+        (val) => ALLOWED_MIME_TYPES.includes(val),
+        'Invalid file format. Only PDF, DOCX, and Markdown (.md) files are allowed.',
+      ),
+    fileBase64: z.string().optional(),
+    markdownContent: z.string().max(MAX_MARKDOWN_CONTENT_LENGTH).optional(),
+    isEncrypted: z.boolean().optional(),
+    tags: z.array(z.string()).optional(),
+    metadata: z.record(z.unknown()).optional(),
+  })
+  .refine((data) => !data.isEncrypted, {
+    message:
+      'The uploaded document is encrypted or password-protected. Please unlock or decrypt the document before uploading.',
+    path: ['isEncrypted'],
+  });
 
 export const createScratchAgreementSchema = z.object({
   title: z.string().min(2, 'Agreement title must be at least 2 characters').max(255),
   description: z.string().max(1000).optional(),
-  htmlContent: z
+  markdownContent: z
     .string()
-    .min(1, 'Document content is required')
-    .max(MAX_HTML_CONTENT_LENGTH, 'HTML content exceeds maximum allowed size (512KB)')
-    .transform(sanitizeHtml),
+    .min(1, 'Document markdown content is required')
+    .max(MAX_MARKDOWN_CONTENT_LENGTH, 'Markdown content exceeds maximum allowed size (512KB)'),
   tags: z.array(z.string()).optional(),
   metadata: z.record(z.unknown()).optional(),
 });
@@ -66,13 +55,16 @@ export const createScratchAgreementSchema = z.object({
 export const updateDraftSchema = z.object({
   title: z.string().min(2).max(255).optional(),
   description: z.string().max(1000).optional(),
-  htmlContent: z
+  markdownContent: z
     .string()
-    .max(MAX_HTML_CONTENT_LENGTH, 'HTML content exceeds maximum allowed size (512KB)')
-    .transform(sanitizeHtml)
+    .max(MAX_MARKDOWN_CONTENT_LENGTH, 'Markdown content exceeds maximum allowed size (512KB)')
     .optional(),
   tags: z.array(z.string()).optional(),
   metadata: z.record(z.unknown()).optional(),
+});
+
+export const activateAgreementSchema = z.object({
+  comment: z.string().max(500).optional(),
 });
 
 export const updateMetadataTagsSchema = z.object({
@@ -95,5 +87,6 @@ export const queryAgreementsSchema = z.object({
 export type CreateUploadAgreementInput = z.infer<typeof createUploadAgreementSchema>;
 export type CreateScratchAgreementInput = z.infer<typeof createScratchAgreementSchema>;
 export type UpdateDraftInput = z.infer<typeof updateDraftSchema>;
+export type ActivateAgreementInput = z.infer<typeof activateAgreementSchema>;
 export type UpdateMetadataTagsInput = z.infer<typeof updateMetadataTagsSchema>;
 export type QueryAgreementsInput = z.infer<typeof queryAgreementsSchema>;

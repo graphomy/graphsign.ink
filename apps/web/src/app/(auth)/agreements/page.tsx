@@ -1,11 +1,15 @@
 'use client';
 
-import { useState, useEffect, Suspense } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { SessionGuard } from '@/components/features/auth/SessionGuard';
 import { HeaderNav } from '@/components/layout/HeaderNav';
 import { Footer } from '@/components/layout/Footer';
+import { MarkdownEditor } from '@/components/features/agreements/MarkdownEditor';
+import { PdfViewerModal } from '@/components/features/agreements/PdfViewerModal';
+import { AgreementHistoryModal } from '@/components/features/agreements/AgreementHistoryModal';
+import { AgreementEditModal } from '@/components/features/agreements/AgreementEditModal';
 import { getApiUrl } from '@/lib/api';
 
 interface AgreementItem {
@@ -17,23 +21,14 @@ interface AgreementItem {
   fileName?: string;
   fileSize?: number;
   mimeType?: string;
-  htmlContent?: string;
-  version: number;
+  markdownContent?: string;
+  version: string | number;
   isArchived: boolean;
   tags?: string[];
   metadata?: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
   author?: { name?: string; email: string };
-}
-
-interface VersionItem {
-  id: string;
-  version: number;
-  title: string;
-  fileUrl?: string;
-  changeSummary?: string;
-  createdAt: string;
 }
 
 function getToken(): string {
@@ -52,7 +47,9 @@ function AgreementManagementContent() {
   // Modals state
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [showScratchModal, setShowScratchModal] = useState(false);
-  const [showVersionModal, setShowVersionModal] = useState(false);
+  const [showPdfModal, setShowPdfModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [showMetadataModal, setShowMetadataModal] = useState(false);
   const [selectedAgreement, setSelectedAgreement] = useState<AgreementItem | null>(null);
 
@@ -63,14 +60,13 @@ function AgreementManagementContent() {
   const [uploadTagInput, setUploadTagInput] = useState('');
 
   const [scratchTitle, setScratchTitle] = useState('');
-  const [scratchHtml, setScratchHtml] = useState(
-    '<h1>Agreement Terms</h1><p>Enter agreement terms, clauses, and variable values here...</p>',
+  const [scratchDesc, setScratchDesc] = useState('');
+  const [scratchMarkdown, setScratchMarkdown] = useState(
+    '# Standard Agreement\n\n## 1. Scope and Terms\nEnter contract clauses, obligations, and deliverables in pure Markdown.\n\n## 2. Term & Termination\nThis agreement is effective upon mutual execution.\n',
   );
   const [scratchTags, setScratchTags] = useState<string[]>([]);
   const [scratchTagInput, setScratchTagInput] = useState('');
-  const [autosaveStatus, setAutosaveStatus] = useState<string>('');
 
-  const [versions, setVersions] = useState<VersionItem[]>([]);
   const [tagInput, setTagInput] = useState('');
   const [tagsList, setTagsList] = useState<string[]>([]);
 
@@ -93,7 +89,8 @@ function AgreementManagementContent() {
       setLoading(true);
       try {
         const isArchivedParam = activeTab === 'archived' ? 'true' : 'false';
-        const statusParam = activeTab === 'drafts' ? 'DRAFT' : '';
+        const statusParam =
+          activeTab === 'drafts' ? 'DRAFT' : activeTab === 'active' ? 'ACTIVE' : '';
         let url = `${getApiUrl()}/api/v1/agreements?isArchived=${isArchivedParam}`;
         if (statusParam) url += `&status=${statusParam}`;
         if (searchQuery) url += `&search=${encodeURIComponent(searchQuery)}`;
@@ -124,18 +121,6 @@ function AgreementManagementContent() {
     };
   }, [activeTab, searchQuery, tagFilter, refreshTrigger]);
 
-  // Draft Autosave interval (every 30 seconds for scratch modal)
-  useEffect(() => {
-    if (!showScratchModal || !scratchTitle) return;
-    const interval = setInterval(() => {
-      setAutosaveStatus('Autosaving draft...');
-      setTimeout(() => {
-        setAutosaveStatus('Draft saved automatically');
-      }, 1000);
-    }, 30000);
-    return () => clearInterval(interval);
-  }, [showScratchModal, scratchTitle]);
-
   function handleAddUploadTag() {
     if (!uploadTagInput.trim()) return;
     const tag = uploadTagInput.trim().toLowerCase();
@@ -160,11 +145,21 @@ function AgreementManagementContent() {
     setActionMessage(null);
 
     if (!uploadFile) {
-      setActionError('Please select a valid document file (PDF or DOCX).');
+      setActionError('Please select a valid document file (.pdf, .docx, or .md).');
       return;
     }
 
     try {
+      const isMd =
+        uploadFile.name.toLowerCase().endsWith('.md') ||
+        uploadFile.type === 'text/markdown' ||
+        uploadFile.type === 'text/plain';
+
+      let markdownContent: string | undefined = undefined;
+      if (isMd) {
+        markdownContent = await uploadFile.text();
+      }
+
       const res = await fetch(`${getApiUrl()}/api/v1/agreements/upload`, {
         method: 'POST',
         headers: {
@@ -172,10 +167,11 @@ function AgreementManagementContent() {
           Authorization: `Bearer ${getToken()}`,
         },
         body: JSON.stringify({
-          title: uploadTitle || uploadFile.name,
+          title: uploadTitle || uploadFile.name.replace(/\.[^/.]+$/, ''),
           fileName: uploadFile.name,
           fileSize: uploadFile.size,
-          mimeType: uploadFile.type || 'application/pdf',
+          mimeType: isMd ? 'text/markdown' : uploadFile.type || 'application/pdf',
+          markdownContent,
           tags: uploadTags,
         }),
       });
@@ -185,12 +181,19 @@ function AgreementManagementContent() {
         throw new Error(data?.error?.message || data?.message || 'Failed to upload agreement.');
       }
 
-      setActionMessage('Agreement uploaded successfully as Draft.');
+      await res.json();
+      if (isMd) {
+        setActionMessage('Markdown agreement uploaded successfully as Draft (v0.1).');
+        setActiveTab('drafts');
+      } else {
+        setActionMessage('Agreement uploaded and converted to active PDF (v1.0).');
+        setActiveTab('active');
+      }
+
       setShowUploadModal(false);
       setUploadTitle('');
       setUploadFile(null);
       setUploadTags([]);
-      setActiveTab('drafts');
       setRefreshTrigger((prev) => prev + 1);
     } catch (err: unknown) {
       setActionError((err as Error).message);
@@ -216,7 +219,8 @@ function AgreementManagementContent() {
         },
         body: JSON.stringify({
           title: scratchTitle.trim(),
-          htmlContent: scratchHtml,
+          description: scratchDesc.trim() || undefined,
+          markdownContent: scratchMarkdown,
           tags: scratchTags,
         }),
       });
@@ -226,9 +230,10 @@ function AgreementManagementContent() {
         throw new Error(data?.error?.message || data?.message || 'Failed to create agreement.');
       }
 
-      setActionMessage('Agreement created from scratch successfully.');
+      setActionMessage('Agreement draft created from scratch successfully (v0.1).');
       setShowScratchModal(false);
       setScratchTitle('');
+      setScratchDesc('');
       setScratchTags([]);
       setActiveTab('drafts');
       setRefreshTrigger((prev) => prev + 1);
@@ -246,7 +251,7 @@ function AgreementManagementContent() {
       });
 
       if (!res.ok) throw new Error('Failed to clone agreement.');
-      setActionMessage('Agreement cloned successfully into a new draft.');
+      setActionMessage('Agreement cloned successfully into a new draft (v0.1).');
       setActiveTab('drafts');
       setRefreshTrigger((prev) => prev + 1);
     } catch (err: unknown) {
@@ -257,13 +262,10 @@ function AgreementManagementContent() {
   async function handleArchiveToggle(id: string, isArchived: boolean) {
     setActionError(null);
     try {
-      const res = await fetch(`${getApiUrl()}/api/v1/agreements/${id}/archive`, {
+      const endpoint = isArchived ? 'archive' : 'unarchive';
+      const res = await fetch(`${getApiUrl()}/api/v1/agreements/${id}/${endpoint}`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${getToken()}`,
-        },
-        body: JSON.stringify({ isArchived }),
+        headers: { Authorization: `Bearer ${getToken()}` },
       });
 
       if (!res.ok) throw new Error('Failed to update archive status.');
@@ -274,20 +276,19 @@ function AgreementManagementContent() {
     }
   }
 
-  async function openVersionModal(agreement: AgreementItem) {
+  function openEditModal(agreement: AgreementItem) {
     setSelectedAgreement(agreement);
-    setShowVersionModal(true);
-    try {
-      const res = await fetch(`${getApiUrl()}/api/v1/agreements/${agreement.id}/versions`, {
-        headers: { Authorization: `Bearer ${getToken()}` },
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setVersions(data || []);
-      }
-    } catch (err) {
-      console.error(err);
-    }
+    setShowEditModal(true);
+  }
+
+  function openPdfViewer(agreement: AgreementItem) {
+    setSelectedAgreement(agreement);
+    setShowPdfModal(true);
+  }
+
+  function openHistoryModal(agreement: AgreementItem) {
+    setSelectedAgreement(agreement);
+    setShowHistoryModal(true);
   }
 
   function openMetadataModal(agreement: AgreementItem) {
@@ -334,6 +335,11 @@ function AgreementManagementContent() {
     }
   }
 
+  function formatVersion(ver: string | number) {
+    const s = String(ver);
+    return s.startsWith('v') || s.startsWith('V') ? s : `v${s}`;
+  }
+
   return (
     <div className="min-h-screen bg-neutral-50 flex flex-col font-sans text-neutral-900">
       <HeaderNav />
@@ -354,7 +360,8 @@ function AgreementManagementContent() {
               <span>📑</span> Agreement Management
             </h1>
             <p className="text-xs text-neutral-600">
-              Upload documents, create agreements from scratch, manage versions and audit trails.
+              Draft contracts in Markdown, convert to verified PDFs, manage semantic versions and
+              audit history.
             </p>
           </div>
 
@@ -366,7 +373,7 @@ function AgreementManagementContent() {
               }}
               className="px-4 py-2 bg-[#ba0000] hover:bg-red-700 text-white text-xs font-semibold rounded-lg shadow-sm transition-all flex items-center gap-1.5"
             >
-              <span>📄</span> Upload PDF/DOCX
+              <span>📄</span> Upload PDF/DOCX/MD
             </button>
             <button
               onClick={() => {
@@ -382,7 +389,7 @@ function AgreementManagementContent() {
 
         {/* Global Notifications Banners */}
         {actionMessage && (
-          <div className="rounded-xl border border-green-200 bg-green-50 p-4 text-xs font-medium text-green-800 flex items-center justify-between">
+          <div className="rounded-xl border border-green-200 bg-green-50 p-4 text-xs font-medium text-green-800 flex items-center justify-between shadow-2xs">
             <span>{actionMessage}</span>
             <button onClick={() => setActionMessage(null)} className="font-bold text-green-700">
               ×
@@ -390,7 +397,7 @@ function AgreementManagementContent() {
           </div>
         )}
         {actionError && (
-          <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-xs font-medium text-red-700 flex items-center justify-between">
+          <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-xs font-medium text-red-700 flex items-center justify-between shadow-2xs">
             <span>{actionError}</span>
             <button onClick={() => setActionError(null)} className="font-bold text-red-700">
               ×
@@ -465,7 +472,7 @@ function AgreementManagementContent() {
               No agreements found in {activeTab}.
             </p>
             <p className="text-xs text-neutral-500 max-w-sm mx-auto">
-              Create a contract from scratch or upload a document to begin sending for signatures.
+              Draft a new agreement in Markdown or upload documents to send for signatures.
             </p>
             <div className="pt-2 flex justify-center gap-3">
               <button
@@ -481,21 +488,23 @@ function AgreementManagementContent() {
             {agreements.map((agreement) => (
               <div
                 key={agreement.id}
-                className="bg-white border border-neutral-200 rounded-xl p-5 hover:border-neutral-300 shadow-sm transition-all flex flex-col justify-between"
+                className="bg-white border border-neutral-200 rounded-xl p-5 hover:border-neutral-300 shadow-sm transition-all flex flex-col justify-between group"
               >
                 <div>
                   <div className="flex items-center justify-between gap-2 mb-3">
                     <span
                       className={`text-[11px] font-bold px-2.5 py-0.5 rounded-md uppercase tracking-wider ${
-                        agreement.status === 'COMPLETED' || agreement.status === 'SEALED'
+                        agreement.status === 'ACTIVE' ||
+                        agreement.status === 'COMPLETED' ||
+                        agreement.status === 'SEALED'
                           ? 'bg-green-100 text-green-800 border border-green-200'
                           : 'bg-amber-100 text-amber-800 border border-amber-200'
                       }`}
                     >
                       {agreement.status}
                     </span>
-                    <span className="text-[11px] font-semibold text-neutral-500 bg-neutral-100 px-2 py-0.5 rounded border border-neutral-200">
-                      v{agreement.version}.0
+                    <span className="text-[11px] font-semibold text-neutral-600 bg-neutral-100 px-2 py-0.5 rounded border border-neutral-200">
+                      {formatVersion(agreement.version)}
                     </span>
                   </div>
 
@@ -503,7 +512,10 @@ function AgreementManagementContent() {
                     {agreement.title}
                   </h3>
                   <p className="text-xs text-neutral-500 mb-4 line-clamp-2">
-                    {agreement.description || agreement.fileName || 'No description provided.'}
+                    {agreement.description ||
+                      (agreement.markdownContent
+                        ? agreement.markdownContent.substring(0, 120)
+                        : agreement.fileName || 'No description provided.')}
                   </p>
 
                   {/* Tags Pills */}
@@ -523,27 +535,50 @@ function AgreementManagementContent() {
 
                 {/* Card Action Controls */}
                 <div className="pt-3 border-t border-neutral-100 flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-1">
+                  <div className="flex flex-wrap items-center gap-1">
+                    {/* Pencil Edit Mode Button */}
                     <button
-                      onClick={() => openVersionModal(agreement)}
+                      onClick={() => openEditModal(agreement)}
+                      className="px-2.5 py-1 text-[11px] font-semibold text-[#ba0000] bg-red-50 hover:bg-red-100 border border-red-200 rounded transition-colors flex items-center gap-1"
+                      title="Edit Document"
+                    >
+                      <span>✏️</span> Edit
+                    </button>
+
+                    {/* View PDF Button */}
+                    <button
+                      onClick={() => openPdfViewer(agreement)}
+                      className="px-2.5 py-1 text-[11px] font-medium text-neutral-700 hover:text-neutral-900 hover:bg-neutral-100 rounded transition-colors flex items-center gap-1"
+                      title="View PDF"
+                    >
+                      <span>👁️</span> PDF
+                    </button>
+
+                    {/* Concise History Button */}
+                    <button
+                      onClick={() => openHistoryModal(agreement)}
                       className="px-2.5 py-1 text-[11px] font-medium text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100 rounded transition-colors"
-                      title="Version History"
+                      title="Change History"
                     >
                       🕒 History
                     </button>
+
+                    {/* Clone Button */}
                     <button
                       onClick={() => handleClone(agreement.id)}
-                      className="px-2.5 py-1 text-[11px] font-medium text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100 rounded transition-colors"
-                      title="Clone Agreement"
+                      className="px-2 py-1 text-[11px] font-medium text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100 rounded transition-colors"
+                      title="Clone Draft"
                     >
                       📋 Clone
                     </button>
+
+                    {/* Tags Button */}
                     <button
                       onClick={() => openMetadataModal(agreement)}
-                      className="px-2.5 py-1 text-[11px] font-medium text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100 rounded transition-colors"
+                      className="px-2 py-1 text-[11px] font-medium text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100 rounded transition-colors"
                       title="Edit Tags"
                     >
-                      🏷️ Tags
+                      🏷️
                     </button>
                   </div>
 
@@ -559,13 +594,14 @@ function AgreementManagementContent() {
           </div>
         )}
 
-        {/* Upload Modal */}
+        {/* Upload Modal (PDF / DOCX / MD) */}
         {showUploadModal && (
           <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
             <div className="bg-white border border-neutral-200 rounded-2xl p-6 max-w-lg w-full shadow-xl">
-              <h2 className="text-lg font-bold text-neutral-900 mb-2">Upload Agreement Document</h2>
+              <h2 className="text-lg font-bold text-neutral-900 mb-1">Upload Agreement Document</h2>
               <p className="text-xs text-neutral-500 mb-4">
-                Select a PDF or DOCX file to upload as an agreement draft.
+                Upload a <strong>PDF or DOCX</strong> (becomes active contract at v1.0) or a{' '}
+                <strong>Markdown (.md)</strong> file (becomes draft at v0.1).
               </p>
 
               {actionError && (
@@ -591,18 +627,21 @@ function AgreementManagementContent() {
 
                 <div>
                   <label className="block text-xs font-semibold text-neutral-700 mb-1">
-                    Select File (PDF / DOCX up to 25MB)
+                    Select File (.PDF, .DOCX, .MD up to 15MB)
                   </label>
                   <input
                     type="file"
                     required
-                    accept=".pdf,.docx,.doc"
+                    accept=".pdf,.docx,.doc,.md,text/markdown,text/plain"
                     onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
                     className="w-full bg-neutral-50 border border-neutral-300 rounded-lg p-2 text-xs text-neutral-700"
                   />
+                  <p className="text-[10px] text-neutral-400 mt-1">
+                    Note: Password-protected or encrypted files must be unlocked prior to upload.
+                  </p>
                 </div>
 
-                {/* Tags input inside Upload Modal */}
+                {/* Tags */}
                 <div>
                   <label className="block text-xs font-semibold text-neutral-700 mb-1">
                     Assign Tags (Optional)
@@ -613,7 +652,13 @@ function AgreementManagementContent() {
                       placeholder="Add tag (e.g. legal, sales)"
                       value={uploadTagInput}
                       onChange={(e) => setUploadTagInput(e.target.value)}
-                      className="flex-1 bg-neutral-50 border border-neutral-300 rounded-lg px-3 py-1.5 text-xs text-neutral-900"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleAddUploadTag();
+                        }
+                      }}
+                      className="flex-1 bg-neutral-50 border border-neutral-300 rounded-lg px-3 py-1.5 text-xs text-neutral-900 focus:outline-none focus:border-[#ba0000]"
                     />
                     <button
                       type="button"
@@ -667,23 +712,26 @@ function AgreementManagementContent() {
           </div>
         )}
 
-        {/* Scratch Modal */}
+        {/* Scratch Creation Modal (Markdown Editor) */}
         {showScratchModal && (
-          <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
-            <div className="bg-white border border-neutral-200 rounded-2xl p-6 max-w-2xl w-full shadow-xl max-h-[90vh] overflow-y-auto">
-              <div className="flex items-center justify-between mb-2">
-                <h2 className="text-lg font-bold text-neutral-900">
-                  Create Agreement from Scratch
-                </h2>
-                {autosaveStatus && (
-                  <span className="text-xs text-amber-600 italic font-medium">
-                    {autosaveStatus}
-                  </span>
-                )}
+          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 md:p-6 overflow-y-auto">
+            <div className="bg-white border border-neutral-200 rounded-2xl p-6 max-w-4xl w-full shadow-2xl flex flex-col my-auto max-h-[95vh] overflow-y-auto">
+              <div className="flex items-center justify-between border-b border-neutral-200 pb-3 mb-4">
+                <div>
+                  <h2 className="text-lg font-bold text-neutral-900 flex items-center gap-2">
+                    <span>✏️</span> Create Agreement from Scratch
+                  </h2>
+                  <p className="text-xs text-neutral-500">
+                    Draft contract terms in Markdown. Initial draft saved at version v0.1.
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShowScratchModal(false)}
+                  className="p-1 text-neutral-400 hover:text-neutral-700 text-lg font-bold"
+                >
+                  ✕
+                </button>
               </div>
-              <p className="text-xs text-neutral-500 mb-4">
-                Compose terms using rich HTML text and assign tags for indexing.
-              </p>
 
               {actionError && (
                 <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-xs font-medium text-red-700">
@@ -692,33 +740,51 @@ function AgreementManagementContent() {
               )}
 
               <form onSubmit={handleScratchSubmit} className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-neutral-700 mb-1">
+                      Agreement Title *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Non-Disclosure Agreement (NDA)"
+                      value={scratchTitle}
+                      onChange={(e) => setScratchTitle(e.target.value)}
+                      className="w-full bg-neutral-50 border border-neutral-300 rounded-lg px-3 py-2 text-xs text-neutral-900 focus:outline-none focus:border-[#ba0000]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-neutral-700 mb-1">
+                      Description (Optional)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Confidentiality agreement for vendor negotiations"
+                      value={scratchDesc}
+                      onChange={(e) => setScratchDesc(e.target.value)}
+                      className="w-full bg-neutral-50 border border-neutral-300 rounded-lg px-3 py-2 text-xs text-neutral-900 focus:outline-none focus:border-[#ba0000]"
+                    />
+                  </div>
+                </div>
+
+                {/* Markdown Editor */}
                 <div>
-                  <label className="block text-xs font-semibold text-neutral-700 mb-1">
-                    Agreement Title
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Enter agreement title (e.g. Non-Disclosure Agreement)"
-                    value={scratchTitle}
-                    onChange={(e) => setScratchTitle(e.target.value)}
-                    className="w-full bg-neutral-50 border border-neutral-300 rounded-lg px-3 py-2 text-xs text-neutral-900 focus:outline-none focus:border-[#ba0000]"
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-semibold text-neutral-700">
+                      Agreement Content (Markdown Format) *
+                    </label>
+                    <span className="text-[10px] text-neutral-400">Pure Markdown</span>
+                  </div>
+                  <MarkdownEditor
+                    value={scratchMarkdown}
+                    onChange={setScratchMarkdown}
+                    minHeight="320px"
                   />
                 </div>
 
-                <div>
-                  <label className="block text-xs font-semibold text-neutral-700 mb-1">
-                    Rich Text Content (HTML)
-                  </label>
-                  <textarea
-                    rows={8}
-                    value={scratchHtml}
-                    onChange={(e) => setScratchHtml(e.target.value)}
-                    className="w-full bg-neutral-50 border border-neutral-300 rounded-lg p-3 text-xs text-neutral-900 font-mono focus:outline-none focus:border-[#ba0000]"
-                  />
-                </div>
-
-                {/* Tags input inside Scratch Modal */}
+                {/* Tags */}
                 <div>
                   <label className="block text-xs font-semibold text-neutral-700 mb-1">
                     Assign Tags (Optional)
@@ -729,7 +795,13 @@ function AgreementManagementContent() {
                       placeholder="Add tag (e.g. nda, confidential)"
                       value={scratchTagInput}
                       onChange={(e) => setScratchTagInput(e.target.value)}
-                      className="flex-1 bg-neutral-50 border border-neutral-300 rounded-lg px-3 py-1.5 text-xs text-neutral-900"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleAddScratchTag();
+                        }
+                      }}
+                      className="flex-1 bg-neutral-50 border border-neutral-300 rounded-lg px-3 py-1.5 text-xs text-neutral-900 focus:outline-none focus:border-[#ba0000]"
                     />
                     <button
                       type="button"
@@ -773,9 +845,9 @@ function AgreementManagementContent() {
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 bg-[#ba0000] hover:bg-red-700 text-white text-xs font-semibold rounded-lg shadow-sm"
+                    className="px-5 py-2 bg-[#ba0000] hover:bg-red-700 text-white text-xs font-bold rounded-lg shadow-sm"
                   >
-                    Save & Create Draft
+                    Create Draft (v0.1)
                   </button>
                 </div>
               </form>
@@ -783,44 +855,52 @@ function AgreementManagementContent() {
           </div>
         )}
 
-        {/* Version History Modal */}
-        {showVersionModal && selectedAgreement && (
-          <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
-            <div className="bg-white border border-neutral-200 rounded-2xl p-6 max-w-lg w-full max-h-[80vh] overflow-y-auto shadow-xl">
-              <h2 className="text-lg font-bold text-neutral-900 mb-1">Version History</h2>
-              <p className="text-xs text-neutral-500 mb-4">{selectedAgreement.title}</p>
+        {/* Pencil Edit Mode Modal */}
+        {showEditModal && selectedAgreement && (
+          <AgreementEditModal
+            agreementId={selectedAgreement.id}
+            initialTitle={selectedAgreement.title}
+            initialDescription={selectedAgreement.description}
+            initialMarkdown={selectedAgreement.markdownContent || ''}
+            initialTags={selectedAgreement.tags || []}
+            currentVersion={selectedAgreement.version}
+            currentStatus={selectedAgreement.status}
+            onClose={() => {
+              setShowEditModal(false);
+              setSelectedAgreement(null);
+            }}
+            onSuccess={(msg) => {
+              setActionMessage(msg);
+              setRefreshTrigger((prev) => prev + 1);
+            }}
+            onActivateSuccess={() => {
+              setActiveTab('active');
+            }}
+          />
+        )}
 
-              <div className="space-y-3">
-                {versions.map((ver) => (
-                  <div
-                    key={ver.id}
-                    className="bg-neutral-50 p-3 rounded-lg border border-neutral-200"
-                  >
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs font-bold text-neutral-900">
-                        Version {ver.version}.0
-                      </span>
-                      <span className="text-[10px] text-neutral-500">
-                        {new Date(ver.createdAt).toLocaleDateString()}
-                      </span>
-                    </div>
-                    <p className="text-xs text-neutral-600">
-                      {ver.changeSummary || 'Initial draft version.'}
-                    </p>
-                  </div>
-                ))}
-              </div>
+        {/* PDF Viewer Modal */}
+        {showPdfModal && selectedAgreement && (
+          <PdfViewerModal
+            agreement={selectedAgreement}
+            onClose={() => {
+              setShowPdfModal(false);
+              setSelectedAgreement(null);
+            }}
+          />
+        )}
 
-              <div className="mt-6 flex justify-end">
-                <button
-                  onClick={() => setShowVersionModal(false)}
-                  className="px-4 py-2 bg-neutral-200 text-neutral-800 text-xs font-semibold rounded-lg"
-                >
-                  Close
-                </button>
-              </div>
-            </div>
-          </div>
+        {/* Concise History Modal */}
+        {showHistoryModal && selectedAgreement && (
+          <AgreementHistoryModal
+            agreementId={selectedAgreement.id}
+            agreementTitle={selectedAgreement.title}
+            currentVersion={selectedAgreement.version}
+            onClose={() => {
+              setShowHistoryModal(false);
+              setSelectedAgreement(null);
+            }}
+          />
         )}
 
         {/* Metadata Tags Modal */}
@@ -843,7 +923,13 @@ function AgreementManagementContent() {
                     placeholder="Enter tag (e.g. hr, confidential)"
                     value={tagInput}
                     onChange={(e) => setTagInput(e.target.value)}
-                    className="flex-1 bg-neutral-50 border border-neutral-300 rounded-lg px-3 py-1.5 text-xs text-neutral-900"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleAddTag();
+                      }
+                    }}
+                    className="flex-1 bg-neutral-50 border border-neutral-300 rounded-lg px-3 py-1.5 text-xs text-neutral-900 focus:outline-none focus:border-[#ba0000]"
                   />
                   <button
                     onClick={handleAddTag}
