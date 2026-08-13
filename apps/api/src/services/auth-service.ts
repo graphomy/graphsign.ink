@@ -653,7 +653,6 @@ export class AuthService {
   }
 
   /**
-<<<<<<< HEAD
    * Logs out a user and records an audit log event.
    *
    * Flow:
