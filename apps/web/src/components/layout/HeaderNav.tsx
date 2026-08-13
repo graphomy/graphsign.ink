@@ -59,14 +59,9 @@ export function HeaderNav() {
               <div className="h-9 w-9 rounded-xl bg-[#ba0000] text-white font-black text-xl flex items-center justify-center shadow-md shadow-[#ba0000]/20 group-hover:scale-105 transition-transform">
                 g
               </div>
-              <div className="flex flex-col">
-                <span className="text-base font-extrabold text-neutral-900 tracking-tight leading-none">
-                  graphsign<span className="text-[#ba0000]">.ink</span>
-                </span>
-                <span className="text-[10px] font-semibold text-neutral-500 tracking-wide uppercase mt-0.5">
-                  {orgName}
-                </span>
-              </div>
+              <span className="text-base font-extrabold text-neutral-900 tracking-tight leading-none">
+                graphsign<span className="text-[#ba0000]">.ink</span>
+              </span>
             </Link>
 
             {pathname !== '/dashboard' && (
@@ -101,7 +96,7 @@ export function HeaderNav() {
 
           {/* Profile Section on Top Right */}
           <div className="flex items-center gap-3">
-            <ProfileDropdown email={userEmail} />
+            <ProfileDropdown email={userEmail} orgName={orgName} />
           </div>
         </div>
 

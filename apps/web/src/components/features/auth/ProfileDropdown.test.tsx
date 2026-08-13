@@ -51,6 +51,13 @@ describe('ProfileDropdown', () => {
     expect(screen.queryByTestId('profile-dropdown-menu')).not.toBeInTheDocument();
   });
 
+  it('should render organization name in dropdown when provided', () => {
+    render(<ProfileDropdown email="test@graphsign.ink" orgName="Acme Corp" />);
+
+    fireEvent.click(screen.getByTestId('profile-menu-button'));
+    expect(screen.getByText('Acme Corp')).toBeInTheDocument();
+  });
+
   it('should close menu when Escape key is pressed', () => {
     render(<ProfileDropdown email="test@graphsign.ink" />);
 

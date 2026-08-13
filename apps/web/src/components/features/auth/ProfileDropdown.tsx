@@ -7,6 +7,7 @@ import { getApiUrl } from '@/lib/api';
 interface ProfileDropdownProps {
   email?: string;
   token?: string;
+  orgName?: string;
 }
 
 /**
@@ -14,7 +15,7 @@ interface ProfileDropdownProps {
  * in the top right header containing Profile, Security (MFA), Session Settings,
  * and Sign Out options.
  */
-export function ProfileDropdown({ email, token }: ProfileDropdownProps) {
+export function ProfileDropdown({ email, token, orgName }: ProfileDropdownProps) {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -23,6 +24,10 @@ export function ProfileDropdown({ email, token }: ProfileDropdownProps) {
     (typeof window !== 'undefined'
       ? (localStorage.getItem('graphsign_user_email') ?? 'user@graphsign.ink')
       : 'user@graphsign.ink');
+
+  const displayOrgName =
+    orgName ||
+    (typeof window !== 'undefined' ? (localStorage.getItem('graphsign_org_name') ?? '') : '');
 
   const userInitial = displayEmail.trim()[0]?.toUpperCase() ?? 'U';
 
@@ -122,7 +127,7 @@ export function ProfileDropdown({ email, token }: ProfileDropdownProps) {
           className="absolute right-0 mt-2 w-60 origin-top-right rounded-xl bg-white p-1.5 shadow-lg ring-1 ring-black/5 border border-neutral-100 focus:outline-none z-50 animate-in fade-in slide-in-from-top-2 duration-150"
         >
           {/* User Info Header */}
-          <div className="px-3 py-2 border-b border-neutral-100 mb-1">
+          <div className="px-3 py-2.5 border-b border-neutral-100 mb-1">
             <p className="text-[11px] text-neutral-400 font-medium uppercase tracking-wider">
               Signed in as
             </p>
@@ -132,6 +137,15 @@ export function ProfileDropdown({ email, token }: ProfileDropdownProps) {
             >
               {displayEmail}
             </p>
+            {displayOrgName && (
+              <div
+                className="mt-1.5 flex items-center gap-1.5 text-[11px] font-medium text-neutral-600 bg-neutral-50 px-2 py-1 rounded border border-neutral-200/80 truncate"
+                title={`Organisation: ${displayOrgName}`}
+              >
+                <span className="text-xs shrink-0">🏢</span>
+                <span className="truncate">{displayOrgName}</span>
+              </div>
+            )}
           </div>
 
           {/* Menu Items */}
