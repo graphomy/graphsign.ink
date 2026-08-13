@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { getApiUrl } from '@/lib/api';
+import { formatDateTime } from '@/lib/date-utils';
 
 interface HistoryEntry {
   id: string;
@@ -153,13 +154,8 @@ export function AgreementHistoryModal({
                         <span>{getActionIcon(item.action)}</span>
                         {item.summary}
                       </span>
-                      <span className="text-[10px] text-neutral-400 whitespace-nowrap">
-                        {new Date(item.createdAt).toLocaleDateString(undefined, {
-                          month: 'short',
-                          day: 'numeric',
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })}
+                      <span className="text-[10px] text-neutral-400 whitespace-nowrap font-medium">
+                        {formatDateTime(item.createdAt)}
                       </span>
                     </div>
 

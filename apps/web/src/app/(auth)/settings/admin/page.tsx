@@ -5,6 +5,7 @@ import { SessionGuard } from '@/components/features/auth/SessionGuard';
 import { HeaderNav } from '@/components/layout/HeaderNav';
 import { Footer } from '@/components/layout/Footer';
 import { getApiUrl } from '@/lib/api';
+import { formatDateTime } from '@/lib/date-utils';
 
 interface ConfigItem {
   key: string;
@@ -57,17 +58,8 @@ function formatBytes(bytesStr?: string | number): string {
 
 function formatDate(dateStr?: string | null): string {
   if (!dateStr) return 'Never';
-  try {
-    return new Date(dateStr).toLocaleString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  } catch {
-    return 'Invalid Date';
-  }
+  const formatted = formatDateTime(dateStr);
+  return formatted || 'Invalid Date';
 }
 
 export default function AdminDashboardPage() {

@@ -5,6 +5,7 @@ import { SessionGuard } from '@/components/features/auth/SessionGuard';
 import { HeaderNav } from '@/components/layout/HeaderNav';
 import { Footer } from '@/components/layout/Footer';
 import { getApiUrl } from '@/lib/api';
+import { formatDateTime } from '@/lib/date-utils';
 
 interface OrganisationProfile {
   id: string;
@@ -966,8 +967,8 @@ function OrganisationSettingsContent() {
                     <tbody className="divide-y">
                       {auditLogs.map((log) => (
                         <tr key={log.id} className="hover:bg-neutral-50">
-                          <td className="p-3 text-neutral-500">
-                            {new Date(log.createdAt).toLocaleString()}
+                          <td className="p-3 text-neutral-500 font-medium">
+                            {formatDateTime(log.createdAt)}
                           </td>
                           <td className="p-3 font-bold text-neutral-900">{log.action}</td>
                           <td className="p-3 text-neutral-600">{log.resourceType}</td>

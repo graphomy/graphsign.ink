@@ -2,6 +2,7 @@
 
 import React, { useState, useRef } from 'react';
 import { renderMarkdownToHtml } from './MarkdownEditor';
+import { formatDate } from '@/lib/date-utils';
 
 interface AgreementData {
   id: string;
@@ -173,15 +174,8 @@ export function PdfViewerModal({ agreement, onClose }: PdfViewerModalProps) {
                 <span className="text-xs font-bold text-neutral-900 block">
                   VERSION {versionDisplay}
                 </span>
-                <span className="text-[10px] text-neutral-500">
-                  {new Date(agreement.updatedAt || agreement.createdAt).toLocaleDateString(
-                    undefined,
-                    {
-                      year: 'numeric',
-                      month: 'long',
-                      day: 'numeric',
-                    },
-                  )}
+                <span className="text-[10px] text-neutral-500 font-medium">
+                  {formatDate(agreement.updatedAt || agreement.createdAt)}
                 </span>
               </div>
             </div>
