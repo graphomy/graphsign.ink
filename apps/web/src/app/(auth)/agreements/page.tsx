@@ -11,6 +11,7 @@ import { PdfViewerModal } from '@/components/features/agreements/PdfViewerModal'
 import { AgreementHistoryModal } from '@/components/features/agreements/AgreementHistoryModal';
 import { AgreementEditModal } from '@/components/features/agreements/AgreementEditModal';
 import { getApiUrl } from '@/lib/api';
+import { formatDateTime } from '@/lib/date-utils';
 
 interface AgreementItem {
   id: string;
@@ -31,6 +32,13 @@ interface AgreementItem {
   author?: { name?: string; email: string };
 }
 
+interface PaginationState {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+}
+
 function getToken(): string {
   if (typeof window === 'undefined') return '';
   return localStorage.getItem('graphsign_session_token') || localStorage.getItem('token') || '';
@@ -42,6 +50,14 @@ function AgreementManagementContent() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [tagFilter, setTagFilter] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize] = useState(10);
+  const [pagination, setPagination] = useState<PaginationState>({
+    page: 1,
+    limit: 10,
+    total: 0,
+    totalPages: 1,
+  });
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   // Modals state
@@ -83,6 +99,12 @@ function AgreementManagementContent() {
     }
   }, [searchParams]);
 
+  // Reset page to 1 when changing tabs, search, or filters
+  function handleTabChange(tab: 'active' | 'drafts' | 'archived') {
+    setActiveTab(tab);
+    setCurrentPage(1);
+  }
+
   useEffect(() => {
     let ignore = false;
     async function load() {
@@ -91,7 +113,7 @@ function AgreementManagementContent() {
         const isArchivedParam = activeTab === 'archived' ? 'true' : 'false';
         const statusParam =
           activeTab === 'drafts' ? 'DRAFT' : activeTab === 'active' ? 'ACTIVE' : '';
-        let url = `${getApiUrl()}/api/v1/agreements?isArchived=${isArchivedParam}`;
+        let url = `${getApiUrl()}/api/v1/agreements?isArchived=${isArchivedParam}&page=${currentPage}&limit=${pageSize}`;
         if (statusParam) url += `&status=${statusParam}`;
         if (searchQuery) url += `&search=${encodeURIComponent(searchQuery)}`;
         if (tagFilter) url += `&tag=${encodeURIComponent(tagFilter)}`;
@@ -103,7 +125,26 @@ function AgreementManagementContent() {
         if (!res.ok) throw new Error('Failed to load agreements.');
         const data = await res.json();
         if (!ignore) {
-          setAgreements(data.items || []);
+          const items: AgreementItem[] = data.items || [];
+          setAgreements(items);
+          if (data.pagination) {
+            setPagination({
+              page: data.pagination.page || currentPage,
+              limit: data.pagination.limit || pageSize,
+              total: data.pagination.total || items.length,
+              totalPages:
+                data.pagination.totalPages ||
+                Math.ceil((data.pagination.total || items.length) / pageSize) ||
+                1,
+            });
+          } else {
+            setPagination({
+              page: currentPage,
+              limit: pageSize,
+              total: items.length,
+              totalPages: Math.ceil(items.length / pageSize) || 1,
+            });
+          }
         }
       } catch (err: unknown) {
         if (!ignore) {
@@ -119,7 +160,7 @@ function AgreementManagementContent() {
     return () => {
       ignore = true;
     };
-  }, [activeTab, searchQuery, tagFilter, refreshTrigger]);
+  }, [activeTab, searchQuery, tagFilter, currentPage, pageSize, refreshTrigger]);
 
   function handleAddUploadTag() {
     if (!uploadTagInput.trim()) return;
@@ -204,6 +245,7 @@ function AgreementManagementContent() {
       setUploadTitle('');
       setUploadFile(null);
       setUploadTags([]);
+      setCurrentPage(1);
       setRefreshTrigger((prev) => prev + 1);
     } catch (err: unknown) {
       setActionError((err as Error).message);
@@ -246,6 +288,7 @@ function AgreementManagementContent() {
       setScratchDesc('');
       setScratchTags([]);
       setActiveTab('drafts');
+      setCurrentPage(1);
       setRefreshTrigger((prev) => prev + 1);
     } catch (err: unknown) {
       setActionError((err as Error).message);
@@ -263,6 +306,7 @@ function AgreementManagementContent() {
       if (!res.ok) throw new Error('Failed to clone agreement.');
       setActionMessage('Agreement cloned successfully into a new draft (v0.1).');
       setActiveTab('drafts');
+      setCurrentPage(1);
       setRefreshTrigger((prev) => prev + 1);
     } catch (err: unknown) {
       setActionError((err as Error).message);
@@ -350,6 +394,10 @@ function AgreementManagementContent() {
     return s.startsWith('v') || s.startsWith('V') ? s : `v${s}`;
   }
 
+  // Calculate slice range for display
+  const startItem = pagination.total === 0 ? 0 : (currentPage - 1) * pageSize + 1;
+  const endItem = Math.min(currentPage * pageSize, pagination.total);
+
   return (
     <div className="min-h-screen bg-neutral-50 flex flex-col font-sans text-neutral-900">
       <HeaderNav />
@@ -419,27 +467,27 @@ function AgreementManagementContent() {
         <div className="bg-white border border-neutral-200 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm">
           <div className="flex items-center gap-1 bg-neutral-100 p-1 rounded-lg">
             <button
-              onClick={() => setActiveTab('active')}
+              onClick={() => handleTabChange('active')}
               className={`px-4 py-1.5 rounded-md text-xs font-semibold transition-all ${
                 activeTab === 'active'
                   ? 'bg-white text-neutral-900 shadow-sm border border-neutral-200'
                   : 'text-neutral-600 hover:text-neutral-900'
               }`}
             >
-              Active Agreements
+              Active
             </button>
             <button
-              onClick={() => setActiveTab('drafts')}
+              onClick={() => handleTabChange('drafts')}
               className={`px-4 py-1.5 rounded-md text-xs font-semibold transition-all ${
                 activeTab === 'drafts'
                   ? 'bg-white text-neutral-900 shadow-sm border border-neutral-200'
                   : 'text-neutral-600 hover:text-neutral-900'
               }`}
             >
-              Drafts Only
+              Drafts
             </button>
             <button
-              onClick={() => setActiveTab('archived')}
+              onClick={() => handleTabChange('archived')}
               className={`px-4 py-1.5 rounded-md text-xs font-semibold transition-all ${
                 activeTab === 'archived'
                   ? 'bg-white text-neutral-900 shadow-sm border border-neutral-200'
@@ -455,22 +503,29 @@ function AgreementManagementContent() {
               type="text"
               placeholder="Search title..."
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setCurrentPage(1);
+              }}
               className="bg-neutral-50 border border-neutral-300 rounded-lg px-3 py-1.5 text-xs text-neutral-900 focus:outline-none focus:border-[#ba0000]"
             />
             <input
               type="text"
               placeholder="Filter tag..."
               value={tagFilter}
-              onChange={(e) => setTagFilter(e.target.value)}
+              onChange={(e) => {
+                setTagFilter(e.target.value);
+                setCurrentPage(1);
+              }}
               className="bg-neutral-50 border border-neutral-300 rounded-lg px-3 py-1.5 text-xs text-neutral-900 focus:outline-none focus:border-[#ba0000] w-28"
             />
           </div>
         </div>
 
-        {/* Agreements Grid */}
+        {/* Agreements Table (Rows format sorted by last modified date, latest at top) */}
         {loading ? (
-          <div className="text-center py-16 text-xs font-medium text-neutral-500 bg-white rounded-xl border border-neutral-200">
+          <div className="text-center py-16 text-xs font-medium text-neutral-500 bg-white rounded-xl border border-neutral-200 shadow-sm">
+            <div className="w-6 h-6 border-2 border-neutral-400 border-t-[#ba0000] rounded-full animate-spin mx-auto mb-2" />
             Loading agreements...
           </div>
         ) : agreements.length === 0 ? (
@@ -494,113 +549,208 @@ function AgreementManagementContent() {
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {agreements.map((agreement) => (
-              <div
-                key={agreement.id}
-                className="bg-white border border-neutral-200 rounded-xl p-5 hover:border-neutral-300 shadow-sm transition-all flex flex-col justify-between group"
-              >
-                <div>
-                  <div className="flex items-center justify-between gap-2 mb-3">
-                    <span
-                      className={`text-[11px] font-bold px-2.5 py-0.5 rounded-md uppercase tracking-wider ${
-                        agreement.status === 'ACTIVE' ||
-                        agreement.status === 'COMPLETED' ||
-                        agreement.status === 'SEALED'
-                          ? 'bg-green-100 text-green-800 border border-green-200'
-                          : 'bg-amber-100 text-amber-800 border border-amber-200'
+          <div className="bg-white border border-neutral-200 rounded-xl shadow-sm overflow-hidden flex flex-col">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-neutral-50/80 border-b border-neutral-200 text-neutral-600 font-semibold uppercase tracking-wider text-[10px]">
+                    <th className="py-3.5 px-4">Document Details</th>
+                    <th className="py-3.5 px-3">Version</th>
+                    <th className="py-3.5 px-3">Status</th>
+                    <th className="py-3.5 px-3">Last Modified</th>
+                    <th className="py-3.5 px-3">Author</th>
+                    <th className="py-3.5 px-4 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-neutral-100">
+                  {agreements.map((agreement) => (
+                    <tr
+                      key={agreement.id}
+                      className="hover:bg-neutral-50/80 transition-colors group"
+                    >
+                      {/* Document Details Column */}
+                      <td className="py-3.5 px-4 max-w-xs sm:max-w-sm md:max-w-md">
+                        <div className="flex items-start gap-2.5">
+                          <span className="text-base mt-0.5 select-none">
+                            {agreement.mimeType === 'application/pdf' ||
+                            agreement.fileName?.endsWith('.pdf')
+                              ? '📑'
+                              : '📝'}
+                          </span>
+                          <div className="space-y-1 min-w-0">
+                            <h3 className="text-xs font-bold text-neutral-900 truncate">
+                              {agreement.title}
+                            </h3>
+                            {agreement.description && (
+                              <p className="text-[11px] text-neutral-500 line-clamp-1">
+                                {agreement.description}
+                              </p>
+                            )}
+                            {agreement.tags && agreement.tags.length > 0 && (
+                              <div className="flex flex-wrap gap-1 pt-0.5">
+                                {agreement.tags.map((tag, idx) => (
+                                  <span
+                                    key={idx}
+                                    className="text-[9px] font-semibold bg-neutral-100 text-neutral-600 px-1.5 py-0.5 rounded border border-neutral-200"
+                                  >
+                                    #{tag}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+
+                      {/* Version Column */}
+                      <td className="py-3.5 px-3 whitespace-nowrap">
+                        <span className="text-[11px] font-bold font-mono text-neutral-700 bg-neutral-100 px-2 py-0.5 rounded border border-neutral-200">
+                          {formatVersion(agreement.version)}
+                        </span>
+                      </td>
+
+                      {/* Status Column */}
+                      <td className="py-3.5 px-3 whitespace-nowrap">
+                        <span
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wide ${
+                            agreement.status === 'ACTIVE' ||
+                            agreement.status === 'COMPLETED' ||
+                            agreement.status === 'SEALED'
+                              ? 'bg-green-100 text-green-800 border border-green-200'
+                              : agreement.status === 'DRAFT'
+                                ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                                : 'bg-neutral-100 text-neutral-700 border border-neutral-200'
+                          }`}
+                        >
+                          {agreement.status}
+                        </span>
+                      </td>
+
+                      {/* Last Modified Date Column (Formatted DD-MON-YYYY HH:mm) */}
+                      <td className="py-3.5 px-3 whitespace-nowrap text-neutral-600 text-[11px]">
+                        {formatDateTime(agreement.updatedAt)}
+                      </td>
+
+                      {/* Author Column */}
+                      <td className="py-3.5 px-3 whitespace-nowrap text-neutral-600 text-[11px]">
+                        {agreement.author?.name ||
+                          agreement.author?.email?.split('@')[0] ||
+                          'System'}
+                      </td>
+
+                      {/* Actions Column */}
+                      <td className="py-3.5 px-4 text-right whitespace-nowrap">
+                        <div className="flex items-center justify-end gap-1.5">
+                          {/* Edit button: shown ONLY for Drafts (removed from Active screen) */}
+                          {activeTab === 'drafts' && (
+                            <button
+                              onClick={() => openEditModal(agreement)}
+                              className="px-2.5 py-1 text-[11px] font-semibold text-[#ba0000] bg-red-50 hover:bg-red-100 border border-red-200 rounded transition-colors flex items-center gap-1"
+                              title="Edit Document"
+                            >
+                              <span>✏️</span> Edit
+                            </button>
+                          )}
+
+                          {/* View PDF Button */}
+                          <button
+                            onClick={() => openPdfViewer(agreement)}
+                            className="px-2.5 py-1 text-[11px] font-medium text-neutral-700 hover:text-neutral-900 bg-neutral-50 hover:bg-neutral-100 border border-neutral-200 rounded transition-colors flex items-center gap-1"
+                            title="View PDF"
+                          >
+                            <span>👁️</span> PDF
+                          </button>
+
+                          {/* Clone Button: shown ONLY for Drafts (removed from Active screen) */}
+                          {activeTab === 'drafts' && (
+                            <button
+                              onClick={() => handleClone(agreement.id)}
+                              className="px-2.5 py-1 text-[11px] font-medium text-neutral-700 hover:text-neutral-900 bg-neutral-50 hover:bg-neutral-100 border border-neutral-200 rounded transition-colors"
+                              title="Clone Draft"
+                            >
+                              📋 Clone
+                            </button>
+                          )}
+
+                          {/* Concise History Button */}
+                          <button
+                            onClick={() => openHistoryModal(agreement)}
+                            className="px-2.5 py-1 text-[11px] font-medium text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100 rounded transition-colors"
+                            title="Change History"
+                          >
+                            🕒 History
+                          </button>
+
+                          {/* Tags Button */}
+                          <button
+                            onClick={() => openMetadataModal(agreement)}
+                            className="p-1 text-neutral-500 hover:text-neutral-900 hover:bg-neutral-100 rounded transition-colors"
+                            title="Edit Tags"
+                          >
+                            🏷️
+                          </button>
+
+                          {/* Archive / Unarchive Button */}
+                          <button
+                            onClick={() => handleArchiveToggle(agreement.id, !agreement.isArchived)}
+                            className="text-[11px] font-semibold text-neutral-400 hover:text-red-600 px-1.5 py-0.5 rounded transition-colors"
+                            title={
+                              agreement.isArchived ? 'Unarchive Agreement' : 'Archive Agreement'
+                            }
+                          >
+                            {agreement.isArchived ? 'Unarchive' : 'Archive'}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Pagination Controls Footer */}
+            <div className="bg-neutral-50 border-t border-neutral-200 px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-neutral-600">
+              <div>
+                Showing <span className="font-semibold text-neutral-900">{startItem}</span> to{' '}
+                <span className="font-semibold text-neutral-900">{endItem}</span> of{' '}
+                <span className="font-semibold text-neutral-900">{pagination.total}</span>{' '}
+                agreements
+              </div>
+
+              {pagination.totalPages > 1 && (
+                <div className="flex items-center gap-1.5 self-center sm:self-auto">
+                  <button
+                    disabled={currentPage <= 1}
+                    onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
+                    className="px-2.5 py-1 rounded bg-white border border-neutral-300 text-neutral-700 hover:bg-neutral-100 disabled:opacity-40 disabled:cursor-not-allowed font-medium transition-colors"
+                  >
+                    Previous
+                  </button>
+
+                  {Array.from({ length: pagination.totalPages }, (_, i) => i + 1).map((pageNum) => (
+                    <button
+                      key={pageNum}
+                      onClick={() => setCurrentPage(pageNum)}
+                      className={`px-2.5 py-1 rounded text-xs font-semibold transition-colors ${
+                        currentPage === pageNum
+                          ? 'bg-[#ba0000] text-white'
+                          : 'bg-white border border-neutral-300 text-neutral-700 hover:bg-neutral-100'
                       }`}
                     >
-                      {agreement.status}
-                    </span>
-                    <span className="text-[11px] font-semibold text-neutral-600 bg-neutral-100 px-2 py-0.5 rounded border border-neutral-200">
-                      {formatVersion(agreement.version)}
-                    </span>
-                  </div>
-
-                  <h3 className="text-sm font-bold text-neutral-900 mb-1.5 line-clamp-1">
-                    {agreement.title}
-                  </h3>
-                  <p className="text-xs text-neutral-500 mb-4 line-clamp-2">
-                    {agreement.description ||
-                      (agreement.markdownContent
-                        ? agreement.markdownContent.substring(0, 120)
-                        : agreement.fileName || 'No description provided.')}
-                  </p>
-
-                  {/* Tags Pills */}
-                  {agreement.tags && agreement.tags.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5 mb-4">
-                      {agreement.tags.map((tag, idx) => (
-                        <span
-                          key={idx}
-                          className="text-[10px] font-semibold bg-neutral-100 text-neutral-700 px-2 py-0.5 rounded border border-neutral-200"
-                        >
-                          #{tag}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* Card Action Controls */}
-                <div className="pt-3 border-t border-neutral-100 flex items-center justify-between gap-2">
-                  <div className="flex flex-wrap items-center gap-1">
-                    {/* Pencil Edit Mode Button */}
-                    <button
-                      onClick={() => openEditModal(agreement)}
-                      className="px-2.5 py-1 text-[11px] font-semibold text-[#ba0000] bg-red-50 hover:bg-red-100 border border-red-200 rounded transition-colors flex items-center gap-1"
-                      title="Edit Document"
-                    >
-                      <span>✏️</span> Edit
+                      {pageNum}
                     </button>
-
-                    {/* View PDF Button */}
-                    <button
-                      onClick={() => openPdfViewer(agreement)}
-                      className="px-2.5 py-1 text-[11px] font-medium text-neutral-700 hover:text-neutral-900 hover:bg-neutral-100 rounded transition-colors flex items-center gap-1"
-                      title="View PDF"
-                    >
-                      <span>👁️</span> PDF
-                    </button>
-
-                    {/* Concise History Button */}
-                    <button
-                      onClick={() => openHistoryModal(agreement)}
-                      className="px-2.5 py-1 text-[11px] font-medium text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100 rounded transition-colors"
-                      title="Change History"
-                    >
-                      🕒 History
-                    </button>
-
-                    {/* Clone Button */}
-                    <button
-                      onClick={() => handleClone(agreement.id)}
-                      className="px-2 py-1 text-[11px] font-medium text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100 rounded transition-colors"
-                      title="Clone Draft"
-                    >
-                      📋 Clone
-                    </button>
-
-                    {/* Tags Button */}
-                    <button
-                      onClick={() => openMetadataModal(agreement)}
-                      className="px-2 py-1 text-[11px] font-medium text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100 rounded transition-colors"
-                      title="Edit Tags"
-                    >
-                      🏷️
-                    </button>
-                  </div>
+                  ))}
 
                   <button
-                    onClick={() => handleArchiveToggle(agreement.id, !agreement.isArchived)}
-                    className="text-[11px] font-semibold text-neutral-500 hover:text-red-600 transition-colors"
+                    disabled={currentPage >= pagination.totalPages}
+                    onClick={() => setCurrentPage((p) => Math.min(p + 1, pagination.totalPages))}
+                    className="px-2.5 py-1 rounded bg-white border border-neutral-300 text-neutral-700 hover:bg-neutral-100 disabled:opacity-40 disabled:cursor-not-allowed font-medium transition-colors"
                   >
-                    {agreement.isArchived ? 'Unarchive' : 'Archive'}
+                    Next
                   </button>
                 </div>
-              </div>
-            ))}
+              )}
+            </div>
           </div>
         )}
 
