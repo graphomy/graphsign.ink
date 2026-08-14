@@ -1257,6 +1257,7 @@ export class AuthService {
       message: 'MFA enforcement settings updated successfully.',
     };
   }
+
   /**
    * Gets or creates the default organisation for MVP.
 

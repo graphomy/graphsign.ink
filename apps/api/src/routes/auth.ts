@@ -165,6 +165,7 @@ export function createAuthRoutes(deps?: AuthDeps) {
         message: 'MFA setup is required by your organisation before signing in.',
       });
     }
+
     c.header(
       'Set-Cookie',
       `graphsign_session=${result.token}; HttpOnly; Path=/; SameSite=Strict; Secure`,
