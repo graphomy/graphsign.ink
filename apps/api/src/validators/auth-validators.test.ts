@@ -5,6 +5,11 @@ import {
   resendVerificationRequestSchema,
   forgotPasswordRequestSchema,
   resetPasswordRequestSchema,
+  updateSessionSettingsSchema,
+  updateProfileRequestSchema,
+  verifyMfaSetupRequestSchema,
+  loginMfaRequestSchema,
+  updateMfaEnforcementRequestSchema,
 } from './auth-validators.js';
 
 describe('registerRequestSchema', () => {
@@ -224,5 +229,119 @@ describe('resetPasswordRequestSchema', () => {
       password: 'weak',
     });
     expect(result.success).toBe(false);
+  });
+});
+
+describe('updateSessionSettingsSchema', () => {
+  it('should accept valid session timeout minutes within bounds', () => {
+    const result = updateSessionSettingsSchema.safeParse({
+      sessionTimeoutMinutes: 30,
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.sessionTimeoutMinutes).toBe(30);
+    }
+  });
+
+  it('should accept boundary values 1 and 1440', () => {
+    expect(updateSessionSettingsSchema.safeParse({ sessionTimeoutMinutes: 1 }).success).toBe(true);
+    expect(updateSessionSettingsSchema.safeParse({ sessionTimeoutMinutes: 1440 }).success).toBe(
+      true,
+    );
+  });
+
+  it('should reject non-integer numbers', () => {
+    const result = updateSessionSettingsSchema.safeParse({
+      sessionTimeoutMinutes: 15.5,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('should reject values less than 1', () => {
+    const result = updateSessionSettingsSchema.safeParse({
+      sessionTimeoutMinutes: 0,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('should reject values greater than 1440', () => {
+    const result = updateSessionSettingsSchema.safeParse({
+      sessionTimeoutMinutes: 1441,
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+describe('updateProfileRequestSchema', () => {
+  it('should accept valid name, timezone, and email', () => {
+    const result = updateProfileRequestSchema.safeParse({
+      name: 'Alice Vance',
+      timezone: 'America/New_York',
+      email: '  Alice@Example.Com  ',
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.name).toBe('Alice Vance');
+      expect(result.data.email).toBe('alice@example.com');
+    }
+  });
+
+  it('should accept empty/optional profile object', () => {
+    const result = updateProfileRequestSchema.safeParse({});
+    expect(result.success).toBe(true);
+  });
+
+  it('should reject invalid email format', () => {
+    const result = updateProfileRequestSchema.safeParse({
+      email: 'not-an-email',
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+describe('verifyMfaSetupRequestSchema', () => {
+  it('should accept valid 6-digit TOTP code', () => {
+    const result = verifyMfaSetupRequestSchema.safeParse({ code: '123456' });
+    expect(result.success).toBe(true);
+  });
+
+  it('should reject code that is not 6 digits', () => {
+    expect(verifyMfaSetupRequestSchema.safeParse({ code: '12345' }).success).toBe(false);
+    expect(verifyMfaSetupRequestSchema.safeParse({ code: '1234567' }).success).toBe(false);
+    expect(verifyMfaSetupRequestSchema.safeParse({ code: 'abcdef' }).success).toBe(false);
+  });
+});
+
+describe('loginMfaRequestSchema', () => {
+  it('should accept valid mfaTicket and 6-digit TOTP code', () => {
+    const result = loginMfaRequestSchema.safeParse({
+      mfaTicket: 'mfa_user-123_1700000',
+      code: '654321',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('should reject missing mfaTicket or invalid code', () => {
+    expect(loginMfaRequestSchema.safeParse({ mfaTicket: '', code: '654321' }).success).toBe(false);
+    expect(loginMfaRequestSchema.safeParse({ mfaTicket: 'ticket', code: '123' }).success).toBe(
+      false,
+    );
+  });
+});
+
+describe('updateMfaEnforcementRequestSchema', () => {
+  it('should accept valid mfaRequired boolean and roles array', () => {
+    const result = updateMfaEnforcementRequestSchema.safeParse({
+      mfaRequired: true,
+      mfaRequiredRoles: ['admin', 'signer'],
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('should accept mfaRequired false with empty roles', () => {
+    const result = updateMfaEnforcementRequestSchema.safeParse({
+      mfaRequired: false,
+    });
+    expect(result.success).toBe(true);
   });
 });

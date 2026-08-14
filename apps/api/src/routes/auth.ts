@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import type { PrismaClient } from '@graphsign/db';
-import { createPrismaClient, prisma as legacyPrisma } from '@graphsign/db';
+import { createPrismaClient } from '@graphsign/db';
 import {
   registerRequestSchema,
   loginRequestSchema,
@@ -8,14 +8,23 @@ import {
   resendVerificationRequestSchema,
   forgotPasswordRequestSchema,
   resetPasswordRequestSchema,
+  updateSessionSettingsSchema,
+  validateSessionRequestSchema,
+  updateProfileRequestSchema,
+  changePasswordRequestSchema,
+  verifyEmailChangeRequestSchema,
+  verifyMfaSetupRequestSchema,
+  loginMfaRequestSchema,
+  updateMfaEnforcementRequestSchema,
 } from '../validators/auth-validators.js';
 import { AuthService } from '../services/auth-service.js';
 import type { MailerService } from '../services/mailer-service.js';
 import { createMailerService } from '../services/mailer-service.js';
 import type { AuditService } from '../services/audit-service.js';
 import { PrismaAuditService } from '../services/audit-service.js';
-import { ValidationError } from '../utils/errors.js';
+import { AppError, ValidationError } from '../utils/errors.js';
 import { createRateLimiter } from '../middleware/rate-limiter.js';
+import { decodeJwt } from '../utils/jwt.js';
 import type { Env } from '../index.js';
 
 export interface AuthDeps {
@@ -37,7 +46,23 @@ export function createAuthRoutes(deps?: AuthDeps) {
   function getAuthService(c: any): AuthService {
     let db = deps?.prisma;
     if (!db) {
-      db = c.env?.DATABASE_URL ? createPrismaClient(c.env.DATABASE_URL) : legacyPrisma;
+      const dbUrl = c.env?.DATABASE_URL || process.env.DATABASE_URL;
+      const isValidUrl =
+        dbUrl &&
+        typeof dbUrl === 'string' &&
+        dbUrl.trim() !== '' &&
+        (dbUrl.startsWith('postgres://') || dbUrl.startsWith('postgresql://'));
+
+      if (isValidUrl) {
+        db = createPrismaClient(dbUrl);
+      } else {
+        const preview = dbUrl ? `${String(dbUrl).substring(0, 10)}...` : 'undefined';
+        throw new AppError(
+          'INTERNAL_SERVER_ERROR',
+          `Database connection string (DATABASE_URL) is missing or invalid in Worker secrets/bindings. Received: "${preview}". Please configure a valid postgresql:// URL in Cloudflare Worker secrets.`,
+          500,
+        );
+      }
     }
 
     let mailer = deps?.mailer;
@@ -122,6 +147,24 @@ export function createAuthRoutes(deps?: AuthDeps) {
       ipAddress: c.req.header('x-forwarded-for')?.split(',')[0]?.trim(),
       userAgent: c.req.header('user-agent'),
     });
+
+    if (result.mfaRequired) {
+      return c.json({
+        mfaRequired: true,
+        mfaTicket: result.mfaTicket,
+        email: result.email,
+        message: 'MFA verification required.',
+      });
+    }
+
+    if (result.mfaSetupRequired) {
+      return c.json({
+        mfaSetupRequired: true,
+        mfaTicket: result.mfaTicket,
+        email: result.email,
+        message: 'MFA setup is required by your organisation before signing in.',
+      });
+    }
 
     c.header(
       'Set-Cookie',
@@ -275,6 +318,403 @@ export function createAuthRoutes(deps?: AuthDeps) {
     return c.json({
       message: result.message,
     });
+  });
+
+  /**
+   * POST /api/v1/auth/logout
+   *
+   * Terminates active session and expires session cookie.
+   */
+  auth.post('/logout', async (c) => {
+    const authService = getAuthService(c);
+    const userId = c.req.header('x-user-id');
+
+    const authHeader = c.req.header('authorization');
+    const cookieHeader = c.req.header('cookie');
+    let token: string | undefined;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      token = authHeader.substring(7).trim();
+    } else if (cookieHeader) {
+      const match = cookieHeader.match(/graphsign_session=([^;]+)/);
+      if (match && match[1]) {
+        token = match[1];
+      }
+    }
+
+    const decoded = token ? decodeJwt(token) : null;
+    const jti = decoded?.jti;
+
+    const result = await authService.logout(userId, jti, {
+      ipAddress: c.req.header('x-forwarded-for')?.split(',')[0]?.trim(),
+      userAgent: c.req.header('user-agent'),
+    });
+
+    c.header(
+      'Set-Cookie',
+      'graphsign_session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; SameSite=Strict; Secure',
+    );
+
+    return c.json({
+      message: result.message,
+    });
+  });
+
+  /**
+   * POST /api/v1/auth/mfa/enable
+   *
+   * Enables MFA for the authenticated user and logs audit event with IP and user agent.
+   */
+  auth.post('/mfa/enable', async (c) => {
+    const authService = getAuthService(c);
+    const userId = c.req.header('x-user-id') ?? '00000000-0000-7000-8000-000000000001';
+
+    const result = await authService.enableMfa(userId, {
+      ipAddress: c.req.header('x-forwarded-for')?.split(',')[0]?.trim(),
+      userAgent: c.req.header('user-agent'),
+    });
+
+    return c.json({
+      message: result.message,
+    });
+  });
+
+  /**
+   * POST /api/v1/auth/mfa/disable
+   *
+   * Disables MFA for the authenticated user and logs audit event with IP and user agent.
+   */
+  auth.post('/mfa/disable', async (c) => {
+    const authService = getAuthService(c);
+    const userId = c.req.header('x-user-id') ?? '00000000-0000-7000-8000-000000000001';
+
+    const result = await authService.disableMfa(userId, {
+      ipAddress: c.req.header('x-forwarded-for')?.split(',')[0]?.trim(),
+      userAgent: c.req.header('user-agent'),
+    });
+
+    return c.json({
+      message: result.message,
+    });
+  });
+
+  /**
+   * GET /api/v1/auth/session-settings
+   *
+   * Retrieves current session timeout setting (in minutes) for the organisation.
+   */
+  auth.get('/session-settings', async (c) => {
+    const authService = getAuthService(c);
+    const orgId = c.req.header('x-organisation-id');
+
+    const settings = await authService.getSessionSettings(orgId);
+
+    return c.json({
+      sessionTimeoutMinutes: settings.sessionTimeoutMinutes,
+    });
+  });
+
+  /**
+   * PUT /api/v1/auth/session-settings
+   *
+   * Updates session timeout setting for the organisation and logs audit event.
+   */
+  auth.put('/session-settings', async (c) => {
+    const body = await c.req.json().catch(() => null);
+
+    if (!body) {
+      throw new ValidationError('Request body is required.');
+    }
+
+    const parsed = updateSessionSettingsSchema.safeParse(body);
+
+    if (!parsed.success) {
+      const firstError = parsed.error.errors[0];
+      throw new ValidationError(firstError?.message ?? 'Invalid input.', {
+        field: firstError?.path.join('.') ?? 'unknown',
+        issue: firstError?.message ?? 'validation_failed',
+      });
+    }
+
+    const authService = getAuthService(c);
+    const userId = c.req.header('x-user-id');
+    const orgId = c.req.header('x-organisation-id');
+
+    const result = await authService.updateSessionSettings(parsed.data, userId, orgId, {
+      ipAddress: c.req.header('x-forwarded-for')?.split(',')[0]?.trim(),
+      userAgent: c.req.header('user-agent'),
+    });
+
+    return c.json({
+      sessionTimeoutMinutes: result.sessionTimeoutMinutes,
+      message: result.message,
+    });
+  });
+
+  /**
+   * POST /api/v1/auth/session/validate
+   *
+   * Checks if session is active or expired given last active timestamp.
+   */
+  auth.post('/session/validate', async (c) => {
+    const body = await c.req.json().catch(() => ({}));
+    const parsed = validateSessionRequestSchema.safeParse(body);
+
+    const authService = getAuthService(c);
+    const orgId = c.req.header('x-organisation-id');
+
+    const result = await authService.validateSession(parsed.data?.lastActiveAt, orgId);
+
+    return c.json(result);
+  });
+
+  /**
+   * GET /api/v1/auth/profile
+   *
+   * Retrieves profile details for the authenticated user.
+   */
+  auth.get('/profile', async (c) => {
+    const userId = c.req.header('x-user-id') ?? '00000000-0000-7000-8000-000000000001';
+    const authService = getAuthService(c);
+
+    const profile = await authService.getProfile(userId);
+
+    return c.json(profile);
+  });
+
+  /**
+   * PUT /api/v1/auth/profile
+   *
+   * Updates user profile (name, timezone) and dispatches verification email if email is modified.
+   */
+  auth.put('/profile', async (c) => {
+    const body = await c.req.json().catch(() => null);
+
+    if (!body) {
+      throw new ValidationError('Request body is required.');
+    }
+
+    const parsed = updateProfileRequestSchema.safeParse(body);
+
+    if (!parsed.success) {
+      const firstError = parsed.error.errors[0];
+      throw new ValidationError(firstError?.message ?? 'Invalid input.', {
+        field: firstError?.path.join('.') ?? 'unknown',
+        issue: firstError?.message ?? 'validation_failed',
+      });
+    }
+
+    const userId = c.req.header('x-user-id') ?? '00000000-0000-7000-8000-000000000001';
+    const authService = getAuthService(c);
+
+    const result = await authService.updateProfile(userId, parsed.data, {
+      ipAddress: c.req.header('x-forwarded-for')?.split(',')[0]?.trim(),
+      userAgent: c.req.header('user-agent'),
+    });
+
+    return c.json(result);
+  });
+
+  /**
+   * POST /api/v1/auth/profile/verify-email-change
+   *
+   * Verifies and finalizes an email change request.
+   */
+  auth.post('/profile/verify-email-change', async (c) => {
+    const body = await c.req.json().catch(() => null);
+
+    if (!body) {
+      throw new ValidationError('Request body is required.');
+    }
+
+    const parsed = verifyEmailChangeRequestSchema.safeParse(body);
+
+    if (!parsed.success) {
+      const firstError = parsed.error.errors[0];
+      throw new ValidationError(firstError?.message ?? 'Invalid input.', {
+        field: firstError?.path.join('.') ?? 'unknown',
+        issue: firstError?.message ?? 'validation_failed',
+      });
+    }
+
+    const authService = getAuthService(c);
+
+    const result = await authService.verifyEmailChange(parsed.data.token, {
+      ipAddress: c.req.header('x-forwarded-for')?.split(',')[0]?.trim(),
+      userAgent: c.req.header('user-agent'),
+    });
+
+    return c.json(result);
+  });
+
+  /**
+   * POST /api/v1/auth/profile/change-password
+   *
+   * Changes the authenticated user's password.
+   */
+  auth.post('/profile/change-password', async (c) => {
+    const body = await c.req.json().catch(() => null);
+
+    if (!body) {
+      throw new ValidationError('Request body is required.');
+    }
+
+    const parsed = changePasswordRequestSchema.safeParse(body);
+
+    if (!parsed.success) {
+      const firstError = parsed.error.errors[0];
+      throw new ValidationError(firstError?.message ?? 'Invalid input.', {
+        field: firstError?.path.join('.') ?? 'unknown',
+        issue: firstError?.message ?? 'validation_failed',
+      });
+    }
+
+    const userId = c.req.header('x-user-id') ?? '00000000-0000-7000-8000-000000000001';
+    const authService = getAuthService(c);
+
+    const result = await authService.changePassword(userId, parsed.data, {
+      ipAddress: c.req.header('x-forwarded-for')?.split(',')[0]?.trim(),
+      userAgent: c.req.header('user-agent'),
+    });
+
+    return c.json(result);
+  });
+
+  /**
+   * POST /api/v1/auth/login/mfa
+   *
+   * Submits 6-digit TOTP code with mfaTicket to complete 2-step login.
+   */
+  auth.post('/login/mfa', async (c) => {
+    const body = await c.req.json().catch(() => null);
+
+    if (!body) {
+      throw new ValidationError('Request body is required.');
+    }
+
+    const parsed = loginMfaRequestSchema.safeParse(body);
+
+    if (!parsed.success) {
+      const firstError = parsed.error.errors[0];
+      throw new ValidationError(firstError?.message ?? 'Invalid input.', {
+        field: firstError?.path.join('.') ?? 'unknown',
+        issue: firstError?.message ?? 'validation_failed',
+      });
+    }
+
+    const authService = getAuthService(c);
+
+    const result = await authService.loginWithMfa(parsed.data, {
+      ipAddress: c.req.header('x-forwarded-for')?.split(',')[0]?.trim(),
+      userAgent: c.req.header('user-agent'),
+    });
+
+    c.header(
+      'Set-Cookie',
+      `graphsign_session=${result.token}; HttpOnly; Path=/; SameSite=Strict; Secure`,
+    );
+
+    return c.json({
+      id: result.id,
+      email: result.email,
+      status: result.status,
+      token: result.token,
+      organisationId: result.organisationId,
+      message: 'Login successful.',
+    });
+  });
+
+  /**
+   * POST /api/v1/auth/mfa/setup
+   *
+   * Initiates MFA setup by generating a Base32 secret and QR code URI.
+   */
+  auth.post('/mfa/setup', async (c) => {
+    const authService = getAuthService(c);
+    const userId = c.req.header('x-user-id') ?? '00000000-0000-7000-8000-000000000001';
+
+    const result = await authService.setupMfa(userId);
+
+    return c.json(result);
+  });
+
+  /**
+   * POST /api/v1/auth/mfa/verify-setup
+   *
+   * Verifies 6-digit TOTP code from authenticator app to confirm setup and activate MFA.
+   */
+  auth.post('/mfa/verify-setup', async (c) => {
+    const body = await c.req.json().catch(() => null);
+
+    if (!body) {
+      throw new ValidationError('Request body is required.');
+    }
+
+    const parsed = verifyMfaSetupRequestSchema.safeParse(body);
+
+    if (!parsed.success) {
+      const firstError = parsed.error.errors[0];
+      throw new ValidationError(firstError?.message ?? 'Invalid input.', {
+        field: firstError?.path.join('.') ?? 'unknown',
+        issue: firstError?.message ?? 'validation_failed',
+      });
+    }
+
+    const authService = getAuthService(c);
+    const userId = c.req.header('x-user-id') ?? '00000000-0000-7000-8000-000000000001';
+
+    const result = await authService.verifySetupMfa(userId, parsed.data.code, {
+      ipAddress: c.req.header('x-forwarded-for')?.split(',')[0]?.trim(),
+      userAgent: c.req.header('user-agent'),
+    });
+
+    return c.json(result);
+  });
+
+  /**
+   * GET /api/v1/auth/mfa-enforcement
+   *
+   * Retrieves MFA enforcement settings for the organisation.
+   */
+  auth.get('/mfa-enforcement', async (c) => {
+    const authService = getAuthService(c);
+    const orgId = c.req.header('x-organisation-id');
+
+    const settings = await authService.getMfaEnforcement(orgId);
+
+    return c.json(settings);
+  });
+
+  /**
+   * PUT /api/v1/auth/mfa-enforcement
+   *
+   * Updates MFA enforcement settings for the organisation.
+   */
+  auth.put('/mfa-enforcement', async (c) => {
+    const body = await c.req.json().catch(() => null);
+
+    if (!body) {
+      throw new ValidationError('Request body is required.');
+    }
+
+    const parsed = updateMfaEnforcementRequestSchema.safeParse(body);
+
+    if (!parsed.success) {
+      const firstError = parsed.error.errors[0];
+      throw new ValidationError(firstError?.message ?? 'Invalid input.', {
+        field: firstError?.path.join('.') ?? 'unknown',
+        issue: firstError?.message ?? 'validation_failed',
+      });
+    }
+
+    const authService = getAuthService(c);
+    const orgId = c.req.header('x-organisation-id');
+
+    const result = await authService.updateMfaEnforcement(orgId, parsed.data, {
+      ipAddress: c.req.header('x-forwarded-for')?.split(',')[0]?.trim(),
+      userAgent: c.req.header('user-agent'),
+    });
+
+    return c.json(result);
   });
 
   return auth;

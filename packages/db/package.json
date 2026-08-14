@@ -7,6 +7,7 @@
   "types": "./src/index.ts",
   "scripts": {
     "generate": "prisma generate",
+    "build": "prisma generate",
     "migrate": "prisma migrate dev",
     "push": "prisma db push",
     "studio": "prisma studio",
@@ -14,11 +15,12 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@prisma/client": "^7.9.1",
-    "@prisma/adapter-neon": "^7.9.1",
+    "@prisma/client": "^6.19.3",
+    "@prisma/adapter-neon": "^6.19.3",
     "@neondatabase/serverless": "^1.1.0"
   },
   "devDependencies": {
+    "@types/node": "^26.1.2",
     "prisma": "^6.9.0",
     "typescript": "^7.0.2"
   }

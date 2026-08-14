@@ -1,17 +1,25 @@
 import { PrismaClient } from '@prisma/client';
 import { PrismaNeon } from '@prisma/adapter-neon';
-import { Pool } from '@neondatabase/serverless';
 
 /**
  * Creates a PrismaClient configured for Neon serverless (WebSocket).
  * Use this in Cloudflare Workers where TCP sockets are unavailable.
  *
- * The Neon serverless driver handles connection pooling on its side,
- * so creating a new client per request is lightweight.
+ * @prisma/adapter-neon v6.x expects a PoolConfig object (not a Pool instance).
+ * It creates and manages its own Pool internally.
  */
 export function createPrismaClient(databaseUrl: string): PrismaClient {
-  const pool = new Pool({ connectionString: databaseUrl });
-  const adapter = new PrismaNeon(pool as any);
+  if (
+    !databaseUrl ||
+    typeof databaseUrl !== 'string' ||
+    (!databaseUrl.startsWith('postgres://') && !databaseUrl.startsWith('postgresql://'))
+  ) {
+    const preview = databaseUrl ? `${String(databaseUrl).substring(0, 15)}...` : 'undefined';
+    throw new Error(
+      `Invalid DATABASE_URL provided to createPrismaClient: "${preview}". Must be a valid postgresql:// or postgres:// connection string.`,
+    );
+  }
+  const adapter = new PrismaNeon({ connectionString: databaseUrl });
   return new PrismaClient({ adapter } as any);
 }
 
@@ -22,19 +30,37 @@ const globalForPrisma = globalThis as unknown as {
 };
 
 /**
- * Prisma client singleton.
- * Reuses the same instance across hot-reloads in development.
- * Used by tests and local dev scripts that rely on process.env.
+ * Legacy singleton helper for local dev / testing scripts that use process.env.
+ * Lazy evaluated to avoid initializing PrismaClient at top-level module load time in Workers.
  */
-export const prisma =
-  globalForPrisma.prisma ??
-  new PrismaClient({
-    log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
-  });
-
-if (process.env.NODE_ENV !== 'production') {
-  globalForPrisma.prisma = prisma;
+export function getLegacyPrisma(): PrismaClient {
+  if (!globalForPrisma.prisma) {
+    if (!process.env.DATABASE_URL) {
+      throw new Error(
+        'DATABASE_URL environment variable is not set. Cannot initialize PrismaClient.',
+      );
+    }
+    globalForPrisma.prisma = new PrismaClient({
+      log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
+    });
+  }
+  return globalForPrisma.prisma;
 }
 
 export { PrismaClient };
-export type { Organisation, User, AuditLog } from '@prisma/client';
+export type {
+  Organisation,
+  User,
+  AuditLog,
+  OrganisationInvitation,
+  Team,
+  TeamMember,
+  CustomRole,
+  OrganisationDomain,
+  UserOrganisation,
+  Agreement,
+  AgreementVersion,
+  Template,
+  TemplateVersion,
+  TemplateShare,
+} from '@prisma/client';

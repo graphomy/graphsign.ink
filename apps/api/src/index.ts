@@ -2,6 +2,12 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { errorHandler } from './middleware/error-handler.js';
 import { createAuthRoutes } from './routes/auth.js';
+import { createOrganisationRoutes } from './routes/organisations.js';
+import { createRoleRoutes } from './routes/roles.js';
+import { createUserRoutes } from './routes/users.js';
+import { createAgreementRoutes } from './routes/agreements.js';
+import { createTemplateRoutes } from './routes/templates.js';
+import { createAdminRoutes } from './routes/admin.js';
 
 /** Cloudflare Worker environment bindings. */
 export type Env = {
@@ -13,6 +19,7 @@ export type Env = {
   WEB_URL: string;
   API_URL: string;
   NODE_ENV: string;
+  SUPERADMIN_ID: string;
 };
 
 type Variables = {
@@ -24,10 +31,27 @@ const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 // Global error handler (Hono onError hook)
 app.onError(errorHandler);
 
-// Global middleware — CORS reads WEB_URL from Worker bindings
+// Global middleware — CORS reads WEB_URL from Worker bindings with dynamic origin matching
 app.use('*', async (c, next) => {
+  const allowedOriginSetting = c.env?.WEB_URL;
   const corsMiddleware = cors({
-    origin: c.env.WEB_URL ?? 'http://localhost:3000',
+    origin: (requestOrigin) => {
+      if (!requestOrigin) return '*';
+      if (!allowedOriginSetting || allowedOriginSetting === '*') return requestOrigin;
+
+      const origins = allowedOriginSetting.split(',').map((o) => o.trim());
+      if (origins.includes(requestOrigin) || requestOrigin.startsWith('http://localhost:')) {
+        return requestOrigin;
+      }
+
+      const cleanReq = requestOrigin.replace(/^https?:\/\/(www\.)?/, '');
+      const isAllowed = origins.some((o) => o.replace(/^https?:\/\/(www\.)?/, '') === cleanReq);
+      if (isAllowed) return requestOrigin;
+
+      return '';
+    },
+    allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowHeaders: ['Content-Type', 'Authorization', 'x-user-id', 'x-organisation-id'],
     credentials: true,
   });
   return corsMiddleware(c, next);
@@ -44,6 +68,12 @@ app.get('/health', (c) => c.json({ status: 'ok', timestamp: new Date().toISOStri
 
 // API v1 routes
 app.route('/api/v1/auth', createAuthRoutes());
+app.route('/api/v1/organisations', createOrganisationRoutes());
+app.route('/api/v1/roles', createRoleRoutes());
+app.route('/api/v1/users', createUserRoutes());
+app.route('/api/v1/agreements', createAgreementRoutes());
+app.route('/api/v1/templates', createTemplateRoutes());
+app.route('/api/v1/admin', createAdminRoutes());
 
 // Workers export — no serve() call needed
 export default app;

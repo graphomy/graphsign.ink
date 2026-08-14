@@ -3,6 +3,8 @@
 import { useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import { registerFormSchema, getPasswordRequirements } from '@/lib/validators/auth';
+import { getApiUrl } from '@/lib/api';
+import { GuestGuard } from '@/components/features/auth/GuestGuard';
 
 /**
  * Registration page — creates a new user account.
@@ -13,7 +15,7 @@ import { registerFormSchema, getPasswordRequirements } from '@/lib/validators/au
  * - Weak password → error displayed
  * - Duplicate email → error displayed
  */
-export default function RegisterPage() {
+function RegisterContent() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -45,7 +47,7 @@ export default function RegisterPage() {
 
     setIsLoading(true);
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8787';
+      const apiUrl = getApiUrl();
       const res = await fetch(`${apiUrl}/api/v1/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -309,5 +311,13 @@ export default function RegisterPage() {
         </Link>
       </p>
     </div>
+  );
+}
+
+export default function RegisterPage() {
+  return (
+    <GuestGuard>
+      <RegisterContent />
+    </GuestGuard>
   );
 }

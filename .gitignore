@@ -42,3 +42,7 @@ yarn-debug.log*
 # Generated
 *.generated.ts
 prisma/generated/
+
+# Local Environment Setup Guides
+Environment_Setup/
+

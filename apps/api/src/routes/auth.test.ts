@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Hono } from 'hono';
 import { createAuthRoutes } from './auth.js';
 import { errorHandler } from '../middleware/error-handler.js';
+import { generateTotpToken } from '../utils/totp.js';
 
 // Mock crypto module
 vi.mock('../utils/crypto.js', () => ({
@@ -32,6 +33,7 @@ function createMockDeps() {
       organisation: {
         findUnique: vi.fn().mockResolvedValue(DEFAULT_ORG),
         create: vi.fn().mockResolvedValue(DEFAULT_ORG),
+        update: vi.fn().mockResolvedValue(DEFAULT_ORG),
       },
       user: {
         findUnique: vi.fn().mockResolvedValue(null),
@@ -53,6 +55,7 @@ function createMockDeps() {
     mailer: {
       sendVerificationEmail: vi.fn(async () => {}),
       sendPasswordResetEmail: vi.fn(async () => {}),
+      sendEmailChangeVerificationEmail: vi.fn(async () => {}),
     },
     audit: {
       log: vi.fn(async () => {}),
@@ -446,5 +449,362 @@ describe('POST /api/v1/auth/reset-password', () => {
     expect(res.status).toBe(400);
     const body = (await res.json()) as any;
     expect(body.error.code).toBe('VALIDATION_ERROR');
+  });
+});
+
+describe('POST /api/v1/auth/logout', () => {
+  let deps: ReturnType<typeof createMockDeps>;
+  let app: Hono;
+
+  beforeEach(() => {
+    deps = createMockDeps();
+    app = createApp(deps);
+  });
+
+  it('should return 200 and clear session cookie on logout', async () => {
+    const res = await app.request('/api/v1/auth/logout', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-user-id': '00000000-0000-7000-8000-000000000001',
+      },
+    });
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    expect(body.message).toContain('Signed out successfully');
+
+    const setCookie = res.headers.get('set-cookie');
+    expect(setCookie).toContain('graphsign_session=');
+    expect(setCookie).toContain('Expires=Thu, 01 Jan 1970 00:00:00 GMT');
+  });
+});
+
+describe('POST /api/v1/auth/mfa/enable and /mfa/disable', () => {
+  let deps: ReturnType<typeof createMockDeps>;
+  let app: Hono;
+
+  beforeEach(() => {
+    deps = createMockDeps();
+    app = createApp(deps);
+  });
+
+  it('should return 200 on enabling MFA and log audit event', async () => {
+    const res = await app.request('/api/v1/auth/mfa/enable', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-user-id': '00000000-0000-7000-8000-000000000001',
+      },
+    });
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    expect(body.message).toBe('MFA enabled successfully.');
+  });
+
+  it('should return 200 on disabling MFA and log audit event', async () => {
+    const res = await app.request('/api/v1/auth/mfa/disable', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-user-id': '00000000-0000-7000-8000-000000000001',
+      },
+    });
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    expect(body.message).toBe('MFA disabled successfully.');
+  });
+});
+
+describe('Session Settings Routes', () => {
+  let deps: ReturnType<typeof createMockDeps>;
+  let app: Hono;
+
+  beforeEach(() => {
+    deps = createMockDeps();
+    (deps.prisma.organisation.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ...DEFAULT_ORG,
+      sessionTimeoutMinutes: 15,
+    });
+    (deps.prisma.organisation.update as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ...DEFAULT_ORG,
+      sessionTimeoutMinutes: 30,
+    });
+    app = createApp(deps);
+  });
+
+  it('should GET session settings successfully', async () => {
+    const res = await app.request('/api/v1/auth/session-settings', {
+      method: 'GET',
+    });
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    expect(body.sessionTimeoutMinutes).toBe(15);
+  });
+
+  it('should PUT session settings successfully with valid timeout', async () => {
+    const res = await app.request('/api/v1/auth/session-settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionTimeoutMinutes: 30 }),
+    });
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    expect(body.sessionTimeoutMinutes).toBe(30);
+    expect(body.message).toContain('updated successfully');
+  });
+
+  it('should return 400 when PUT session settings receives invalid timeout value (<1)', async () => {
+    const res = await app.request('/api/v1/auth/session-settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionTimeoutMinutes: 0 }),
+    });
+
+    expect(res.status).toBe(400);
+  });
+
+  it('should POST session validate and return active status', async () => {
+    const recentTime = Date.now() - 60000;
+    const res = await app.request('/api/v1/auth/session/validate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ lastActiveAt: recentTime }),
+    });
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    expect(body.valid).toBe(true);
+    expect(body.sessionTimeoutMinutes).toBe(15);
+  });
+});
+
+describe('Profile Routes', () => {
+  let deps: ReturnType<typeof createMockDeps>;
+  let app: Hono;
+
+  const mockUser = {
+    id: '00000000-0000-7000-8000-000000000001',
+    organisationId: DEFAULT_ORG.id,
+    email: 'user@example.com',
+    name: 'Alice Vance',
+    timezone: 'UTC',
+    status: 'active',
+    pendingEmail: null,
+    pendingEmailTokenHash: null,
+    pendingEmailTokenExpiresAt: null,
+    createdAt: new Date('2026-01-01T00:00:00Z'),
+    updatedAt: new Date(),
+    deletedAt: null,
+  };
+
+  beforeEach(() => {
+    deps = createMockDeps();
+    (deps.prisma.user.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue(mockUser);
+    (deps.prisma.user.update as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ...mockUser,
+      name: 'Alice Cooper',
+      timezone: 'Europe/London',
+    });
+    app = createApp(deps);
+  });
+
+  it('should GET profile successfully', async () => {
+    const res = await app.request('/api/v1/auth/profile', {
+      method: 'GET',
+      headers: { 'x-user-id': mockUser.id },
+    });
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    expect(body.id).toBe(mockUser.id);
+    expect(body.email).toBe(mockUser.email);
+    expect(body.name).toBe('Alice Vance');
+  });
+
+  it('should PUT profile to update name and timezone', async () => {
+    const res = await app.request('/api/v1/auth/profile', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-user-id': mockUser.id,
+      },
+      body: JSON.stringify({
+        name: 'Alice Cooper',
+        timezone: 'Europe/London',
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    expect(body.name).toBe('Alice Cooper');
+    expect(body.timezone).toBe('Europe/London');
+  });
+
+  it('should return 400 when PUT profile receives invalid email', async () => {
+    const res = await app.request('/api/v1/auth/profile', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-user-id': mockUser.id,
+      },
+      body: JSON.stringify({
+        email: 'invalid-email',
+      }),
+    });
+
+    expect(res.status).toBe(400);
+  });
+
+  it('should POST verify-email-change and return success', async () => {
+    (deps.prisma.user.findFirst as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ...mockUser,
+      pendingEmail: 'newemail@example.com',
+      pendingEmailTokenHash: 'sha256-hashed-token',
+      pendingEmailTokenExpiresAt: new Date(Date.now() + 60000),
+    });
+
+    (deps.prisma.user.update as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ...mockUser,
+      email: 'newemail@example.com',
+      pendingEmail: null,
+    });
+
+    const res = await app.request('/api/v1/auth/profile/verify-email-change', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: 'raw-verification-token' }),
+    });
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    expect(body.email).toBe('newemail@example.com');
+    expect(body.message).toBe('Email address updated successfully.');
+  });
+});
+
+describe('MFA Routes', () => {
+  let deps: ReturnType<typeof createMockDeps>;
+  let app: Hono;
+
+  const mockUser = {
+    id: '00000000-0000-7000-8000-000000000001',
+    organisationId: DEFAULT_ORG.id,
+    email: 'mfauser@example.com',
+    passwordHash: '$2b$10$abcdefghijklmnopqrstuu',
+    emailVerified: true,
+    status: 'active',
+    mfaEnabled: true,
+    mfaSecret: 'JBSWY3DPEHPK3PXP',
+    deletedAt: null,
+  };
+
+  beforeEach(() => {
+    deps = createMockDeps();
+    (deps.prisma.user.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue(mockUser);
+    app = createApp(deps);
+  });
+
+  it('should POST /mfa/setup and return secret and QR code URI', async () => {
+    (deps.prisma.user.update as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ...mockUser,
+      mfaPendingSecret: 'JBSWY3DPEHPK3PXP',
+    });
+
+    const res = await app.request('/api/v1/auth/mfa/setup', {
+      method: 'POST',
+      headers: { 'x-user-id': mockUser.id },
+    });
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    expect(body.secret).toBeDefined();
+    expect(body.qrCode).toContain('data:image/svg+xml');
+  });
+
+  it('should return 400 when /mfa/verify-setup receives invalid code', async () => {
+    (deps.prisma.user.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ...mockUser,
+      mfaPendingSecret: 'JBSWY3DPEHPK3PXP',
+    });
+
+    const res = await app.request('/api/v1/auth/mfa/verify-setup', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-user-id': mockUser.id,
+      },
+      body: JSON.stringify({ code: '000000' }),
+    });
+
+    expect(res.status).toBe(400);
+  });
+
+  it('should POST /login/mfa with valid code and return session token', async () => {
+    const validCode = await generateTotpToken('JBSWY3DPEHPK3PXP');
+
+    const res = await app.request('/api/v1/auth/login/mfa', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        mfaTicket: `mfa_${mockUser.id}_170000000`,
+        code: validCode,
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    expect(body.token).toBeDefined();
+    expect(body.message).toBe('Login successful.');
+  });
+});
+
+describe('MFA Enforcement Routes', () => {
+  let deps: ReturnType<typeof createMockDeps>;
+  let app: Hono;
+
+  beforeEach(() => {
+    deps = createMockDeps();
+    (deps.prisma.organisation.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ...DEFAULT_ORG,
+      mfaRequired: false,
+      mfaRequiredRoles: [],
+    });
+    (deps.prisma.organisation.update as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ...DEFAULT_ORG,
+      mfaRequired: true,
+      mfaRequiredRoles: ['admin', 'signer'],
+    });
+    app = createApp(deps);
+  });
+
+  it('should GET /mfa-enforcement successfully', async () => {
+    const res = await app.request('/api/v1/auth/mfa-enforcement', {
+      method: 'GET',
+    });
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    expect(body.mfaRequired).toBe(false);
+  });
+
+  it('should PUT /mfa-enforcement to update policy settings', async () => {
+    const res = await app.request('/api/v1/auth/mfa-enforcement', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        mfaRequired: true,
+        mfaRequiredRoles: ['admin', 'signer'],
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    expect(body.mfaRequired).toBe(true);
+    expect(body.mfaRequiredRoles).toEqual(['admin', 'signer']);
   });
 });
