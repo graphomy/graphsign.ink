@@ -29,8 +29,16 @@ interface PdfViewerModalProps {
   onClose: () => void;
 }
 
+function getToken(): string {
+  if (typeof window === 'undefined') return '';
+  return localStorage.getItem('graphsign_session_token') || localStorage.getItem('token') || '';
+}
+
 export function PdfViewerModal({ agreement, onClose }: PdfViewerModalProps) {
   const [zoomLevel, setZoomLevel] = useState<number>(100);
+  const [fetchedBlobUrl, setFetchedBlobUrl] = useState<string | null>(null);
+  const [isLoadingFile, setIsLoadingFile] = useState<boolean>(false);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const printableAreaRef = useRef<HTMLDivElement>(null);
 
   const meta = (agreement.metadata as Record<string, unknown>) || {};
@@ -50,8 +58,8 @@ export function PdfViewerModal({ agreement, onClose }: PdfViewerModalProps) {
     ? agreement.version
     : `v${agreement.version}`;
 
-  // Derive Blob URL for uploaded PDF data
-  const pdfBlobUrl = useMemo(() => {
+  // Derive Blob URL synchronously for base64 uploaded PDF data if present
+  const inlineBlobUrl = useMemo(() => {
     if (rawFileData && typeof rawFileData === 'string') {
       try {
         let base64 = rawFileData;
@@ -79,23 +87,76 @@ export function PdfViewerModal({ agreement, onClose }: PdfViewerModalProps) {
           return URL.createObjectURL(blob);
         }
       } catch (e) {
-        console.error('Error creating PDF object URL:', e);
+        console.error('Error creating inline PDF object URL:', e);
       }
     }
     return null;
   }, [rawFileData, agreement.mimeType]);
 
-  // Clean up object URL on unmount
+  // Fetch binary file with authorization headers when inline base64 is not present
   useEffect(() => {
+    if (inlineBlobUrl || isMarkdown) {
+      return;
+    }
+
+    let isMounted = true;
+    let createdUrl: string | null = null;
+
+    async function loadPdfBinary() {
+      setIsLoadingFile(true);
+      setFetchError(null);
+
+      try {
+        const token = getToken();
+        const res = await fetch(`${getApiUrl()}/api/v1/agreements/${agreement.id}/file`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        if (!res.ok) {
+          const errData = await res.json().catch(() => null);
+          throw new Error(errData?.error?.message || `Failed to fetch document (${res.status})`);
+        }
+
+        const blob = await res.blob();
+        createdUrl = URL.createObjectURL(blob);
+
+        if (isMounted) {
+          setFetchedBlobUrl(createdUrl);
+        }
+      } catch (err: unknown) {
+        if (isMounted) {
+          console.error('Error fetching agreement file:', err);
+          setFetchError((err as Error).message);
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoadingFile(false);
+        }
+      }
+    }
+
+    loadPdfBinary();
+
     return () => {
-      if (pdfBlobUrl && typeof URL.revokeObjectURL === 'function') {
-        URL.revokeObjectURL(pdfBlobUrl);
+      isMounted = false;
+      if (createdUrl && typeof URL.revokeObjectURL === 'function') {
+        URL.revokeObjectURL(createdUrl);
       }
     };
-  }, [pdfBlobUrl]);
+  }, [agreement.id, inlineBlobUrl, isMarkdown]);
 
-  const fallbackApiFileUrl = `${getApiUrl()}/api/v1/agreements/${agreement.id}/file`;
-  const effectivePdfUrl = pdfBlobUrl || (hasFileData || isPdf ? fallbackApiFileUrl : null);
+  // Clean up inline object URL on unmount
+  useEffect(() => {
+    return () => {
+      if (inlineBlobUrl && typeof URL.revokeObjectURL === 'function') {
+        URL.revokeObjectURL(inlineBlobUrl);
+      }
+    };
+  }, [inlineBlobUrl]);
+
+  const effectivePdfUrl = inlineBlobUrl || fetchedBlobUrl;
 
   function handleZoomIn() {
     setZoomLevel((prev) => Math.min(prev + 15, 160));
@@ -126,11 +187,6 @@ export function PdfViewerModal({ agreement, onClose }: PdfViewerModalProps) {
       return;
     }
 
-    if (agreement.fileUrl && !agreement.fileUrl.includes('storage.graphsign.ink')) {
-      window.open(agreement.fileUrl, '_blank', 'noopener,noreferrer');
-      return;
-    }
-
     // For markdown documents, open a clean printable view in new tab
     const cleanContent =
       agreement.markdownContent || `# ${agreement.title}\n\n${agreement.description || ''}`;
@@ -150,19 +206,9 @@ export function PdfViewerModal({ agreement, onClose }: PdfViewerModalProps) {
       agreement.fileName ||
       (isPdf ? `${cleanTitle}.pdf` : `${cleanTitle}_v${agreement.version}.md`);
 
-    if (pdfBlobUrl) {
+    if (effectivePdfUrl) {
       const a = document.createElement('a');
-      a.href = pdfBlobUrl;
-      a.download = fileName;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      return;
-    }
-
-    if (isPdf) {
-      const a = document.createElement('a');
-      a.href = fallbackApiFileUrl;
+      a.href = effectivePdfUrl;
       a.download = fileName;
       document.body.appendChild(a);
       a.click();
@@ -276,7 +322,24 @@ export function PdfViewerModal({ agreement, onClose }: PdfViewerModalProps) {
 
       {/* Document View Canvas */}
       <div className="flex-1 bg-neutral-900 p-2 sm:p-4 md:p-6 overflow-hidden flex justify-center items-center">
-        {isPdf && effectivePdfUrl ? (
+        {isLoadingFile ? (
+          <div className="flex flex-col items-center justify-center p-12 text-center text-white space-y-3">
+            <div className="w-8 h-8 border-3 border-neutral-600 border-t-white rounded-full animate-spin" />
+            <p className="text-xs text-neutral-300 font-medium">Loading document securely...</p>
+          </div>
+        ) : fetchError ? (
+          <div className="bg-neutral-800 border border-red-500/40 rounded-xl p-8 max-w-md text-center text-white space-y-4 shadow-xl">
+            <div className="text-4xl text-red-400">⚠️</div>
+            <h3 className="text-sm font-bold text-neutral-100">Unable to load document</h3>
+            <p className="text-xs text-neutral-400">{fetchError}</p>
+            <button
+              onClick={() => window.location.reload()}
+              className="px-4 py-2 bg-neutral-700 hover:bg-neutral-600 text-white rounded-lg text-xs font-semibold"
+            >
+              Retry
+            </button>
+          </div>
+        ) : isPdf && effectivePdfUrl ? (
           <div className="w-full h-full rounded-b-lg overflow-hidden bg-neutral-800 border border-neutral-700 shadow-2xl flex flex-col">
             <iframe
               src={effectivePdfUrl}

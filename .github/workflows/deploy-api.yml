@@ -59,7 +59,13 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
       - name: Deploy to Cloudflare Workers
-        run: pnpm --filter @graphsign/api exec wrangler deploy --name ${{ github.ref_name == 'main' && 'graphsign-api' || 'dev-graphsign-api' }}
+        run: |
+          pnpm --filter @graphsign/api exec wrangler deploy \
+            --name ${{ github.ref_name == 'main' && 'graphsign-api' || 'dev-graphsign-api' }} \
+            --var WEB_URL:"${{ vars.WEB_URL || (github.ref_name == 'main' && 'https://graphsign-web.pages.dev,https://graphsign.ink,http://localhost:3000' || 'https://dev-graphsign-web.pages.dev,http://localhost:3000') }}" \
+            --var API_URL:"${{ vars.API_URL || (github.ref_name == 'main' && 'https://graphsign-api.kunal-f9f.workers.dev' || 'https://dev-graphsign-api.kunal-f9f.workers.dev') }}" \
+            --var EMAIL_FROM:"${{ vars.EMAIL_FROM || 'notification@mail.graphomy.com' }}" \
+            --var NODE_ENV:"${{ vars.NODE_ENV || (github.ref_name == 'main' && 'production' || 'development') }}"
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

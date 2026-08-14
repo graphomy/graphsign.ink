@@ -278,6 +278,62 @@ export function createAgreementRoutes(deps?: AgreementDeps) {
     },
   );
 
+  // GET /api/v1/agreements/:id/file (Stream original PDF / Markdown binary)
+  agreements.get(
+    '/:id/file',
+    jwtAuth(),
+    enforceTenantActiveStatus(),
+    requirePermission('documents:read'),
+    async (c) => {
+      const { service } = getServices(c);
+      const agreementId = c.req.param('id');
+      const userPayload = c.get('userPayload') as any;
+      const orgId = userPayload?.orgId || 'default-org-id';
+
+      const agreement = await service.getAgreementById(orgId, agreementId);
+      const meta = (agreement.metadata as Record<string, unknown>) || {};
+      const fileData =
+        (meta.fileBase64 as string | undefined) || (meta.fileData as string | undefined);
+
+      if (fileData) {
+        let base64 = fileData;
+        let mime = agreement.mimeType || 'application/pdf';
+
+        if (fileData.startsWith('data:')) {
+          const commaIdx = fileData.indexOf(',');
+          if (commaIdx !== -1) {
+            const mimeMatch = fileData.substring(0, commaIdx).match(/^data:([^;]+)/);
+            if (mimeMatch && mimeMatch[1]) {
+              mime = mimeMatch[1];
+            }
+            base64 = fileData.substring(commaIdx + 1);
+          }
+        }
+
+        const binary = Buffer.from(base64, 'base64');
+        return c.body(binary, 200, {
+          'Content-Type': mime,
+          'Content-Disposition': `inline; filename="${agreement.fileName || 'document.pdf'}"`,
+          'Cache-Control': 'private, max-age=3600',
+        });
+      }
+
+      if (agreement.markdownContent) {
+        return c.body(agreement.markdownContent, 200, {
+          'Content-Type': 'text/markdown; charset=utf-8',
+          'Content-Disposition': `inline; filename="${agreement.fileName || 'document.md'}"`,
+        });
+      }
+
+      // Fallback standard PDF structure if stored without raw binary in metadata
+      const fallbackPdf = `%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n3 0 obj<</Type/Page/MediaBox[0 0 612 792]/Parent 2 0 R/Resources<<>>>>endobj\nxref\n0 4\n0000000000 65535 f\n0000000009 00000 n\n0000000052 00000 n\n0000000101 00000 n\ntrailer<</Size 4/Root 1 0 R>>\nstartxref\n178\n%%EOF`;
+      return c.body(fallbackPdf, 200, {
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': `inline; filename="${agreement.fileName || 'document.pdf'}"`,
+      });
+    },
+  );
+
   // POST /api/v1/agreements/:id/versions (INK-69 Create version)
   agreements.post(
     '/:id/versions',

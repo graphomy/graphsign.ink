@@ -240,4 +240,21 @@ describe('Agreement Routes Integration Tests (Epic INK-8)', () => {
     const text = await res.text();
     expect(text).toContain('# Terms of Service');
   });
+
+  it('GET /api/v1/agreements/:id/file - streams file when token is passed in query parameter', async () => {
+    mockAgreementService.getAgreementById.mockResolvedValue({
+      id: 'ag-query-token',
+      title: 'Query Token Document',
+      fileName: 'doc.md',
+      markdownContent: '# Document Content',
+      metadata: {},
+    });
+
+    const res = await app.request(`/api/v1/agreements/ag-query-token/file?token=${token}`);
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get('Content-Type')).toContain('text/markdown');
+    const text = await res.text();
+    expect(text).toContain('# Document Content');
+  });
 });
