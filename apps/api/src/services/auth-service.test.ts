@@ -985,6 +985,4 @@ describe('AuthService', () => {
       );
     });
   });
-=======
->>>>>>> origin/main
 });

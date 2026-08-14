@@ -717,7 +717,5 @@ export function createAuthRoutes(deps?: AuthDeps) {
     return c.json(result);
   });
 
-=======
->>>>>>> origin/main
   return auth;
 }
