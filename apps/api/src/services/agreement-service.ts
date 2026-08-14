@@ -130,7 +130,10 @@ export class AgreementService {
         mimeType: isMarkdown ? 'text/markdown' : 'application/pdf',
         markdownContent: input.markdownContent,
         tags: input.tags ? (input.tags as any) : [],
-        metadata: input.metadata ? (input.metadata as any) : {},
+        metadata: {
+          ...((input.metadata as any) || {}),
+          ...(input.fileBase64 ? { fileData: input.fileBase64 } : {}),
+        },
         version,
         versions: {
           create: {
