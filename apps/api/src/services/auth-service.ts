@@ -387,6 +387,8 @@ export class AuthService {
       status: user.status,
       token: sessionToken,
       organisationId: org.id,
+=======
+>>>>>>> origin/main
     };
   }
 
@@ -1258,6 +1260,8 @@ export class AuthService {
     };
   }
   /**
+=======
+>>>>>>> origin/main
    * Gets or creates the default organisation for MVP.
 
    * Multi-org support will be added in a separate story.

@@ -23,7 +23,7 @@ We prioritize:
 ### 📄 Agreement Management & Markdown Drafting
 
 - Pure Markdown drafting format with live dual-pane editor and formatting toolbar.
-- Real-time Markdown to PDF rendering for Active agreements with legal A4 layout, watermarks, and signatory blocks.
+- Real-time source PDF viewer and document reader with print/download controls.
 - Semantic document versioning: `v0.1` draft baseline, auto minor version bumps (`+0.1`), and major version promotions (`v1.0`, `v2.0`) upon activation.
 - Dedicated tab separation for Active agreements, Drafts, and Archived records.
 - In-place Pencil ✏️ edit mode and concise audit history timelines.
