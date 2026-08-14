@@ -16,13 +16,18 @@ export function jwtAuth(): MiddlewareHandler {
   return async (c, next) => {
     const authHeader = c.req.header('authorization');
     const cookieHeader = c.req.header('cookie');
+    const queryToken = c.req.query('token');
 
     let token: string | undefined;
 
     if (authHeader && authHeader.startsWith('Bearer ')) {
       token = authHeader.substring(7).trim();
+    } else if (queryToken) {
+      token = queryToken.trim();
     } else if (cookieHeader) {
-      const match = cookieHeader.match(/graphsign_session=([^;]+)/);
+      const match =
+        cookieHeader.match(/graphsign_session=([^;]+)/) ||
+        cookieHeader.match(/graphsign_session_token=([^;]+)/);
       if (match && match[1]) {
         token = match[1];
       }
