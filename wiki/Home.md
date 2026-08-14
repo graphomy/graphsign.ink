@@ -20,16 +20,24 @@ We prioritize:
 
 ## ✨ Core Features (V1 Scope)
 
-### 📄 Agreement Generation & Templates
+### 📄 Agreement Management & Markdown Drafting
 
-- Upload PDF and DOCX documents.
-- Build reusable agreement templates.
-- Interactive field placement (signatures, initials, dates, text fields).
+- Pure Markdown drafting format with live dual-pane editor and formatting toolbar.
+- Real-time Markdown to PDF rendering for Active agreements with legal A4 layout, watermarks, and signatory blocks.
+- Semantic document versioning: `v0.1` draft baseline, auto minor version bumps (`+0.1`), and major version promotions (`v1.0`, `v2.0`) upon activation.
+- Dedicated tab separation for Active agreements, Drafts, and Archived records.
+- In-place Pencil ✏️ edit mode and concise audit history timelines.
+- Native upload support for `.pdf`, `.docx`, and `.md` contracts (with password/encryption detection).
+
+### 🌐 Internationalization & Timezone Support
+
+- Standardized `DD-MON-YYYY` date formatting (e.g. `14-AUG-2026`) across dashboards, PDF generation, and audit trails.
+- Automatic conversion according to user's configured profile timezone, with resilient fallback to GMT/UTC.
 
 ### 🔄 Agreement Workflow Engine
 
 - State machine routing: `Draft` → `Review` → `Approval` → `Signing` → `Completed` → `Archived`.
-- Audit logging for every state transition.
+- Append-only audit logging for every state transition and draft revision.
 
 ### ✍️ Legally Binding Electronic Signatures
 
@@ -41,7 +49,7 @@ We prioritize:
 
 - Organization-level Role-Based Access Control (RBAC).
 - Append-only, hash-chained audit trails.
-- Configurable document retention and privacy controls.
+- Configurable document retention, custom domains, and team management.
 
 ---
 

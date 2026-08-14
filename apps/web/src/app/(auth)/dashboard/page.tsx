@@ -6,6 +6,7 @@ import { SessionGuard } from '@/components/features/auth/SessionGuard';
 import { HeaderNav } from '@/components/layout/HeaderNav';
 import { Footer } from '@/components/layout/Footer';
 import { getApiUrl } from '@/lib/api';
+import { formatDate } from '@/lib/date-utils';
 
 interface UserSession {
   email: string;
@@ -243,8 +244,8 @@ function DashboardContent() {
                       <td className="px-5 py-3.5 text-neutral-600">
                         {agreement.author?.email || 'System User'}
                       </td>
-                      <td className="px-5 py-3.5 text-neutral-500">
-                        {new Date(agreement.createdAt).toLocaleDateString()}
+                      <td className="px-5 py-3.5 text-neutral-500 font-medium">
+                        {formatDate(agreement.createdAt)}
                       </td>
                       <td className="px-5 py-3.5 text-right">
                         <Link

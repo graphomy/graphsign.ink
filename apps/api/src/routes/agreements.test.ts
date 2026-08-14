@@ -196,4 +196,48 @@ describe('Agreement Routes Integration Tests (Epic INK-8)', () => {
     const body = (await res.json()) as any;
     expect(body.isArchived).toBe(true);
   });
+
+  it('GET /api/v1/agreements/:id/file - streams original PDF binary when base64 is stored', async () => {
+    const sampleBase64 = Buffer.from('%PDF-1.4 sample pdf content').toString('base64');
+    mockAgreementService.getAgreementById.mockResolvedValue({
+      id: 'ag-pdf',
+      title: 'Contract PDF',
+      fileName: 'contract.pdf',
+      mimeType: 'application/pdf',
+      metadata: { fileData: `data:application/pdf;base64,${sampleBase64}` },
+    });
+
+    const res = await app.request('/api/v1/agreements/ag-pdf/file', {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get('Content-Type')).toBe('application/pdf');
+    expect(res.headers.get('Content-Disposition')).toContain('contract.pdf');
+    const text = await res.text();
+    expect(text).toBe('%PDF-1.4 sample pdf content');
+  });
+
+  it('GET /api/v1/agreements/:id/file - streams markdown text when markdownContent exists', async () => {
+    mockAgreementService.getAgreementById.mockResolvedValue({
+      id: 'ag-md',
+      title: 'Terms of Service',
+      fileName: 'terms.md',
+      markdownContent: '# Terms of Service\n\n1. Introduction',
+      metadata: {},
+    });
+
+    const res = await app.request('/api/v1/agreements/ag-md/file', {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get('Content-Type')).toContain('text/markdown');
+    const text = await res.text();
+    expect(text).toContain('# Terms of Service');
+  });
 });

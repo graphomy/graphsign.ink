@@ -156,8 +156,17 @@ function AgreementManagementContent() {
         uploadFile.type === 'text/plain';
 
       let markdownContent: string | undefined = undefined;
+      let fileBase64: string | undefined = undefined;
+
       if (isMd) {
         markdownContent = await uploadFile.text();
+      } else {
+        fileBase64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(uploadFile);
+        });
       }
 
       const res = await fetch(`${getApiUrl()}/api/v1/agreements/upload`, {
@@ -171,6 +180,7 @@ function AgreementManagementContent() {
           fileName: uploadFile.name,
           fileSize: uploadFile.size,
           mimeType: isMd ? 'text/markdown' : uploadFile.type || 'application/pdf',
+          fileBase64,
           markdownContent,
           tags: uploadTags,
         }),
@@ -859,10 +869,10 @@ function AgreementManagementContent() {
         {showEditModal && selectedAgreement && (
           <AgreementEditModal
             agreementId={selectedAgreement.id}
-            initialTitle={selectedAgreement.title}
-            initialDescription={selectedAgreement.description}
-            initialMarkdown={selectedAgreement.markdownContent || ''}
-            initialTags={selectedAgreement.tags || []}
+            initialTitle={selectedAgreement.title ?? ''}
+            initialDescription={selectedAgreement.description ?? ''}
+            initialMarkdown={selectedAgreement.markdownContent ?? ''}
+            initialTags={selectedAgreement.tags ?? []}
             currentVersion={selectedAgreement.version}
             currentStatus={selectedAgreement.status}
             onClose={() => {

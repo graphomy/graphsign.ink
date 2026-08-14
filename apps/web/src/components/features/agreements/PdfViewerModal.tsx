@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { renderMarkdownToHtml } from './MarkdownEditor';
+import { getApiUrl } from '@/lib/api';
 
 interface AgreementData {
   id: string;
@@ -12,7 +13,9 @@ interface AgreementData {
   markdownContent?: string;
   fileUrl?: string;
   fileName?: string;
+  mimeType?: string;
   tags?: string[];
+  metadata?: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
   author?: {
@@ -30,6 +33,70 @@ export function PdfViewerModal({ agreement, onClose }: PdfViewerModalProps) {
   const [zoomLevel, setZoomLevel] = useState<number>(100);
   const printableAreaRef = useRef<HTMLDivElement>(null);
 
+  const meta = (agreement.metadata as Record<string, unknown>) || {};
+  const rawFileData =
+    (meta.fileData as string | undefined) || (meta.fileBase64 as string | undefined);
+  const hasFileData = !!rawFileData;
+
+  const isPdf =
+    hasFileData ||
+    agreement.mimeType === 'application/pdf' ||
+    agreement.fileName?.toLowerCase().endsWith('.pdf') ||
+    (!agreement.markdownContent && !!agreement.fileUrl);
+
+  const isMarkdown = !!agreement.markdownContent && !hasFileData;
+
+  const versionDisplay = String(agreement.version).startsWith('v')
+    ? agreement.version
+    : `v${agreement.version}`;
+
+  // Derive Blob URL for uploaded PDF data
+  const pdfBlobUrl = useMemo(() => {
+    if (rawFileData && typeof rawFileData === 'string') {
+      try {
+        let base64 = rawFileData;
+        let mime = agreement.mimeType || 'application/pdf';
+
+        if (rawFileData.startsWith('data:')) {
+          const commaIdx = rawFileData.indexOf(',');
+          if (commaIdx !== -1) {
+            const mimeMatch = rawFileData.substring(0, commaIdx).match(/^data:([^;]+)/);
+            if (mimeMatch && mimeMatch[1]) {
+              mime = mimeMatch[1];
+            }
+            base64 = rawFileData.substring(commaIdx + 1);
+          }
+        }
+
+        const byteCharacters = atob(base64);
+        const byteNumbers = new Array(byteCharacters.length);
+        for (let i = 0; i < byteCharacters.length; i++) {
+          byteNumbers[i] = byteCharacters.charCodeAt(i);
+        }
+        const byteArray = new Uint8Array(byteNumbers);
+        const blob = new Blob([byteArray], { type: mime });
+        if (typeof URL.createObjectURL === 'function') {
+          return URL.createObjectURL(blob);
+        }
+      } catch (e) {
+        console.error('Error creating PDF object URL:', e);
+      }
+    }
+    return null;
+  }, [rawFileData, agreement.mimeType]);
+
+  // Clean up object URL on unmount
+  useEffect(() => {
+    return () => {
+      if (pdfBlobUrl && typeof URL.revokeObjectURL === 'function') {
+        URL.revokeObjectURL(pdfBlobUrl);
+      }
+    };
+  }, [pdfBlobUrl]);
+
+  const fallbackApiFileUrl = `${getApiUrl()}/api/v1/agreements/${agreement.id}/file`;
+  const effectivePdfUrl = pdfBlobUrl || (hasFileData || isPdf ? fallbackApiFileUrl : null);
+
   function handleZoomIn() {
     setZoomLevel((prev) => Math.min(prev + 15, 160));
   }
@@ -43,88 +110,150 @@ export function PdfViewerModal({ agreement, onClose }: PdfViewerModalProps) {
   }
 
   function handlePrint() {
+    if (isPdf && effectivePdfUrl) {
+      const printWindow = window.open(effectivePdfUrl, '_blank');
+      if (printWindow) {
+        printWindow.focus();
+      }
+      return;
+    }
     window.print();
   }
 
+  function handleOpenOriginal() {
+    if (effectivePdfUrl) {
+      window.open(effectivePdfUrl, '_blank', 'noopener,noreferrer');
+      return;
+    }
+
+    if (agreement.fileUrl && !agreement.fileUrl.includes('storage.graphsign.ink')) {
+      window.open(agreement.fileUrl, '_blank', 'noopener,noreferrer');
+      return;
+    }
+
+    // For markdown documents, open a clean printable view in new tab
+    const cleanContent =
+      agreement.markdownContent || `# ${agreement.title}\n\n${agreement.description || ''}`;
+    const blob = new Blob(
+      [
+        `<!DOCTYPE html><html><head><title>${agreement.title}</title><style>body{font-family:sans-serif;padding:40px;max-width:800px;margin:auto;line-height:1.6;color:#111;}</style></head><body>${renderMarkdownToHtml(cleanContent)}</body></html>`,
+      ],
+      { type: 'text/html;charset=utf-8' },
+    );
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank');
+  }
+
   function handleDownload() {
-    // Generate text/markdown or printable HTML blob download
-    const title = agreement.title.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+    const cleanTitle = agreement.title.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+    const fileName =
+      agreement.fileName ||
+      (isPdf ? `${cleanTitle}.pdf` : `${cleanTitle}_v${agreement.version}.md`);
+
+    if (pdfBlobUrl) {
+      const a = document.createElement('a');
+      a.href = pdfBlobUrl;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      return;
+    }
+
+    if (isPdf) {
+      const a = document.createElement('a');
+      a.href = fallbackApiFileUrl;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      return;
+    }
+
+    // Markdown file download
     const content =
       agreement.markdownContent ||
-      `# ${agreement.title}\n\n${agreement.description || ''}\n\nStatus: ${agreement.status}\nVersion: v${agreement.version}`;
+      `# ${agreement.title}\n\n${agreement.description || ''}\n\nStatus: ${agreement.status}\nVersion: ${versionDisplay}`;
     const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${title}_v${agreement.version}.md`;
+    a.download = fileName;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
   }
 
-  const isMarkdown = !!agreement.markdownContent;
-  const versionDisplay = String(agreement.version).startsWith('v')
-    ? agreement.version
-    : `v${agreement.version}`;
-
   return (
-    <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex flex-col justify-between p-2 sm:p-4 md:p-6 overflow-hidden">
+    <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex flex-col justify-between p-2 sm:p-4 md:p-6 overflow-hidden">
       {/* Top PDF Controls Toolbar */}
       <div className="bg-neutral-900 text-white rounded-t-xl px-4 py-3 flex flex-wrap items-center justify-between gap-3 shadow-lg border-b border-neutral-800">
         <div className="flex items-center gap-3">
-          <span className="text-xl">📑</span>
+          <span className="text-xl">{isPdf ? '📑' : '📝'}</span>
           <div>
             <div className="flex items-center gap-2">
               <h2 className="text-sm font-bold text-neutral-100 max-w-md truncate">
                 {agreement.title}
               </h2>
               <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-green-600/30 text-green-400 border border-green-500/40">
-                ACTIVE {versionDisplay}
+                {agreement.status} {versionDisplay}
               </span>
             </div>
             <p className="text-[11px] text-neutral-400">
-              PDF Mode • Created by {agreement.author?.name || agreement.author?.email || 'Author'}
+              {isPdf ? 'Source PDF View' : 'Document View'} • Created by{' '}
+              {agreement.author?.name || agreement.author?.email || 'Author'}
             </p>
           </div>
         </div>
 
         {/* Zoom & Action Controls */}
         <div className="flex items-center gap-2">
-          {/* Zoom controls */}
-          <div className="flex items-center bg-neutral-800 rounded-lg p-0.5 border border-neutral-700">
-            <button
-              onClick={handleZoomOut}
-              className="px-2.5 py-1 text-xs text-neutral-300 hover:text-white hover:bg-neutral-700 rounded transition-colors font-bold"
-              title="Zoom Out"
-            >
-              −
-            </button>
-            <span className="px-2 text-xs font-mono text-neutral-300 min-w-[48px] text-center">
-              {zoomLevel}%
-            </span>
-            <button
-              onClick={handleZoomIn}
-              className="px-2.5 py-1 text-xs text-neutral-300 hover:text-white hover:bg-neutral-700 rounded transition-colors font-bold"
-              title="Zoom In"
-            >
-              +
-            </button>
-            <button
-              onClick={handleResetZoom}
-              className="px-2 py-1 text-[10px] text-neutral-400 hover:text-neutral-200 border-l border-neutral-700 ml-0.5"
-              title="Reset Zoom"
-            >
-              100%
-            </button>
-          </div>
+          {/* Zoom controls (for markdown document view) */}
+          {isMarkdown && (
+            <div className="flex items-center bg-neutral-800 rounded-lg p-0.5 border border-neutral-700">
+              <button
+                onClick={handleZoomOut}
+                className="px-2.5 py-1 text-xs text-neutral-300 hover:text-white hover:bg-neutral-700 rounded transition-colors font-bold"
+                title="Zoom Out"
+              >
+                −
+              </button>
+              <span className="px-2 text-xs font-mono text-neutral-300 min-w-[48px] text-center">
+                {zoomLevel}%
+              </span>
+              <button
+                onClick={handleZoomIn}
+                className="px-2.5 py-1 text-xs text-neutral-300 hover:text-white hover:bg-neutral-700 rounded transition-colors font-bold"
+                title="Zoom In"
+              >
+                +
+              </button>
+              <button
+                onClick={handleResetZoom}
+                className="px-2 py-1 text-[10px] text-neutral-400 hover:text-neutral-200 border-l border-neutral-700 ml-0.5"
+                title="Reset Zoom"
+              >
+                100%
+              </button>
+            </div>
+          )}
+
+          {/* Open Original File / New Tab Button */}
+          <button
+            onClick={handleOpenOriginal}
+            className="px-3 py-1.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-xs font-semibold rounded-lg border border-neutral-700 transition-colors flex items-center gap-1.5"
+            title="Open Original File in New Tab"
+          >
+            <span>🔗</span> Open Original File
+          </button>
 
           <button
             onClick={handlePrint}
             className="px-3 py-1.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-xs font-semibold rounded-lg border border-neutral-700 transition-colors flex items-center gap-1.5"
             title="Print Document"
           >
-            <span>🖨️</span> Print PDF
+            <span>🖨️</span> Print
           </button>
 
           <button
@@ -146,136 +275,56 @@ export function PdfViewerModal({ agreement, onClose }: PdfViewerModalProps) {
       </div>
 
       {/* Document View Canvas */}
-      <div className="flex-1 bg-neutral-800 p-4 md:p-8 overflow-y-auto flex justify-center items-start">
-        <div
-          ref={printableAreaRef}
-          style={{ transform: `scale(${zoomLevel / 100})`, transformOrigin: 'top center' }}
-          className="bg-white text-neutral-900 w-full max-w-[850px] min-h-[1100px] shadow-2xl p-10 md:p-14 rounded-sm flex flex-col justify-between transition-transform duration-150 border border-neutral-300 print:p-0 print:shadow-none print:transform-none"
-        >
-          {/* Header Bar */}
-          <div>
-            <div className="flex items-center justify-between border-b-2 border-neutral-900 pb-4 mb-8">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded bg-[#ba0000] text-white flex items-center justify-center font-bold text-sm">
-                  GS
-                </div>
-                <div>
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-neutral-800">
-                    graphsign.ink
-                  </h3>
-                  <p className="text-[10px] text-neutral-500">
-                    Certified Cryptographic Document Platform
-                  </p>
-                </div>
-              </div>
-
-              <div className="text-right">
-                <span className="text-xs font-bold text-neutral-900 block">
-                  VERSION {versionDisplay}
-                </span>
-                <span className="text-[10px] text-neutral-500">
-                  {new Date(agreement.updatedAt || agreement.createdAt).toLocaleDateString(
-                    undefined,
-                    {
-                      year: 'numeric',
-                      month: 'long',
-                      day: 'numeric',
-                    },
-                  )}
-                </span>
-              </div>
-            </div>
-
-            {/* Document Title Header */}
-            <div className="mb-8">
-              <h1 className="text-2xl font-black tracking-tight text-neutral-900 mb-2">
-                {agreement.title}
-              </h1>
-              {agreement.description && (
-                <p className="text-xs text-neutral-600 italic mb-4">{agreement.description}</p>
-              )}
-
-              {agreement.tags && agreement.tags.length > 0 && (
-                <div className="flex flex-wrap gap-1.5 mb-2">
-                  {agreement.tags.map((tag) => (
-                    <span
-                      key={tag}
-                      className="text-[10px] font-semibold bg-neutral-100 text-neutral-700 px-2 py-0.5 rounded border border-neutral-200"
-                    >
-                      #{tag}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Render Document Content */}
-            {isMarkdown ? (
+      <div className="flex-1 bg-neutral-900 p-2 sm:p-4 md:p-6 overflow-hidden flex justify-center items-center">
+        {isPdf && effectivePdfUrl ? (
+          <div className="w-full h-full rounded-b-lg overflow-hidden bg-neutral-800 border border-neutral-700 shadow-2xl flex flex-col">
+            <iframe
+              src={effectivePdfUrl}
+              className="w-full h-full min-h-[600px] border-0 bg-white"
+              title={agreement.title}
+            />
+          </div>
+        ) : isMarkdown ? (
+          <div className="w-full h-full overflow-y-auto flex justify-center p-2 sm:p-4">
+            <div
+              ref={printableAreaRef}
+              style={{ transform: `scale(${zoomLevel / 100})`, transformOrigin: 'top center' }}
+              className="bg-white text-neutral-900 w-full max-w-[850px] min-h-[1050px] shadow-2xl p-8 sm:p-12 md:p-16 rounded-sm transition-transform duration-150 border border-neutral-300 print:p-0 print:shadow-none print:transform-none"
+            >
               <div
-                className="prose prose-sm max-w-none text-neutral-800 font-serif leading-relaxed text-justify"
+                className="prose prose-sm max-w-none text-neutral-900 leading-relaxed text-left font-serif"
                 dangerouslySetInnerHTML={{
                   __html: renderMarkdownToHtml(agreement.markdownContent || ''),
                 }}
               />
-            ) : (
-              <div className="py-12 text-center space-y-4">
-                <div className="text-5xl">📄</div>
-                <h3 className="text-lg font-bold text-neutral-800">
-                  {agreement.fileName || 'Uploaded Document'}
-                </h3>
-                <p className="text-xs text-neutral-500 max-w-md mx-auto">
-                  This document was uploaded as a PDF/DOCX contract. Converted and verified for
-                  electronic execution and digital signatures.
-                </p>
-                {agreement.fileUrl && (
-                  <div className="pt-4">
-                    <a
-                      href={agreement.fileUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="px-4 py-2 bg-neutral-900 text-white rounded-lg text-xs font-semibold hover:bg-neutral-800 transition-colors inline-flex items-center gap-1.5"
-                    >
-                      <span>🔗</span> Open Original File
-                    </a>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Legal Document Footer & Signature Area */}
-          <div className="mt-16 pt-8 border-t border-neutral-300 text-[11px] text-neutral-600">
-            <div className="grid grid-cols-2 gap-8 mb-8">
-              <div className="border border-dashed border-neutral-300 rounded-lg p-4 bg-neutral-50/50">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-neutral-500 mb-6">
-                  Sender Signatory
-                </p>
-                <div className="border-b border-neutral-400 pb-1 mb-1">
-                  <span className="font-semibold text-neutral-800">
-                    {agreement.author?.name || agreement.author?.email || 'Authorized Signatory'}
-                  </span>
-                </div>
-                <span className="text-[10px] text-neutral-400">Signature / Certified Seal</span>
-              </div>
-
-              <div className="border border-dashed border-neutral-300 rounded-lg p-4 bg-neutral-50/50">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-neutral-500 mb-6">
-                  Counterparty Signatory
-                </p>
-                <div className="border-b border-neutral-400 pb-1 mb-1 text-neutral-400 italic">
-                  <span>Pending Recipient Signature</span>
-                </div>
-                <span className="text-[10px] text-neutral-400">Signature / Verification</span>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between text-[10px] text-neutral-400 border-t border-neutral-200 pt-3">
-              <span>Document ID: {agreement.id}</span>
-              <span>Protected by graphsign.ink e-Signature Engine</span>
-              <span>Page 1 of 1</span>
             </div>
           </div>
-        </div>
+        ) : (
+          <div className="w-full h-full flex flex-col items-center justify-center text-center p-8 bg-neutral-800 rounded-b-lg border border-neutral-700">
+            <div className="text-5xl mb-4">📄</div>
+            <h3 className="text-base font-bold text-neutral-100 mb-2">
+              {agreement.fileName || agreement.title}
+            </h3>
+            <p className="text-xs text-neutral-400 max-w-md mb-6">
+              Source file is ready for execution. You can view or download the original file
+              directly.
+            </p>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={handleOpenOriginal}
+                className="px-4 py-2 bg-neutral-700 hover:bg-neutral-600 text-white rounded-lg text-xs font-semibold transition-colors inline-flex items-center gap-1.5"
+              >
+                <span>🔗</span> Open Original File
+              </button>
+              <button
+                onClick={handleDownload}
+                className="px-4 py-2 bg-[#ba0000] hover:bg-red-700 text-white rounded-lg text-xs font-semibold transition-colors inline-flex items-center gap-1.5"
+              >
+                <span>⬇️</span> Download File
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Bottom Modal Close Bar */}

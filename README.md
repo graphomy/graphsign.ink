@@ -14,8 +14,18 @@ Open-source, globally compliant document generation, agreement workflow, and ele
 - 🗄️ **[Database & Schema](.claude/docs/database.md)**: PostgreSQL 15+, Prisma ORM, RLS tenant isolation, and migrations.
 - 🌐 **[REST API Specifications](.claude/docs/api.md)**: URI versioning (`/api/v1/`), standard HTTP status codes, error payload schema, and rate limits.
 - 🧪 **[Testing Pyramid & Standards](.claude/docs/testing.md)**: 70/20/10 testing pyramid, coverage thresholds (80%-100%), and domain tests.
-- 📚 **[Wiki — Home](wiki/Home.md)**: Product architecture and compliance overview.
+- 📚 **[Wiki — Home](wiki/Home.md)**: Product architecture, agreement versioning, Markdown drafting, and compliance overview.
 - 🚀 **[Wiki — Getting Started](wiki/Getting-Started.md)**: Detailed instructions for setting up and running graphsign.ink locally.
+
+---
+
+## ✨ Key Platform Features
+
+- **Markdown Agreement Drafting**: Real-time Markdown live editor with formatting toolbar (headings, bold, lists, tables, code, links).
+- **Active Agreement PDF Viewer**: Verified legal A4 document view with watermarks, signature boxes, and print/download controls.
+- **Semantic Versioning**: `v0.1` draft baseline, automatic minor bumps (`+0.1`), and major version promotions (`v1.0`, `v2.0`) upon activation.
+- **Timezone-Aware Date Standards**: All dates standardized in `DD-MON-YYYY` format (e.g. `14-AUG-2026`) based on user profile timezone with GMT fallback.
+- **Tamper-Evident Signatures**: Cryptographic signing and append-only hash-chained audit trails.
 
 ---
 

@@ -99,6 +99,22 @@ describe('AgreementManagementPage Unit Tests (Epic INK-8)', () => {
     });
   });
 
+  it('opens PDF viewer modal when PDF button is clicked', async () => {
+    render(<AgreementManagementPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Active NDA Contract')).toBeInTheDocument();
+    });
+
+    const pdfButtons = screen.getAllByTitle('View PDF');
+    fireEvent.click(pdfButtons[0]);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Open Original File/i)).toBeInTheDocument();
+      expect(screen.getByText(/Download/i)).toBeInTheDocument();
+    });
+  });
+
   describe('renderMarkdownToHtml Helper', () => {
     it('correctly converts markdown headings, bold, lists, and tables', () => {
       const md = '# Title\n\n## Subtitle\n\n**Bold Text**\n\n- Item 1\n- Item 2';

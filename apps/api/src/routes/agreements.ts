@@ -150,6 +150,65 @@ export function createAgreementRoutes(deps?: AgreementDeps) {
     },
   );
 
+  // GET /api/v1/agreements/:id/file (Serve original PDF or markdown document)
+  agreements.get(
+    '/:id/file',
+    jwtAuth(),
+    enforceTenantActiveStatus(),
+    requirePermission('documents:read'),
+    async (c) => {
+      const { service } = getServices(c);
+      const agreementId = c.req.param('id');
+      const userPayload = c.get('userPayload') as any;
+      const orgId = userPayload?.orgId || 'default-org-id';
+
+      const agreement = await service.getAgreementById(orgId, agreementId);
+      const meta = (agreement.metadata as Record<string, any>) || {};
+      const fileData = meta.fileData || meta.fileBase64;
+
+      if (fileData && typeof fileData === 'string') {
+        let mimeType = agreement.mimeType || 'application/pdf';
+        let base64Content = fileData;
+
+        if (fileData.startsWith('data:')) {
+          const commaIdx = fileData.indexOf(',');
+          if (commaIdx !== -1) {
+            const mimeMatch = fileData.substring(0, commaIdx).match(/^data:([^;]+)/);
+            if (mimeMatch && mimeMatch[1]) {
+              mimeType = mimeMatch[1];
+            }
+            base64Content = fileData.substring(commaIdx + 1);
+          }
+        }
+
+        const buffer = Buffer.from(base64Content, 'base64');
+        const fileName = agreement.fileName || `${agreement.title.replace(/[^a-z0-9]/gi, '_')}.pdf`;
+
+        return new Response(buffer, {
+          status: 200,
+          headers: {
+            'Content-Type': mimeType,
+            'Content-Disposition': `inline; filename="${encodeURIComponent(fileName)}"`,
+            'Content-Length': buffer.length.toString(),
+            'Cache-Control': 'private, max-age=3600',
+          },
+        });
+      }
+
+      if (agreement.markdownContent) {
+        return new Response(agreement.markdownContent, {
+          status: 200,
+          headers: {
+            'Content-Type': 'text/markdown; charset=utf-8',
+            'Content-Disposition': `inline; filename="${encodeURIComponent(agreement.fileName || `${agreement.title}.md`)}"`,
+          },
+        });
+      }
+
+      return c.json({ error: { message: 'Original file content not available.' } }, 404);
+    },
+  );
+
   // PATCH /api/v1/agreements/:id/draft (INK-68 Save draft & autosave, bump minor version)
   agreements.patch(
     '/:id/draft',

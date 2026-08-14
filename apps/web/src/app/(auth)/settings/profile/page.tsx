@@ -6,6 +6,7 @@ import { SessionGuard } from '@/components/features/auth/SessionGuard';
 import { HeaderNav } from '@/components/layout/HeaderNav';
 import { Footer } from '@/components/layout/Footer';
 import { getApiUrl } from '@/lib/api';
+import { setUserTimezone } from '@/lib/date-utils';
 
 interface UserProfile {
   id: string;
@@ -98,7 +99,9 @@ function ProfileContent() {
           const initialEmail = data.email ?? '';
           setEmail(initialEmail);
           setUsername(data.username ?? (initialEmail ? initialEmail.split('@')[0] : ''));
-          setTimezone(data.timezone ?? 'UTC');
+          const tz = data.timezone ?? 'UTC';
+          setTimezone(tz);
+          setUserTimezone(tz);
         }
       } catch {
         setError('Failed to load user profile.');
@@ -149,6 +152,9 @@ function ProfileContent() {
       setProfile(data);
       if (data.email) {
         localStorage.setItem('graphsign_user_email', data.email);
+      }
+      if (timezone) {
+        setUserTimezone(timezone);
       }
       setMessage(data.message ?? 'Profile updated successfully.');
     } catch {
