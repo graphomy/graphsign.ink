@@ -15,6 +15,38 @@ export interface MailerService {
     role: string,
     token: string,
   ): Promise<void>;
+  sendReviewRequestEmail(
+    to: string,
+    agreementTitle: string,
+    authorName: string,
+    notes?: string,
+  ): Promise<void>;
+  sendReviewDecisionEmail(
+    to: string,
+    agreementTitle: string,
+    reviewerName: string,
+    decision: 'APPROVE' | 'REJECT',
+    comments?: string,
+  ): Promise<void>;
+  sendSigningInvitationEmail(
+    to: string,
+    recipientName: string,
+    agreementTitle: string,
+    senderName: string,
+    signingToken: string,
+    expiresAt?: Date | null,
+  ): Promise<void>;
+  sendAgreementCompletedEmail(
+    to: string,
+    recipientName: string,
+    agreementTitle: string,
+  ): Promise<void>;
+  sendAgreementCancelledEmail(
+    to: string,
+    recipientName: string,
+    agreementTitle: string,
+    reason?: string,
+  ): Promise<void>;
 }
 
 /**
@@ -155,6 +187,168 @@ export class ResendMailerService implements MailerService {
       `,
     });
   }
+
+  async sendReviewRequestEmail(
+    to: string,
+    agreementTitle: string,
+    authorName: string,
+    notes?: string,
+  ): Promise<void> {
+    const reviewUrl = `${this.webUrl}/agreements`;
+
+    await this.resend.emails.send({
+      from: this.from,
+      to,
+      subject: `Review Request: "${agreementTitle}" on graphsign.ink`,
+      html: `
+        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+          <h1 style="color: #111; font-size: 20px;">Review Request</h1>
+          <p style="color: #333; font-size: 15px; line-height: 1.5;">
+            <strong>${authorName}</strong> has submitted the agreement <strong>"${agreementTitle}"</strong> for your review.
+          </p>
+          ${
+            notes
+              ? `<div style="background: #f4f4f5; padding: 12px; border-radius: 6px; margin: 12px 0; font-size: 14px; color: #333;"><strong>Author notes:</strong> ${notes}</div>`
+              : ''
+          }
+          <a href="${reviewUrl}"
+             style="display: inline-block; background: #2563eb; color: white;
+                    padding: 10px 20px; text-decoration: none; border-radius: 6px;
+                    font-size: 15px; margin: 16px 0; font-weight: bold;">
+            Open Agreements to Review
+          </a>
+        </div>
+      `,
+    });
+  }
+
+  async sendReviewDecisionEmail(
+    to: string,
+    agreementTitle: string,
+    reviewerName: string,
+    decision: 'APPROVE' | 'REJECT',
+    comments?: string,
+  ): Promise<void> {
+    const isApproved = decision === 'APPROVE';
+    const statusColor = isApproved ? '#059669' : '#dc2626';
+
+    await this.resend.emails.send({
+      from: this.from,
+      to,
+      subject: `Document ${isApproved ? 'Approved' : 'Rejected'}: "${agreementTitle}"`,
+      html: `
+        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+          <h1 style="color: ${statusColor}; font-size: 20px;">Agreement ${
+            isApproved ? 'Approved' : 'Rejected'
+          }</h1>
+          <p style="color: #333; font-size: 15px; line-height: 1.5;">
+            <strong>${reviewerName}</strong> has <strong>${
+              isApproved ? 'approved' : 'rejected'
+            }</strong> your agreement <strong>"${agreementTitle}"</strong>.
+          </p>
+          ${
+            comments
+              ? `<div style="background: #f4f4f5; padding: 12px; border-radius: 6px; margin: 12px 0; font-size: 14px; color: #333;"><strong>Feedback comments:</strong> ${comments}</div>`
+              : ''
+          }
+          <a href="${this.webUrl}/agreements"
+             style="display: inline-block; background: #18181b; color: white;
+                    padding: 10px 20px; text-decoration: none; border-radius: 6px;
+                    font-size: 14px; margin: 16px 0;">
+            View Agreement
+          </a>
+        </div>
+      `,
+    });
+  }
+
+  async sendSigningInvitationEmail(
+    to: string,
+    recipientName: string,
+    agreementTitle: string,
+    senderName: string,
+    signingToken: string,
+    expiresAt?: Date | null,
+  ): Promise<void> {
+    const signingUrl = `${this.webUrl}/sign/${encodeURIComponent(signingToken)}`;
+
+    await this.resend.emails.send({
+      from: this.from,
+      to,
+      subject: `Please sign: "${agreementTitle}" via graphsign.ink`,
+      html: `
+        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+          <h1 style="color: #111; font-size: 20px;">You have a document to sign</h1>
+          <p style="color: #333; font-size: 15px; line-height: 1.5;">
+            Hello ${recipientName},<br/><br/>
+            <strong>${senderName}</strong> has sent you <strong>"${agreementTitle}"</strong> to review and sign.
+          </p>
+          <a href="${signingUrl}"
+             style="display: inline-block; background: #2563eb; color: white;
+                    padding: 12px 24px; text-decoration: none; border-radius: 6px;
+                    font-size: 16px; margin: 16px 0; font-weight: bold;">
+            Review & Sign Document
+          </a>
+          ${
+            expiresAt
+              ? `<p style="color: #dc2626; font-size: 13px;">This invitation will expire on ${expiresAt.toUTCString()}.</p>`
+              : ''
+          }
+          <p style="color: #666; font-size: 12px;">
+            Secure link: <a href="${signingUrl}">${signingUrl}</a>
+          </p>
+        </div>
+      `,
+    });
+  }
+
+  async sendAgreementCompletedEmail(
+    to: string,
+    recipientName: string,
+    agreementTitle: string,
+  ): Promise<void> {
+    await this.resend.emails.send({
+      from: this.from,
+      to,
+      subject: `Completed: "${agreementTitle}" has been signed by all parties`,
+      html: `
+        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+          <h1 style="color: #059669; font-size: 20px;">Document Execution Completed</h1>
+          <p style="color: #333; font-size: 15px; line-height: 1.5;">
+            Hello ${recipientName},<br/><br/>
+            All parties have finished signing <strong>"${agreementTitle}"</strong>. A copy of this completed agreement is now permanently recorded in the audit trail.
+          </p>
+        </div>
+      `,
+    });
+  }
+
+  async sendAgreementCancelledEmail(
+    to: string,
+    recipientName: string,
+    agreementTitle: string,
+    reason?: string,
+  ): Promise<void> {
+    await this.resend.emails.send({
+      from: this.from,
+      to,
+      subject: `Cancelled: "${agreementTitle}" has been voided`,
+      html: `
+        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+          <h1 style="color: #dc2626; font-size: 20px;">Document Cancelled</h1>
+          <p style="color: #333; font-size: 15px; line-height: 1.5;">
+            Hello ${recipientName},<br/><br/>
+            The agreement <strong>"${agreementTitle}"</strong> has been cancelled by the author and is no longer available for signing.
+          </p>
+          ${
+            reason
+              ? `<div style="background: #fef2f2; border: 1px solid #fecaca; padding: 12px; border-radius: 6px; margin: 12px 0; font-size: 14px; color: #991b1b;"><strong>Reason:</strong> ${reason}</div>`
+              : ''
+          }
+        </div>
+      `,
+    });
+  }
 }
 
 /**
@@ -191,6 +385,54 @@ export class ConsoleMailerService implements MailerService {
     const inviteUrl = `${this.webUrl}/accept-invite?token=${encodeURIComponent(token)}`;
     console.log(`[MAILER] Invitation to ${orgName} (${role}) for ${to}:`);
     console.log(`[MAILER] Invite URL: ${inviteUrl}`);
+  }
+
+  async sendReviewRequestEmail(
+    to: string,
+    agreementTitle: string,
+    authorName: string,
+    notes?: string,
+  ): Promise<void> {
+    console.log(`[MAILER] Review request for ${to} on "${agreementTitle}" from ${authorName}: notes="${notes}"`);
+  }
+
+  async sendReviewDecisionEmail(
+    to: string,
+    agreementTitle: string,
+    reviewerName: string,
+    decision: 'APPROVE' | 'REJECT',
+    comments?: string,
+  ): Promise<void> {
+    console.log(`[MAILER] Review decision (${decision}) for ${to} on "${agreementTitle}" by ${reviewerName}: comments="${comments}"`);
+  }
+
+  async sendSigningInvitationEmail(
+    to: string,
+    recipientName: string,
+    agreementTitle: string,
+    senderName: string,
+    signingToken: string,
+    expiresAt?: Date | null,
+  ): Promise<void> {
+    const signingUrl = `${this.webUrl}/sign/${encodeURIComponent(signingToken)}`;
+    console.log(`[MAILER] Signing invitation for ${recipientName} (${to}) for "${agreementTitle}" from ${senderName}: url=${signingUrl}, expiresAt=${expiresAt}`);
+  }
+
+  async sendAgreementCompletedEmail(
+    to: string,
+    recipientName: string,
+    agreementTitle: string,
+  ): Promise<void> {
+    console.log(`[MAILER] Agreement completed notice for ${recipientName} (${to}) on "${agreementTitle}"`);
+  }
+
+  async sendAgreementCancelledEmail(
+    to: string,
+    recipientName: string,
+    agreementTitle: string,
+    reason?: string,
+  ): Promise<void> {
+    console.log(`[MAILER] Agreement cancelled notice for ${recipientName} (${to}) on "${agreementTitle}": reason="${reason}"`);
   }
 }
 

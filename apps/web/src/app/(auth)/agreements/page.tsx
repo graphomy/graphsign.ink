@@ -11,6 +11,10 @@ import { PdfViewerModal } from '@/components/features/agreements/PdfViewerModal'
 import { AgreementHistoryModal } from '@/components/features/agreements/AgreementHistoryModal';
 import { AgreementEditModal } from '@/components/features/agreements/AgreementEditModal';
 import { DocumentEditorModal } from '@/components/features/agreements/DocumentEditorModal';
+import { SubmitReviewModal } from '@/components/features/agreements/SubmitReviewModal';
+import { ReviewDecisionModal } from '@/components/features/agreements/ReviewDecisionModal';
+import { SendAgreementModal } from '@/components/features/agreements/SendAgreementModal';
+import { CancelAgreementModal } from '@/components/features/agreements/CancelAgreementModal';
 import { getApiUrl } from '@/lib/api';
 import { formatDateTime } from '@/lib/date-utils';
 
@@ -31,6 +35,17 @@ interface AgreementItem {
   createdAt: string;
   updatedAt: string;
   author?: { name?: string; email: string };
+  fields?: {
+    fields?: Array<Record<string, unknown>>;
+    recipients?: Array<{
+      id?: string;
+      name: string;
+      email: string;
+      role: 'signer' | 'approver' | 'viewer';
+      routingOrder?: number;
+      color?: string;
+    }>;
+  };
 }
 
 interface PaginationState {
@@ -69,6 +84,10 @@ function AgreementManagementContent() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [showMetadataModal, setShowMetadataModal] = useState(false);
+  const [showSubmitReviewModal, setShowSubmitReviewModal] = useState(false);
+  const [showReviewDecisionModal, setShowReviewDecisionModal] = useState(false);
+  const [showSendAgreementModal, setShowSendAgreementModal] = useState(false);
+  const [showCancelAgreementModal, setShowCancelAgreementModal] = useState(false);
   const [selectedAgreement, setSelectedAgreement] = useState<AgreementItem | null>(null);
 
   // Form states
@@ -646,13 +665,19 @@ function AgreementManagementContent() {
                       <td className="py-3.5 px-3 whitespace-nowrap">
                         <span
                           className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wide ${
-                            agreement.status === 'ACTIVE' ||
                             agreement.status === 'COMPLETED' ||
-                            agreement.status === 'SEALED'
-                              ? 'bg-green-100 text-green-800 border border-green-200'
+                            agreement.status === 'SEALED' ||
+                            agreement.status === 'ACTIVE'
+                              ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
                               : agreement.status === 'DRAFT'
                                 ? 'bg-amber-100 text-amber-800 border border-amber-200'
-                                : 'bg-neutral-100 text-neutral-700 border border-neutral-200'
+                                : agreement.status === 'IN_REVIEW'
+                                  ? 'bg-purple-100 text-purple-800 border border-purple-200'
+                                  : agreement.status === 'APPROVED'
+                                    ? 'bg-blue-100 text-blue-800 border border-blue-200'
+                                    : agreement.status === 'SENT'
+                                      ? 'bg-indigo-100 text-indigo-800 border border-indigo-200 animate-pulse'
+                                      : 'bg-red-100 text-red-800 border border-red-200'
                           }`}
                         >
                           {agreement.status}
@@ -673,9 +698,67 @@ function AgreementManagementContent() {
 
                       {/* Actions Column */}
                       <td className="py-3.5 px-4 text-right whitespace-nowrap">
-                        <div className="flex items-center justify-end gap-1.5">
-                          {/* Edit button: shown ONLY for Drafts (removed from Active screen) */}
-                          {activeTab === 'drafts' && (
+                        <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                          {/* Workflow: Submit for Review (INK-87) */}
+                          {(agreement.status === 'DRAFT' || agreement.status === 'REJECTED') && (
+                            <button
+                              onClick={() => {
+                                setSelectedAgreement(agreement);
+                                setShowSubmitReviewModal(true);
+                              }}
+                              className="px-2.5 py-1 text-[11px] font-semibold text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded transition-colors flex items-center gap-1"
+                              title="Submit for Review"
+                            >
+                              <span>📤</span> Review
+                            </button>
+                          )}
+
+                          {/* Workflow: Review Decision (Approve / Reject) (INK-88, INK-89) */}
+                          {agreement.status === 'IN_REVIEW' && (
+                            <button
+                              onClick={() => {
+                                setSelectedAgreement(agreement);
+                                setShowReviewDecisionModal(true);
+                              }}
+                              className="px-2.5 py-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded transition-colors flex items-center gap-1"
+                              title="Review Decision"
+                            >
+                              <span>⚖️</span> Decide
+                            </button>
+                          )}
+
+                          {/* Workflow: Send for Signature (INK-90, INK-91, INK-92) */}
+                          {(agreement.status === 'DRAFT' ||
+                            agreement.status === 'APPROVED' ||
+                            agreement.status === 'REJECTED') && (
+                            <button
+                              onClick={() => {
+                                setSelectedAgreement(agreement);
+                                setShowSendAgreementModal(true);
+                              }}
+                              className="px-2.5 py-1 text-[11px] font-bold text-white bg-blue-600 hover:bg-blue-700 rounded transition-colors flex items-center gap-1 shadow-xs"
+                              title="Send for Signature"
+                            >
+                              <span>🚀</span> Send
+                            </button>
+                          )}
+
+                          {/* Workflow: Cancel Agreement (INK-95) */}
+                          {(agreement.status === 'SENT' || agreement.status === 'IN_REVIEW') && (
+                            <button
+                              onClick={() => {
+                                setSelectedAgreement(agreement);
+                                setShowCancelAgreementModal(true);
+                              }}
+                              className="px-2.5 py-1 text-[11px] font-semibold text-red-600 bg-red-50 hover:bg-red-100 border border-red-200 rounded transition-colors flex items-center gap-1"
+                              title="Cancel Agreement"
+                            >
+                              <span>🛑</span> Void
+                            </button>
+                          )}
+
+                          {/* Edit button: shown for Drafts and Rejected */}
+                          {(agreement.status === 'DRAFT' || agreement.status === 'REJECTED') && (
                             <button
                               onClick={() => openEditModal(agreement)}
                               className="px-2.5 py-1 text-[11px] font-semibold text-[#ba0000] bg-red-50 hover:bg-red-100 border border-red-200 rounded transition-colors flex items-center gap-1"
@@ -686,13 +769,15 @@ function AgreementManagementContent() {
                           )}
 
                           {/* Design / Place Fields Visual Editor Button (INK-78 to INK-85) */}
-                          <button
-                            onClick={() => openDocumentEditor(agreement)}
-                            className="px-2.5 py-1 text-[11px] font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded transition-colors flex items-center gap-1"
-                            title="Design & Place Signing Fields"
-                          >
-                            <span>🎨</span> Fields
-                          </button>
+                          {agreement.status !== 'COMPLETED' && agreement.status !== 'CANCELLED' && (
+                            <button
+                              onClick={() => openDocumentEditor(agreement)}
+                              className="px-2.5 py-1 text-[11px] font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded transition-colors flex items-center gap-1"
+                              title="Design & Place Signing Fields"
+                            >
+                              <span>🎨</span> Fields
+                            </button>
+                          )}
 
                           {/* View PDF Button */}
                           <button
@@ -703,7 +788,7 @@ function AgreementManagementContent() {
                             <span>👁️</span> PDF
                           </button>
 
-                          {/* Clone Button: shown ONLY for Drafts (removed from Active screen) */}
+                          {/* Clone Button */}
                           {activeTab === 'drafts' && (
                             <button
                               onClick={() => handleClone(agreement.id)}
@@ -711,39 +796,14 @@ function AgreementManagementContent() {
                               className="px-2.5 py-1 text-[11px] font-medium text-neutral-700 hover:text-neutral-900 bg-neutral-50 hover:bg-neutral-100 border border-neutral-200 rounded transition-colors disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-1"
                               title="Clone Draft"
                             >
-                              {cloningId === agreement.id ? (
-                                <>
-                                  <svg
-                                    className="animate-spin h-3 w-3 text-neutral-700"
-                                    viewBox="0 0 24 24"
-                                    fill="none"
-                                  >
-                                    <circle
-                                      className="opacity-25"
-                                      cx="12"
-                                      cy="12"
-                                      r="10"
-                                      stroke="currentColor"
-                                      strokeWidth="4"
-                                    />
-                                    <path
-                                      className="opacity-75"
-                                      fill="currentColor"
-                                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                                    />
-                                  </svg>
-                                  <span>Cloning...</span>
-                                </>
-                              ) : (
-                                <span>📋 Clone</span>
-                              )}
+                              {cloningId === agreement.id ? 'Cloning...' : '📋 Clone'}
                             </button>
                           )}
 
                           {/* Concise History Button */}
                           <button
                             onClick={() => openHistoryModal(agreement)}
-                            className="px-2.5 py-1 text-[11px] font-medium text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100 rounded transition-colors"
+                            className="px-2 py-1 text-[11px] font-medium text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100 rounded transition-colors"
                             title="Change History"
                           >
                             🕒 History
@@ -1313,6 +1373,71 @@ function AgreementManagementContent() {
               </div>
             </div>
           </div>
+        )}
+
+        {/* Submit Review Modal (INK-87) */}
+        {showSubmitReviewModal && selectedAgreement && (
+          <SubmitReviewModal
+            agreementId={selectedAgreement.id}
+            agreementTitle={selectedAgreement.title}
+            onClose={() => {
+              setShowSubmitReviewModal(false);
+              setSelectedAgreement(null);
+            }}
+            onSuccess={(msg) => {
+              setActionMessage(msg);
+              setRefreshTrigger((prev) => prev + 1);
+            }}
+          />
+        )}
+
+        {/* Review Decision Modal (INK-88, INK-89) */}
+        {showReviewDecisionModal && selectedAgreement && (
+          <ReviewDecisionModal
+            agreementId={selectedAgreement.id}
+            agreementTitle={selectedAgreement.title}
+            onClose={() => {
+              setShowReviewDecisionModal(false);
+              setSelectedAgreement(null);
+            }}
+            onSuccess={(msg) => {
+              setActionMessage(msg);
+              setRefreshTrigger((prev) => prev + 1);
+            }}
+          />
+        )}
+
+        {/* Send Agreement Modal (INK-90, INK-91, INK-92) */}
+        {showSendAgreementModal && selectedAgreement && (
+          <SendAgreementModal
+            agreementId={selectedAgreement.id}
+            agreementTitle={selectedAgreement.title}
+            defaultRecipients={selectedAgreement.fields?.recipients}
+            onClose={() => {
+              setShowSendAgreementModal(false);
+              setSelectedAgreement(null);
+            }}
+            onSuccess={(msg) => {
+              setActionMessage(msg);
+              setRefreshTrigger((prev) => prev + 1);
+            }}
+          />
+        )}
+
+        {/* Cancel Agreement Modal (INK-95) */}
+        {showCancelAgreementModal && selectedAgreement && (
+          <CancelAgreementModal
+            agreementId={selectedAgreement.id}
+            agreementTitle={selectedAgreement.title}
+            onClose={() => {
+              setShowCancelAgreementModal(false);
+              setSelectedAgreement(null);
+            }}
+            onSuccess={(msg) => {
+              setActionMessage(msg);
+              setRefreshTrigger((prev) => prev + 1);
+            }}
+          />
         )}
       </main>
 

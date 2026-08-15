@@ -235,6 +235,14 @@ model Agreement {
   archivedAt      DateTime? @map("archived_at") @db.Timestamptz()
   tags            Json?     @db.JsonB
   metadata        Json?     @db.JsonB
+  signingOrder    String    @default("PARALLEL") @map("signing_order") @db.VarChar(20)
+  currentStep     Int       @default(1) @map("current_step")
+  expiresAt       DateTime? @map("expires_at") @db.Timestamptz()
+  reviewerId      String?   @map("reviewer_id") @db.Uuid
+  reviewedAt      DateTime? @map("reviewed_at") @db.Timestamptz()
+  rejectionReason String?   @map("rejection_reason") @db.VarChar(1000)
+  cancellationReason String? @map("cancellation_reason") @db.VarChar(1000)
+  completedAt     DateTime? @map("completed_at") @db.Timestamptz()
   createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz()
   updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
   deletedAt       DateTime? @map("deleted_at") @db.Timestamptz()
@@ -243,13 +251,46 @@ model Agreement {
   author       User               @relation(fields: [authorId], references: [id])
   template     Template?          @relation(fields: [templateId], references: [id], onDelete: SetNull)
   versions     AgreementVersion[]
+  recipients   AgreementRecipient[]
 
   @@index([organisationId])
   @@index([authorId])
   @@index([templateId])
   @@index([status])
   @@index([isArchived])
+  @@index([expiresAt])
   @@map("agreements")
+}
+
+/// Agreement recipient envelope model for workflow routing, signing tokens, and tracking.
+model AgreementRecipient {
+  id               String    @id @db.Uuid
+  agreementId      String    @map("agreement_id") @db.Uuid
+  name             String    @db.VarChar(255)
+  email            String    @db.VarChar(255)
+  role             String    @default("signer") @db.VarChar(50)
+  routingOrder     Int       @default(1) @map("routing_order")
+  status           String    @default("PENDING") @db.VarChar(50)
+  signingTokenHash String?   @unique @map("signing_token_hash") @db.VarChar(255)
+  tokenExpiresAt   DateTime? @map("token_expires_at") @db.Timestamptz()
+  viewedAt         DateTime? @map("viewed_at") @db.Timestamptz()
+  signedAt         DateTime? @map("signed_at") @db.Timestamptz()
+  declinedAt       DateTime? @map("declined_at") @db.Timestamptz()
+  declineReason    String?   @map("decline_reason") @db.VarChar(500)
+  color            String?   @db.VarChar(50)
+  fieldsData       Json?     @map("fields_data") @db.JsonB
+  signatureData    Json?     @map("signature_data") @db.JsonB
+  ipAddress        String?   @map("ip_address") @db.VarChar(45)
+  userAgent        String?   @map("user_agent") @db.VarChar(512)
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
+
+  agreement Agreement @relation(fields: [agreementId], references: [id], onDelete: Cascade)
+
+  @@index([agreementId])
+  @@index([email])
+  @@index([status])
+  @@map("agreement_recipients")
 }
 
 /// Agreement version history model.
