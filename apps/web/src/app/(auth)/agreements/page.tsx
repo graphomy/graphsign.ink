@@ -86,6 +86,13 @@ function AgreementManagementContent() {
   const [tagInput, setTagInput] = useState('');
   const [tagsList, setTagsList] = useState<string[]>([]);
 
+  // Action processing states to prevent duplicate clicks
+  const [isUploading, setIsUploading] = useState(false);
+  const [isCreatingScratch, setIsCreatingScratch] = useState(false);
+  const [cloningId, setCloningId] = useState<string | null>(null);
+  const [isArchivingId, setIsArchivingId] = useState<string | null>(null);
+  const [isSavingTags, setIsSavingTags] = useState(false);
+
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const searchParams = useSearchParams();
@@ -182,6 +189,7 @@ function AgreementManagementContent() {
 
   async function handleUploadSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (isUploading) return;
     setActionError(null);
     setActionMessage(null);
 
@@ -190,6 +198,7 @@ function AgreementManagementContent() {
       return;
     }
 
+    setIsUploading(true);
     try {
       const isMd =
         uploadFile.name.toLowerCase().endsWith('.md') ||
@@ -249,11 +258,14 @@ function AgreementManagementContent() {
       setRefreshTrigger((prev) => prev + 1);
     } catch (err: unknown) {
       setActionError((err as Error).message);
+    } finally {
+      setIsUploading(false);
     }
   }
 
   async function handleScratchSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (isCreatingScratch) return;
     setActionError(null);
     setActionMessage(null);
 
@@ -262,6 +274,7 @@ function AgreementManagementContent() {
       return;
     }
 
+    setIsCreatingScratch(true);
     try {
       const res = await fetch(`${getApiUrl()}/api/v1/agreements/scratch`, {
         method: 'POST',
@@ -292,11 +305,15 @@ function AgreementManagementContent() {
       setRefreshTrigger((prev) => prev + 1);
     } catch (err: unknown) {
       setActionError((err as Error).message);
+    } finally {
+      setIsCreatingScratch(false);
     }
   }
 
   async function handleClone(id: string) {
+    if (cloningId) return;
     setActionError(null);
+    setCloningId(id);
     try {
       const res = await fetch(`${getApiUrl()}/api/v1/agreements/${id}/clone`, {
         method: 'POST',
@@ -310,11 +327,15 @@ function AgreementManagementContent() {
       setRefreshTrigger((prev) => prev + 1);
     } catch (err: unknown) {
       setActionError((err as Error).message);
+    } finally {
+      setCloningId(null);
     }
   }
 
   async function handleArchiveToggle(id: string, isArchived: boolean) {
+    if (isArchivingId) return;
     setActionError(null);
+    setIsArchivingId(id);
     try {
       const endpoint = isArchived ? 'archive' : 'unarchive';
       const res = await fetch(`${getApiUrl()}/api/v1/agreements/${id}/${endpoint}`, {
@@ -327,6 +348,8 @@ function AgreementManagementContent() {
       setRefreshTrigger((prev) => prev + 1);
     } catch (err: unknown) {
       setActionError((err as Error).message);
+    } finally {
+      setIsArchivingId(null);
     }
   }
 
@@ -366,7 +389,8 @@ function AgreementManagementContent() {
   }
 
   async function handleSaveTags() {
-    if (!selectedAgreement) return;
+    if (!selectedAgreement || isSavingTags) return;
+    setIsSavingTags(true);
     setActionError(null);
     try {
       const res = await fetch(`${getApiUrl()}/api/v1/agreements/${selectedAgreement.id}/metadata`, {
@@ -386,6 +410,8 @@ function AgreementManagementContent() {
       setRefreshTrigger((prev) => prev + 1);
     } catch (err: unknown) {
       setActionError((err as Error).message);
+    } finally {
+      setIsSavingTags(false);
     }
   }
 
@@ -665,10 +691,36 @@ function AgreementManagementContent() {
                           {activeTab === 'drafts' && (
                             <button
                               onClick={() => handleClone(agreement.id)}
-                              className="px-2.5 py-1 text-[11px] font-medium text-neutral-700 hover:text-neutral-900 bg-neutral-50 hover:bg-neutral-100 border border-neutral-200 rounded transition-colors"
+                              disabled={cloningId === agreement.id}
+                              className="px-2.5 py-1 text-[11px] font-medium text-neutral-700 hover:text-neutral-900 bg-neutral-50 hover:bg-neutral-100 border border-neutral-200 rounded transition-colors disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-1"
                               title="Clone Draft"
                             >
-                              📋 Clone
+                              {cloningId === agreement.id ? (
+                                <>
+                                  <svg
+                                    className="animate-spin h-3 w-3 text-neutral-700"
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                  >
+                                    <circle
+                                      className="opacity-25"
+                                      cx="12"
+                                      cy="12"
+                                      r="10"
+                                      stroke="currentColor"
+                                      strokeWidth="4"
+                                    />
+                                    <path
+                                      className="opacity-75"
+                                      fill="currentColor"
+                                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                                    />
+                                  </svg>
+                                  <span>Cloning...</span>
+                                </>
+                              ) : (
+                                <span>📋 Clone</span>
+                              )}
                             </button>
                           )}
 
@@ -693,12 +745,17 @@ function AgreementManagementContent() {
                           {/* Archive / Unarchive Button */}
                           <button
                             onClick={() => handleArchiveToggle(agreement.id, !agreement.isArchived)}
-                            className="text-[11px] font-semibold text-neutral-400 hover:text-red-600 px-1.5 py-0.5 rounded transition-colors"
+                            disabled={isArchivingId === agreement.id}
+                            className="text-[11px] font-semibold text-neutral-400 hover:text-red-600 px-1.5 py-0.5 rounded transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                             title={
                               agreement.isArchived ? 'Unarchive Agreement' : 'Archive Agreement'
                             }
                           >
-                            {agreement.isArchived ? 'Unarchive' : 'Archive'}
+                            {isArchivingId === agreement.id
+                              ? 'Updating...'
+                              : agreement.isArchived
+                                ? 'Unarchive'
+                                : 'Archive'}
                           </button>
                         </div>
                       </td>
@@ -852,19 +909,46 @@ function AgreementManagementContent() {
                 <div className="flex justify-end gap-3 pt-4 border-t border-neutral-200">
                   <button
                     type="button"
+                    disabled={isUploading}
                     onClick={() => {
                       setActionError(null);
                       setShowUploadModal(false);
                     }}
-                    className="px-4 py-2 text-xs font-semibold text-neutral-600 hover:text-neutral-900"
+                    className="px-4 py-2 text-xs font-semibold text-neutral-600 hover:text-neutral-900 disabled:opacity-50"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 bg-[#ba0000] hover:bg-red-700 text-white text-xs font-semibold rounded-lg shadow-sm"
+                    disabled={isUploading}
+                    className="px-4 py-2 bg-[#ba0000] hover:bg-red-700 text-white text-xs font-semibold rounded-lg shadow-sm flex items-center gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed"
                   >
-                    Upload Document
+                    {isUploading ? (
+                      <>
+                        <svg
+                          className="animate-spin h-3.5 w-3.5 text-white"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                        >
+                          <circle
+                            className="opacity-25"
+                            cx="12"
+                            cy="12"
+                            r="10"
+                            stroke="currentColor"
+                            strokeWidth="4"
+                          />
+                          <path
+                            className="opacity-75"
+                            fill="currentColor"
+                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                          />
+                        </svg>
+                        <span>Processing & Uploading...</span>
+                      </>
+                    ) : (
+                      <span>Upload Document</span>
+                    )}
                   </button>
                 </div>
               </form>
@@ -995,19 +1079,46 @@ function AgreementManagementContent() {
                 <div className="flex justify-end gap-3 pt-4 border-t border-neutral-200">
                   <button
                     type="button"
+                    disabled={isCreatingScratch}
                     onClick={() => {
                       setActionError(null);
                       setShowScratchModal(false);
                     }}
-                    className="px-4 py-2 text-xs font-semibold text-neutral-600 hover:text-neutral-900"
+                    className="px-4 py-2 text-xs font-semibold text-neutral-600 hover:text-neutral-900 disabled:opacity-50"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    className="px-5 py-2 bg-[#ba0000] hover:bg-red-700 text-white text-xs font-bold rounded-lg shadow-sm"
+                    disabled={isCreatingScratch}
+                    className="px-5 py-2 bg-[#ba0000] hover:bg-red-700 text-white text-xs font-bold rounded-lg shadow-sm flex items-center gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed"
                   >
-                    Create Draft (v0.1)
+                    {isCreatingScratch ? (
+                      <>
+                        <svg
+                          className="animate-spin h-3.5 w-3.5 text-white"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                        >
+                          <circle
+                            className="opacity-25"
+                            cx="12"
+                            cy="12"
+                            r="10"
+                            stroke="currentColor"
+                            strokeWidth="4"
+                          />
+                          <path
+                            className="opacity-75"
+                            fill="currentColor"
+                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                          />
+                        </svg>
+                        <span>Creating Draft (v0.1)...</span>
+                      </>
+                    ) : (
+                      <span>Create Draft (v0.1)</span>
+                    )}
                   </button>
                 </div>
               </form>
@@ -1122,19 +1233,46 @@ function AgreementManagementContent() {
 
                 <div className="flex justify-end gap-3 pt-4 border-t border-neutral-200">
                   <button
+                    disabled={isSavingTags}
                     onClick={() => {
                       setActionError(null);
                       setShowMetadataModal(false);
                     }}
-                    className="px-4 py-2 text-xs font-semibold text-neutral-600"
+                    className="px-4 py-2 text-xs font-semibold text-neutral-600 disabled:opacity-50"
                   >
                     Cancel
                   </button>
                   <button
                     onClick={handleSaveTags}
-                    className="px-4 py-2 bg-[#ba0000] hover:bg-red-700 text-white text-xs font-semibold rounded-lg shadow-sm"
+                    disabled={isSavingTags}
+                    className="px-4 py-2 bg-[#ba0000] hover:bg-red-700 text-white text-xs font-semibold rounded-lg shadow-sm flex items-center gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed"
                   >
-                    Save Tags
+                    {isSavingTags ? (
+                      <>
+                        <svg
+                          className="animate-spin h-3.5 w-3.5 text-white"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                        >
+                          <circle
+                            className="opacity-25"
+                            cx="12"
+                            cy="12"
+                            r="10"
+                            stroke="currentColor"
+                            strokeWidth="4"
+                          />
+                          <path
+                            className="opacity-75"
+                            fill="currentColor"
+                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                          />
+                        </svg>
+                        <span>Saving Tags...</span>
+                      </>
+                    ) : (
+                      <span>Save Tags</span>
+                    )}
                   </button>
                 </div>
               </div>

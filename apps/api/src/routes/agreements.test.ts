@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { Hono } from 'hono';
 import { createAgreementRoutes } from './agreements.js';
 import { signJwt } from '../utils/jwt.js';
+import { errorHandler } from '../middleware/error-handler.js';
 
 describe('Agreement Routes Integration Tests (Epic INK-8)', () => {
   let mockAgreementService: any;
@@ -32,6 +33,7 @@ describe('Agreement Routes Integration Tests (Epic INK-8)', () => {
     });
 
     app = new Hono();
+    app.onError(errorHandler);
     app.route(
       '/api/v1/agreements',
       createAgreementRoutes({ agreementService: mockAgreementService }),
@@ -256,5 +258,41 @@ describe('Agreement Routes Integration Tests (Epic INK-8)', () => {
     expect(res.headers.get('Content-Type')).toContain('text/markdown');
     const text = await res.text();
     expect(text).toContain('# Document Content');
+  });
+
+  it('GET /api/v1/agreements - passes authorId and userRole to service for privacy scoping (INK-248)', async () => {
+    mockAgreementService.listAgreements.mockResolvedValue({
+      items: [{ id: 'ag-1', title: 'My Private Agreement' }],
+      pagination: { page: 1, limit: 20, total: 1, totalPages: 1 },
+    });
+
+    const res = await app.request('/api/v1/agreements?page=1&limit=20', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    expect(res.status).toBe(200);
+    expect(mockAgreementService.listAgreements).toHaveBeenCalledWith(
+      'org-123',
+      expect.objectContaining({ page: 1, limit: 20 }),
+      'user-123',
+      'sender',
+    );
+  });
+
+  it('GET /api/v1/agreements/:id/file - blocks super admin from accessing private file payloads (INK-248)', async () => {
+    const superAdminToken = await signJwt({
+      sub: 'super-1',
+      email: 'kunal@graphomy.com',
+      orgId: 'org-123',
+      role: 'super_admin',
+    });
+
+    const res = await app.request('/api/v1/agreements/ag-secret/file', {
+      headers: { Authorization: `Bearer ${superAdminToken}` },
+    });
+
+    expect(res.status).toBe(403);
+    const body = (await res.json()) as any;
+    expect(body.error?.message).toContain('Super Admins are restricted to metadata only');
   });
 });

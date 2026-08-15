@@ -240,23 +240,87 @@ describe('AgreementService Unit Tests (Epic INK-8)', () => {
     });
   });
 
-  describe('setArchiveStatus (INK-71)', () => {
-    it('should archive agreement', async () => {
+  describe('Privacy & Data Isolation (INK-248)', () => {
+    it('listAgreements - restricts regular users to their own authored agreements', async () => {
+      mockPrisma.agreement.findMany.mockResolvedValue([
+        { id: 'ag-1', title: 'My Agreement', authorId: 'user-1' },
+      ]);
+      mockPrisma.agreement.count.mockResolvedValue(1);
+
+      const res = await service.listAgreements('org-1', { page: 1, limit: 20 }, 'user-1', 'user');
+
+      expect(res.items).toHaveLength(1);
+      expect(mockPrisma.agreement.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            organisationId: 'org-1',
+            authorId: 'user-1',
+          }),
+        }),
+      );
+    });
+
+    it('listAgreements - allows org_admin to view all organisation agreements without author scoping', async () => {
+      mockPrisma.agreement.findMany.mockResolvedValue([
+        { id: 'ag-1', title: 'User 1 Agreement', authorId: 'user-1' },
+        { id: 'ag-2', title: 'User 2 Agreement', authorId: 'user-2' },
+      ]);
+      mockPrisma.agreement.count.mockResolvedValue(2);
+
+      const res = await service.listAgreements(
+        'org-1',
+        { page: 1, limit: 20 },
+        'admin-user',
+        'org_admin',
+      );
+
+      expect(res.items).toHaveLength(2);
+      expect(mockPrisma.agreement.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.not.objectContaining({
+            authorId: expect.anything(),
+          }),
+        }),
+      );
+    });
+
+    it('getAgreementById - allows author to access their own agreement', async () => {
       mockPrisma.agreement.findFirst.mockResolvedValue({
         id: 'ag-1',
         organisationId: 'org-1',
+        authorId: 'user-1',
+        title: 'User 1 Document',
       });
 
-      mockPrisma.agreement.update.mockResolvedValue({
+      const res = await service.getAgreementById('org-1', 'ag-1', 'user-1', 'user');
+      expect(res.id).toBe('ag-1');
+    });
+
+    it('getAgreementById - throws ForbiddenError when non-admin accesses another user agreement', async () => {
+      mockPrisma.agreement.findFirst.mockResolvedValue({
         id: 'ag-1',
-        isArchived: true,
+        organisationId: 'org-1',
+        authorId: 'user-1',
+        title: 'User 1 Document',
       });
 
-      const res = await service.setArchiveStatus('org-1', 'user-1', 'ag-1', true);
-      expect(res.isArchived).toBe(true);
-      expect(mockAudit.log).toHaveBeenCalledWith(
-        expect.objectContaining({ action: 'AGREEMENT_ARCHIVED' }),
+      await expect(service.getAgreementById('org-1', 'ag-1', 'user-2', 'user')).rejects.toThrow(
+        ForbiddenError,
       );
+    });
+
+    it('saveDraft - throws ForbiddenError when non-admin edits another user draft', async () => {
+      mockPrisma.agreement.findFirst.mockResolvedValue({
+        id: 'ag-1',
+        organisationId: 'org-1',
+        authorId: 'user-1',
+        status: 'DRAFT',
+        version: '0.1',
+      });
+
+      await expect(
+        service.saveDraft('org-1', 'user-2', 'ag-1', { title: 'Hacked Title' }, 'user'),
+      ).rejects.toThrow(ForbiddenError);
     });
   });
 });

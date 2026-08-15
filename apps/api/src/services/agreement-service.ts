@@ -243,13 +243,30 @@ export class AgreementService {
    * Save and autosave agreement draft (FR-004.003 / INK-68)
    * Automatically increments minor version (e.g. 0.1 -> 0.2)
    */
-  async saveDraft(orgId: string, authorId: string, agreementId: string, input: UpdateDraftInput) {
+  async saveDraft(
+    orgId: string,
+    authorId: string,
+    agreementId: string,
+    input: UpdateDraftInput,
+    userRole?: string,
+  ) {
     const existing = await this.prisma.agreement.findFirst({
       where: { id: agreementId, organisationId: orgId, deletedAt: null },
     });
 
     if (!existing) {
       throw new NotFoundError('Agreement not found.');
+    }
+
+    if (
+      userRole &&
+      userRole !== 'org_admin' &&
+      userRole !== 'admin' &&
+      userRole !== 'super_admin' &&
+      authorId !== 'unknown' &&
+      existing.authorId !== authorId
+    ) {
+      throw new ForbiddenError('You do not have permission to edit this agreement.');
     }
 
     if (existing.status !== 'DRAFT') {
@@ -312,6 +329,7 @@ export class AgreementService {
     authorId: string,
     agreementId: string,
     input?: ActivateAgreementInput,
+    userRole?: string,
   ) {
     const existing = await this.prisma.agreement.findFirst({
       where: { id: agreementId, organisationId: orgId, deletedAt: null },
@@ -319,6 +337,17 @@ export class AgreementService {
 
     if (!existing) {
       throw new NotFoundError('Agreement not found.');
+    }
+
+    if (
+      userRole &&
+      userRole !== 'org_admin' &&
+      userRole !== 'admin' &&
+      userRole !== 'super_admin' &&
+      authorId !== 'unknown' &&
+      existing.authorId !== authorId
+    ) {
+      throw new ForbiddenError('You do not have permission to activate this agreement.');
     }
 
     if (existing.status === 'ACTIVE') {
@@ -367,9 +396,9 @@ export class AgreementService {
   }
 
   /**
-   * Get single agreement by ID
+   * Get single agreement by ID (INK-248 scoped for privacy)
    */
-  async getAgreementById(orgId: string, agreementId: string) {
+  async getAgreementById(orgId: string, agreementId: string, userId?: string, userRole?: string) {
     const agreement = await this.prisma.agreement.findFirst({
       where: { id: agreementId, organisationId: orgId, deletedAt: null },
       include: { author: { select: { id: true, name: true, email: true } } },
@@ -379,19 +408,49 @@ export class AgreementService {
       throw new NotFoundError('Agreement not found.');
     }
 
+    // Non-admin users can only view their own agreements (INK-248)
+    if (
+      userRole &&
+      userRole !== 'org_admin' &&
+      userRole !== 'admin' &&
+      userRole !== 'super_admin' &&
+      userId &&
+      userId !== 'unknown' &&
+      agreement.authorId !== userId
+    ) {
+      throw new ForbiddenError('You do not have permission to access this agreement.');
+    }
+
     return agreement;
   }
 
   /**
    * Get concise history timeline for an agreement
    */
-  async getAgreementHistory(orgId: string, agreementId: string): Promise<HistoryItem[]> {
+  async getAgreementHistory(
+    orgId: string,
+    agreementId: string,
+    userId?: string,
+    userRole?: string,
+  ): Promise<HistoryItem[]> {
     const agreement = await this.prisma.agreement.findFirst({
       where: { id: agreementId, organisationId: orgId, deletedAt: null },
     });
 
     if (!agreement) {
       throw new NotFoundError('Agreement not found.');
+    }
+
+    if (
+      userRole &&
+      userRole !== 'org_admin' &&
+      userRole !== 'admin' &&
+      userRole !== 'super_admin' &&
+      userId &&
+      userId !== 'unknown' &&
+      agreement.authorId !== userId
+    ) {
+      throw new ForbiddenError('You do not have permission to access this agreement history.');
     }
 
     const auditLogs = await this.prisma.auditLog.findMany({
@@ -479,6 +538,7 @@ export class AgreementService {
     authorId: string,
     agreementId: string,
     changeSummary?: string,
+    userRole?: string,
   ) {
     const existing = await this.prisma.agreement.findFirst({
       where: { id: agreementId, organisationId: orgId, deletedAt: null },
@@ -486,6 +546,17 @@ export class AgreementService {
 
     if (!existing) {
       throw new NotFoundError('Agreement not found.');
+    }
+
+    if (
+      userRole &&
+      userRole !== 'org_admin' &&
+      userRole !== 'admin' &&
+      userRole !== 'super_admin' &&
+      authorId !== 'unknown' &&
+      existing.authorId !== authorId
+    ) {
+      throw new ForbiddenError('You do not have permission to version this agreement.');
     }
 
     const nextVersion = incrementMinorVersion(existing.version);
@@ -525,13 +596,25 @@ export class AgreementService {
   /**
    * List version history of an agreement (FR-004.004 / INK-69)
    */
-  async listVersions(orgId: string, agreementId: string) {
+  async listVersions(orgId: string, agreementId: string, userId?: string, userRole?: string) {
     const existing = await this.prisma.agreement.findFirst({
       where: { id: agreementId, organisationId: orgId, deletedAt: null },
     });
 
     if (!existing) {
       throw new NotFoundError('Agreement not found.');
+    }
+
+    if (
+      userRole &&
+      userRole !== 'org_admin' &&
+      userRole !== 'admin' &&
+      userRole !== 'super_admin' &&
+      userId &&
+      userId !== 'unknown' &&
+      existing.authorId !== userId
+    ) {
+      throw new ForbiddenError('You do not have permission to view versions for this agreement.');
     }
 
     return this.prisma.agreementVersion.findMany({
@@ -543,13 +626,24 @@ export class AgreementService {
   /**
    * Clone agreement into a new draft (FR-004.005 / INK-70)
    */
-  async cloneAgreement(orgId: string, authorId: string, agreementId: string) {
+  async cloneAgreement(orgId: string, authorId: string, agreementId: string, userRole?: string) {
     const existing = await this.prisma.agreement.findFirst({
       where: { id: agreementId, organisationId: orgId, deletedAt: null },
     });
 
     if (!existing) {
       throw new NotFoundError('Agreement not found.');
+    }
+
+    if (
+      userRole &&
+      userRole !== 'org_admin' &&
+      userRole !== 'admin' &&
+      userRole !== 'super_admin' &&
+      authorId !== 'unknown' &&
+      existing.authorId !== authorId
+    ) {
+      throw new ForbiddenError('You do not have permission to clone this agreement.');
     }
 
     const newAgreementId = generateId();
@@ -601,13 +695,30 @@ export class AgreementService {
   /**
    * Archive / Unarchive agreement (FR-004.006 / INK-71)
    */
-  async setArchiveStatus(orgId: string, authorId: string, agreementId: string, archive: boolean) {
+  async setArchiveStatus(
+    orgId: string,
+    authorId: string,
+    agreementId: string,
+    archive: boolean,
+    userRole?: string,
+  ) {
     const existing = await this.prisma.agreement.findFirst({
       where: { id: agreementId, organisationId: orgId, deletedAt: null },
     });
 
     if (!existing) {
       throw new NotFoundError('Agreement not found.');
+    }
+
+    if (
+      userRole &&
+      userRole !== 'org_admin' &&
+      userRole !== 'admin' &&
+      userRole !== 'super_admin' &&
+      authorId !== 'unknown' &&
+      existing.authorId !== authorId
+    ) {
+      throw new ForbiddenError('You do not have permission to archive/unarchive this agreement.');
     }
 
     const updated = await this.prisma.agreement.update({
@@ -639,6 +750,7 @@ export class AgreementService {
     authorId: string,
     agreementId: string,
     input: UpdateMetadataTagsInput,
+    userRole?: string,
   ) {
     const existing = await this.prisma.agreement.findFirst({
       where: { id: agreementId, organisationId: orgId, deletedAt: null },
@@ -646,6 +758,17 @@ export class AgreementService {
 
     if (!existing) {
       throw new NotFoundError('Agreement not found.');
+    }
+
+    if (
+      userRole &&
+      userRole !== 'org_admin' &&
+      userRole !== 'admin' &&
+      userRole !== 'super_admin' &&
+      authorId !== 'unknown' &&
+      existing.authorId !== authorId
+    ) {
+      throw new ForbiddenError('You do not have permission to update metadata for this agreement.');
     }
 
     const currentTags: string[] = Array.isArray(existing.tags) ? (existing.tags as string[]) : [];
@@ -681,11 +804,16 @@ export class AgreementService {
   }
 
   /**
-   * List agreements with filtering, pagination, and tag search
+   * List agreements with filtering, pagination, and tag search (INK-248 scoped for privacy)
    * - ACTIVE tab: returns ACTIVE agreements with major versions
    * - DRAFT tab: returns DRAFT agreements
    */
-  async listAgreements(orgId: string, query: QueryAgreementsInput) {
+  async listAgreements(
+    orgId: string,
+    query: QueryAgreementsInput,
+    userId?: string,
+    userRole?: string,
+  ) {
     const page = query.page || 1;
     const limit = query.limit || 20;
     const skip = (page - 1) * limit;
@@ -695,6 +823,18 @@ export class AgreementService {
       deletedAt: null,
       isArchived: query.isArchived ?? false,
     };
+
+    // Non-admin users are strictly scoped to their authored documents (INK-248)
+    if (
+      userRole &&
+      userRole !== 'org_admin' &&
+      userRole !== 'admin' &&
+      userRole !== 'super_admin' &&
+      userId &&
+      userId !== 'unknown'
+    ) {
+      where.authorId = userId;
+    }
 
     if (query.status) {
       where.status = query.status;
