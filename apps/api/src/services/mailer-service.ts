@@ -393,7 +393,9 @@ export class ConsoleMailerService implements MailerService {
     authorName: string,
     notes?: string,
   ): Promise<void> {
-    console.log(`[MAILER] Review request for ${to} on "${agreementTitle}" from ${authorName}: notes="${notes}"`);
+    console.log(
+      `[MAILER] Review request for ${to} on "${agreementTitle}" from ${authorName}: notes="${notes}"`,
+    );
   }
 
   async sendReviewDecisionEmail(
@@ -403,7 +405,9 @@ export class ConsoleMailerService implements MailerService {
     decision: 'APPROVE' | 'REJECT',
     comments?: string,
   ): Promise<void> {
-    console.log(`[MAILER] Review decision (${decision}) for ${to} on "${agreementTitle}" by ${reviewerName}: comments="${comments}"`);
+    console.log(
+      `[MAILER] Review decision (${decision}) for ${to} on "${agreementTitle}" by ${reviewerName}: comments="${comments}"`,
+    );
   }
 
   async sendSigningInvitationEmail(
@@ -415,7 +419,9 @@ export class ConsoleMailerService implements MailerService {
     expiresAt?: Date | null,
   ): Promise<void> {
     const signingUrl = `${this.webUrl}/sign/${encodeURIComponent(signingToken)}`;
-    console.log(`[MAILER] Signing invitation for ${recipientName} (${to}) for "${agreementTitle}" from ${senderName}: url=${signingUrl}, expiresAt=${expiresAt}`);
+    console.log(
+      `[MAILER] Signing invitation for ${recipientName} (${to}) for "${agreementTitle}" from ${senderName}: url=${signingUrl}, expiresAt=${expiresAt}`,
+    );
   }
 
   async sendAgreementCompletedEmail(
@@ -423,7 +429,9 @@ export class ConsoleMailerService implements MailerService {
     recipientName: string,
     agreementTitle: string,
   ): Promise<void> {
-    console.log(`[MAILER] Agreement completed notice for ${recipientName} (${to}) on "${agreementTitle}"`);
+    console.log(
+      `[MAILER] Agreement completed notice for ${recipientName} (${to}) on "${agreementTitle}"`,
+    );
   }
 
   async sendAgreementCancelledEmail(
@@ -432,7 +440,9 @@ export class ConsoleMailerService implements MailerService {
     agreementTitle: string,
     reason?: string,
   ): Promise<void> {
-    console.log(`[MAILER] Agreement cancelled notice for ${recipientName} (${to}) on "${agreementTitle}": reason="${reason}"`);
+    console.log(
+      `[MAILER] Agreement cancelled notice for ${recipientName} (${to}) on "${agreementTitle}": reason="${reason}"`,
+    );
   }
 }
 

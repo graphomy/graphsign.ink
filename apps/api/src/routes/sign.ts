@@ -6,10 +6,7 @@ import type { AuditService } from '../services/audit-service.js';
 import { PrismaAuditService } from '../services/audit-service.js';
 import type { MailerService } from '../services/mailer-service.js';
 import { createMailerService } from '../services/mailer-service.js';
-import {
-  recipientSignSchema,
-  declineSignSchema,
-} from '../validators/workflow-validators.js';
+import { recipientSignSchema, declineSignSchema } from '../validators/workflow-validators.js';
 import { BadRequestError } from '../utils/errors.js';
 import { createRateLimiter } from '../middleware/rate-limiter.js';
 import type { Env } from '../index.js';
@@ -94,9 +91,7 @@ export function createSignRoutes(deps?: SignDeps) {
     const parseResult = recipientSignSchema.safeParse(body);
 
     if (!parseResult.success) {
-      throw new BadRequestError(
-        parseResult.error.errors.map((e) => e.message).join(', '),
-      );
+      throw new BadRequestError(parseResult.error.errors.map((e) => e.message).join(', '));
     }
 
     const ip = c.req.header('x-forwarded-for') || c.req.header('cf-connecting-ip');
@@ -123,9 +118,7 @@ export function createSignRoutes(deps?: SignDeps) {
     const parseResult = declineSignSchema.safeParse(body);
 
     if (!parseResult.success) {
-      throw new BadRequestError(
-        parseResult.error.errors.map((e) => e.message).join(', '),
-      );
+      throw new BadRequestError(parseResult.error.errors.map((e) => e.message).join(', '));
     }
 
     const ip = c.req.header('x-forwarded-for') || c.req.header('cf-connecting-ip');

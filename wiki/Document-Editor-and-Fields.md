@@ -17,23 +17,23 @@ The **Visual Document Editor** provides an interactive multi-page canvas where d
 
 ## 🛠️ Field Palette & Supported Field Types
 
-| Icon | Field Type | Purpose | Validation Options |
-| :---: | :--- | :--- | :--- |
-| ✍️ | **SIGNATURE** | Primary legal electronic signature | Required toggle |
-| 🔤 | **INITIALS** | Signer initials for margins and terms | Required toggle |
-| 📝 | **TEXT** | Single-line or multi-line text input | Required, min/max length, regex |
-| 📅 | **DATE** | Date signed or specified date | Date formats (`DD-MON-YYYY`, etc.) |
-| ✉️ | **EMAIL** | Email address input | RFC 5322 regex validation |
-| 🏢 | **COMPANY** | Organization or designation | Required toggle |
-| ☑️ | **CHECKBOX** | Acknowledgment checkbox | Required toggle |
-| 🔘 | **RADIO** | Single selection among options | Choice list options |
-| 🔽 | **DROPDOWN** | Select from option menu | Choice list options |
+| Icon | Field Type    | Purpose                               | Validation Options                 |
+| :--: | :------------ | :------------------------------------ | :--------------------------------- |
+|  ✍️  | **SIGNATURE** | Primary legal electronic signature    | Required toggle                    |
+|  🔤  | **INITIALS**  | Signer initials for margins and terms | Required toggle                    |
+|  📝  | **TEXT**      | Single-line or multi-line text input  | Required, min/max length, regex    |
+|  📅  | **DATE**      | Date signed or specified date         | Date formats (`DD-MON-YYYY`, etc.) |
+|  ✉️  | **EMAIL**     | Email address input                   | RFC 5322 regex validation          |
+|  🏢  | **COMPANY**   | Organization or designation           | Required toggle                    |
+|  ☑️  | **CHECKBOX**  | Acknowledgment checkbox               | Required toggle                    |
+|  🔘  | **RADIO**     | Single selection among options        | Choice list options                |
+|  🔽  | **DROPDOWN**  | Select from option menu               | Choice list options                |
 
 ---
 
 ## 👥 Recipient Assignment & Visual Color Coding
 
-- Authors configure recipients (*Signer 1*, *Signer 2*, *Approver*, *Viewer*).
+- Authors configure recipients (_Signer 1_, _Signer 2_, _Approver_, _Viewer_).
 - Every placed field is assigned to a specific recipient.
 - **Color Coding**: Each recipient has a dedicated color badge and canvas border highlighting, making multi-party contracts intuitive to inspect at a glance.
 
@@ -42,6 +42,7 @@ The **Visual Document Editor** provides an interactive multi-page canvas where d
 ## ⚙️ Field Validation & Property Inspector
 
 Clicking any field on the canvas opens the right-hand Property Inspector:
+
 - **Label & Placeholder**: User-friendly prompt and instructional text.
 - **Required Constraint**: Toggles mandatory completion before the signer can submit.
 - **Validation Rules**:
@@ -62,12 +63,14 @@ Clicking any field on the canvas opens the right-hand Property Inspector:
 ## 🔌 API Endpoints for Fields & Recipients
 
 ### 1. Fetch Fields & Recipients
+
 ```http
 GET /api/v1/agreements/:id/fields
 Authorization: Bearer <jwt-token>
 ```
 
 ### 2. Save Fields & Recipients
+
 ```http
 PUT /api/v1/agreements/:id/fields
 Authorization: Bearer <jwt-token>

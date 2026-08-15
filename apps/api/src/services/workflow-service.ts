@@ -40,11 +40,7 @@ export class WorkflowService {
   /**
    * INK-87: Submit agreement for internal review
    */
-  async submitForReview(
-    ctx: WorkflowContext,
-    agreementId: string,
-    input: SubmitReviewInput,
-  ) {
+  async submitForReview(ctx: WorkflowContext, agreementId: string, input: SubmitReviewInput) {
     const agreement = await this.prisma.agreement.findFirst({
       where: {
         id: agreementId,
@@ -78,7 +74,9 @@ export class WorkflowService {
     });
 
     if (!reviewer) {
-      throw new NotFoundError(`Reviewer with email ${input.reviewerEmail} not found in organisation.`);
+      throw new NotFoundError(
+        `Reviewer with email ${input.reviewerEmail} not found in organisation.`,
+      );
     }
 
     const updated = await this.prisma.agreement.update({
@@ -118,11 +116,7 @@ export class WorkflowService {
   /**
    * INK-88: Approve document
    */
-  async approveAgreement(
-    ctx: WorkflowContext,
-    agreementId: string,
-    input: ReviewDecisionInput,
-  ) {
+  async approveAgreement(ctx: WorkflowContext, agreementId: string, input: ReviewDecisionInput) {
     const agreement = await this.prisma.agreement.findFirst({
       where: {
         id: agreementId,
@@ -142,7 +136,9 @@ export class WorkflowService {
 
     const isAdmin = ctx.role === 'admin' || ctx.role === 'superadmin' || ctx.role === 'owner';
     if (agreement.reviewerId && agreement.reviewerId !== ctx.userId && !isAdmin) {
-      throw new ForbiddenError('Only the assigned reviewer or an administrator can approve this document.');
+      throw new ForbiddenError(
+        'Only the assigned reviewer or an administrator can approve this document.',
+      );
     }
 
     const updated = await this.prisma.agreement.update({
@@ -183,11 +179,7 @@ export class WorkflowService {
   /**
    * INK-89: Reject document
    */
-  async rejectAgreement(
-    ctx: WorkflowContext,
-    agreementId: string,
-    input: ReviewDecisionInput,
-  ) {
+  async rejectAgreement(ctx: WorkflowContext, agreementId: string, input: ReviewDecisionInput) {
     const agreement = await this.prisma.agreement.findFirst({
       where: {
         id: agreementId,
@@ -207,7 +199,9 @@ export class WorkflowService {
 
     const isAdmin = ctx.role === 'admin' || ctx.role === 'superadmin' || ctx.role === 'owner';
     if (agreement.reviewerId && agreement.reviewerId !== ctx.userId && !isAdmin) {
-      throw new ForbiddenError('Only the assigned reviewer or an administrator can reject this document.');
+      throw new ForbiddenError(
+        'Only the assigned reviewer or an administrator can reject this document.',
+      );
     }
 
     const updated = await this.prisma.agreement.update({
@@ -248,11 +242,7 @@ export class WorkflowService {
   /**
    * INK-90, INK-91, INK-92: Send agreement for signature
    */
-  async sendForSignature(
-    ctx: WorkflowContext,
-    agreementId: string,
-    input: SendAgreementInput,
-  ) {
+  async sendForSignature(ctx: WorkflowContext, agreementId: string, input: SendAgreementInput) {
     const agreement = await this.prisma.agreement.findFirst({
       where: {
         id: agreementId,
@@ -587,7 +577,9 @@ export class WorkflowService {
       where: { agreementId: agreement.id },
     });
 
-    const activeSigners = allRecipients.filter((r: any) => r.role === 'signer' || r.role === 'approver');
+    const activeSigners = allRecipients.filter(
+      (r: any) => r.role === 'signer' || r.role === 'approver',
+    );
     const allFinished = activeSigners.every((r: any) => r.status === 'SIGNED');
 
     if (allFinished) {
@@ -615,11 +607,7 @@ export class WorkflowService {
 
       // Send completion confirmation emails to all participants
       for (const r of allRecipients) {
-        await this.mailerService.sendAgreementCompletedEmail(
-          r.email,
-          r.name,
-          agreement.title,
-        );
+        await this.mailerService.sendAgreementCompletedEmail(r.email, r.name, agreement.title);
       }
     } else if (agreement.signingOrder === 'SEQUENTIAL') {
       // Advance to next sequential tier if current tier is finished
@@ -686,7 +674,12 @@ export class WorkflowService {
       where: { signingTokenHash: tokenHash },
       include: {
         agreement: {
-          select: { id: true, organisationId: true, title: true, author: { select: { email: true } } },
+          select: {
+            id: true,
+            organisationId: true,
+            title: true,
+            author: { select: { email: true } },
+          },
         },
       },
     });
@@ -734,11 +727,7 @@ export class WorkflowService {
   /**
    * INK-95: Cancel / Void agreement
    */
-  async cancelAgreement(
-    ctx: WorkflowContext,
-    agreementId: string,
-    input: CancelAgreementInput,
-  ) {
+  async cancelAgreement(ctx: WorkflowContext, agreementId: string, input: CancelAgreementInput) {
     const agreement = await this.prisma.agreement.findFirst({
       where: {
         id: agreementId,

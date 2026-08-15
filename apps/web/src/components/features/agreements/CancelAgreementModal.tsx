@@ -72,11 +72,14 @@ export function CancelAgreementModal({
           <h2 className="text-base font-bold text-red-600 flex items-center gap-2">
             <span>🛑</span> Cancel / Void Agreement
           </h2>
-          <button onClick={onClose} className="text-neutral-400 hover:text-neutral-600">✕</button>
+          <button onClick={onClose} className="text-neutral-400 hover:text-neutral-600">
+            ✕
+          </button>
         </div>
 
         <p className="text-xs text-neutral-600">
-          Are you sure you want to cancel <strong>&quot;{agreementTitle}&quot;</strong>? This will immediately invalidate all outstanding signing invitations and mark the envelope as void.
+          Are you sure you want to cancel <strong>&quot;{agreementTitle}&quot;</strong>? This will
+          immediately invalidate all outstanding signing invitations and mark the envelope as void.
         </p>
 
         {error && (

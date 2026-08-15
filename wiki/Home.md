@@ -21,6 +21,7 @@ We build around five core principles:
 ## 📑 Feature Overview (Implemented Modules)
 
 ### 📄 Agreement & Document Management
+
 - Support for uploading `.pdf`, `.docx`, and `.md` documents with size/encryption detection.
 - Live dual-pane Markdown scratch editor with formatting toolbar and preview.
 - Semantic document versioning (`v0.1` draft baseline, auto-incrementing minor/major version bumps upon activation).
@@ -28,6 +29,7 @@ We build around five core principles:
 - Change history timeline modal and metadata tagging.
 
 ### 🎨 Visual Document Editor & Field Placement
+
 - Multi-page visual canvas with zoom controls, fit-to-width, and left-hand thumbnail navigation.
 - Rich field palette: **Signature**, **Initials**, **Text**, **Date**, **Email**, **Company**, **Checkbox**, **Radio Group**, **Dropdown**.
 - Recipient assignment with distinct color coding per envelope participant.
@@ -35,6 +37,7 @@ We build around five core principles:
 - Interactive **Preview Mode** with participant switcher to simulate signer inputs before dispatch.
 
 ### 🔄 Governed Workflow Engine & Signer Portal
+
 - State machine lifecycle: `DRAFT` $\rightarrow$ `IN_REVIEW` $\rightarrow$ `APPROVED` / `REJECTED` $\rightarrow$ `SENT` $\rightarrow$ `COMPLETED` / `CANCELLED` / `EXPIRED` / `DECLINED`.
 - Internal review submission and reviewer approval/rejection workflows with feedback comments.
 - **Sequential vs Parallel Signing Order**: Tiered routing with automatic step advancement upon completion.
@@ -43,12 +46,14 @@ We build around five core principles:
 - Automated view tracking beacons and cancellation/expiry handling.
 
 ### 👥 Identity, Multi-Tenancy & RBAC
+
 - User registration, secure email verification, and password reset.
 - Time-based One-Time Password (TOTP) Multi-Factor Authentication (MFA).
 - Organization workspaces, team hierarchies, custom domain verification DNS records, and storage quotas.
 - Fine-grained Role-Based Access Control (`owner`, `admin`, `sender`, `viewer`).
 
 ### 🛡️ Immutable Audit Trail
+
 - Cryptographic SHA-256 hash-chained audit logging (`previous_hash` $\rightarrow$ `current_hash`).
 - Tamper-evident logging of every lifecycle transition, draft revision, view event, and signature execution.
 
@@ -56,14 +61,14 @@ We build around five core principles:
 
 ## 🏗️ Technology Stack
 
-| Layer | Technology |
-| :--- | :--- |
-| **Language** | TypeScript (Strict Mode) across monorepo |
-| **Frontend** | Next.js 15+ (App Router), React 19, Vanilla CSS, Tailwind utilities |
-| **API Backend** | Hono framework on Cloudflare Workers |
-| **Database & ORM** | PostgreSQL 15+ / Neon Postgres with Prisma ORM |
-| **Authentication** | JWT (HMAC-SHA256), Web Crypto API, TOTP MFA (RFC 6238) |
-| **Testing** | Vitest, React Testing Library, JSDOM |
+| Layer              | Technology                                                          |
+| :----------------- | :------------------------------------------------------------------ |
+| **Language**       | TypeScript (Strict Mode) across monorepo                            |
+| **Frontend**       | Next.js 15+ (App Router), React 19, Vanilla CSS, Tailwind utilities |
+| **API Backend**    | Hono framework on Cloudflare Workers                                |
+| **Database & ORM** | PostgreSQL 15+ / Neon Postgres with Prisma ORM                      |
+| **Authentication** | JWT (HMAC-SHA256), Web Crypto API, TOTP MFA (RFC 6238)              |
+| **Testing**        | Vitest, React Testing Library, JSDOM                                |
 
 ---
 

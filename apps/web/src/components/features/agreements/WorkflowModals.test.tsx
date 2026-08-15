@@ -37,7 +37,9 @@ describe('Workflow Modals Unit Tests (INK-87 to INK-95)', () => {
     fireEvent.click(submitBtn);
 
     await waitFor(() => {
-      expect(handleSuccess).toHaveBeenCalledWith('Agreement submitted for review to reviewer@company.com');
+      expect(handleSuccess).toHaveBeenCalledWith(
+        'Agreement submitted for review to reviewer@company.com',
+      );
       expect(handleClose).toHaveBeenCalled();
     });
   });
@@ -65,7 +67,9 @@ describe('Workflow Modals Unit Tests (INK-87 to INK-95)', () => {
     fireEvent.click(confirmBtn);
 
     await waitFor(() => {
-      expect(handleSuccess).toHaveBeenCalledWith('Agreement "Employment Agreement" approved successfully.');
+      expect(handleSuccess).toHaveBeenCalledWith(
+        'Agreement "Employment Agreement" approved successfully.',
+      );
       expect(handleClose).toHaveBeenCalled();
     });
   });
@@ -126,14 +130,18 @@ describe('Workflow Modals Unit Tests (INK-87 to INK-95)', () => {
     );
 
     expect(screen.getByText(/Cancel \/ Void Agreement/)).toBeDefined();
-    const reasonInput = screen.getByPlaceholderText('Explain why this agreement is being cancelled...');
+    const reasonInput = screen.getByPlaceholderText(
+      'Explain why this agreement is being cancelled...',
+    );
     fireEvent.change(reasonInput, { target: { value: 'Client cancelled contract.' } });
 
     const voidBtn = screen.getByRole('button', { name: 'Confirm Void / Cancel' });
     fireEvent.click(voidBtn);
 
     await waitFor(() => {
-      expect(handleSuccess).toHaveBeenCalledWith('Agreement "Employment Agreement" has been cancelled.');
+      expect(handleSuccess).toHaveBeenCalledWith(
+        'Agreement "Employment Agreement" has been cancelled.',
+      );
       expect(handleClose).toHaveBeenCalled();
     });
   });

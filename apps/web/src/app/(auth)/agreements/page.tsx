@@ -10,7 +10,11 @@ import { MarkdownEditor } from '@/components/features/agreements/MarkdownEditor'
 import { PdfViewerModal } from '@/components/features/agreements/PdfViewerModal';
 import { AgreementHistoryModal } from '@/components/features/agreements/AgreementHistoryModal';
 import { AgreementEditModal } from '@/components/features/agreements/AgreementEditModal';
-import { DocumentEditorModal } from '@/components/features/agreements/DocumentEditorModal';
+import {
+  DocumentEditorModal,
+  DocumentField,
+  Recipient,
+} from '@/components/features/agreements/DocumentEditorModal';
 import { SubmitReviewModal } from '@/components/features/agreements/SubmitReviewModal';
 import { ReviewDecisionModal } from '@/components/features/agreements/ReviewDecisionModal';
 import { SendAgreementModal } from '@/components/features/agreements/SendAgreementModal';
@@ -36,15 +40,8 @@ interface AgreementItem {
   updatedAt: string;
   author?: { name?: string; email: string };
   fields?: {
-    fields?: Array<Record<string, unknown>>;
-    recipients?: Array<{
-      id?: string;
-      name: string;
-      email: string;
-      role: 'signer' | 'approver' | 'viewer';
-      routingOrder?: number;
-      color?: string;
-    }>;
+    fields?: DocumentField[];
+    recipients?: Recipient[];
   };
 }
 

@@ -75,9 +75,7 @@ export function SendAgreementModal({
   }
 
   function handleUpdateRecipient(index: number, updates: Partial<RecipientItem>) {
-    setRecipients((prev) =>
-      prev.map((r, idx) => (idx === index ? { ...r, ...updates } : r)),
-    );
+    setRecipients((prev) => prev.map((r, idx) => (idx === index ? { ...r, ...updates } : r)));
   }
 
   function handleRemoveRecipient(index: number) {
@@ -147,7 +145,9 @@ export function SendAgreementModal({
             <h2 className="text-base font-bold text-neutral-900">Send Agreement for Signature</h2>
             <p className="text-xs text-neutral-500 truncate max-w-sm">{agreementTitle}</p>
           </div>
-          <button onClick={onClose} className="text-neutral-400 hover:text-neutral-600">✕</button>
+          <button onClick={onClose} className="text-neutral-400 hover:text-neutral-600">
+            ✕
+          </button>
         </div>
 
         {error && (

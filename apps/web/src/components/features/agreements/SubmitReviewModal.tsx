@@ -55,7 +55,9 @@ export function SubmitReviewModal({
 
       const data = await res.json();
       if (!res.ok || !data.success) {
-        throw new Error(data.error?.message || data.message || 'Failed to submit agreement for review.');
+        throw new Error(
+          data.error?.message || data.message || 'Failed to submit agreement for review.',
+        );
       }
 
       onSuccess(`Agreement submitted for review to ${reviewerEmail}`);
@@ -72,11 +74,14 @@ export function SubmitReviewModal({
       <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 text-neutral-900">
         <div className="flex items-center justify-between">
           <h2 className="text-base font-bold text-neutral-900">Submit for Internal Review</h2>
-          <button onClick={onClose} className="text-neutral-400 hover:text-neutral-600">✕</button>
+          <button onClick={onClose} className="text-neutral-400 hover:text-neutral-600">
+            ✕
+          </button>
         </div>
 
         <p className="text-xs text-neutral-600">
-          Submit <strong>&quot;{agreementTitle}&quot;</strong> to an internal reviewer before sending it to signers.
+          Submit <strong>&quot;{agreementTitle}&quot;</strong> to an internal reviewer before
+          sending it to signers.
         </p>
 
         {error && (

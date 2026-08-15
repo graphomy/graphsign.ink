@@ -24,9 +24,12 @@ describe('Sign Route Integration Tests (Public Signer Endpoints)', () => {
 
     app = new Hono();
     app.onError(errorHandler);
-    app.route('/api/v1/sign', createSignRoutes({
-      workflowService: mockWorkflowService,
-    }));
+    app.route(
+      '/api/v1/sign',
+      createSignRoutes({
+        workflowService: mockWorkflowService,
+      }),
+    );
   });
 
   it('GET /api/v1/sign/:token returns signer session', async () => {

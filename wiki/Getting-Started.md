@@ -7,20 +7,23 @@ This guide provides step-by-step instructions for cloning, configuring, building
 ## 📑 Documentation Table of Contents
 
 ### 1. System Architecture & Foundation
-* **[Home](Home.md)** — Project overview, mission, architectural pillars, and technology stack
-* **[Getting Started](Getting-Started.md)** — System prerequisites, local setup, and developer guide
-* **[Security & Immutable Audit Trail](Security-and-Audit-Trail.md)** — Hash-chained audit logs, token hashing, and compliance
+
+- **[Home](Home.md)** — Project overview, mission, architectural pillars, and technology stack
+- **[Getting Started](Getting-Started.md)** — System prerequisites, local setup, and developer guide
+- **[Security & Immutable Audit Trail](Security-and-Audit-Trail.md)** — Hash-chained audit logs, token hashing, and compliance
 
 ### 2. Feature & Domain Guides
-* **[Authentication & Identity Management](Authentication-and-Identity.md)** — User registration, email verification, TOTP MFA, JWT sessions
-* **[Organization & Multi-Tenancy](Organization-and-Tenancy.md)** — Tenant boundaries, teams, custom domains, storage quotas, RBAC
-* **[Agreement & Document Management](Agreement-Management.md)** — PDF/DOCX uploads, Markdown scratch editor, semantic versioning, change history
-* **[Visual Document Editor & Field Placement](Document-Editor-and-Fields.md)** — Multi-page canvas, drag & drop field palette, recipient assignment, validation, preview mode
-* **[Workflow Engine & Signer Portal](Workflow-Engine-and-Signer-Portal.md)** — Review workflows, sequential/parallel routing, tokenized signer portal, conditional logic engine
-* **[Template Management](Template-Management.md)** — Reusable contract templates, publishing governance, instantiation
+
+- **[Authentication & Identity Management](Authentication-and-Identity.md)** — User registration, email verification, TOTP MFA, JWT sessions
+- **[Organization & Multi-Tenancy](Organization-and-Tenancy.md)** — Tenant boundaries, teams, custom domains, storage quotas, RBAC
+- **[Agreement & Document Management](Agreement-Management.md)** — PDF/DOCX uploads, Markdown scratch editor, semantic versioning, change history
+- **[Visual Document Editor & Field Placement](Document-Editor-and-Fields.md)** — Multi-page canvas, drag & drop field palette, recipient assignment, validation, preview mode
+- **[Workflow Engine & Signer Portal](Workflow-Engine-and-Signer-Portal.md)** — Review workflows, sequential/parallel routing, tokenized signer portal, conditional logic engine
+- **[Template Management](Template-Management.md)** — Reusable contract templates, publishing governance, instantiation
 
 ### 3. Developer & Integration References
-* **[REST API Reference](REST-API-Reference.md)** — Complete API endpoints, request/response formats, authentication, error handling
+
+- **[REST API Reference](REST-API-Reference.md)** — Complete API endpoints, request/response formats, authentication, error handling
 
 ---
 
@@ -88,15 +91,19 @@ pnpm --filter @graphsign/db exec prisma db push
 ### 5. Running the Application Locally
 
 #### Run All Services (Full Stack)
+
 ```bash
 pnpm dev
 ```
 
 #### Run Services Individually
+
 - **API Worker Service (Hono on Cloudflare Worker)**:
+
   ```bash
   pnpm --filter @graphsign/api dev
   ```
+
   _Running at [http://localhost:8787](http://localhost:8787)_
 
 - **Web Frontend (Next.js App Router)**:

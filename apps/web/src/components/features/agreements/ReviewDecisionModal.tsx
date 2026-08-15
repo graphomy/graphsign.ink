@@ -42,16 +42,19 @@ export function ReviewDecisionModal({
 
     try {
       const endpoint = decision === 'APPROVE' ? 'approve' : 'reject';
-      const res = await fetch(`${getApiUrl()}/api/v1/agreements/${agreementId}/review/${endpoint}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${getToken()}`,
+      const res = await fetch(
+        `${getApiUrl()}/api/v1/agreements/${agreementId}/review/${endpoint}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${getToken()}`,
+          },
+          body: JSON.stringify({
+            comments: comments.trim() || undefined,
+          }),
         },
-        body: JSON.stringify({
-          comments: comments.trim() || undefined,
-        }),
-      });
+      );
 
       const data = await res.json();
       if (!res.ok || !data.success) {
@@ -76,11 +79,14 @@ export function ReviewDecisionModal({
       <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 text-neutral-900">
         <div className="flex items-center justify-between">
           <h2 className="text-base font-bold text-neutral-900">Review &amp; Decision</h2>
-          <button onClick={onClose} className="text-neutral-400 hover:text-neutral-600">✕</button>
+          <button onClick={onClose} className="text-neutral-400 hover:text-neutral-600">
+            ✕
+          </button>
         </div>
 
         <p className="text-xs text-neutral-600">
-          Review <strong>&quot;{agreementTitle}&quot;</strong> and make an approval or rejection decision.
+          Review <strong>&quot;{agreementTitle}&quot;</strong> and make an approval or rejection
+          decision.
         </p>
 
         {error && (
@@ -124,7 +130,11 @@ export function ReviewDecisionModal({
             </label>
             <textarea
               rows={3}
-              placeholder={decision === 'APPROVE' ? 'Optional review comments...' : 'Explain required changes...'}
+              placeholder={
+                decision === 'APPROVE'
+                  ? 'Optional review comments...'
+                  : 'Explain required changes...'
+              }
               value={comments}
               onChange={(e) => setComments(e.target.value)}
               className="w-full bg-white border border-neutral-300 rounded-lg p-2.5 text-xs focus:outline-none focus:border-blue-600"
@@ -148,7 +158,11 @@ export function ReviewDecisionModal({
                   : 'bg-red-600 hover:bg-red-700'
               } disabled:opacity-50`}
             >
-              {isSubmitting ? 'Submitting...' : decision === 'APPROVE' ? 'Confirm Approval' : 'Confirm Rejection'}
+              {isSubmitting
+                ? 'Submitting...'
+                : decision === 'APPROVE'
+                  ? 'Confirm Approval'
+                  : 'Confirm Rejection'}
             </button>
           </div>
         </form>

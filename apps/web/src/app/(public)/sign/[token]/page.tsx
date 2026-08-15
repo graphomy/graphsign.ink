@@ -114,7 +114,9 @@ export default function SignDocumentPage({
         const data = await res.json();
 
         if (!res.ok || !data.success) {
-          throw new Error(data.error?.message || data.message || 'Invalid or expired signing link.');
+          throw new Error(
+            data.error?.message || data.message || 'Invalid or expired signing link.',
+          );
         }
 
         setAgreement(data.data.agreement);
@@ -193,7 +195,9 @@ export default function SignDocumentPage({
   }, [fields, fieldValues]);
 
   // Canvas Drawing Handlers
-  function startDrawing(e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) {
+  function startDrawing(
+    e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>,
+  ) {
     setIsDrawing(true);
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -201,8 +205,8 @@ export default function SignDocumentPage({
     if (!ctx) return;
 
     const rect = canvas.getBoundingClientRect();
-    const clientX = 'touches' in e ? (e.touches[0]?.clientX || 0) : e.clientX;
-    const clientY = 'touches' in e ? (e.touches[0]?.clientY || 0) : e.clientY;
+    const clientX = 'touches' in e ? e.touches[0]?.clientX || 0 : e.clientX;
+    const clientY = 'touches' in e ? e.touches[0]?.clientY || 0 : e.clientY;
 
     ctx.beginPath();
     ctx.moveTo(clientX - rect.left, clientY - rect.top);
@@ -216,8 +220,8 @@ export default function SignDocumentPage({
     if (!ctx) return;
 
     const rect = canvas.getBoundingClientRect();
-    const clientX = 'touches' in e ? (e.touches[0]?.clientX || 0) : e.clientX;
-    const clientY = 'touches' in e ? (e.touches[0]?.clientY || 0) : e.clientY;
+    const clientX = 'touches' in e ? e.touches[0]?.clientX || 0 : e.clientX;
+    const clientY = 'touches' in e ? e.touches[0]?.clientY || 0 : e.clientY;
 
     ctx.lineWidth = 2.5;
     ctx.lineCap = 'round';
@@ -314,7 +318,10 @@ export default function SignDocumentPage({
         body: JSON.stringify({
           fieldsData: fieldValues,
           signatureData: {
-            type: typeof primarySigVal === 'string' && primarySigVal.startsWith('data:') ? 'DRAWN' : 'TYPED',
+            type:
+              typeof primarySigVal === 'string' && primarySigVal.startsWith('data:')
+                ? 'DRAWN'
+                : 'TYPED',
             data: String(primarySigVal || currentRecipient?.name || 'Signed'),
             consentGiven: true,
             timestamp: new Date().toISOString(),
@@ -366,7 +373,9 @@ export default function SignDocumentPage({
       <div className="min-h-screen bg-neutral-900 flex items-center justify-center p-4">
         <div className="text-center text-white space-y-3">
           <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="text-sm font-semibold text-neutral-300">Loading secure agreement portal...</p>
+          <p className="text-sm font-semibold text-neutral-300">
+            Loading secure agreement portal...
+          </p>
         </div>
       </div>
     );
@@ -380,7 +389,9 @@ export default function SignDocumentPage({
             ⚠️
           </div>
           <h1 className="text-lg font-bold mb-2">Unable to Access Agreement</h1>
-          <p className="text-xs text-neutral-400 mb-6">{error || 'This link may have expired or was cancelled.'}</p>
+          <p className="text-xs text-neutral-400 mb-6">
+            {error || 'This link may have expired or was cancelled.'}
+          </p>
         </div>
       </div>
     );
@@ -394,8 +405,12 @@ export default function SignDocumentPage({
             🛑
           </div>
           <h1 className="text-lg font-bold mb-2">Document Signing Declined</h1>
-          <p className="text-xs text-neutral-400 mb-4">You have declined to sign &quot;{agreement.title}&quot;.</p>
-          <p className="text-[11px] text-neutral-500">The document author ({agreement.senderName}) has been notified.</p>
+          <p className="text-xs text-neutral-400 mb-4">
+            You have declined to sign &quot;{agreement.title}&quot;.
+          </p>
+          <p className="text-[11px] text-neutral-500">
+            The document author ({agreement.senderName}) has been notified.
+          </p>
         </div>
       </div>
     );
@@ -410,7 +425,8 @@ export default function SignDocumentPage({
           </div>
           <h1 className="text-lg font-bold mb-2">Signing Completed!</h1>
           <p className="text-xs text-neutral-400 mb-6">
-            Thank you, <strong>{currentRecipient?.name}</strong>. Your signature and inputs have been recorded in the immutable audit trail.
+            Thank you, <strong>{currentRecipient?.name}</strong>. Your signature and inputs have
+            been recorded in the immutable audit trail.
           </p>
           <div className="p-3 bg-neutral-800/80 rounded-lg text-left text-xs space-y-1 mb-6 border border-neutral-700">
             <div className="flex justify-between text-neutral-400">
@@ -463,7 +479,8 @@ export default function SignDocumentPage({
       {/* Sequential Turn Warning Banner */}
       {!isTurn && (
         <div className="bg-amber-500 text-neutral-950 text-xs font-bold py-2 px-4 text-center">
-          ⏳ It is not your turn yet in sequential signing order. Preceding signers are completing their steps.
+          ⏳ It is not your turn yet in sequential signing order. Preceding signers are completing
+          their steps.
         </div>
       )}
 
@@ -472,9 +489,15 @@ export default function SignDocumentPage({
         {/* Signer Welcome Card */}
         <div className="bg-white border border-neutral-200 rounded-xl p-4 md:p-6 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wider">Signing As</span>
-            <h2 className="text-base font-bold text-neutral-900">{currentRecipient?.name} ({currentRecipient?.email})</h2>
-            <p className="text-xs text-neutral-500 mt-0.5">Please review the document below and complete the highlighted signature fields.</p>
+            <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wider">
+              Signing As
+            </span>
+            <h2 className="text-base font-bold text-neutral-900">
+              {currentRecipient?.name} ({currentRecipient?.email})
+            </h2>
+            <p className="text-xs text-neutral-500 mt-0.5">
+              Please review the document below and complete the highlighted signature fields.
+            </p>
           </div>
           <div className="flex items-center gap-2 text-xs font-medium text-neutral-600 bg-neutral-50 border border-neutral-200 px-3 py-2 rounded-lg">
             <span>Participants:</span>
@@ -498,11 +521,17 @@ export default function SignDocumentPage({
           {/* Document Content */}
           <div className="prose prose-sm max-w-none text-neutral-800 leading-relaxed">
             {agreement.markdownContent ? (
-              <div className="whitespace-pre-wrap font-serif text-sm">{agreement.markdownContent}</div>
+              <div className="whitespace-pre-wrap font-serif text-sm">
+                {agreement.markdownContent}
+              </div>
             ) : (
               <div className="p-8 text-center text-neutral-400">
-                <p className="font-bold text-sm text-neutral-700">{agreement.fileName || 'Uploaded Agreement Document'}</p>
-                <p className="text-xs mt-1">Please complete the required fields placed on the document envelope below.</p>
+                <p className="font-bold text-sm text-neutral-700">
+                  {agreement.fileName || 'Uploaded Agreement Document'}
+                </p>
+                <p className="text-xs mt-1">
+                  Please complete the required fields placed on the document envelope below.
+                </p>
               </div>
             )}
           </div>
@@ -530,7 +559,9 @@ export default function SignDocumentPage({
                     <div className="flex items-center justify-between mb-1.5">
                       <label className="text-xs font-bold text-neutral-800 flex items-center gap-1">
                         <span>{field.label || field.type}</span>
-                        {field.computedRequired && <span className="text-red-500 font-black">*</span>}
+                        {field.computedRequired && (
+                          <span className="text-red-500 font-black">*</span>
+                        )}
                       </label>
                       {!isAssignedToMe && (
                         <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-neutral-200 text-neutral-600">
@@ -549,9 +580,15 @@ export default function SignDocumentPage({
                           >
                             {typeof value === 'string' && value.startsWith('data:') ? (
                               /* eslint-disable-next-line @next/next/no-img-element */
-                              <img src={value} alt="Signature" className="max-h-full object-contain" />
+                              <img
+                                src={value}
+                                alt="Signature"
+                                className="max-h-full object-contain"
+                              />
                             ) : (
-                              <span className="font-serif italic text-lg text-blue-900">{String(value)}</span>
+                              <span className="font-serif italic text-lg text-blue-900">
+                                {String(value)}
+                              </span>
                             )}
                           </div>
                         ) : (
@@ -626,7 +663,10 @@ export default function SignDocumentPage({
                     {field.type === 'RADIO' && (
                       <div className="space-y-1 py-1">
                         {field.options?.map((opt) => (
-                          <label key={opt.value} className="flex items-center gap-2 cursor-pointer text-xs">
+                          <label
+                            key={opt.value}
+                            className="flex items-center gap-2 cursor-pointer text-xs"
+                          >
                             <input
                               type="radio"
                               name={field.groupName || field.id}
@@ -656,7 +696,11 @@ export default function SignDocumentPage({
                       </select>
                     )}
 
-                    {hasError && <p className="text-[10px] text-red-600 font-semibold mt-1">{formErrors[field.id]}</p>}
+                    {hasError && (
+                      <p className="text-[10px] text-red-600 font-semibold mt-1">
+                        {formErrors[field.id]}
+                      </p>
+                    )}
                   </div>
                 );
               })}
@@ -682,11 +726,17 @@ export default function SignDocumentPage({
               className="mt-0.5 w-4 h-4 text-blue-600 rounded"
             />
             <div className="text-xs text-neutral-600 leading-relaxed">
-              <span className="font-bold text-neutral-900">Electronic Record and Signature Disclosure: </span>
-              I agree to use electronic records and signatures for this document. I acknowledge that my electronic signature constitutes a legally binding execution under applicable laws (ESIGN &amp; eIDAS).
+              <span className="font-bold text-neutral-900">
+                Electronic Record and Signature Disclosure:{' '}
+              </span>
+              I agree to use electronic records and signatures for this document. I acknowledge that
+              my electronic signature constitutes a legally binding execution under applicable laws
+              (ESIGN &amp; eIDAS).
             </div>
           </label>
-          {formErrors['consent'] && <p className="text-[11px] text-red-600 font-bold mt-2 ml-7">{formErrors['consent']}</p>}
+          {formErrors['consent'] && (
+            <p className="text-[11px] text-red-600 font-bold mt-2 ml-7">{formErrors['consent']}</p>
+          )}
         </div>
 
         {/* Bottom Actions */}
@@ -713,7 +763,10 @@ export default function SignDocumentPage({
           <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="text-base font-bold text-neutral-900">Adopt Your Signature</h3>
-              <button onClick={() => setActiveSignatureFieldId(null)} className="text-neutral-400 hover:text-neutral-600">
+              <button
+                onClick={() => setActiveSignatureFieldId(null)}
+                className="text-neutral-400 hover:text-neutral-600"
+              >
                 ✕
               </button>
             </div>
@@ -723,7 +776,9 @@ export default function SignDocumentPage({
               <button
                 onClick={() => setSignatureTab('draw')}
                 className={`py-2 px-4 border-b-2 transition-colors ${
-                  signatureTab === 'draw' ? 'border-blue-600 text-blue-600' : 'border-transparent text-neutral-500'
+                  signatureTab === 'draw'
+                    ? 'border-blue-600 text-blue-600'
+                    : 'border-transparent text-neutral-500'
                 }`}
               >
                 ✏️ Draw
@@ -731,7 +786,9 @@ export default function SignDocumentPage({
               <button
                 onClick={() => setSignatureTab('type')}
                 className={`py-2 px-4 border-b-2 transition-colors ${
-                  signatureTab === 'type' ? 'border-blue-600 text-blue-600' : 'border-transparent text-neutral-500'
+                  signatureTab === 'type'
+                    ? 'border-blue-600 text-blue-600'
+                    : 'border-transparent text-neutral-500'
                 }`}
               >
                 ⌨️ Type
@@ -805,7 +862,8 @@ export default function SignDocumentPage({
           <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
             <h3 className="text-base font-bold text-neutral-900">Decline to Sign</h3>
             <p className="text-xs text-neutral-600">
-              Please state why you are declining this agreement. The sender will be notified immediately.
+              Please state why you are declining this agreement. The sender will be notified
+              immediately.
             </p>
             <textarea
               rows={3}

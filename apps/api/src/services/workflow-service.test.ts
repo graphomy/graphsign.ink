@@ -35,7 +35,9 @@ describe('WorkflowService Unit Tests (INK-86 to INK-96)', () => {
       agreement: {
         findFirst: vi.fn().mockResolvedValue({ ...mockAgreement }),
         findMany: vi.fn().mockResolvedValue([]),
-        update: vi.fn().mockImplementation(({ data }) => Promise.resolve({ ...mockAgreement, ...data })),
+        update: vi
+          .fn()
+          .mockImplementation(({ data }) => Promise.resolve({ ...mockAgreement, ...data })),
       },
       user: {
         findFirst: vi.fn().mockResolvedValue({
@@ -45,10 +47,14 @@ describe('WorkflowService Unit Tests (INK-86 to INK-96)', () => {
         }),
       },
       agreementRecipient: {
-        create: vi.fn().mockImplementation(({ data }) => Promise.resolve({ ...data, id: 'recip-1' })),
+        create: vi
+          .fn()
+          .mockImplementation(({ data }) => Promise.resolve({ ...data, id: 'recip-1' })),
         findUnique: vi.fn().mockResolvedValue(null),
         findMany: vi.fn().mockResolvedValue([]),
-        update: vi.fn().mockImplementation(({ data }) => Promise.resolve({ id: 'recip-1', ...data })),
+        update: vi
+          .fn()
+          .mockImplementation(({ data }) => Promise.resolve({ id: 'recip-1', ...data })),
         updateMany: vi.fn().mockResolvedValue({ count: 1 }),
         deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
       },
@@ -225,7 +231,13 @@ describe('WorkflowService Unit Tests (INK-86 to INK-96)', () => {
     });
 
     mockPrisma.agreementRecipient.findMany.mockResolvedValueOnce([
-      { id: 'recip-1', email: 's1@example.com', name: 'Signer 1', role: 'signer', status: 'SIGNED' },
+      {
+        id: 'recip-1',
+        email: 's1@example.com',
+        name: 'Signer 1',
+        role: 'signer',
+        status: 'SIGNED',
+      },
     ]);
 
     const res = await service.submitRecipientSignature(
@@ -257,9 +269,7 @@ describe('WorkflowService Unit Tests (INK-86 to INK-96)', () => {
     mockPrisma.agreement.findFirst.mockResolvedValueOnce({
       ...mockAgreement,
       status: 'SENT',
-      recipients: [
-        { id: 'recip-1', name: 'Signer 1', email: 's1@example.com' },
-      ],
+      recipients: [{ id: 'recip-1', name: 'Signer 1', email: 's1@example.com' }],
     });
 
     const res = await service.cancelAgreement(mockCtx, 'ag-1', {

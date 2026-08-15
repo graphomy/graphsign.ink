@@ -7,11 +7,13 @@ The **Agreement & Document Management** module handles document creation, file u
 ## 📄 Creation Modes
 
 ### 1. File Upload (PDF / DOCX / MD)
+
 - Authors can upload existing contracts in `.pdf`, `.docx`, or `.md` formats.
 - **Security Scans**: Detects password-protected or corrupted files and blocks unauthorized uploads.
 - Secure binary storage with cryptographic SHA-256 file checksums.
 
 ### 2. Scratch Markdown Document Authoring
+
 - Dual-pane Markdown editor with real-time preview and formatting toolbar (Headings, Bold, Italic, Lists, Tables, Blockquotes).
 - Stored as pure Markdown text for lightweight version diffing and automated clause generation.
 
@@ -21,18 +23,18 @@ The **Agreement & Document Management** module handles document creation, file u
 
 An agreement moves through the following lifecycle states:
 
-| Status | Meaning | Permitted Operations |
-| :--- | :--- | :--- |
-| `DRAFT` | Initial authoring phase | Edit content, design fields, submit for review, send, clone, archive |
-| `IN_REVIEW` | Under internal review | Reviewer approve/reject, author cancel |
-| `APPROVED` | Approved by reviewer | Send for signature, field placement, cancel |
-| `REJECTED` | Reviewer requested changes | Edit content, adjust fields, re-submit for review |
-| `SENT` | Dispatched to signers | Signers execute, author track/void |
-| `COMPLETED` | Fully executed by all signers | Download sealed PDF, view audit certificate |
-| `CANCELLED` | Voided by author or admin | Read-only archive |
-| `DECLINED` | Declined by a signer | Read-only with decline reason |
-| `EXPIRED` | Deadline passed | Read-only archive |
-| `ARCHIVED` | Hidden from active views | Restore to draft or permanent purge |
+| Status      | Meaning                       | Permitted Operations                                                 |
+| :---------- | :---------------------------- | :------------------------------------------------------------------- |
+| `DRAFT`     | Initial authoring phase       | Edit content, design fields, submit for review, send, clone, archive |
+| `IN_REVIEW` | Under internal review         | Reviewer approve/reject, author cancel                               |
+| `APPROVED`  | Approved by reviewer          | Send for signature, field placement, cancel                          |
+| `REJECTED`  | Reviewer requested changes    | Edit content, adjust fields, re-submit for review                    |
+| `SENT`      | Dispatched to signers         | Signers execute, author track/void                                   |
+| `COMPLETED` | Fully executed by all signers | Download sealed PDF, view audit certificate                          |
+| `CANCELLED` | Voided by author or admin     | Read-only archive                                                    |
+| `DECLINED`  | Declined by a signer          | Read-only with decline reason                                        |
+| `EXPIRED`   | Deadline passed               | Read-only archive                                                    |
+| `ARCHIVED`  | Hidden from active views      | Restore to draft or permanent purge                                  |
 
 ---
 
@@ -47,16 +49,16 @@ An agreement moves through the following lifecycle states:
 
 ## 🔌 API Endpoints for Agreements
 
-| Method | Endpoint | Description | Permission Required |
-| :--- | :--- | :--- | :--- |
-| `GET` | `/api/v1/agreements` | List agreements with filters (`status`, `isArchived`, `tag`, `search`) | `documents:read` |
-| `POST` | `/api/v1/agreements/upload` | Upload PDF/DOCX agreement | `documents:write` |
-| `POST` | `/api/v1/agreements/scratch` | Create agreement from scratch Markdown | `documents:write` |
-| `GET` | `/api/v1/agreements/:id` | Get agreement details | `documents:read` |
-| `PUT` | `/api/v1/agreements/:id/draft` | Update draft content or title | `documents:write` |
-| `POST` | `/api/v1/agreements/:id/activate`| Activate draft agreement | `documents:write` |
-| `POST` | `/api/v1/agreements/:id/clone` | Clone agreement into a new draft | `documents:write` |
-| `POST` | `/api/v1/agreements/:id/archive`| Archive / unarchive agreement | `documents:write` |
-| `GET` | `/api/v1/agreements/:id/file` | Stream document binary / text | `documents:read` |
-| `GET` | `/api/v1/agreements/:id/history`| Retrieve concise change history | `documents:read` |
-| `PATCH` | `/api/v1/agreements/:id/tags` | Update metadata tags | `documents:write` |
+| Method  | Endpoint                          | Description                                                            | Permission Required |
+| :------ | :-------------------------------- | :--------------------------------------------------------------------- | :------------------ |
+| `GET`   | `/api/v1/agreements`              | List agreements with filters (`status`, `isArchived`, `tag`, `search`) | `documents:read`    |
+| `POST`  | `/api/v1/agreements/upload`       | Upload PDF/DOCX agreement                                              | `documents:write`   |
+| `POST`  | `/api/v1/agreements/scratch`      | Create agreement from scratch Markdown                                 | `documents:write`   |
+| `GET`   | `/api/v1/agreements/:id`          | Get agreement details                                                  | `documents:read`    |
+| `PUT`   | `/api/v1/agreements/:id/draft`    | Update draft content or title                                          | `documents:write`   |
+| `POST`  | `/api/v1/agreements/:id/activate` | Activate draft agreement                                               | `documents:write`   |
+| `POST`  | `/api/v1/agreements/:id/clone`    | Clone agreement into a new draft                                       | `documents:write`   |
+| `POST`  | `/api/v1/agreements/:id/archive`  | Archive / unarchive agreement                                          | `documents:write`   |
+| `GET`   | `/api/v1/agreements/:id/file`     | Stream document binary / text                                          | `documents:read`    |
+| `GET`   | `/api/v1/agreements/:id/history`  | Retrieve concise change history                                        | `documents:read`    |
+| `PATCH` | `/api/v1/agreements/:id/tags`     | Update metadata tags                                                   | `documents:write`   |
