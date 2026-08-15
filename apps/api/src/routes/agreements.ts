@@ -13,6 +13,7 @@ import {
   updateMetadataTagsSchema,
   queryAgreementsSchema,
 } from '../validators/agreement-validators.js';
+import { saveDocumentFieldsSchema } from '../validators/field-validators.js';
 import { BadRequestError, ForbiddenError } from '../utils/errors.js';
 import { requirePermission } from '../middleware/rbac-middleware.js';
 import { enforceTenantActiveStatus } from '../middleware/tenant-status-middleware.js';
@@ -422,6 +423,59 @@ export function createAgreementRoutes(deps?: AgreementDeps) {
         userRole,
       );
       return c.json(updated, 200);
+    },
+  );
+
+  // GET /api/v1/agreements/:id/fields (Get document fields & recipients - INK-78 to INK-85)
+  agreements.get(
+    '/:id/fields',
+    jwtAuth(),
+    enforceTenantActiveStatus(),
+    requirePermission('documents:read'),
+    async (c) => {
+      const { service } = getServices(c);
+      const agreementId = c.req.param('id');
+      const userPayload = c.get('userPayload') as any;
+      const orgId = userPayload?.orgId || 'default-org-id';
+      const userId = userPayload?.sub || 'unknown';
+      const userRole = userPayload?.role || 'user';
+
+      const result = await service.getAgreementFields(orgId, agreementId, userId, userRole);
+      return c.json(result, 200);
+    },
+  );
+
+  // PUT /api/v1/agreements/:id/fields (Save document fields & recipients - INK-78 to INK-85)
+  agreements.put(
+    '/:id/fields',
+    jwtAuth(),
+    enforceTenantActiveStatus(),
+    requirePermission('documents:update'),
+    async (c) => {
+      const { service } = getServices(c);
+      const agreementId = c.req.param('id');
+      const userPayload = c.get('userPayload') as any;
+      const authorId = userPayload?.sub || 'unknown';
+      const orgId = userPayload?.orgId || 'default-org-id';
+      const userRole = userPayload?.role || 'user';
+
+      const body = await c.req.json().catch(() => null);
+      const parsed = saveDocumentFieldsSchema.safeParse(body);
+
+      if (!parsed.success) {
+        throw new BadRequestError(
+          parsed.error.errors[0]?.message || 'Invalid document fields payload',
+        );
+      }
+
+      const result = await service.saveAgreementFields(
+        orgId,
+        authorId,
+        agreementId,
+        parsed.data,
+        userRole,
+      );
+      return c.json(result, 200);
     },
   );
 

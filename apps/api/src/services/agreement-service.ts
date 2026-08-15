@@ -11,6 +11,7 @@ import type {
   UpdateMetadataTagsInput,
   QueryAgreementsInput,
 } from '../validators/agreement-validators.js';
+import type { SaveDocumentFieldsInput } from '../validators/field-validators.js';
 
 /** Default estimated size for scratch/markdown-created agreements (10 KB). */
 const DEFAULT_SCRATCH_SIZE_BYTES = 10 * 1024;
@@ -871,6 +872,109 @@ export class AgreementService {
         total,
         totalPages: Math.ceil(total / limit),
       },
+    };
+  }
+
+  /**
+   * Get fields and recipient definitions for an agreement (INK-78 to INK-85)
+   */
+  async getAgreementFields(orgId: string, agreementId: string, userId?: string, userRole?: string) {
+    const agreement = await this.prisma.agreement.findFirst({
+      where: { id: agreementId, organisationId: orgId, deletedAt: null },
+    });
+
+    if (!agreement) {
+      throw new NotFoundError('Agreement not found.');
+    }
+
+    if (
+      userRole &&
+      userRole !== 'org_admin' &&
+      userRole !== 'admin' &&
+      userRole !== 'super_admin' &&
+      userId &&
+      userId !== 'unknown' &&
+      agreement.authorId !== userId
+    ) {
+      throw new ForbiddenError('You do not have permission to view fields for this agreement.');
+    }
+
+    const fieldsData = (agreement.fields as Record<string, any>) || {};
+    const fieldsList = Array.isArray(fieldsData.fields)
+      ? fieldsData.fields
+      : Array.isArray(agreement.fields)
+        ? agreement.fields
+        : [];
+    const recipientsList = Array.isArray(fieldsData.recipients) ? fieldsData.recipients : [];
+
+    return {
+      agreementId,
+      fields: fieldsList,
+      recipients: recipientsList,
+    };
+  }
+
+  /**
+   * Save document fields and recipient mappings for an agreement (INK-78 to INK-85)
+   */
+  async saveAgreementFields(
+    orgId: string,
+    authorId: string,
+    agreementId: string,
+    data: SaveDocumentFieldsInput,
+    userRole?: string,
+  ) {
+    const agreement = await this.prisma.agreement.findFirst({
+      where: { id: agreementId, organisationId: orgId, deletedAt: null },
+    });
+
+    if (!agreement) {
+      throw new NotFoundError('Agreement not found.');
+    }
+
+    if (
+      userRole &&
+      userRole !== 'org_admin' &&
+      userRole !== 'admin' &&
+      userRole !== 'super_admin' &&
+      authorId &&
+      authorId !== 'unknown' &&
+      agreement.authorId !== authorId
+    ) {
+      throw new ForbiddenError('You do not have permission to modify fields for this agreement.');
+    }
+
+    const fieldsPayload = {
+      fields: data.fields,
+      recipients: data.recipients,
+    };
+
+    const updated = await this.prisma.agreement.update({
+      where: { id: agreementId },
+      data: {
+        fields: fieldsPayload as any,
+        updatedAt: new Date(),
+      },
+    });
+
+    if (this.audit) {
+      await this.audit.log({
+        organisationId: orgId,
+        userId: authorId,
+        action: 'AGREEMENT_FIELDS_UPDATED',
+        resourceType: 'Agreement',
+        resourceId: agreementId,
+        metadata: {
+          fieldCount: data.fields.length,
+          recipientCount: data.recipients.length,
+        },
+      });
+    }
+
+    return {
+      agreementId: updated.id,
+      fields: data.fields,
+      recipients: data.recipients,
     };
   }
 }

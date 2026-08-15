@@ -10,6 +10,7 @@ import { MarkdownEditor } from '@/components/features/agreements/MarkdownEditor'
 import { PdfViewerModal } from '@/components/features/agreements/PdfViewerModal';
 import { AgreementHistoryModal } from '@/components/features/agreements/AgreementHistoryModal';
 import { AgreementEditModal } from '@/components/features/agreements/AgreementEditModal';
+import { DocumentEditorModal } from '@/components/features/agreements/DocumentEditorModal';
 import { getApiUrl } from '@/lib/api';
 import { formatDateTime } from '@/lib/date-utils';
 
@@ -64,6 +65,7 @@ function AgreementManagementContent() {
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [showScratchModal, setShowScratchModal] = useState(false);
   const [showPdfModal, setShowPdfModal] = useState(false);
+  const [showDocumentEditor, setShowDocumentEditor] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [showMetadataModal, setShowMetadataModal] = useState(false);
@@ -361,6 +363,11 @@ function AgreementManagementContent() {
   function openPdfViewer(agreement: AgreementItem) {
     setSelectedAgreement(agreement);
     setShowPdfModal(true);
+  }
+
+  function openDocumentEditor(agreement: AgreementItem) {
+    setSelectedAgreement(agreement);
+    setShowDocumentEditor(true);
   }
 
   function openHistoryModal(agreement: AgreementItem) {
@@ -677,6 +684,15 @@ function AgreementManagementContent() {
                               <span>✏️</span> Edit
                             </button>
                           )}
+
+                          {/* Design / Place Fields Visual Editor Button (INK-78 to INK-85) */}
+                          <button
+                            onClick={() => openDocumentEditor(agreement)}
+                            className="px-2.5 py-1 text-[11px] font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded transition-colors flex items-center gap-1"
+                            title="Design & Place Signing Fields"
+                          >
+                            <span>🎨</span> Fields
+                          </button>
 
                           {/* View PDF Button */}
                           <button
@@ -1157,6 +1173,25 @@ function AgreementManagementContent() {
             onClose={() => {
               setShowPdfModal(false);
               setSelectedAgreement(null);
+            }}
+            onOpenEditor={() => {
+              setShowPdfModal(false);
+              setShowDocumentEditor(true);
+            }}
+          />
+        )}
+
+        {/* Visual Document Editor Modal (INK-78 to INK-85) */}
+        {showDocumentEditor && selectedAgreement && (
+          <DocumentEditorModal
+            agreement={selectedAgreement}
+            onClose={() => {
+              setShowDocumentEditor(false);
+              setSelectedAgreement(null);
+            }}
+            onSuccess={(msg) => {
+              setActionMessage(msg);
+              setRefreshTrigger((prev) => prev + 1);
             }}
           />
         )}

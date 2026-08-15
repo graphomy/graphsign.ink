@@ -295,4 +295,117 @@ describe('Agreement Routes Integration Tests (Epic INK-8)', () => {
     const body = (await res.json()) as any;
     expect(body.error?.message).toContain('Super Admins are restricted to metadata only');
   });
+
+  it('GET /api/v1/agreements/:id/fields - returns fields and recipients (INK-78 to INK-85)', async () => {
+    mockAgreementService.getAgreementFields = vi.fn().mockResolvedValue({
+      agreementId: 'ag-fields-1',
+      fields: [
+        {
+          id: 'f-sig-1',
+          type: 'SIGNATURE',
+          pageNumber: 1,
+          x: 20,
+          y: 60,
+          width: 30,
+          height: 10,
+          recipientId: 'r-1',
+          isRequired: true,
+        },
+      ],
+      recipients: [
+        {
+          id: 'r-1',
+          name: 'Jane Signer',
+          email: 'jane@example.com',
+          role: 'signer',
+          color: '#3B82F6',
+        },
+      ],
+    });
+
+    const res = await app.request('/api/v1/agreements/ag-fields-1/fields', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    expect(body.agreementId).toBe('ag-fields-1');
+    expect(body.fields).toHaveLength(1);
+    expect(body.recipients).toHaveLength(1);
+  });
+
+  it('PUT /api/v1/agreements/:id/fields - saves document fields and recipients (INK-78 to INK-85)', async () => {
+    mockAgreementService.saveAgreementFields = vi.fn().mockResolvedValue({
+      agreementId: 'ag-fields-1',
+      fields: [
+        {
+          id: 'f-1',
+          type: 'TEXT',
+          pageNumber: 1,
+          x: 15,
+          y: 25,
+          width: 30,
+          height: 6,
+          label: 'Legal Name',
+          recipientId: 'r-1',
+          isRequired: true,
+        },
+      ],
+      recipients: [
+        {
+          id: 'r-1',
+          name: 'Jane Signer',
+          email: 'jane@example.com',
+          role: 'signer',
+          color: '#3B82F6',
+        },
+      ],
+    });
+
+    const payload = {
+      fields: [
+        {
+          id: 'f-1',
+          type: 'TEXT',
+          pageNumber: 1,
+          x: 15,
+          y: 25,
+          width: 30,
+          height: 6,
+          label: 'Legal Name',
+          recipientId: 'r-1',
+          isRequired: true,
+        },
+      ],
+      recipients: [
+        {
+          id: 'r-1',
+          name: 'Jane Signer',
+          email: 'jane@example.com',
+          role: 'signer',
+          color: '#3B82F6',
+        },
+      ],
+    };
+
+    const res = await app.request('/api/v1/agreements/ag-fields-1/fields', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    expect(body.fields).toHaveLength(1);
+    expect(mockAgreementService.saveAgreementFields).toHaveBeenCalledWith(
+      'org-123',
+      'user-123',
+      'ag-fields-1',
+      expect.objectContaining({ fields: expect.any(Array), recipients: expect.any(Array) }),
+      'sender',
+    );
+  });
 });

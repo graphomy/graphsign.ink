@@ -27,6 +27,7 @@ interface AgreementData {
 interface PdfViewerModalProps {
   agreement: AgreementData;
   onClose: () => void;
+  onOpenEditor?: () => void;
 }
 
 function getToken(): string {
@@ -34,7 +35,7 @@ function getToken(): string {
   return localStorage.getItem('graphsign_session_token') || localStorage.getItem('token') || '';
 }
 
-export function PdfViewerModal({ agreement, onClose }: PdfViewerModalProps) {
+export function PdfViewerModal({ agreement, onClose, onOpenEditor }: PdfViewerModalProps) {
   const [zoomLevel, setZoomLevel] = useState<number>(100);
   const [fetchedBlobUrl, setFetchedBlobUrl] = useState<string | null>(null);
   const [isLoadingFile, setIsLoadingFile] = useState<boolean>(false);
@@ -283,6 +284,19 @@ export function PdfViewerModal({ agreement, onClose }: PdfViewerModalProps) {
                 100%
               </button>
             </div>
+          )}
+
+          {onOpenEditor && (
+            <button
+              onClick={() => {
+                onClose();
+                onOpenEditor();
+              }}
+              className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-lg shadow-sm transition-colors flex items-center gap-1.5"
+              title="Open Visual Document Editor"
+            >
+              <span>✏️</span> Design Fields
+            </button>
           )}
 
           {/* Open Original File / New Tab Button */}
