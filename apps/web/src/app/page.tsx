@@ -3,33 +3,71 @@
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 
-/* ─── Intersection Observer hook for scroll-triggered animations ─── */
-function useInView(threshold = 0.15) {
-  const ref = useRef<HTMLDivElement>(null);
+/* ─── Scroll-triggered animation wrapper ─── */
+function AnimateInView({
+  children,
+  className = '',
+  delay = 0,
+}: {
+  children: React.ReactNode;
+  className?: string;
+  delay?: number;
+}) {
   const [inView, setInView] = useState(false);
+  const [node, setNode] = useState<HTMLDivElement | null>(null);
+
   useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
+    if (!node) return;
     const obs = new IntersectionObserver(
       ([e]) => {
         if (e.isIntersecting) {
           setInView(true);
-          obs.unobserve(el);
+          obs.unobserve(node);
         }
       },
-      { threshold },
+      { threshold: 0.15 },
     );
-    obs.observe(el);
+    obs.observe(node);
     return () => obs.disconnect();
-  }, [threshold]);
-  return { ref, inView };
+  }, [node]);
+
+  return (
+    <div
+      ref={setNode}
+      className={className}
+      style={{
+        opacity: inView ? 1 : 0,
+        transform: inView ? 'translateY(0)' : 'translateY(30px)',
+        transition: `all 0.8s cubic-bezier(0.16, 1, 0.3, 1) ${delay}s`,
+      }}
+    >
+      {children}
+    </div>
+  );
 }
 
 /* ─── Animated signature SVG — draws a cursive signature with a pen ─── */
 function SignatureAnimation() {
-  const { ref, inView } = useInView(0.3);
+  const [inView, setInView] = useState(false);
+  const [node, setNode] = useState<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!node) return;
+    const obs = new IntersectionObserver(
+      ([e]) => {
+        if (e.isIntersecting) {
+          setInView(true);
+          obs.unobserve(node);
+        }
+      },
+      { threshold: 0.3 },
+    );
+    obs.observe(node);
+    return () => obs.disconnect();
+  }, [node]);
+
   return (
-    <div ref={ref} className="relative w-full max-w-md mx-auto mt-12">
+    <div ref={setNode} className="relative w-full max-w-md mx-auto mt-12">
       {/* Document card */}
       <div
         className="relative bg-white rounded-2xl shadow-2xl shadow-neutral-300/60 border border-neutral-200 p-8 pt-6"
@@ -39,7 +77,7 @@ function SignatureAnimation() {
           transition: 'all 0.8s cubic-bezier(0.16, 1, 0.3, 1)',
         }}
       >
-        {/* Fake document lines */}
+        {/* Mock document text lines */}
         <div className="space-y-3 mb-8">
           <div className="h-2 bg-neutral-100 rounded-full w-3/4" />
           <div className="h-2 bg-neutral-100 rounded-full w-full" />
@@ -277,11 +315,6 @@ export default function Home() {
     return () => clearTimeout(t);
   }, []);
 
-  const feat1 = useInView();
-  const feat2 = useInView();
-  const stepSection = useInView();
-  const ctaSection = useInView();
-
   return (
     <div className="min-h-screen bg-white text-neutral-900 flex flex-col font-sans selection:bg-[#ba0000] selection:text-white overflow-x-hidden">
       {/* ── Sticky Header ── */}
@@ -432,33 +465,21 @@ export default function Home() {
         {/* ── Features Grid ── */}
         <section className="py-24 px-6 relative bg-white">
           <div className="max-w-7xl mx-auto">
-            <div
-              ref={feat1.ref}
-              className="text-center mb-16"
-              style={{
-                opacity: feat1.inView ? 1 : 0,
-                transform: feat1.inView ? 'translateY(0)' : 'translateY(30px)',
-                transition: 'all 0.8s cubic-bezier(0.16, 1, 0.3, 1)',
-              }}
-            >
+            <AnimateInView className="text-center mb-16">
               <p className="text-xs font-bold tracking-[0.2em] uppercase text-[#ba0000] mb-3">
                 Built for Trust
               </p>
               <h2 className="text-3xl sm:text-5xl font-black tracking-tight text-neutral-900">
                 Enterprise-Grade Features
               </h2>
-            </div>
+            </AnimateInView>
 
-            <div ref={feat2.ref} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {features.map((f, i) => (
-                <div
+                <AnimateInView
                   key={f.title}
+                  delay={i * 0.1}
                   className="group relative p-8 rounded-2xl border border-neutral-200 bg-neutral-50/50 hover:bg-white hover:border-neutral-300 hover:shadow-lg hover:shadow-neutral-200/50 transition-all duration-500 overflow-hidden"
-                  style={{
-                    opacity: feat2.inView ? 1 : 0,
-                    transform: feat2.inView ? 'translateY(0)' : 'translateY(40px)',
-                    transition: `all 0.7s cubic-bezier(0.16, 1, 0.3, 1) ${i * 0.1}s`,
-                  }}
                 >
                   {/* Hover glow */}
                   <div className="absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500 bg-gradient-to-br from-[#ba0000]/[0.03] via-transparent to-transparent pointer-events-none" />
@@ -470,7 +491,7 @@ export default function Home() {
                     <h3 className="text-lg font-bold text-neutral-900">{f.title}</h3>
                     <p className="text-sm text-neutral-500 leading-relaxed">{f.desc}</p>
                   </div>
-                </div>
+                </AnimateInView>
               ))}
             </div>
           </div>
@@ -479,22 +500,14 @@ export default function Home() {
         {/* ── How It Works ── */}
         <section className="py-24 px-6 border-t border-neutral-100 relative bg-neutral-50">
           <div className="max-w-5xl mx-auto">
-            <div
-              ref={stepSection.ref}
-              className="text-center mb-20"
-              style={{
-                opacity: stepSection.inView ? 1 : 0,
-                transform: stepSection.inView ? 'translateY(0)' : 'translateY(30px)',
-                transition: 'all 0.8s cubic-bezier(0.16, 1, 0.3, 1)',
-              }}
-            >
+            <AnimateInView className="text-center mb-20">
               <p className="text-xs font-bold tracking-[0.2em] uppercase text-[#ba0000] mb-3">
                 Five Steps
               </p>
               <h2 className="text-3xl sm:text-5xl font-black tracking-tight text-neutral-900">
                 How It Works
               </h2>
-            </div>
+            </AnimateInView>
 
             <div className="relative">
               {/* Vertical line */}
@@ -503,16 +516,12 @@ export default function Home() {
               {steps.map((s, i) => {
                 const isLeft = i % 2 === 0;
                 return (
-                  <div
+                  <AnimateInView
                     key={s.num}
+                    delay={0.15 * i}
                     className={`relative flex items-start gap-8 mb-16 last:mb-0 ${
                       isLeft ? 'md:flex-row' : 'md:flex-row-reverse'
                     }`}
-                    style={{
-                      opacity: stepSection.inView ? 1 : 0,
-                      transform: stepSection.inView ? 'translateY(0)' : 'translateY(30px)',
-                      transition: `all 0.7s cubic-bezier(0.16, 1, 0.3, 1) ${0.15 * i}s`,
-                    }}
                   >
                     <div className={`flex-1 ${isLeft ? 'md:text-right' : 'md:text-left'}`}>
                       <div className="inline-block">
@@ -532,7 +541,7 @@ export default function Home() {
                     </div>
 
                     <div className="flex-1 hidden md:block" />
-                  </div>
+                  </AnimateInView>
                 );
               })}
             </div>
@@ -548,15 +557,7 @@ export default function Home() {
                 'radial-gradient(ellipse 50% 60% at 50% 100%, rgba(186,0,0,0.03) 0%, transparent 70%)',
             }}
           />
-          <div
-            ref={ctaSection.ref}
-            className="relative z-10 max-w-3xl mx-auto text-center space-y-8"
-            style={{
-              opacity: ctaSection.inView ? 1 : 0,
-              transform: ctaSection.inView ? 'translateY(0)' : 'translateY(30px)',
-              transition: 'all 0.8s cubic-bezier(0.16, 1, 0.3, 1)',
-            }}
-          >
+          <AnimateInView className="relative z-10 max-w-3xl mx-auto text-center space-y-8">
             <h2 className="text-3xl sm:text-5xl font-black tracking-tight text-neutral-900">
               Own Your Signing
               <br />
@@ -584,7 +585,7 @@ export default function Home() {
                 Star on GitHub
               </a>
             </div>
-          </div>
+          </AnimateInView>
         </section>
       </main>
 
