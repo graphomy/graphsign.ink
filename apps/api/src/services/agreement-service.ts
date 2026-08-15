@@ -398,12 +398,7 @@ export class AgreementService {
   /**
    * Get single agreement by ID (INK-248 scoped for privacy)
    */
-  async getAgreementById(
-    orgId: string,
-    agreementId: string,
-    userId?: string,
-    userRole?: string,
-  ) {
+  async getAgreementById(orgId: string, agreementId: string, userId?: string, userRole?: string) {
     const agreement = await this.prisma.agreement.findFirst({
       where: { id: agreementId, organisationId: orgId, deletedAt: null },
       include: { author: { select: { id: true, name: true, email: true } } },
@@ -601,12 +596,7 @@ export class AgreementService {
   /**
    * List version history of an agreement (FR-004.004 / INK-69)
    */
-  async listVersions(
-    orgId: string,
-    agreementId: string,
-    userId?: string,
-    userRole?: string,
-  ) {
+  async listVersions(orgId: string, agreementId: string, userId?: string, userRole?: string) {
     const existing = await this.prisma.agreement.findFirst({
       where: { id: agreementId, organisationId: orgId, deletedAt: null },
     });
@@ -636,12 +626,7 @@ export class AgreementService {
   /**
    * Clone agreement into a new draft (FR-004.005 / INK-70)
    */
-  async cloneAgreement(
-    orgId: string,
-    authorId: string,
-    agreementId: string,
-    userRole?: string,
-  ) {
+  async cloneAgreement(orgId: string, authorId: string, agreementId: string, userRole?: string) {
     const existing = await this.prisma.agreement.findFirst({
       where: { id: agreementId, organisationId: orgId, deletedAt: null },
     });

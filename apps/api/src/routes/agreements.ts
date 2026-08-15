@@ -65,7 +65,7 @@ export function createAgreementRoutes(deps?: AgreementDeps) {
       const userPayload = c.get('userPayload') as any;
       const orgId = userPayload?.orgId || 'default-org-id';
       const userId = userPayload?.sub || 'unknown';
-      const userRole = c.get('userRole') || userPayload?.role || 'user';
+      const userRole = userPayload?.role || 'user';
 
       const queryParams = {
         page: c.req.query('page'),
@@ -148,7 +148,7 @@ export function createAgreementRoutes(deps?: AgreementDeps) {
       const userPayload = c.get('userPayload') as any;
       const orgId = userPayload?.orgId || 'default-org-id';
       const userId = userPayload?.sub || 'unknown';
-      const userRole = c.get('userRole') || userPayload?.role || 'user';
+      const userRole = userPayload?.role || 'user';
 
       const agreement = await service.getAgreementById(orgId, agreementId, userId, userRole);
       return c.json(agreement, 200);
@@ -167,7 +167,7 @@ export function createAgreementRoutes(deps?: AgreementDeps) {
       const userPayload = c.get('userPayload') as any;
       const authorId = userPayload?.sub || 'unknown';
       const orgId = userPayload?.orgId || 'default-org-id';
-      const userRole = c.get('userRole') || userPayload?.role || 'user';
+      const userRole = userPayload?.role || 'user';
 
       const body = await c.req.json().catch(() => null);
       const parsed = updateDraftSchema.safeParse(body);
@@ -178,13 +178,7 @@ export function createAgreementRoutes(deps?: AgreementDeps) {
         );
       }
 
-      const updated = await service.saveDraft(
-        orgId,
-        authorId,
-        agreementId,
-        parsed.data,
-        userRole,
-      );
+      const updated = await service.saveDraft(orgId, authorId, agreementId, parsed.data, userRole);
       return c.json(updated, 200);
     },
   );
@@ -201,7 +195,7 @@ export function createAgreementRoutes(deps?: AgreementDeps) {
       const userPayload = c.get('userPayload') as any;
       const authorId = userPayload?.sub || 'unknown';
       const orgId = userPayload?.orgId || 'default-org-id';
-      const userRole = c.get('userRole') || userPayload?.role || 'user';
+      const userRole = userPayload?.role || 'user';
 
       const body = await c.req.json().catch(() => ({}));
       const parsed = activateAgreementSchema.safeParse(body);
@@ -233,7 +227,7 @@ export function createAgreementRoutes(deps?: AgreementDeps) {
       const userPayload = c.get('userPayload') as any;
       const orgId = userPayload?.orgId || 'default-org-id';
       const userId = userPayload?.sub || 'unknown';
-      const userRole = c.get('userRole') || userPayload?.role || 'user';
+      const userRole = userPayload?.role || 'user';
 
       const history = await service.getAgreementHistory(orgId, agreementId, userId, userRole);
       return c.json(history, 200);
@@ -250,8 +244,8 @@ export function createAgreementRoutes(deps?: AgreementDeps) {
       const { service } = getServices(c);
       const agreementId = c.req.param('id');
       const userPayload = c.get('userPayload') as any;
-      const userEmail = c.get('userEmail') || userPayload?.email;
-      const userRole = c.get('userRole') || userPayload?.role || 'user';
+      const userEmail = userPayload?.email;
+      const userRole = userPayload?.role || 'user';
       const authorId = userPayload?.sub || 'unknown';
       const orgId = userPayload?.orgId || 'default-org-id';
 
@@ -268,32 +262,18 @@ export function createAgreementRoutes(deps?: AgreementDeps) {
         (meta.fileBase64 as string | undefined) || (meta.fileData as string | undefined);
 
       if (fileData) {
-        let base64 = fileData;
-        let mime = agreement.mimeType || 'application/pdf';
-
-        if (fileData.startsWith('data:')) {
-          const commaIdx = fileData.indexOf(',');
-          if (commaIdx !== -1) {
-            const mimeMatch = fileData.substring(0, commaIdx).match(/^data:([^;]+)/);
-            if (mimeMatch && mimeMatch[1]) {
-              mime = mimeMatch[1];
-            }
-            base64 = fileData.substring(commaIdx + 1);
-          }
-        }
-
-        const binary = Buffer.from(base64, 'base64');
-        return c.body(binary, 200, {
-          'Content-Type': mime,
+        const base64Content = fileData.includes(',') ? fileData.split(',')[1] : fileData;
+        const binaryBuffer = Buffer.from(base64Content || '', 'base64');
+        return c.body(binaryBuffer, 200, {
+          'Content-Type': agreement.mimeType || 'application/pdf',
           'Content-Disposition': `inline; filename="${agreement.fileName || 'document.pdf'}"`,
-          'Cache-Control': 'private, max-age=3600',
         });
       }
 
       if (agreement.markdownContent) {
-        return c.body(agreement.markdownContent, 200, {
+        return c.text(agreement.markdownContent, 200, {
           'Content-Type': 'text/markdown; charset=utf-8',
-          'Content-Disposition': `inline; filename="${agreement.fileName || 'document.md'}"`,
+          'Content-Disposition': `inline; filename="${agreement.fileName || 'agreement.md'}"`,
         });
       }
 
@@ -318,7 +298,7 @@ export function createAgreementRoutes(deps?: AgreementDeps) {
       const userPayload = c.get('userPayload') as any;
       const authorId = userPayload?.sub || 'unknown';
       const orgId = userPayload?.orgId || 'default-org-id';
-      const userRole = c.get('userRole') || userPayload?.role || 'user';
+      const userRole = userPayload?.role || 'user';
 
       const body = await c.req.json().catch(() => ({}));
       const version = await service.createVersion(
@@ -344,7 +324,7 @@ export function createAgreementRoutes(deps?: AgreementDeps) {
       const userPayload = c.get('userPayload') as any;
       const orgId = userPayload?.orgId || 'default-org-id';
       const userId = userPayload?.sub || 'unknown';
-      const userRole = c.get('userRole') || userPayload?.role || 'user';
+      const userRole = userPayload?.role || 'user';
 
       const versions = await service.listVersions(orgId, agreementId, userId, userRole);
       return c.json(versions, 200);
@@ -363,7 +343,7 @@ export function createAgreementRoutes(deps?: AgreementDeps) {
       const userPayload = c.get('userPayload') as any;
       const authorId = userPayload?.sub || 'unknown';
       const orgId = userPayload?.orgId || 'default-org-id';
-      const userRole = c.get('userRole') || userPayload?.role || 'user';
+      const userRole = userPayload?.role || 'user';
 
       const cloned = await service.cloneAgreement(orgId, authorId, agreementId, userRole);
       return c.json(cloned, 201);
@@ -382,7 +362,7 @@ export function createAgreementRoutes(deps?: AgreementDeps) {
       const userPayload = c.get('userPayload') as any;
       const authorId = userPayload?.sub || 'unknown';
       const orgId = userPayload?.orgId || 'default-org-id';
-      const userRole = c.get('userRole') || userPayload?.role || 'user';
+      const userRole = userPayload?.role || 'user';
 
       const archived = await service.setArchiveStatus(orgId, authorId, agreementId, true, userRole);
       return c.json(archived, 200);
@@ -400,7 +380,7 @@ export function createAgreementRoutes(deps?: AgreementDeps) {
       const userPayload = c.get('userPayload') as any;
       const authorId = userPayload?.sub || 'unknown';
       const orgId = userPayload?.orgId || 'default-org-id';
-      const userRole = c.get('userRole') || userPayload?.role || 'user';
+      const userRole = userPayload?.role || 'user';
 
       const unarchived = await service.setArchiveStatus(
         orgId,
@@ -425,7 +405,7 @@ export function createAgreementRoutes(deps?: AgreementDeps) {
       const userPayload = c.get('userPayload') as any;
       const authorId = userPayload?.sub || 'unknown';
       const orgId = userPayload?.orgId || 'default-org-id';
-      const userRole = c.get('userRole') || userPayload?.role || 'user';
+      const userRole = userPayload?.role || 'user';
 
       const body = await c.req.json().catch(() => null);
       const parsed = updateMetadataTagsSchema.safeParse(body);

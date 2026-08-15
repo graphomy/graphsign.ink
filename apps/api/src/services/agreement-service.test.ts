@@ -247,12 +247,7 @@ describe('AgreementService Unit Tests (Epic INK-8)', () => {
       ]);
       mockPrisma.agreement.count.mockResolvedValue(1);
 
-      const res = await service.listAgreements(
-        'org-1',
-        { page: 1, limit: 20 },
-        'user-1',
-        'user',
-      );
+      const res = await service.listAgreements('org-1', { page: 1, limit: 20 }, 'user-1', 'user');
 
       expect(res.items).toHaveLength(1);
       expect(mockPrisma.agreement.findMany).toHaveBeenCalledWith(
@@ -309,9 +304,9 @@ describe('AgreementService Unit Tests (Epic INK-8)', () => {
         title: 'User 1 Document',
       });
 
-      await expect(
-        service.getAgreementById('org-1', 'ag-1', 'user-2', 'user'),
-      ).rejects.toThrow(ForbiddenError);
+      await expect(service.getAgreementById('org-1', 'ag-1', 'user-2', 'user')).rejects.toThrow(
+        ForbiddenError,
+      );
     });
 
     it('saveDraft - throws ForbiddenError when non-admin edits another user draft', async () => {
@@ -324,13 +319,7 @@ describe('AgreementService Unit Tests (Epic INK-8)', () => {
       });
 
       await expect(
-        service.saveDraft(
-          'org-1',
-          'user-2',
-          'ag-1',
-          { title: 'Hacked Title' },
-          'user',
-        ),
+        service.saveDraft('org-1', 'user-2', 'ag-1', { title: 'Hacked Title' }, 'user'),
       ).rejects.toThrow(ForbiddenError);
     });
   });
