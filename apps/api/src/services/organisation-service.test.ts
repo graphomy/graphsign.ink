@@ -42,6 +42,11 @@ describe('OrganisationService', () => {
       sendPasswordResetEmail: vi.fn().mockResolvedValue(undefined),
       sendEmailChangeVerificationEmail: vi.fn().mockResolvedValue(undefined),
       sendOrganisationInvitationEmail: vi.fn().mockResolvedValue(undefined),
+      sendReviewRequestEmail: vi.fn().mockResolvedValue(undefined),
+      sendReviewDecisionEmail: vi.fn().mockResolvedValue(undefined),
+      sendSigningInvitationEmail: vi.fn().mockResolvedValue(undefined),
+      sendAgreementCompletedEmail: vi.fn().mockResolvedValue(undefined),
+      sendAgreementCancelledEmail: vi.fn().mockResolvedValue(undefined),
     };
 
     service = new OrganisationService(mockPrisma, mockAuditService, mockMailerService);

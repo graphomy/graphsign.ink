@@ -6,6 +6,8 @@ import { createOrganisationRoutes } from './routes/organisations.js';
 import { createRoleRoutes } from './routes/roles.js';
 import { createUserRoutes } from './routes/users.js';
 import { createAgreementRoutes } from './routes/agreements.js';
+import { createWorkflowRoutes } from './routes/workflow.js';
+import { createSignRoutes } from './routes/sign.js';
 import { createTemplateRoutes } from './routes/templates.js';
 import { createAdminRoutes } from './routes/admin.js';
 
@@ -72,6 +74,8 @@ app.route('/api/v1/organisations', createOrganisationRoutes());
 app.route('/api/v1/roles', createRoleRoutes());
 app.route('/api/v1/users', createUserRoutes());
 app.route('/api/v1/agreements', createAgreementRoutes());
+app.route('/api/v1/agreements', createWorkflowRoutes());
+app.route('/api/v1/sign', createSignRoutes());
 app.route('/api/v1/templates', createTemplateRoutes());
 app.route('/api/v1/admin', createAdminRoutes());
 
