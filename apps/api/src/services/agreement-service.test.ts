@@ -323,4 +323,124 @@ describe('AgreementService Unit Tests (Epic INK-8)', () => {
       ).rejects.toThrow(ForbiddenError);
     });
   });
+
+  describe('Document Editor Fields (INK-78 to INK-85)', () => {
+    it('getAgreementFields - returns fields and recipients list', async () => {
+      mockPrisma.agreement.findFirst.mockResolvedValue({
+        id: 'ag-1',
+        organisationId: 'org-1',
+        authorId: 'user-1',
+        fields: {
+          fields: [
+            {
+              id: 'f-1',
+              type: 'SIGNATURE',
+              pageNumber: 1,
+              x: 20,
+              y: 50,
+              width: 25,
+              height: 8,
+              recipientId: 'r-1',
+              isRequired: true,
+            },
+          ],
+          recipients: [
+            {
+              id: 'r-1',
+              name: 'Alice Signer',
+              email: 'alice@example.com',
+              role: 'signer',
+              color: '#3B82F6',
+            },
+          ],
+        },
+      });
+
+      const res = await service.getAgreementFields('org-1', 'ag-1', 'user-1', 'user');
+      expect(res.agreementId).toBe('ag-1');
+      expect(res.fields).toHaveLength(1);
+      expect(res.fields[0].type).toBe('SIGNATURE');
+      expect(res.recipients).toHaveLength(1);
+    });
+
+    it('saveAgreementFields - updates fields JSONB and logs audit event', async () => {
+      mockPrisma.agreement.findFirst.mockResolvedValue({
+        id: 'ag-1',
+        organisationId: 'org-1',
+        authorId: 'user-1',
+      });
+      mockPrisma.agreement.update.mockResolvedValue({
+        id: 'ag-1',
+        fields: { fields: [], recipients: [] },
+      });
+
+      const payload = {
+        fields: [
+          {
+            id: 'f-sig',
+            type: 'SIGNATURE' as const,
+            pageNumber: 1,
+            x: 10,
+            y: 20,
+            width: 30,
+            height: 10,
+            label: 'Sign Here',
+            recipientId: 'r-1',
+            isRequired: true,
+          },
+          {
+            id: 'f-text',
+            type: 'TEXT' as const,
+            pageNumber: 1,
+            x: 10,
+            y: 40,
+            width: 40,
+            height: 6,
+            label: 'Full Name',
+            recipientId: 'r-1',
+            isRequired: true,
+            validation: { type: 'none' as const },
+          },
+        ],
+        recipients: [
+          {
+            id: 'r-1',
+            name: 'Bob Signer',
+            email: 'bob@example.com',
+            role: 'signer' as const,
+            color: '#10B981',
+          },
+        ],
+      };
+
+      const res = await service.saveAgreementFields('org-1', 'user-1', 'ag-1', payload, 'user');
+      expect(res.agreementId).toBe('ag-1');
+      expect(res.fields).toHaveLength(2);
+      expect(mockAudit.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'AGREEMENT_FIELDS_UPDATED',
+          resourceId: 'ag-1',
+          metadata: expect.objectContaining({ fieldCount: 2, recipientCount: 1 }),
+        }),
+      );
+    });
+
+    it('saveAgreementFields - rejects non-author edit with ForbiddenError', async () => {
+      mockPrisma.agreement.findFirst.mockResolvedValue({
+        id: 'ag-1',
+        organisationId: 'org-1',
+        authorId: 'user-1',
+      });
+
+      await expect(
+        service.saveAgreementFields(
+          'org-1',
+          'user-hacker',
+          'ag-1',
+          { fields: [], recipients: [] },
+          'user',
+        ),
+      ).rejects.toThrow(ForbiddenError);
+    });
+  });
 });
