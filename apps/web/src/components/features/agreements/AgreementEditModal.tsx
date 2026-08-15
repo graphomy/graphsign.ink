@@ -316,9 +316,36 @@ export function AgreementEditModal({
                 type="button"
                 onClick={handleMoveToActive}
                 disabled={activating || saving}
-                className="w-full sm:w-auto px-4 py-2 bg-green-700 hover:bg-green-800 text-white text-xs font-bold rounded-lg shadow-sm transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
+                className="w-full sm:w-auto px-4 py-2 bg-green-700 hover:bg-green-800 text-white text-xs font-bold rounded-lg shadow-sm transition-all flex items-center justify-center gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                <span>🚀</span> {activating ? 'Activating...' : 'Move to Active (Major Version)'}
+                {activating ? (
+                  <>
+                    <svg
+                      className="animate-spin h-3.5 w-3.5 text-white"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                    >
+                      <circle
+                        className="opacity-25"
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        stroke="currentColor"
+                        strokeWidth="4"
+                      />
+                      <path
+                        className="opacity-75"
+                        fill="currentColor"
+                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                      />
+                    </svg>
+                    <span>Activating Document...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>🚀</span> Move to Active (Major Version)
+                  </>
+                )}
               </button>
             )}
           </div>
@@ -328,7 +355,7 @@ export function AgreementEditModal({
               type="button"
               onClick={onClose}
               disabled={saving || activating}
-              className="px-4 py-2 text-xs font-semibold text-neutral-600 hover:text-neutral-900 transition-colors"
+              className="px-4 py-2 text-xs font-semibold text-neutral-600 hover:text-neutral-900 transition-colors disabled:opacity-50"
             >
               Cancel
             </button>
@@ -336,9 +363,36 @@ export function AgreementEditModal({
               type="button"
               onClick={handleSaveDraft}
               disabled={saving || activating}
-              className="px-5 py-2 bg-[#ba0000] hover:bg-red-700 text-white text-xs font-bold rounded-lg shadow-sm transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
+              className="px-5 py-2 bg-[#ba0000] hover:bg-red-700 text-white text-xs font-bold rounded-lg shadow-sm transition-all flex items-center justify-center gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              <span>💾</span> {saving ? 'Saving...' : 'Save Draft (Minor Bump)'}
+              {saving ? (
+                <>
+                  <svg
+                    className="animate-spin h-3.5 w-3.5 text-white"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                  >
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                    />
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                    />
+                  </svg>
+                  <span>Saving Draft...</span>
+                </>
+              ) : (
+                <>
+                  <span>💾</span> Save Draft (Minor Bump)
+                </>
+              )}
             </button>
           </div>
         </div>

@@ -13,10 +13,11 @@ import {
   updateMetadataTagsSchema,
   queryAgreementsSchema,
 } from '../validators/agreement-validators.js';
-import { BadRequestError } from '../utils/errors.js';
+import { BadRequestError, ForbiddenError } from '../utils/errors.js';
 import { requirePermission } from '../middleware/rbac-middleware.js';
 import { enforceTenantActiveStatus } from '../middleware/tenant-status-middleware.js';
 import { createRateLimiter } from '../middleware/rate-limiter.js';
+import { isSuperAdmin } from '../config/roles.js';
 import type { Env } from '../index.js';
 
 export interface AgreementDeps {
@@ -53,7 +54,7 @@ export function createAgreementRoutes(deps?: AgreementDeps) {
     return { service };
   }
 
-  // GET /api/v1/agreements (List & Search)
+  // GET /api/v1/agreements (List & Search - INK-248 scoped for privacy)
   agreements.get(
     '/',
     jwtAuth(),
@@ -63,6 +64,8 @@ export function createAgreementRoutes(deps?: AgreementDeps) {
       const { service } = getServices(c);
       const userPayload = c.get('userPayload') as any;
       const orgId = userPayload?.orgId || 'default-org-id';
+      const userId = userPayload?.sub || 'unknown';
+      const userRole = userPayload?.role || 'user';
 
       const queryParams = {
         page: c.req.query('page'),
@@ -78,7 +81,7 @@ export function createAgreementRoutes(deps?: AgreementDeps) {
         throw new BadRequestError(parsed.error.errors[0]?.message || 'Invalid query parameters');
       }
 
-      const result = await service.listAgreements(orgId, parsed.data);
+      const result = await service.listAgreements(orgId, parsed.data, userId, userRole);
       return c.json(result, 200);
     },
   );
@@ -144,68 +147,11 @@ export function createAgreementRoutes(deps?: AgreementDeps) {
       const agreementId = c.req.param('id');
       const userPayload = c.get('userPayload') as any;
       const orgId = userPayload?.orgId || 'default-org-id';
+      const userId = userPayload?.sub || 'unknown';
+      const userRole = userPayload?.role || 'user';
 
-      const agreement = await service.getAgreementById(orgId, agreementId);
+      const agreement = await service.getAgreementById(orgId, agreementId, userId, userRole);
       return c.json(agreement, 200);
-    },
-  );
-
-  // GET /api/v1/agreements/:id/file (Serve original PDF or markdown document)
-  agreements.get(
-    '/:id/file',
-    jwtAuth(),
-    enforceTenantActiveStatus(),
-    requirePermission('documents:read'),
-    async (c) => {
-      const { service } = getServices(c);
-      const agreementId = c.req.param('id');
-      const userPayload = c.get('userPayload') as any;
-      const orgId = userPayload?.orgId || 'default-org-id';
-
-      const agreement = await service.getAgreementById(orgId, agreementId);
-      const meta = (agreement.metadata as Record<string, any>) || {};
-      const fileData = meta.fileData || meta.fileBase64;
-
-      if (fileData && typeof fileData === 'string') {
-        let mimeType = agreement.mimeType || 'application/pdf';
-        let base64Content = fileData;
-
-        if (fileData.startsWith('data:')) {
-          const commaIdx = fileData.indexOf(',');
-          if (commaIdx !== -1) {
-            const mimeMatch = fileData.substring(0, commaIdx).match(/^data:([^;]+)/);
-            if (mimeMatch && mimeMatch[1]) {
-              mimeType = mimeMatch[1];
-            }
-            base64Content = fileData.substring(commaIdx + 1);
-          }
-        }
-
-        const buffer = Buffer.from(base64Content, 'base64');
-        const fileName = agreement.fileName || `${agreement.title.replace(/[^a-z0-9]/gi, '_')}.pdf`;
-
-        return new Response(buffer, {
-          status: 200,
-          headers: {
-            'Content-Type': mimeType,
-            'Content-Disposition': `inline; filename="${encodeURIComponent(fileName)}"`,
-            'Content-Length': buffer.length.toString(),
-            'Cache-Control': 'private, max-age=3600',
-          },
-        });
-      }
-
-      if (agreement.markdownContent) {
-        return new Response(agreement.markdownContent, {
-          status: 200,
-          headers: {
-            'Content-Type': 'text/markdown; charset=utf-8',
-            'Content-Disposition': `inline; filename="${encodeURIComponent(agreement.fileName || `${agreement.title}.md`)}"`,
-          },
-        });
-      }
-
-      return c.json({ error: { message: 'Original file content not available.' } }, 404);
     },
   );
 
@@ -221,6 +167,7 @@ export function createAgreementRoutes(deps?: AgreementDeps) {
       const userPayload = c.get('userPayload') as any;
       const authorId = userPayload?.sub || 'unknown';
       const orgId = userPayload?.orgId || 'default-org-id';
+      const userRole = userPayload?.role || 'user';
 
       const body = await c.req.json().catch(() => null);
       const parsed = updateDraftSchema.safeParse(body);
@@ -231,7 +178,7 @@ export function createAgreementRoutes(deps?: AgreementDeps) {
         );
       }
 
-      const updated = await service.saveDraft(orgId, authorId, agreementId, parsed.data);
+      const updated = await service.saveDraft(orgId, authorId, agreementId, parsed.data, userRole);
       return c.json(updated, 200);
     },
   );
@@ -248,6 +195,7 @@ export function createAgreementRoutes(deps?: AgreementDeps) {
       const userPayload = c.get('userPayload') as any;
       const authorId = userPayload?.sub || 'unknown';
       const orgId = userPayload?.orgId || 'default-org-id';
+      const userRole = userPayload?.role || 'user';
 
       const body = await c.req.json().catch(() => ({}));
       const parsed = activateAgreementSchema.safeParse(body);
@@ -256,7 +204,13 @@ export function createAgreementRoutes(deps?: AgreementDeps) {
         throw new BadRequestError(parsed.error.errors[0]?.message || 'Invalid activation payload');
       }
 
-      const activated = await service.activateAgreement(orgId, authorId, agreementId, parsed.data);
+      const activated = await service.activateAgreement(
+        orgId,
+        authorId,
+        agreementId,
+        parsed.data,
+        userRole,
+      );
       return c.json(activated, 200);
     },
   );
@@ -272,13 +226,15 @@ export function createAgreementRoutes(deps?: AgreementDeps) {
       const agreementId = c.req.param('id');
       const userPayload = c.get('userPayload') as any;
       const orgId = userPayload?.orgId || 'default-org-id';
+      const userId = userPayload?.sub || 'unknown';
+      const userRole = userPayload?.role || 'user';
 
-      const history = await service.getAgreementHistory(orgId, agreementId);
+      const history = await service.getAgreementHistory(orgId, agreementId, userId, userRole);
       return c.json(history, 200);
     },
   );
 
-  // GET /api/v1/agreements/:id/file (Stream original PDF / Markdown binary)
+  // GET /api/v1/agreements/:id/file (Stream original PDF / Markdown binary - INK-248 restricted for Super Admin)
   agreements.get(
     '/:id/file',
     jwtAuth(),
@@ -288,40 +244,36 @@ export function createAgreementRoutes(deps?: AgreementDeps) {
       const { service } = getServices(c);
       const agreementId = c.req.param('id');
       const userPayload = c.get('userPayload') as any;
+      const userEmail = userPayload?.email;
+      const userRole = userPayload?.role || 'user';
+      const authorId = userPayload?.sub || 'unknown';
       const orgId = userPayload?.orgId || 'default-org-id';
 
-      const agreement = await service.getAgreementById(orgId, agreementId);
+      // INK-248: Super Admin is restricted to metadata only and cannot access private file contents
+      if (isSuperAdmin(userEmail) || userRole === 'super_admin') {
+        throw new ForbiddenError(
+          'Super Admins are restricted to metadata only and cannot access private file contents.',
+        );
+      }
+
+      const agreement = await service.getAgreementById(orgId, agreementId, authorId, userRole);
       const meta = (agreement.metadata as Record<string, unknown>) || {};
       const fileData =
         (meta.fileBase64 as string | undefined) || (meta.fileData as string | undefined);
 
       if (fileData) {
-        let base64 = fileData;
-        let mime = agreement.mimeType || 'application/pdf';
-
-        if (fileData.startsWith('data:')) {
-          const commaIdx = fileData.indexOf(',');
-          if (commaIdx !== -1) {
-            const mimeMatch = fileData.substring(0, commaIdx).match(/^data:([^;]+)/);
-            if (mimeMatch && mimeMatch[1]) {
-              mime = mimeMatch[1];
-            }
-            base64 = fileData.substring(commaIdx + 1);
-          }
-        }
-
-        const binary = Buffer.from(base64, 'base64');
-        return c.body(binary, 200, {
-          'Content-Type': mime,
+        const base64Content = fileData.includes(',') ? fileData.split(',')[1] : fileData;
+        const binaryBuffer = Buffer.from(base64Content || '', 'base64');
+        return c.body(binaryBuffer, 200, {
+          'Content-Type': agreement.mimeType || 'application/pdf',
           'Content-Disposition': `inline; filename="${agreement.fileName || 'document.pdf'}"`,
-          'Cache-Control': 'private, max-age=3600',
         });
       }
 
       if (agreement.markdownContent) {
-        return c.body(agreement.markdownContent, 200, {
+        return c.text(agreement.markdownContent, 200, {
           'Content-Type': 'text/markdown; charset=utf-8',
-          'Content-Disposition': `inline; filename="${agreement.fileName || 'document.md'}"`,
+          'Content-Disposition': `inline; filename="${agreement.fileName || 'agreement.md'}"`,
         });
       }
 
@@ -346,6 +298,7 @@ export function createAgreementRoutes(deps?: AgreementDeps) {
       const userPayload = c.get('userPayload') as any;
       const authorId = userPayload?.sub || 'unknown';
       const orgId = userPayload?.orgId || 'default-org-id';
+      const userRole = userPayload?.role || 'user';
 
       const body = await c.req.json().catch(() => ({}));
       const version = await service.createVersion(
@@ -353,6 +306,7 @@ export function createAgreementRoutes(deps?: AgreementDeps) {
         authorId,
         agreementId,
         body?.changeSummary,
+        userRole,
       );
       return c.json(version, 201);
     },
@@ -369,8 +323,10 @@ export function createAgreementRoutes(deps?: AgreementDeps) {
       const agreementId = c.req.param('id');
       const userPayload = c.get('userPayload') as any;
       const orgId = userPayload?.orgId || 'default-org-id';
+      const userId = userPayload?.sub || 'unknown';
+      const userRole = userPayload?.role || 'user';
 
-      const versions = await service.listVersions(orgId, agreementId);
+      const versions = await service.listVersions(orgId, agreementId, userId, userRole);
       return c.json(versions, 200);
     },
   );
@@ -387,8 +343,9 @@ export function createAgreementRoutes(deps?: AgreementDeps) {
       const userPayload = c.get('userPayload') as any;
       const authorId = userPayload?.sub || 'unknown';
       const orgId = userPayload?.orgId || 'default-org-id';
+      const userRole = userPayload?.role || 'user';
 
-      const cloned = await service.cloneAgreement(orgId, authorId, agreementId);
+      const cloned = await service.cloneAgreement(orgId, authorId, agreementId, userRole);
       return c.json(cloned, 201);
     },
   );
@@ -405,8 +362,9 @@ export function createAgreementRoutes(deps?: AgreementDeps) {
       const userPayload = c.get('userPayload') as any;
       const authorId = userPayload?.sub || 'unknown';
       const orgId = userPayload?.orgId || 'default-org-id';
+      const userRole = userPayload?.role || 'user';
 
-      const archived = await service.setArchiveStatus(orgId, authorId, agreementId, true);
+      const archived = await service.setArchiveStatus(orgId, authorId, agreementId, true, userRole);
       return c.json(archived, 200);
     },
   );
@@ -422,8 +380,15 @@ export function createAgreementRoutes(deps?: AgreementDeps) {
       const userPayload = c.get('userPayload') as any;
       const authorId = userPayload?.sub || 'unknown';
       const orgId = userPayload?.orgId || 'default-org-id';
+      const userRole = userPayload?.role || 'user';
 
-      const unarchived = await service.setArchiveStatus(orgId, authorId, agreementId, false);
+      const unarchived = await service.setArchiveStatus(
+        orgId,
+        authorId,
+        agreementId,
+        false,
+        userRole,
+      );
       return c.json(unarchived, 200);
     },
   );
@@ -440,6 +405,7 @@ export function createAgreementRoutes(deps?: AgreementDeps) {
       const userPayload = c.get('userPayload') as any;
       const authorId = userPayload?.sub || 'unknown';
       const orgId = userPayload?.orgId || 'default-org-id';
+      const userRole = userPayload?.role || 'user';
 
       const body = await c.req.json().catch(() => null);
       const parsed = updateMetadataTagsSchema.safeParse(body);
@@ -453,6 +419,7 @@ export function createAgreementRoutes(deps?: AgreementDeps) {
         authorId,
         agreementId,
         parsed.data,
+        userRole,
       );
       return c.json(updated, 200);
     },
