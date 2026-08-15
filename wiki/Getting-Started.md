@@ -1,16 +1,36 @@
 # Getting Started with graphsign.ink
 
-This guide provides step-by-step instructions for cloning, configuring, building, and running graphsign.ink locally on your computer.
+This guide provides step-by-step instructions for cloning, configuring, building, running, and developing with graphsign.ink.
+
+---
+
+## 📑 Documentation Table of Contents
+
+### 1. System Architecture & Foundation
+* **[Home](Home.md)** — Project overview, mission, architectural pillars, and technology stack
+* **[Getting Started](Getting-Started.md)** — System prerequisites, local setup, and developer guide
+* **[Security & Immutable Audit Trail](Security-and-Audit-Trail.md)** — Hash-chained audit logs, token hashing, and compliance
+
+### 2. Feature & Domain Guides
+* **[Authentication & Identity Management](Authentication-and-Identity.md)** — User registration, email verification, TOTP MFA, JWT sessions
+* **[Organization & Multi-Tenancy](Organization-and-Tenancy.md)** — Tenant boundaries, teams, custom domains, storage quotas, RBAC
+* **[Agreement & Document Management](Agreement-Management.md)** — PDF/DOCX uploads, Markdown scratch editor, semantic versioning, change history
+* **[Visual Document Editor & Field Placement](Document-Editor-and-Fields.md)** — Multi-page canvas, drag & drop field palette, recipient assignment, validation, preview mode
+* **[Workflow Engine & Signer Portal](Workflow-Engine-and-Signer-Portal.md)** — Review workflows, sequential/parallel routing, tokenized signer portal, conditional logic engine
+* **[Template Management](Template-Management.md)** — Reusable contract templates, publishing governance, instantiation
+
+### 3. Developer & Integration References
+* **[REST API Reference](REST-API-Reference.md)** — Complete API endpoints, request/response formats, authentication, error handling
 
 ---
 
 ## 📋 System Prerequisites
 
-Before starting, ensure you have the following installed on your machine:
+Ensure you have the following installed on your local development machine:
 
-- **Node.js**: v18.0.0 or higher (v20+ recommended)
+- **Node.js**: v18.0.0 or higher (v20+ LTS recommended)
 - **pnpm**: v9.0.0 or higher (`npm install -g pnpm`)
-- **PostgreSQL**: v15 or higher (or a cloud PostgreSQL instance such as Neon Postgres)
+- **PostgreSQL**: v15 or higher (or cloud PostgreSQL such as Neon)
 - **Git**: v2.30 or higher
 
 ---
@@ -19,16 +39,12 @@ Before starting, ensure you have the following installed on your machine:
 
 ### 1. Clone the Repository
 
-Clone the project repository from GitHub and navigate into the project directory:
-
 ```bash
 git clone https://github.com/graphomy/graphsign.ink.git
 cd graphsign.ink
 ```
 
 ### 2. Install Monorepo Dependencies
-
-Install workspace dependencies across all applications and packages using `pnpm`:
 
 ```bash
 pnpm install
@@ -42,112 +58,70 @@ Copy the example environment configuration file to `.env`:
 cp .env.example .env
 ```
 
-Open `.env` in your code editor and update the database URL and API settings:
+Configure your local environment variables in `.env`:
 
 ```env
 # Database Connection URL (PostgreSQL 15+)
 DATABASE_URL="postgresql://postgres:postgres@localhost:5432/graphsign?schema=public"
 
-# Public API URL (Hono Worker)
+# Public API URL (Hono Cloudflare Worker)
 NEXT_PUBLIC_API_URL="http://localhost:8787"
 
-# Mailer Configuration (Optional: Leave blank to print email links to console in dev)
+# Mailer Configuration (Leave blank for console logging in development)
 RESEND_API_KEY=""
-EMAIL_FROM="noreply@emaildomain.com"
+EMAIL_FROM="noreply@example.com"
 
 # Web App URL
 WEB_URL="http://localhost:3000"
 ```
 
-### 4. Database Setup & Prisma Schema Generation
-
-Initialize the Prisma Client and sync the database schema with your local PostgreSQL database:
+### 4. Database Setup & Prisma Client Generation
 
 ```bash
 # Generate Prisma Client types
 pnpm --filter @graphsign/db exec prisma generate
 
-# Push the schema to your local database
+# Push schema changes to your database
 pnpm --filter @graphsign/db exec prisma db push
 ```
 
 ### 5. Running the Application Locally
 
-#### Option A: Run All Services Simultaneously
-
-To start both the API worker service and the Next.js web application together:
-
+#### Run All Services (Full Stack)
 ```bash
 pnpm dev
 ```
 
-#### Option B: Run Services Individually
-
+#### Run Services Individually
 - **API Worker Service (Hono on Cloudflare Worker)**:
-
   ```bash
   pnpm --filter @graphsign/api dev
   ```
+  _Running at [http://localhost:8787](http://localhost:8787)_
 
-  _The API server will run at [http://localhost:8787](http://localhost:8787)._
-
-- **Web App (Next.js App Router)**:
+- **Web Frontend (Next.js App Router)**:
   ```bash
   pnpm --filter @graphsign/web dev
   ```
-  _The Web frontend will run at [http://localhost:3000](http://localhost:3000)._
+  _Running at [http://localhost:3000](http://localhost:3000)_
 
 ---
 
-## 🧪 Testing & Code Quality
+## 🧪 Testing & Validation Commands
 
-### Running Automated Unit & Integration Tests
-
-Run test suites across the monorepo using Vitest:
+Run tests and verification checks across the entire monorepo:
 
 ```bash
+# Run all unit and integration test suites
 pnpm test
+
+# Run test suites with interactive UI
+pnpm --filter @graphsign/api test
+pnpm --filter @graphsign/web test
+
+# Run ESLint across all workspace packages
+pnpm lint
+
+# Run full production build and type checking
+pnpm build
 ```
-
-### Running Frontend Linting
-
-Validate code style and TypeScript rules in the frontend:
-
-```bash
-pnpm --filter @graphsign/web lint
-```
-
-### Building for Production
-
-Test building all production bundles:
-
-```bash
-# Build Next.js application
-pnpm --filter @graphsign/web build
-```
-
----
-
-## 📂 Repository Layout Reference
-
-```
-graphsign.ink/
-├─ apps/
-│  ├─ web/          # Next.js 14+ (Cloudflare Pages / Node) — editor, signer, dashboards
-│  └─ api/          # Hono on Workers — REST API, workflow engine, webhooks
-├─ services/
-│  ├─ signing/      # JVM (EU DSS / PDFBox) — CSC PAdES sealing service
-│  └─ workers/      # Node queue consumer workers
-├─ packages/
-│  ├─ db/           # Prisma schema, RLS policies & migrations
-│  └─ sdk/          # API client and TypeScript definitions
-├─ infra/           # Docker Compose & Cloudflare configs
-└─ wiki/            # GitHub Wiki documentation pages
-```
-
----
-
-## ❓ Troubleshooting & Support
-
-- **Prisma Client module error**: If you encounter `.prisma/client` missing errors, run `pnpm --filter @graphsign/db exec prisma generate`.
-- **Port Conflicts**: Ensure ports `3000` (Next.js) and `8787` (Wrangler/Hono) are free.
