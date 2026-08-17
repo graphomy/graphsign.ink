@@ -870,12 +870,7 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
         {/* ========================================================================= */}
         {/* CENTER VIEWPORT: DOCUMENT CANVAS & FIELD OVERLAYS */}
         {/* ========================================================================= */}
-        <main
-          className="flex-1 overflow-auto bg-neutral-800 flex justify-center p-4 sm:p-8 relative"
-          onClick={() => {
-            if (activeMode === 'editor') setSelectedFieldId(null);
-          }}
-        >
+        <main className="flex-1 overflow-auto bg-neutral-800 flex justify-center p-4 sm:p-8 relative">
           {/* Document Canvas Sheet */}
           <div
             ref={pageContainerRef}
@@ -931,6 +926,12 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
                   <div
                     key={field.id}
                     onMouseDown={(e) => handleFieldMouseDown(e, field)}
+                    onClick={(e) => {
+                      if (activeMode === 'editor') {
+                        e.stopPropagation();
+                        setSelectedFieldId(field.id);
+                      }
+                    }}
                     style={{
                       left: `${field.x}%`,
                       top: `${field.y}%`,
@@ -1132,255 +1133,315 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
         {/* ========================================================================= */}
         {/* RIGHT SIDEBAR: FIELD PROPERTIES & VALIDATIONS (INK-80, 81, 82, 83) */}
         {/* ========================================================================= */}
-        {activeMode === 'editor' && selectedField && (
-          <aside className="w-80 bg-white border-l border-neutral-200 flex flex-col shrink-0 overflow-y-auto p-4 space-y-4 hidden lg:flex shadow-xs">
-            <div className="flex items-center justify-between border-b border-neutral-200 pb-2.5">
-              <div>
-                <h3 className="text-xs font-bold text-neutral-900 uppercase tracking-wider">
-                  Field Settings
-                </h3>
-                <span className="text-[10px] text-neutral-400 font-mono">{selectedField.type}</span>
-              </div>
-              <button
-                onClick={() => setSelectedFieldId(null)}
-                className="text-neutral-400 hover:text-neutral-700 text-sm font-bold"
-              >
-                ✕
-              </button>
-            </div>
-
-            {/* Recipient Assignment (INK-79) */}
-            <div>
-              <label className="block text-[11px] font-bold text-neutral-700 mb-1">
-                Assigned Recipient *
-              </label>
-              <select
-                value={selectedField.recipientId}
-                onChange={(e) =>
-                  updateFieldProperty(selectedField.id, { recipientId: e.target.value })
-                }
-                className="w-full bg-neutral-50 border border-neutral-300 rounded-lg px-2.5 py-1.5 text-xs text-neutral-900 focus:outline-none focus:border-blue-600"
-              >
-                {recipients.map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {r.name} ({r.email})
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Field Label */}
-            <div>
-              <label className="block text-[11px] font-bold text-neutral-700 mb-1">
-                Field Label
-              </label>
-              <input
-                type="text"
-                value={selectedField.label}
-                onChange={(e) => updateFieldProperty(selectedField.id, { label: e.target.value })}
-                className="w-full bg-neutral-50 border border-neutral-300 rounded-lg px-2.5 py-1.5 text-xs text-neutral-900 focus:outline-none focus:border-blue-600"
-              />
-            </div>
-
-            {/* Placeholder Text */}
-            {(selectedField.type === 'TEXT' || selectedField.type === 'COMPANY') && (
-              <div>
-                <label className="block text-[11px] font-bold text-neutral-700 mb-1">
-                  Placeholder Text
-                </label>
-                <input
-                  type="text"
-                  value={selectedField.placeholder || ''}
-                  onChange={(e) =>
-                    updateFieldProperty(selectedField.id, { placeholder: e.target.value })
-                  }
-                  className="w-full bg-neutral-50 border border-neutral-300 rounded-lg px-2.5 py-1.5 text-xs text-neutral-900 focus:outline-none focus:border-blue-600"
-                />
-              </div>
-            )}
-
-            {/* Date Format (INK-80) */}
-            {selectedField.type === 'DATE' && (
-              <div>
-                <label className="block text-[11px] font-bold text-neutral-700 mb-1">
-                  Date Format
-                </label>
-                <select
-                  value={selectedField.dateFormat || 'YYYY-MM-DD'}
-                  onChange={(e) =>
-                    updateFieldProperty(selectedField.id, { dateFormat: e.target.value })
-                  }
-                  className="w-full bg-neutral-50 border border-neutral-300 rounded-lg px-2.5 py-1.5 text-xs text-neutral-900 focus:outline-none focus:border-blue-600"
-                >
-                  <option value="YYYY-MM-DD">YYYY-MM-DD (2026-08-16)</option>
-                  <option value="DD/MM/YYYY">DD/MM/YYYY (16/08/2026)</option>
-                  <option value="MM/DD/YYYY">MM/DD/YYYY (08/16/2026)</option>
-                  <option value="MMM D, YYYY">MMM D, YYYY (Aug 16, 2026)</option>
-                </select>
-              </div>
-            )}
-
-            {/* Options list for Dropdown / Radio (INK-81) */}
-            {(selectedField.type === 'DROPDOWN' || selectedField.type === 'RADIO') && (
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <label className="text-[11px] font-bold text-neutral-700">Options List</label>
+        {activeMode === 'editor' && (
+          <aside className="w-80 bg-white border-l border-neutral-200 flex flex-col shrink-0 overflow-y-auto p-4 space-y-4 shadow-xs">
+            {selectedField ? (
+              <>
+                <div className="flex items-center justify-between border-b border-neutral-200 pb-2.5">
+                  <div>
+                    <h3 className="text-xs font-bold text-neutral-900 uppercase tracking-wider">
+                      Field Settings
+                    </h3>
+                    <span className="text-[10px] text-neutral-400 font-mono">
+                      {selectedField.type}
+                    </span>
+                  </div>
                   <button
-                    type="button"
-                    onClick={() => {
-                      const cur = selectedField.options || [];
-                      updateFieldProperty(selectedField.id, {
-                        options: [
-                          ...cur,
-                          { label: `Option ${cur.length + 1}`, value: `opt_${Date.now()}` },
-                        ],
-                      });
-                    }}
-                    className="text-[10px] font-bold text-blue-600 hover:underline"
+                    onClick={() => setSelectedFieldId(null)}
+                    className="text-neutral-400 hover:text-neutral-700 text-sm font-bold"
+                    title="Deselect field"
                   >
-                    + Add Option
+                    ✕
                   </button>
                 </div>
-                <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
-                  {selectedField.options?.map((opt, oIdx) => (
-                    <div key={oIdx} className="flex items-center gap-1.5">
-                      <input
-                        type="text"
-                        value={opt.label}
-                        onChange={(e) => {
-                          const updated = [...(selectedField.options || [])];
-                          updated[oIdx] = {
-                            label: e.target.value,
-                            value: e.target.value.toLowerCase().replace(/\s+/g, '_'),
-                          };
-                          updateFieldProperty(selectedField.id, { options: updated });
-                        }}
-                        className="flex-1 bg-neutral-50 border border-neutral-300 rounded px-2 py-1 text-xs"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const updated = (selectedField.options || []).filter(
-                            (_, idx) => idx !== oIdx,
-                          );
-                          updateFieldProperty(selectedField.id, { options: updated });
-                        }}
-                        className="text-neutral-400 hover:text-red-600 font-bold px-1"
-                      >
-                        ×
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
 
-            {/* Required Toggle (INK-83) */}
-            <div className="flex items-center justify-between p-2.5 bg-neutral-50 border border-neutral-200 rounded-lg">
-              <div>
-                <span className="text-xs font-bold text-neutral-900 block">Required Field</span>
-                <span className="text-[10px] text-neutral-500 block">
-                  Signer must complete to submit
-                </span>
-              </div>
-              <input
-                type="checkbox"
-                checked={selectedField.isRequired}
-                onChange={(e) =>
-                  updateFieldProperty(selectedField.id, { isRequired: e.target.checked })
-                }
-                className="w-4 h-4 text-[#ba0000] rounded"
-              />
-            </div>
-
-            {/* Validation Rules (INK-82) */}
-            {(selectedField.type === 'TEXT' || selectedField.type === 'EMAIL') && (
-              <div className="space-y-2 p-2.5 bg-neutral-50 border border-neutral-200 rounded-lg">
-                <span className="text-xs font-bold text-neutral-900 block">Validation Rules</span>
+                {/* Recipient Assignment (INK-79) */}
                 <div>
-                  <label className="block text-[10px] font-semibold text-neutral-600 mb-1">
-                    Rule Type
+                  <label className="block text-[11px] font-bold text-neutral-700 mb-1">
+                    Assigned Recipient *
                   </label>
                   <select
-                    value={selectedField.validation?.type || 'none'}
+                    value={selectedField.recipientId}
                     onChange={(e) =>
-                      updateFieldProperty(selectedField.id, {
-                        validation: {
-                          ...selectedField.validation,
-                          type: e.target.value as 'none' | 'email' | 'number' | 'regex',
-                        },
-                      })
+                      updateFieldProperty(selectedField.id, { recipientId: e.target.value })
                     }
-                    className="w-full bg-white border border-neutral-300 rounded px-2 py-1 text-xs"
+                    className="w-full bg-neutral-50 border border-neutral-300 rounded-lg px-2.5 py-1.5 text-xs text-neutral-900 focus:outline-none focus:border-blue-600"
                   >
-                    <option value="none">None (Free text)</option>
-                    <option value="email">Email Address</option>
-                    <option value="number">Numbers Only</option>
-                    <option value="regex">Custom Regular Expression</option>
+                    {recipients.map((r) => (
+                      <option key={r.id} value={r.id}>
+                        {r.name} ({r.email})
+                      </option>
+                    ))}
                   </select>
                 </div>
 
-                {selectedField.validation?.type === 'regex' && (
+                {/* Field Label */}
+                <div>
+                  <label className="block text-[11px] font-bold text-neutral-700 mb-1">
+                    Field Label
+                  </label>
+                  <input
+                    type="text"
+                    value={selectedField.label}
+                    onChange={(e) =>
+                      updateFieldProperty(selectedField.id, { label: e.target.value })
+                    }
+                    className="w-full bg-neutral-50 border border-neutral-300 rounded-lg px-2.5 py-1.5 text-xs text-neutral-900 focus:outline-none focus:border-blue-600"
+                  />
+                </div>
+
+                {/* Placeholder Text */}
+                {(selectedField.type === 'TEXT' || selectedField.type === 'COMPANY') && (
                   <div>
-                    <label className="block text-[10px] font-semibold text-neutral-600 mb-1">
-                      Regex Pattern
+                    <label className="block text-[11px] font-bold text-neutral-700 mb-1">
+                      Placeholder Text
                     </label>
                     <input
                       type="text"
-                      placeholder="^[0-9]{5}$ (e.g. ZIP code)"
-                      value={selectedField.validation.pattern || ''}
+                      value={selectedField.placeholder || ''}
                       onChange={(e) =>
-                        updateFieldProperty(selectedField.id, {
-                          validation: {
-                            ...selectedField.validation,
-                            pattern: e.target.value,
-                          },
-                        })
+                        updateFieldProperty(selectedField.id, { placeholder: e.target.value })
                       }
-                      className="w-full bg-white border border-neutral-300 rounded px-2 py-1 text-xs font-mono"
+                      className="w-full bg-neutral-50 border border-neutral-300 rounded-lg px-2.5 py-1.5 text-xs text-neutral-900 focus:outline-none focus:border-blue-600"
                     />
                   </div>
                 )}
 
-                {selectedField.validation?.type !== 'none' && (
+                {/* Date Format (INK-80) */}
+                {selectedField.type === 'DATE' && (
                   <div>
-                    <label className="block text-[10px] font-semibold text-neutral-600 mb-1">
-                      Custom Error Message
+                    <label className="block text-[11px] font-bold text-neutral-700 mb-1">
+                      Date Format
                     </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Please enter a valid 5-digit ZIP"
-                      value={selectedField.validation?.errorMessage || ''}
+                    <select
+                      value={selectedField.dateFormat || 'YYYY-MM-DD'}
                       onChange={(e) =>
-                        updateFieldProperty(selectedField.id, {
-                          validation: {
-                            ...selectedField.validation,
-                            errorMessage: e.target.value,
-                          },
-                        })
+                        updateFieldProperty(selectedField.id, { dateFormat: e.target.value })
                       }
-                      className="w-full bg-white border border-neutral-300 rounded px-2 py-1 text-xs"
-                    />
+                      className="w-full bg-neutral-50 border border-neutral-300 rounded-lg px-2.5 py-1.5 text-xs text-neutral-900 focus:outline-none focus:border-blue-600"
+                    >
+                      <option value="YYYY-MM-DD">YYYY-MM-DD (2026-08-16)</option>
+                      <option value="DD/MM/YYYY">DD/MM/YYYY (16/08/2026)</option>
+                      <option value="MM/DD/YYYY">MM/DD/YYYY (08/16/2026)</option>
+                      <option value="MMM D, YYYY">MMM D, YYYY (Aug 16, 2026)</option>
+                    </select>
                   </div>
                 )}
+
+                {/* Options list for Dropdown / Radio (INK-81) */}
+                {(selectedField.type === 'DROPDOWN' || selectedField.type === 'RADIO') && (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[11px] font-bold text-neutral-700">Options List</label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const cur = selectedField.options || [];
+                          updateFieldProperty(selectedField.id, {
+                            options: [
+                              ...cur,
+                              { label: `Option ${cur.length + 1}`, value: `opt_${Date.now()}` },
+                            ],
+                          });
+                        }}
+                        className="text-[10px] font-bold text-blue-600 hover:underline"
+                      >
+                        + Add Option
+                      </button>
+                    </div>
+                    <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
+                      {selectedField.options?.map((opt, oIdx) => (
+                        <div key={oIdx} className="flex items-center gap-1.5">
+                          <input
+                            type="text"
+                            value={opt.label}
+                            onChange={(e) => {
+                              const updated = [...(selectedField.options || [])];
+                              updated[oIdx] = {
+                                label: e.target.value,
+                                value: e.target.value.toLowerCase().replace(/\s+/g, '_'),
+                              };
+                              updateFieldProperty(selectedField.id, { options: updated });
+                            }}
+                            className="flex-1 bg-neutral-50 border border-neutral-300 rounded px-2 py-1 text-xs"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const updated = (selectedField.options || []).filter(
+                                (_, idx) => idx !== oIdx,
+                              );
+                              updateFieldProperty(selectedField.id, { options: updated });
+                            }}
+                            className="text-neutral-400 hover:text-red-600 font-bold px-1"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Required Toggle (INK-83) */}
+                <div className="flex items-center justify-between p-2.5 bg-neutral-50 border border-neutral-200 rounded-lg">
+                  <div>
+                    <span className="text-xs font-bold text-neutral-900 block">Required Field</span>
+                    <span className="text-[10px] text-neutral-500 block">
+                      Signer must complete to submit
+                    </span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={selectedField.isRequired}
+                    onChange={(e) =>
+                      updateFieldProperty(selectedField.id, { isRequired: e.target.checked })
+                    }
+                    className="w-4 h-4 text-[#ba0000] rounded"
+                  />
+                </div>
+
+                {/* Validation Rules (INK-82) */}
+                {(selectedField.type === 'TEXT' || selectedField.type === 'EMAIL') && (
+                  <div className="space-y-2 p-2.5 bg-neutral-50 border border-neutral-200 rounded-lg">
+                    <span className="text-xs font-bold text-neutral-900 block">
+                      Validation Rules
+                    </span>
+                    <div>
+                      <label className="block text-[10px] font-semibold text-neutral-600 mb-1">
+                        Rule Type
+                      </label>
+                      <select
+                        value={selectedField.validation?.type || 'none'}
+                        onChange={(e) =>
+                          updateFieldProperty(selectedField.id, {
+                            validation: {
+                              ...selectedField.validation,
+                              type: e.target.value as 'none' | 'email' | 'number' | 'regex',
+                            },
+                          })
+                        }
+                        className="w-full bg-white border border-neutral-300 rounded px-2 py-1 text-xs"
+                      >
+                        <option value="none">None (Free text)</option>
+                        <option value="email">Email Address</option>
+                        <option value="number">Numbers Only</option>
+                        <option value="regex">Custom Regular Expression</option>
+                      </select>
+                    </div>
+
+                    {selectedField.validation?.type === 'regex' && (
+                      <div>
+                        <label className="block text-[10px] font-semibold text-neutral-600 mb-1">
+                          Regex Pattern
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="^[0-9]{5}$ (e.g. ZIP code)"
+                          value={selectedField.validation.pattern || ''}
+                          onChange={(e) =>
+                            updateFieldProperty(selectedField.id, {
+                              validation: {
+                                ...selectedField.validation,
+                                pattern: e.target.value,
+                              },
+                            })
+                          }
+                          className="w-full bg-white border border-neutral-300 rounded px-2 py-1 text-xs font-mono"
+                        />
+                      </div>
+                    )}
+
+                    {selectedField.validation?.type !== 'none' && (
+                      <div>
+                        <label className="block text-[10px] font-semibold text-neutral-600 mb-1">
+                          Custom Error Message
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="e.g. Please enter a valid 5-digit ZIP"
+                          value={selectedField.validation?.errorMessage || ''}
+                          onChange={(e) =>
+                            updateFieldProperty(selectedField.id, {
+                              validation: {
+                                ...selectedField.validation,
+                                errorMessage: e.target.value,
+                              },
+                            })
+                          }
+                          className="w-full bg-white border border-neutral-300 rounded px-2 py-1 text-xs"
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Position Metrics (INK-84) */}
+                <div className="grid grid-cols-2 gap-2 text-[10px] font-mono text-neutral-500 p-2 bg-neutral-100/70 rounded">
+                  <span>X: {selectedField.x}%</span>
+                  <span>Y: {selectedField.y}%</span>
+                  <span>W: {selectedField.width}%</span>
+                  <span>H: {selectedField.height}%</span>
+                </div>
+
+                {/* Delete Field Button */}
+                <button
+                  onClick={() => handleDeleteField(selectedField.id)}
+                  className="w-full py-2 text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors border border-red-200"
+                >
+                  Delete Field
+                </button>
+              </>
+            ) : (
+              <div className="space-y-4 py-1">
+                <div className="border-b border-neutral-200 pb-2.5">
+                  <h3 className="text-xs font-bold text-neutral-900 uppercase tracking-wider">
+                    Field Inspector
+                  </h3>
+                  <p className="text-[11px] text-neutral-500 mt-1">
+                    Click any field on the document to edit its settings, required rules, or
+                    assigned signer.
+                  </p>
+                </div>
+
+                <div className="bg-neutral-50 border border-neutral-200 rounded-xl p-3 space-y-2">
+                  <span className="text-xs font-bold text-neutral-800 flex items-center gap-1.5">
+                    <span>💡</span> Quick Guide
+                  </span>
+                  <ul className="text-[11px] text-neutral-600 space-y-1.5 list-disc list-inside">
+                    <li>Drag elements from the left palette onto the document sheet.</li>
+                    <li>Click placed fields to open detailed property settings.</li>
+                    <li>Drag bottom-right corner to resize any field.</li>
+                  </ul>
+                </div>
+
+                <div className="bg-neutral-50 border border-neutral-200 rounded-xl p-3 space-y-2">
+                  <span className="text-xs font-bold text-neutral-800 flex items-center gap-1.5">
+                    <span>👥</span> Document Signers ({recipients.length})
+                  </span>
+                  <div className="space-y-1.5 pt-1">
+                    {recipients.map((r) => (
+                      <div key={r.id} className="flex items-center gap-2 text-xs">
+                        <span
+                          className="w-2.5 h-2.5 rounded-full shrink-0"
+                          style={{ backgroundColor: r.color }}
+                        />
+                        <span className="font-semibold text-neutral-800 truncate">{r.name}</span>
+                        <span className="text-[10px] text-neutral-400 truncate">({r.email})</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 text-xs text-blue-900">
+                  <span className="font-bold block mb-0.5">Document Fields</span>
+                  <p className="text-[11px] text-blue-700">
+                    {fields.length} {fields.length === 1 ? 'field' : 'fields'} placed across{' '}
+                    {recipients.length} {recipients.length === 1 ? 'signer' : 'signers'}.
+                  </p>
+                </div>
               </div>
             )}
-
-            {/* Position Metrics (INK-84) */}
-            <div className="grid grid-cols-2 gap-2 text-[10px] font-mono text-neutral-500 p-2 bg-neutral-100/70 rounded">
-              <span>X: {selectedField.x}%</span>
-              <span>Y: {selectedField.y}%</span>
-              <span>W: {selectedField.width}%</span>
-              <span>H: {selectedField.height}%</span>
-            </div>
-
-            {/* Delete Field Button */}
-            <button
-              onClick={() => handleDeleteField(selectedField.id)}
-              className="w-full py-2 text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors border border-red-200"
-            >
-              Delete Field
-            </button>
           </aside>
         )}
 

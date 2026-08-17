@@ -770,9 +770,9 @@ function AgreementManagementContent() {
                             <button
                               onClick={() => openDocumentEditor(agreement)}
                               className="px-2.5 py-1 text-[11px] font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded transition-colors flex items-center gap-1"
-                              title="Design & Place Signing Fields"
+                              title="Send for Signature"
                             >
-                              <span>🎨</span> Fields
+                              <span>✍️</span> Send for Signature
                             </button>
                           )}
 

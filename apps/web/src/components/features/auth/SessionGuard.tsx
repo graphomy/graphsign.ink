@@ -71,28 +71,38 @@ export function SessionGuard({
       return;
     }
 
-    // Setup Idle Session Timeout
+    // Setup Idle Session Timeout with adaptive throttling (up to 2s in production) to prevent main-thread lag on mousemove / scroll
     let timeoutId: NodeJS.Timeout;
+    let lastActivityTime = Date.now();
+    const throttleMs = Math.min(2000, Math.max(100, Math.floor(effectiveTimeoutMs / 4)));
 
-    const resetIdleTimer = () => {
+    const scheduleTimeout = () => {
       clearTimeout(timeoutId);
       timeoutId = setTimeout(handleSignOutDueToTimeout, effectiveTimeoutMs);
     };
 
-    // Activity event listeners
+    const handleUserActivity = () => {
+      const now = Date.now();
+      if (now - lastActivityTime >= throttleMs) {
+        lastActivityTime = now;
+        scheduleTimeout();
+      }
+    };
+
+    // Activity event listeners with passive option for optimal rendering performance
     const activityEvents = ['mousemove', 'keydown', 'click', 'scroll', 'touchstart'];
 
     activityEvents.forEach((event) => {
-      window.addEventListener(event, resetIdleTimer);
+      window.addEventListener(event, handleUserActivity, { passive: true });
     });
 
     // Initial timer kickoff
-    resetIdleTimer();
+    scheduleTimeout();
 
     return () => {
       clearTimeout(timeoutId);
       activityEvents.forEach((event) => {
-        window.removeEventListener(event, resetIdleTimer);
+        window.removeEventListener(event, handleUserActivity);
       });
     };
   }, [effectiveTimeoutMs, handleSignOutDueToTimeout, isAuthenticated]);

@@ -111,4 +111,72 @@ describe('OrganisationSettingsPage', () => {
     fireEvent.click(screen.getByTestId('tab-members'));
     expect(screen.getByTestId('members-section')).toBeInTheDocument();
   });
+
+  it('renders compliance settings with retention days and delete account trigger', async () => {
+    vi.mocked(global.fetch).mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          name: 'Acme Legal',
+          documentRetentionDays: 30,
+          allowedEsignStandards: ['ESIGN'],
+        }),
+    } as Response);
+
+    render(<OrganisationSettingsPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('tab-compliance')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByTestId('tab-compliance'));
+    expect(screen.getByTestId('compliance-form')).toBeInTheDocument();
+    expect(screen.getByText('Delete Account (Right to Erasure)')).toBeInTheDocument();
+
+    // Click delete account button to open modal
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Account' }));
+    expect(screen.getByText('Confirm Permanent Account Deletion')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Your account password...')).toBeInTheDocument();
+  });
+
+  it('renders audit logs with pagination controls', async () => {
+    vi.mocked(global.fetch).mockImplementation((url: RequestInfo | URL) => {
+      const urlStr = url.toString();
+      if (urlStr.includes('/audit-logs')) {
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              logs: [
+                {
+                  id: 'log-1',
+                  action: 'DOCUMENT_CREATED',
+                  resourceType: 'Agreement',
+                  createdAt: new Date().toISOString(),
+                  user: { email: 'admin@acme.com' },
+                },
+              ],
+              total: 1,
+              page: 1,
+              totalPages: 1,
+            }),
+        } as Response);
+      }
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({ name: 'Acme Legal' }),
+      } as Response);
+    });
+
+    render(<OrganisationSettingsPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('tab-audit')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByTestId('tab-audit'));
+    expect(screen.getByTestId('audit-section')).toBeInTheDocument();
+    expect(screen.getByText('DOCUMENT_CREATED')).toBeInTheDocument();
+    expect(screen.getByText('Page 1 of 1')).toBeInTheDocument();
+  });
 });
