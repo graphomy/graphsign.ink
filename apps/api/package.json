@@ -18,7 +18,7 @@
     "hono": "^4.13.0",
     "jose": "^6.2.8",
     "qrcode": "^1.5.4",
-    "resend": "^6.18.1",
+    "resend": "^6.19.0",
     "scrypt-js": "^3.0.1",
     "uuid": "^14.0.1",
     "zod": "^3.23.0"
@@ -29,7 +29,7 @@
     "@types/qrcode": "^1.5.6",
     "@types/uuid": "^11.0.0",
     "typescript": "^7.0.2",
-    "vitest": "^3.2.6",
-    "wrangler": "^4.115.0"
+    "vitest": "^4.1.10",
+    "wrangler": "^4.122.0"
   }
 }
