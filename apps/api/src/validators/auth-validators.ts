@@ -252,3 +252,9 @@ export const mfaEnforcementResponseSchema = z.object({
 });
 
 export type MfaEnforcementResponse = z.infer<typeof mfaEnforcementResponseSchema>;
+
+export const deleteAccountRequestSchema = z.object({
+  password: z.string().min(1, 'Password is required to confirm account deletion.'),
+});
+
+export type DeleteAccountRequest = z.infer<typeof deleteAccountRequestSchema>;

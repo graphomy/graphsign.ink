@@ -39,7 +39,7 @@ model Organisation {
   allowedEsignStandards      Json?    @map("allowed_esign_standards") @db.JsonB
   requireReauthBeforeSigning Boolean  @default(false) @map("require_reauth_before_signing")
   signatureReasonRequired    Boolean  @default(false) @map("signature_reason_required")
-  documentRetentionDays      Int      @default(365) @map("document_retention_days")
+  documentRetentionDays      Int      @default(30) @map("document_retention_days")
 
   createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz()
   updatedAt             DateTime  @updatedAt @map("updated_at") @db.Timestamptz()

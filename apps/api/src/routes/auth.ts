@@ -16,14 +16,16 @@ import {
   verifyMfaSetupRequestSchema,
   loginMfaRequestSchema,
   updateMfaEnforcementRequestSchema,
+  deleteAccountRequestSchema,
 } from '../validators/auth-validators.js';
 import { AuthService } from '../services/auth-service.js';
 import type { MailerService } from '../services/mailer-service.js';
 import { createMailerService } from '../services/mailer-service.js';
 import type { AuditService } from '../services/audit-service.js';
 import { PrismaAuditService } from '../services/audit-service.js';
-import { AppError, ValidationError } from '../utils/errors.js';
+import { AppError, ValidationError, UnauthorizedError } from '../utils/errors.js';
 import { createRateLimiter } from '../middleware/rate-limiter.js';
+import { jwtAuth } from '../middleware/jwt-auth.js';
 import { decodeJwt } from '../utils/jwt.js';
 import type { Env } from '../index.js';
 
@@ -715,6 +717,43 @@ export function createAuthRoutes(deps?: AuthDeps) {
     });
 
     return c.json(result);
+  });
+
+  /**
+   * POST /api/v1/auth/delete-account
+   *
+   * Permanently deletes user account from database upon password confirmation (GDPR Right to Erasure).
+   */
+  auth.post('/delete-account', jwtAuth(), async (c) => {
+    const body = await c.req.json().catch(() => null);
+
+    if (!body) {
+      throw new ValidationError('Request body is required.');
+    }
+
+    const parsed = deleteAccountRequestSchema.safeParse(body);
+    if (!parsed.success) {
+      const firstError = parsed.error.errors[0];
+      throw new ValidationError(firstError?.message ?? 'Invalid password input.');
+    }
+
+    const payload = c.get('userPayload') as any;
+    const userId = payload?.sub;
+
+    if (!userId) {
+      throw new UnauthorizedError('User context not found in session.');
+    }
+
+    const authService = getAuthService(c);
+    await authService.deleteAccount(userId, parsed.data.password, {
+      ipAddress: c.req.header('x-forwarded-for')?.split(',')[0]?.trim(),
+      userAgent: c.req.header('user-agent'),
+    });
+
+    return c.json({
+      success: true,
+      message: 'Account permanently deleted. You can create a new account anytime.',
+    });
   });
 
   return auth;

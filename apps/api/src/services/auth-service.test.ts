@@ -18,6 +18,22 @@ vi.mock('../utils/crypto.js', () => ({
 
 function createMockPrisma() {
   return {
+    $transaction: vi.fn(async (cb: any) =>
+      cb({
+        team: { updateMany: vi.fn() },
+        organisationInvitation: { deleteMany: vi.fn() },
+        auditLog: { updateMany: vi.fn() },
+        userOrganisation: { deleteMany: vi.fn() },
+        teamMember: { deleteMany: vi.fn() },
+        agreementRecipient: { deleteMany: vi.fn() },
+        agreementVersion: { deleteMany: vi.fn() },
+        agreement: { deleteMany: vi.fn() },
+        templateShare: { deleteMany: vi.fn() },
+        templateVersion: { deleteMany: vi.fn() },
+        template: { deleteMany: vi.fn() },
+        user: { delete: vi.fn() },
+      }),
+    ),
     organisation: {
       findUnique: vi.fn(),
       create: vi.fn(),
@@ -28,10 +44,12 @@ function createMockPrisma() {
       findFirst: vi.fn(),
       create: vi.fn(),
       update: vi.fn(),
+      delete: vi.fn(),
     },
     auditLog: {
       findFirst: vi.fn(),
       create: vi.fn(),
+      updateMany: vi.fn(),
     },
   } as unknown as Parameters<
     typeof AuthService extends new (...args: infer P) => unknown ? (...args: P) => void : never
@@ -988,6 +1006,52 @@ describe('AuthService', () => {
           userId: mockUser.id,
         }),
       );
+    });
+  });
+
+  describe('deleteAccount', () => {
+    it('should permanently delete user account when password is valid', async () => {
+      const mockUser = {
+        id: '00000000-0000-7000-8000-000000000001',
+        organisationId: DEFAULT_ORG.id,
+        email: 'delete-me@example.com',
+        passwordHash: '$scrypt$32768$8$1$00000000000000000000000000000000$hashed_password',
+      };
+
+      (prisma.user.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue(mockUser);
+
+      await authService.deleteAccount(mockUser.id, 'Str0ng!Pass');
+
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'USER_ACCOUNT_DELETED',
+          userId: mockUser.id,
+        }),
+      );
+      expect(prisma.$transaction).toHaveBeenCalled();
+    });
+
+    it('should reject account deletion when password is incorrect', async () => {
+      const mockUser = {
+        id: '00000000-0000-7000-8000-000000000001',
+        organisationId: DEFAULT_ORG.id,
+        email: 'delete-me@example.com',
+        passwordHash: '$scrypt$32768$8$1$00000000000000000000000000000000$hashed_password',
+      };
+
+      (prisma.user.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue(mockUser);
+
+      await expect(authService.deleteAccount(mockUser.id, 'WrongPassword')).rejects.toThrow(
+        'Invalid password. Please enter your correct password to confirm account deletion.',
+      );
+    });
+
+    it('should reject deletion when user does not exist', async () => {
+      (prisma.user.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+
+      await expect(
+        authService.deleteAccount('non-existent-user-id', 'Str0ng!Pass'),
+      ).rejects.toThrow('User account not found.');
     });
   });
 });

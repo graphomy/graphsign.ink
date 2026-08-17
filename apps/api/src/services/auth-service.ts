@@ -1259,8 +1259,70 @@ export class AuthService {
   }
 
   /**
-   * Gets or creates the default organisation for MVP.
+   * Permanently deletes a user account from database upon password confirmation (GDPR Right to Erasure).
+   */
+  async deleteAccount(
+    userId: string,
+    password: string,
+    meta: { ipAddress?: string; userAgent?: string } = {},
+  ): Promise<void> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
 
+    if (!user) {
+      throw new NotFoundError('User account not found.');
+    }
+
+    const isMatch = await verifyPassword(password, user.passwordHash);
+    if (!isMatch) {
+      throw new ValidationError(
+        'Invalid password. Please enter your correct password to confirm account deletion.',
+      );
+    }
+
+    if (this.audit) {
+      await this.audit.log({
+        organisationId: user.organisationId,
+        userId: user.id,
+        action: 'USER_ACCOUNT_DELETED',
+        resourceType: 'User',
+        resourceId: user.id,
+        ipAddress: meta.ipAddress,
+        userAgent: meta.userAgent,
+        metadata: {
+          email: user.email,
+          deletedAt: new Date().toISOString(),
+          gdprRightToErasure: true,
+        },
+      });
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      // Clear team leadership
+      await tx.team.updateMany({ where: { leadId: userId }, data: { leadId: null } });
+      // Delete user invitations
+      await tx.organisationInvitation.deleteMany({ where: { invitedById: userId } });
+      // Anonymize user reference on audit logs to preserve audit chain
+      await tx.auditLog.updateMany({ where: { userId }, data: { userId: null } });
+      // Delete user organisation memberships
+      await tx.userOrganisation.deleteMany({ where: { userId } });
+      // Delete team memberships
+      await tx.teamMember.deleteMany({ where: { userId } });
+      // Delete user-owned agreements and templates
+      await tx.agreementRecipient.deleteMany({ where: { agreement: { authorId: userId } } });
+      await tx.agreementVersion.deleteMany({ where: { agreement: { authorId: userId } } });
+      await tx.agreement.deleteMany({ where: { authorId: userId } });
+      await tx.templateShare.deleteMany({ where: { template: { authorId: userId } } });
+      await tx.templateVersion.deleteMany({ where: { template: { authorId: userId } } });
+      await tx.template.deleteMany({ where: { authorId: userId } });
+      // Permanently delete user from database
+      await tx.user.delete({ where: { id: userId } });
+    });
+  }
+
+  /**
+   * Gets or creates the default organisation for MVP.
    * Multi-org support will be added in a separate story.
    */
   private async getOrCreateDefaultOrganisation() {

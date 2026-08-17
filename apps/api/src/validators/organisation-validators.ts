@@ -59,8 +59,9 @@ export const updateComplianceSettingsSchema = z.object({
   signatureReasonRequired: z.boolean().optional(),
   documentRetentionDays: z
     .number()
+    .int('Retention period must be an integer number of days')
     .min(1, 'Retention period must be at least 1 day')
-    .max(3650, 'Retention period cannot exceed 10 years')
+    .max(365, 'Retention period cannot exceed 365 days (1 year)')
     .optional(),
 });
 

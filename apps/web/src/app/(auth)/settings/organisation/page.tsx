@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, Suspense } from 'react';
+import { useRouter } from 'next/navigation';
 import { SessionGuard } from '@/components/features/auth/SessionGuard';
 import { HeaderNav } from '@/components/layout/HeaderNav';
 import { Footer } from '@/components/layout/Footer';
@@ -83,6 +84,8 @@ interface AuditLogItem {
 }
 
 function OrganisationSettingsContent() {
+  const router = useRouter();
+
   const [activeTab, setActiveTab] = useState<
     | 'general'
     | 'branding'
@@ -140,6 +143,21 @@ function OrganisationSettingsContent() {
   const [newDomain, setNewDomain] = useState<string>('');
 
   const [auditLogs, setAuditLogs] = useState<AuditLogItem[]>([]);
+  const [auditPage, setAuditPage] = useState<number>(1);
+  const [auditTotal, setAuditTotal] = useState<number>(0);
+  const [auditTotalPages, setAuditTotalPages] = useState<number>(1);
+  const [isLoadingAudit, setIsLoadingAudit] = useState<boolean>(false);
+
+  const [complianceRetentionDays, setComplianceRetentionDays] = useState<number>(30);
+  const [complianceStandards, setComplianceStandards] = useState<string[]>(['ESIGN']);
+  const [requireReauth, setRequireReauth] = useState<boolean>(false);
+  const [signatureReason, setSignatureReason] = useState<boolean>(false);
+
+  const [showDeleteAccountModal, setShowDeleteAccountModal] = useState<boolean>(false);
+  const [deleteAccountPassword, setDeleteAccountPassword] = useState<string>('');
+  const [deleteAccountError, setDeleteAccountError] = useState<string>('');
+  const [isDeletingAccount, setIsDeletingAccount] = useState<boolean>(false);
+
   const [userOrgs, setUserOrgs] = useState<{ id: string; name: string; role: string }[]>([]);
 
   // Fetch Organisation Data
@@ -172,7 +190,9 @@ function OrganisationSettingsContent() {
           fetch(`${apiUrl}/api/v1/organisations/teams`, { headers }).catch(() => null),
           fetch(`${apiUrl}/api/v1/organisations/roles`, { headers }).catch(() => null),
           fetch(`${apiUrl}/api/v1/organisations/domains`, { headers }).catch(() => null),
-          fetch(`${apiUrl}/api/v1/organisations/me/audit-logs`, { headers }).catch(() => null),
+          fetch(`${apiUrl}/api/v1/organisations/me/audit-logs?page=1&limit=10`, { headers }).catch(
+            () => null,
+          ),
           fetch(`${apiUrl}/api/v1/organisations/my-organisations`, { headers }).catch(() => null),
         ]);
 
@@ -195,7 +215,14 @@ function OrganisationSettingsContent() {
         }
 
         if (resUsage?.ok) setUsage(await resUsage.json());
-        if (resComp?.ok) setCompliance(await resComp.json());
+        if (resComp?.ok) {
+          const compData = await resComp.json();
+          setCompliance(compData);
+          setComplianceRetentionDays(compData.documentRetentionDays ?? 30);
+          setComplianceStandards(compData.allowedEsignStandards ?? ['ESIGN']);
+          setRequireReauth(compData.requireReauthBeforeSigning ?? false);
+          setSignatureReason(compData.signatureReasonRequired ?? false);
+        }
         if (resInv?.ok) {
           const data = await resInv.json();
           setInvitations(Array.isArray(data) ? data : []);
@@ -206,6 +233,9 @@ function OrganisationSettingsContent() {
         if (resAudit?.ok) {
           const data = await resAudit.json();
           setAuditLogs(data.logs ?? []);
+          setAuditTotal(data.total ?? 0);
+          setAuditPage(data.page ?? 1);
+          setAuditTotalPages(data.totalPages ?? 1);
         }
         if (resUserOrgs?.ok) setUserOrgs(await resUserOrgs.json());
       } catch {
@@ -217,6 +247,114 @@ function OrganisationSettingsContent() {
 
     loadData();
   }, []);
+
+  // Fetch Paginated Audit Logs (10 per page)
+  async function fetchAuditLogs(page: number) {
+    setIsLoadingAudit(true);
+    try {
+      const token = localStorage.getItem('graphsign_session_token') ?? '';
+      const userId = localStorage.getItem('graphsign_user_id') ?? '';
+      const apiUrl = getApiUrl();
+      const res = await fetch(
+        `${apiUrl}/api/v1/organisations/me/audit-logs?page=${page}&limit=10`,
+        {
+          headers: { Authorization: `Bearer ${token}`, 'x-user-id': userId },
+        },
+      );
+      if (res.ok) {
+        const data = await res.json();
+        setAuditLogs(data.logs ?? []);
+        setAuditTotal(data.total ?? 0);
+        setAuditPage(data.page ?? page);
+        setAuditTotalPages(data.totalPages ?? 1);
+      }
+    } catch {
+      setError('Failed to fetch audit logs.');
+    } finally {
+      setIsLoadingAudit(false);
+    }
+  }
+
+  // Save Compliance Settings (Retention 1-365 days)
+  async function handleSaveCompliance(e: React.FormEvent) {
+    e.preventDefault();
+    setIsSaving(true);
+    setMessage('');
+    setError('');
+
+    try {
+      const token = localStorage.getItem('graphsign_session_token') ?? '';
+      const apiUrl = getApiUrl();
+
+      const res = await fetch(`${apiUrl}/api/v1/organisations/me/compliance`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          documentRetentionDays: Number(complianceRetentionDays),
+          allowedEsignStandards: complianceStandards,
+          requireReauthBeforeSigning: requireReauth,
+          signatureReasonRequired: signatureReason,
+        }),
+      });
+
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        throw new Error(
+          data?.error?.message || data?.message || 'Failed to save compliance settings.',
+        );
+      }
+
+      setMessage(data.message ?? 'Compliance settings updated successfully.');
+      setCompliance((prev) => ({
+        ...prev,
+        documentRetentionDays: Number(complianceRetentionDays),
+        allowedEsignStandards: complianceStandards,
+        requireReauthBeforeSigning: requireReauth,
+        signatureReasonRequired: signatureReason,
+      }));
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to update compliance settings.';
+      setError(msg);
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  // Permanent Account Deletion (GDPR Right to Erasure)
+  async function handleDeleteAccount(e: React.FormEvent) {
+    e.preventDefault();
+    if (!deleteAccountPassword) return;
+
+    setIsDeletingAccount(true);
+    setDeleteAccountError('');
+
+    try {
+      const token = localStorage.getItem('graphsign_session_token') ?? '';
+      const apiUrl = getApiUrl();
+
+      const res = await fetch(`${apiUrl}/api/v1/auth/delete-account`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ password: deleteAccountPassword }),
+      });
+
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        throw new Error(
+          data?.error?.message ||
+            data?.message ||
+            'Failed to delete account. Please verify your password and try again.',
+        );
+      }
+
+      localStorage.clear();
+      router.push('/login?notice=account_deleted');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to delete account.';
+      setDeleteAccountError(msg);
+      setIsDeletingAccount(false);
+    }
+  }
 
   // Save General Settings
   async function handleSaveGeneral(e: React.FormEvent) {
@@ -951,10 +1089,16 @@ function OrganisationSettingsContent() {
             {/* AUDIT LOGS TAB (INK-58) */}
             {activeTab === 'audit' && (
               <div className="space-y-4" data-testid="audit-section">
-                <h3 className="text-xs font-bold uppercase text-neutral-900">
-                  Organisation Audit Logs
-                </h3>
-                <div className="overflow-x-auto border rounded-xl">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-bold uppercase text-neutral-900">
+                    Organisation Audit Logs
+                  </h3>
+                  <span className="text-xs text-neutral-500 font-medium">
+                    Showing 10 records per page • Total {auditTotal} events
+                  </span>
+                </div>
+
+                <div className="overflow-x-auto border rounded-xl bg-white shadow-xs">
                   <table className="w-full text-left text-xs">
                     <thead className="bg-neutral-50 border-b font-bold text-neutral-700">
                       <tr>
@@ -965,18 +1109,57 @@ function OrganisationSettingsContent() {
                       </tr>
                     </thead>
                     <tbody className="divide-y">
-                      {auditLogs.map((log) => (
-                        <tr key={log.id} className="hover:bg-neutral-50">
-                          <td className="p-3 text-neutral-500 font-medium">
-                            {formatDateTime(log.createdAt)}
+                      {auditLogs.length > 0 ? (
+                        auditLogs.map((log) => (
+                          <tr key={log.id} className="hover:bg-neutral-50">
+                            <td className="p-3 text-neutral-500 font-medium whitespace-nowrap">
+                              {formatDateTime(log.createdAt)}
+                            </td>
+                            <td className="p-3 font-bold text-neutral-900">{log.action}</td>
+                            <td className="p-3 text-neutral-600">{log.resourceType}</td>
+                            <td className="p-3 text-neutral-600">{log.user?.email || 'System'}</td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan={4} className="p-6 text-center text-neutral-400">
+                            {isLoadingAudit
+                              ? 'Loading audit records...'
+                              : 'No audit log records found.'}
                           </td>
-                          <td className="p-3 font-bold text-neutral-900">{log.action}</td>
-                          <td className="p-3 text-neutral-600">{log.resourceType}</td>
-                          <td className="p-3 text-neutral-600">{log.user?.email || 'System'}</td>
                         </tr>
-                      ))}
+                      )}
                     </tbody>
                   </table>
+                </div>
+
+                {/* PAGINATION CONTROLS */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 border-t text-xs text-neutral-600">
+                  <span>
+                    Showing {auditLogs.length > 0 ? (auditPage - 1) * 10 + 1 : 0} to{' '}
+                    {Math.min(auditPage * 10, auditTotal)} of {auditTotal} records
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      disabled={auditPage <= 1 || isLoadingAudit}
+                      onClick={() => fetchAuditLogs(auditPage - 1)}
+                      className="px-3 py-1.5 border rounded-lg hover:bg-neutral-100 disabled:opacity-40 disabled:cursor-not-allowed font-medium transition-colors"
+                    >
+                      ← Previous
+                    </button>
+                    <span className="font-semibold text-neutral-800 px-1">
+                      Page {auditPage} of {Math.max(1, auditTotalPages)}
+                    </span>
+                    <button
+                      type="button"
+                      disabled={auditPage >= auditTotalPages || isLoadingAudit}
+                      onClick={() => fetchAuditLogs(auditPage + 1)}
+                      className="px-3 py-1.5 border rounded-lg hover:bg-neutral-100 disabled:opacity-40 disabled:cursor-not-allowed font-medium transition-colors"
+                    >
+                      Next →
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
@@ -994,19 +1177,194 @@ function OrganisationSettingsContent() {
 
             {/* COMPLIANCE TAB */}
             {activeTab === 'compliance' && (
-              <div className="space-y-4" data-testid="compliance-form">
-                <h3 className="text-xs font-bold uppercase text-neutral-900">
-                  Compliance Settings
-                </h3>
-                <p className="text-xs text-neutral-500">
-                  Standards: {compliance.allowedEsignStandards?.join(', ') || 'ESIGN'} | Retention:{' '}
-                  {compliance.documentRetentionDays} days
-                </p>
+              <div className="space-y-6" data-testid="compliance-form">
+                <form onSubmit={handleSaveCompliance} className="space-y-4">
+                  <div>
+                    <h3 className="text-sm font-bold text-neutral-900">
+                      Compliance & Data Lifecycle Settings
+                    </h3>
+                    <p className="text-xs text-neutral-500 mt-0.5">
+                      Configure legal e-signature standards and document retention policies.
+                    </p>
+                  </div>
+
+                  <div className="border rounded-xl p-4 bg-neutral-50 space-y-4">
+                    <div>
+                      <label className="block text-xs font-bold text-neutral-900 mb-1">
+                        Document Retention Period (Days) *
+                      </label>
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="number"
+                          min={1}
+                          max={365}
+                          required
+                          value={complianceRetentionDays}
+                          onChange={(e) => setComplianceRetentionDays(Number(e.target.value))}
+                          className="w-32 rounded-lg border px-3 py-1.5 text-xs bg-white font-medium"
+                        />
+                        <span className="text-xs text-neutral-500">
+                          (Default: 30 days, Maximum: 365 days / 1 year)
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-neutral-500 mt-1">
+                        Documents will be retained for this duration before automatic compliance
+                        archiving.
+                      </p>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-neutral-900 mb-1">
+                        Allowed E-Signature Standards
+                      </label>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 text-xs pt-1">
+                        {['ESIGN', 'UETA', 'eIDAS_SES', 'eIDAS_AES', 'eIDAS_QES', 'PART_11'].map(
+                          (std) => (
+                            <label
+                              key={std}
+                              className="flex items-center gap-2 bg-white p-2 rounded-lg border cursor-pointer hover:bg-neutral-100/50"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={complianceStandards.includes(std)}
+                                onChange={(e) =>
+                                  e.target.checked
+                                    ? setComplianceStandards([...complianceStandards, std])
+                                    : setComplianceStandards(
+                                        complianceStandards.filter((s) => s !== std),
+                                      )
+                                }
+                                className="rounded text-[#ba0000]"
+                              />
+                              <span className="font-semibold text-neutral-800">{std}</span>
+                            </label>
+                          ),
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="space-y-2 pt-2 border-t">
+                      <label className="flex items-center gap-2 text-xs font-semibold text-neutral-800 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={requireReauth}
+                          onChange={(e) => setRequireReauth(e.target.checked)}
+                          className="rounded text-[#ba0000]"
+                        />
+                        Require re-authentication before signing documents
+                      </label>
+                      <label className="flex items-center gap-2 text-xs font-semibold text-neutral-800 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={signatureReason}
+                          onChange={(e) => setSignatureReason(e.target.checked)}
+                          className="rounded text-[#ba0000]"
+                        />
+                        Require signer to provide signature intent / reason
+                      </label>
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={isSaving}
+                    className="px-4 py-2 bg-[#ba0000] text-white text-xs font-bold rounded-lg shadow-xs hover:bg-red-700 transition-colors disabled:opacity-50"
+                  >
+                    {isSaving ? 'Saving...' : 'Save Compliance Settings'}
+                  </button>
+                </form>
+
+                {/* DANGER ZONE: PERMANENT ACCOUNT DELETION */}
+                <div className="border border-red-200 bg-red-50/50 rounded-xl p-5 space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+                    <div>
+                      <h4 className="text-xs font-bold text-red-700 uppercase tracking-wide flex items-center gap-1.5">
+                        <span>⚠️</span> Delete Account (Right to Erasure)
+                      </h4>
+                      <p className="text-xs text-neutral-600 mt-1">
+                        Permanently delete your user account and all personal data from the
+                        database. This action is irreversible. You can create a new account in the
+                        future with a new email.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDeleteAccountPassword('');
+                        setDeleteAccountError('');
+                        setShowDeleteAccountModal(true);
+                      }}
+                      className="px-3.5 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-lg transition-colors shrink-0 shadow-xs"
+                    >
+                      Delete Account
+                    </button>
+                  </div>
+                </div>
               </div>
             )}
           </div>
         )}
       </main>
+
+      {/* Permanent Account Deletion Modal */}
+      {showDeleteAccountModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div className="space-y-2">
+              <h3 className="text-base font-bold text-red-600 flex items-center gap-2">
+                <span>⚠️</span> Confirm Permanent Account Deletion
+              </h3>
+              <p className="text-xs text-neutral-600 leading-relaxed">
+                This action is <strong>permanent and cannot be undone</strong>. Your user record,
+                active sessions, and access credentials will be completely deleted from the
+                database.
+              </p>
+            </div>
+
+            {deleteAccountError && (
+              <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700 font-semibold">
+                {deleteAccountError}
+              </div>
+            )}
+
+            <form onSubmit={handleDeleteAccount} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-neutral-800 mb-1">
+                  Enter your password to confirm:
+                </label>
+                <input
+                  type="password"
+                  required
+                  placeholder="Your account password..."
+                  value={deleteAccountPassword}
+                  onChange={(e) => setDeleteAccountPassword(e.target.value)}
+                  className="w-full border border-neutral-300 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-red-500 bg-white"
+                  autoFocus
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  disabled={isDeletingAccount}
+                  onClick={() => setShowDeleteAccountModal(false)}
+                  className="px-4 py-2 border rounded-lg text-xs font-semibold text-neutral-700 hover:bg-neutral-100 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isDeletingAccount || !deleteAccountPassword}
+                  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-lg shadow-xs transition-colors disabled:opacity-50"
+                >
+                  {isDeletingAccount ? 'Deleting Account...' : 'Permanently Delete My Account'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       <Footer />
     </div>
   );

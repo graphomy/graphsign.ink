@@ -117,14 +117,28 @@ describe('Organisation Validators', () => {
   });
 
   describe('updateComplianceSettingsSchema', () => {
-    it('validates valid compliance parameters', () => {
+    it('validates valid compliance parameters up to 365 days', () => {
       const result = updateComplianceSettingsSchema.safeParse({
         allowedEsignStandards: ['ESIGN', 'eIDAS_SES'],
         requireReauthBeforeSigning: true,
         signatureReasonRequired: true,
-        documentRetentionDays: 730,
+        documentRetentionDays: 365,
       });
       expect(result.success).toBe(true);
+    });
+
+    it('rejects document retention greater than 365 days', () => {
+      const result = updateComplianceSettingsSchema.safeParse({
+        documentRetentionDays: 366,
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects document retention below 1 day', () => {
+      const result = updateComplianceSettingsSchema.safeParse({
+        documentRetentionDays: 0,
+      });
+      expect(result.success).toBe(false);
     });
   });
 
