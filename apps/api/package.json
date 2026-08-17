@@ -24,7 +24,7 @@
     "zod": "^3.23.0"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^5.20260729.1",
+    "@cloudflare/workers-types": "^5.20260812.1",
     "@types/node": "^26.1.2",
     "@types/qrcode": "^1.5.6",
     "@types/uuid": "^11.0.0",
