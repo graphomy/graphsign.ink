@@ -14,8 +14,6 @@ export interface JwtPayload {
   [key: string]: unknown;
 }
 
-const DEFAULT_SECRET = 'graphsign_jwt_secret_key_change_in_production_32bytes!';
-
 function base64UrlEncode(str: string): string {
   const base64 = btoa(str);
   return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
@@ -38,9 +36,27 @@ function arrayBufferToBase64Url(buffer: ArrayBuffer): string {
   return base64UrlEncode(binary);
 }
 
-async function getHmacKey(secret: string): Promise<CryptoKey> {
+/**
+ * Resolves JWT secret with strict validation to prevent hardcoded secret vulnerabilities (SEC-01).
+ */
+export function resolveJwtSecret(secret?: string): string {
+  if (secret && secret.trim().length > 0) {
+    return secret.trim();
+  }
+  const envSecret = typeof process !== 'undefined' ? process.env?.JWT_SECRET : undefined;
+  if (envSecret && envSecret.trim().length > 0) {
+    return envSecret.trim();
+  }
+  if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'test') {
+    return 'test_jwt_secret_key_minimum_32_bytes_long!';
+  }
+  throw new Error('JWT_SECRET configuration is missing in environment bindings.');
+}
+
+async function getHmacKey(secret?: string): Promise<CryptoKey> {
   const encoder = new TextEncoder();
-  const keyData = encoder.encode(secret || DEFAULT_SECRET);
+  const validSecret = resolveJwtSecret(secret);
+  const keyData = encoder.encode(validSecret);
   return crypto.subtle.importKey('raw', keyData, { name: 'HMAC', hash: 'SHA-256' }, false, [
     'sign',
     'verify',
@@ -52,7 +68,7 @@ async function getHmacKey(secret: string): Promise<CryptoKey> {
  */
 export async function signJwt(
   payload: Omit<JwtPayload, 'iat' | 'exp'> & { exp?: number; iat?: number },
-  secret: string = DEFAULT_SECRET,
+  secret?: string,
   expiresInSeconds: number = 86400, // 24 hours default
 ): Promise<string> {
   const header = { alg: 'HS256', typ: 'JWT' };
@@ -79,10 +95,7 @@ export async function signJwt(
 /**
  * Verifies a JWT token's HMAC-SHA256 signature, format, and expiration.
  */
-export async function verifyJwt(
-  token: string,
-  secret: string = DEFAULT_SECRET,
-): Promise<JwtPayload> {
+export async function verifyJwt(token: string, secret?: string): Promise<JwtPayload> {
   const parts = token.split('.');
   if (parts.length !== 3) {
     throw new Error('Invalid JWT format: Token must contain 3 parts.');

@@ -5,6 +5,11 @@ import { UnauthorizedError } from '../utils/errors.js';
 declare module 'hono' {
   interface ContextVariableMap {
     userPayload: JwtPayload;
+    userId: string;
+    userEmail: string;
+    userRole: string;
+    orgId: string;
+    requestId: string;
   }
 }
 
@@ -38,7 +43,8 @@ export function jwtAuth(): MiddlewareHandler {
     }
 
     try {
-      const payload = await verifyJwt(token);
+      const secret = (c.env as any)?.JWT_SECRET || process.env.JWT_SECRET;
+      const payload = await verifyJwt(token, secret);
       c.set('userPayload', payload);
       if (payload.sub) c.set('userId', payload.sub);
       if (payload.email) c.set('userEmail', payload.email);

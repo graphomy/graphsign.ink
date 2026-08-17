@@ -943,11 +943,12 @@ describe('AuthService', () => {
       };
 
       const validCode = await generateTotpToken(secret);
+      const mfaTicket = await authService.generateMfaTicket(mockUser.id, 'mfa');
 
       (prisma.user.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue(mockUser);
 
       const result = await authService.loginWithMfa({
-        mfaTicket: `mfa_${mockUser.id}_170000000`,
+        mfaTicket,
         code: validCode,
       });
 
@@ -973,11 +974,12 @@ describe('AuthService', () => {
         deletedAt: null,
       };
 
+      const mfaTicket = await authService.generateMfaTicket(mockUser.id, 'mfa');
       (prisma.user.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue(mockUser);
 
       await expect(
         authService.loginWithMfa({
-          mfaTicket: `mfa_${mockUser.id}_170000000`,
+          mfaTicket,
           code: '000000',
         }),
       ).rejects.toThrow('Invalid TOTP verification code.');

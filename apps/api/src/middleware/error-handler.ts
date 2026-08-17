@@ -62,19 +62,10 @@ export const errorHandler: ErrorHandler = (err: Error, c: Context) => {
   // Unknown or infrastructure errors — log full details
   console.error('Unhandled error:', err);
 
-  const isProd = c.env?.NODE_ENV === 'production';
-  const isDbError =
-    err.name === 'PrismaClientInitializationError' ||
-    err.name === 'PrismaClientKnownRequestError' ||
-    err.stack?.includes('kn2.connect') ||
-    err.stack?.includes('PrismaNeon');
-
+  const isDev = (c.env?.NODE_ENV || process.env.NODE_ENV) === 'development';
   let message = 'An unexpected error occurred.';
-  if (!isProd) {
+  if (isDev) {
     message = `An unexpected error occurred: ${err?.message ?? String(err)}`;
-  } else if (isDbError) {
-    // Keep production message clean per security.md, but ensure log traces are clear
-    message = 'An unexpected error occurred.';
   }
 
   const body = buildErrorBody(c, 'INTERNAL_SERVER_ERROR', message);

@@ -3,6 +3,8 @@ import { Hono } from 'hono';
 import { createAuthRoutes } from './auth.js';
 import { errorHandler } from '../middleware/error-handler.js';
 import { generateTotpToken } from '../utils/totp.js';
+import { signJwt } from '../utils/jwt.js';
+import { AuthService } from '../services/auth-service.js';
 
 // Mock crypto module
 vi.mock('../utils/crypto.js', () => ({
@@ -480,6 +482,23 @@ describe('POST /api/v1/auth/logout', () => {
   });
 });
 
+async function getAuthHeaders(
+  userId = '00000000-0000-7000-8000-000000000001',
+  orgId = DEFAULT_ORG.id,
+  role = 'admin',
+) {
+  const token = await signJwt({
+    sub: userId,
+    orgId,
+    email: 'user@example.com',
+    role,
+    jti: 'test-jti-' + Math.random(),
+  });
+  return {
+    Authorization: `Bearer ${token}`,
+  };
+}
+
 describe('POST /api/v1/auth/mfa/enable and /mfa/disable', () => {
   let deps: ReturnType<typeof createMockDeps>;
   let app: Hono;
@@ -490,11 +509,12 @@ describe('POST /api/v1/auth/mfa/enable and /mfa/disable', () => {
   });
 
   it('should return 200 on enabling MFA and log audit event', async () => {
+    const authHeaders = await getAuthHeaders();
     const res = await app.request('/api/v1/auth/mfa/enable', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-user-id': '00000000-0000-7000-8000-000000000001',
+        ...authHeaders,
       },
     });
 
@@ -504,11 +524,12 @@ describe('POST /api/v1/auth/mfa/enable and /mfa/disable', () => {
   });
 
   it('should return 200 on disabling MFA and log audit event', async () => {
+    const authHeaders = await getAuthHeaders();
     const res = await app.request('/api/v1/auth/mfa/disable', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-user-id': '00000000-0000-7000-8000-000000000001',
+        ...authHeaders,
       },
     });
 
@@ -536,8 +557,12 @@ describe('Session Settings Routes', () => {
   });
 
   it('should GET session settings successfully', async () => {
+    const authHeaders = await getAuthHeaders();
     const res = await app.request('/api/v1/auth/session-settings', {
       method: 'GET',
+      headers: {
+        ...authHeaders,
+      },
     });
 
     expect(res.status).toBe(200);
@@ -546,9 +571,10 @@ describe('Session Settings Routes', () => {
   });
 
   it('should PUT session settings successfully with valid timeout', async () => {
+    const authHeaders = await getAuthHeaders();
     const res = await app.request('/api/v1/auth/session-settings', {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...authHeaders },
       body: JSON.stringify({ sessionTimeoutMinutes: 30 }),
     });
 
@@ -559,9 +585,10 @@ describe('Session Settings Routes', () => {
   });
 
   it('should return 400 when PUT session settings receives invalid timeout value (<1)', async () => {
+    const authHeaders = await getAuthHeaders();
     const res = await app.request('/api/v1/auth/session-settings', {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...authHeaders },
       body: JSON.stringify({ sessionTimeoutMinutes: 0 }),
     });
 
@@ -614,9 +641,10 @@ describe('Profile Routes', () => {
   });
 
   it('should GET profile successfully', async () => {
+    const authHeaders = await getAuthHeaders(mockUser.id);
     const res = await app.request('/api/v1/auth/profile', {
       method: 'GET',
-      headers: { 'x-user-id': mockUser.id },
+      headers: { ...authHeaders },
     });
 
     expect(res.status).toBe(200);
@@ -627,11 +655,12 @@ describe('Profile Routes', () => {
   });
 
   it('should PUT profile to update name and timezone', async () => {
+    const authHeaders = await getAuthHeaders(mockUser.id);
     const res = await app.request('/api/v1/auth/profile', {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
-        'x-user-id': mockUser.id,
+        ...authHeaders,
       },
       body: JSON.stringify({
         name: 'Alice Cooper',
@@ -646,11 +675,12 @@ describe('Profile Routes', () => {
   });
 
   it('should return 400 when PUT profile receives invalid email', async () => {
+    const authHeaders = await getAuthHeaders(mockUser.id);
     const res = await app.request('/api/v1/auth/profile', {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
-        'x-user-id': mockUser.id,
+        ...authHeaders,
       },
       body: JSON.stringify({
         email: 'invalid-email',
@@ -710,6 +740,7 @@ describe('MFA Routes', () => {
   });
 
   it('should POST /mfa/setup and return secret and QR code URI', async () => {
+    const authHeaders = await getAuthHeaders(mockUser.id);
     (deps.prisma.user.update as ReturnType<typeof vi.fn>).mockResolvedValue({
       ...mockUser,
       mfaPendingSecret: 'JBSWY3DPEHPK3PXP',
@@ -717,7 +748,7 @@ describe('MFA Routes', () => {
 
     const res = await app.request('/api/v1/auth/mfa/setup', {
       method: 'POST',
-      headers: { 'x-user-id': mockUser.id },
+      headers: { ...authHeaders },
     });
 
     expect(res.status).toBe(200);
@@ -727,6 +758,7 @@ describe('MFA Routes', () => {
   });
 
   it('should return 400 when /mfa/verify-setup receives invalid code', async () => {
+    const authHeaders = await getAuthHeaders(mockUser.id);
     (deps.prisma.user.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue({
       ...mockUser,
       mfaPendingSecret: 'JBSWY3DPEHPK3PXP',
@@ -736,7 +768,7 @@ describe('MFA Routes', () => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-user-id': mockUser.id,
+        ...authHeaders,
       },
       body: JSON.stringify({ code: '000000' }),
     });
@@ -746,12 +778,14 @@ describe('MFA Routes', () => {
 
   it('should POST /login/mfa with valid code and return session token', async () => {
     const validCode = await generateTotpToken('JBSWY3DPEHPK3PXP');
+    const authService = new AuthService(deps.prisma as any, deps.mailer as any, deps.audit as any);
+    const mfaTicket = await authService.generateMfaTicket(mockUser.id, 'mfa');
 
     const res = await app.request('/api/v1/auth/login/mfa', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        mfaTicket: `mfa_${mockUser.id}_170000000`,
+        mfaTicket,
         code: validCode,
       }),
     });
@@ -783,8 +817,10 @@ describe('MFA Enforcement Routes', () => {
   });
 
   it('should GET /mfa-enforcement successfully', async () => {
+    const authHeaders = await getAuthHeaders();
     const res = await app.request('/api/v1/auth/mfa-enforcement', {
       method: 'GET',
+      headers: { ...authHeaders },
     });
 
     expect(res.status).toBe(200);
@@ -793,9 +829,10 @@ describe('MFA Enforcement Routes', () => {
   });
 
   it('should PUT /mfa-enforcement to update policy settings', async () => {
+    const authHeaders = await getAuthHeaders();
     const res = await app.request('/api/v1/auth/mfa-enforcement', {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...authHeaders },
       body: JSON.stringify({
         mfaRequired: true,
         mfaRequiredRoles: ['admin', 'signer'],

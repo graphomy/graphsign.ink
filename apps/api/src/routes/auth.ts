@@ -77,7 +77,8 @@ export function createAuthRoutes(deps?: AuthDeps) {
       audit = new PrismaAuditService(db);
     }
 
-    return new AuthService(db, mailer, audit);
+    const jwtSecret = c.env?.JWT_SECRET || process.env.JWT_SECRET;
+    return new AuthService(db, mailer, audit, jwtSecret);
   }
 
   /**
@@ -366,9 +367,13 @@ export function createAuthRoutes(deps?: AuthDeps) {
    *
    * Enables MFA for the authenticated user and logs audit event with IP and user agent.
    */
-  auth.post('/mfa/enable', async (c) => {
+  auth.post('/mfa/enable', jwtAuth(), async (c) => {
     const authService = getAuthService(c);
-    const userId = c.req.header('x-user-id') ?? '00000000-0000-7000-8000-000000000001';
+    const userId = c.get('userId') || (c.get('userPayload') as any)?.sub;
+
+    if (!userId) {
+      throw new UnauthorizedError('User context not found in session.');
+    }
 
     const result = await authService.enableMfa(userId, {
       ipAddress: c.req.header('x-forwarded-for')?.split(',')[0]?.trim(),
@@ -385,9 +390,13 @@ export function createAuthRoutes(deps?: AuthDeps) {
    *
    * Disables MFA for the authenticated user and logs audit event with IP and user agent.
    */
-  auth.post('/mfa/disable', async (c) => {
+  auth.post('/mfa/disable', jwtAuth(), async (c) => {
     const authService = getAuthService(c);
-    const userId = c.req.header('x-user-id') ?? '00000000-0000-7000-8000-000000000001';
+    const userId = c.get('userId') || (c.get('userPayload') as any)?.sub;
+
+    if (!userId) {
+      throw new UnauthorizedError('User context not found in session.');
+    }
 
     const result = await authService.disableMfa(userId, {
       ipAddress: c.req.header('x-forwarded-for')?.split(',')[0]?.trim(),
@@ -404,9 +413,10 @@ export function createAuthRoutes(deps?: AuthDeps) {
    *
    * Retrieves current session timeout setting (in minutes) for the organisation.
    */
-  auth.get('/session-settings', async (c) => {
+  auth.get('/session-settings', jwtAuth(), async (c) => {
     const authService = getAuthService(c);
-    const orgId = c.req.header('x-organisation-id');
+    const orgId =
+      c.get('orgId') || (c.get('userPayload') as any)?.orgId || c.req.header('x-organisation-id');
 
     const settings = await authService.getSessionSettings(orgId);
 
@@ -420,7 +430,7 @@ export function createAuthRoutes(deps?: AuthDeps) {
    *
    * Updates session timeout setting for the organisation and logs audit event.
    */
-  auth.put('/session-settings', async (c) => {
+  auth.put('/session-settings', jwtAuth(), async (c) => {
     const body = await c.req.json().catch(() => null);
 
     if (!body) {
@@ -438,8 +448,9 @@ export function createAuthRoutes(deps?: AuthDeps) {
     }
 
     const authService = getAuthService(c);
-    const userId = c.req.header('x-user-id');
-    const orgId = c.req.header('x-organisation-id');
+    const userId = c.get('userId') || (c.get('userPayload') as any)?.sub;
+    const orgId =
+      c.get('orgId') || (c.get('userPayload') as any)?.orgId || c.req.header('x-organisation-id');
 
     const result = await authService.updateSessionSettings(parsed.data, userId, orgId, {
       ipAddress: c.req.header('x-forwarded-for')?.split(',')[0]?.trim(),
@@ -462,7 +473,8 @@ export function createAuthRoutes(deps?: AuthDeps) {
     const parsed = validateSessionRequestSchema.safeParse(body);
 
     const authService = getAuthService(c);
-    const orgId = c.req.header('x-organisation-id');
+    const orgId =
+      c.get('orgId') || (c.get('userPayload') as any)?.orgId || c.req.header('x-organisation-id');
 
     const result = await authService.validateSession(parsed.data?.lastActiveAt, orgId);
 
@@ -474,8 +486,11 @@ export function createAuthRoutes(deps?: AuthDeps) {
    *
    * Retrieves profile details for the authenticated user.
    */
-  auth.get('/profile', async (c) => {
-    const userId = c.req.header('x-user-id') ?? '00000000-0000-7000-8000-000000000001';
+  auth.get('/profile', jwtAuth(), async (c) => {
+    const userId = c.get('userId') || (c.get('userPayload') as any)?.sub;
+    if (!userId) {
+      throw new UnauthorizedError('User context not found in session.');
+    }
     const authService = getAuthService(c);
 
     const profile = await authService.getProfile(userId);
@@ -488,7 +503,7 @@ export function createAuthRoutes(deps?: AuthDeps) {
    *
    * Updates user profile (name, timezone) and dispatches verification email if email is modified.
    */
-  auth.put('/profile', async (c) => {
+  auth.put('/profile', jwtAuth(), async (c) => {
     const body = await c.req.json().catch(() => null);
 
     if (!body) {
@@ -505,7 +520,10 @@ export function createAuthRoutes(deps?: AuthDeps) {
       });
     }
 
-    const userId = c.req.header('x-user-id') ?? '00000000-0000-7000-8000-000000000001';
+    const userId = c.get('userId') || (c.get('userPayload') as any)?.sub;
+    if (!userId) {
+      throw new UnauthorizedError('User context not found in session.');
+    }
     const authService = getAuthService(c);
 
     const result = await authService.updateProfile(userId, parsed.data, {
@@ -553,7 +571,7 @@ export function createAuthRoutes(deps?: AuthDeps) {
    *
    * Changes the authenticated user's password.
    */
-  auth.post('/profile/change-password', async (c) => {
+  auth.post('/profile/change-password', jwtAuth(), async (c) => {
     const body = await c.req.json().catch(() => null);
 
     if (!body) {
@@ -570,7 +588,10 @@ export function createAuthRoutes(deps?: AuthDeps) {
       });
     }
 
-    const userId = c.req.header('x-user-id') ?? '00000000-0000-7000-8000-000000000001';
+    const userId = c.get('userId') || (c.get('userPayload') as any)?.sub;
+    if (!userId) {
+      throw new UnauthorizedError('User context not found in session.');
+    }
     const authService = getAuthService(c);
 
     const result = await authService.changePassword(userId, parsed.data, {
@@ -630,9 +651,12 @@ export function createAuthRoutes(deps?: AuthDeps) {
    *
    * Initiates MFA setup by generating a Base32 secret and QR code URI.
    */
-  auth.post('/mfa/setup', async (c) => {
+  auth.post('/mfa/setup', jwtAuth(), async (c) => {
     const authService = getAuthService(c);
-    const userId = c.req.header('x-user-id') ?? '00000000-0000-7000-8000-000000000001';
+    const userId = c.get('userId') || (c.get('userPayload') as any)?.sub;
+    if (!userId) {
+      throw new UnauthorizedError('User context not found in session.');
+    }
 
     const result = await authService.setupMfa(userId);
 
@@ -644,7 +668,7 @@ export function createAuthRoutes(deps?: AuthDeps) {
    *
    * Verifies 6-digit TOTP code from authenticator app to confirm setup and activate MFA.
    */
-  auth.post('/mfa/verify-setup', async (c) => {
+  auth.post('/mfa/verify-setup', jwtAuth(), async (c) => {
     const body = await c.req.json().catch(() => null);
 
     if (!body) {
@@ -662,7 +686,10 @@ export function createAuthRoutes(deps?: AuthDeps) {
     }
 
     const authService = getAuthService(c);
-    const userId = c.req.header('x-user-id') ?? '00000000-0000-7000-8000-000000000001';
+    const userId = c.get('userId') || (c.get('userPayload') as any)?.sub;
+    if (!userId) {
+      throw new UnauthorizedError('User context not found in session.');
+    }
 
     const result = await authService.verifySetupMfa(userId, parsed.data.code, {
       ipAddress: c.req.header('x-forwarded-for')?.split(',')[0]?.trim(),
@@ -677,9 +704,10 @@ export function createAuthRoutes(deps?: AuthDeps) {
    *
    * Retrieves MFA enforcement settings for the organisation.
    */
-  auth.get('/mfa-enforcement', async (c) => {
+  auth.get('/mfa-enforcement', jwtAuth(), async (c) => {
     const authService = getAuthService(c);
-    const orgId = c.req.header('x-organisation-id');
+    const orgId =
+      c.get('orgId') || (c.get('userPayload') as any)?.orgId || c.req.header('x-organisation-id');
 
     const settings = await authService.getMfaEnforcement(orgId);
 
@@ -691,7 +719,7 @@ export function createAuthRoutes(deps?: AuthDeps) {
    *
    * Updates MFA enforcement settings for the organisation.
    */
-  auth.put('/mfa-enforcement', async (c) => {
+  auth.put('/mfa-enforcement', jwtAuth(), async (c) => {
     const body = await c.req.json().catch(() => null);
 
     if (!body) {
@@ -709,7 +737,8 @@ export function createAuthRoutes(deps?: AuthDeps) {
     }
 
     const authService = getAuthService(c);
-    const orgId = c.req.header('x-organisation-id');
+    const orgId =
+      c.get('orgId') || (c.get('userPayload') as any)?.orgId || c.req.header('x-organisation-id');
 
     const result = await authService.updateMfaEnforcement(orgId, parsed.data, {
       ipAddress: c.req.header('x-forwarded-for')?.split(',')[0]?.trim(),
