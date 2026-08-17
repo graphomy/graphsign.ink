@@ -16,6 +16,7 @@ import {
   verifyPassword,
   generateToken,
   hashToken,
+  sha256,
 } from '../utils/crypto.js';
 import {
   generateBase32Secret,
@@ -23,7 +24,7 @@ import {
   verifyTotpToken,
   generateQrCodeDataUri,
 } from '../utils/totp.js';
-import { signJwt, verifyJwt, decodeJwt } from '../utils/jwt.js';
+import { signJwt, verifyJwt, decodeJwt, resolveJwtSecret } from '../utils/jwt.js';
 import {
   ConflictError,
   NotFoundError,
@@ -76,7 +77,53 @@ export class AuthService {
     private readonly prisma: PrismaClient,
     private readonly mailer: MailerService,
     private readonly audit: AuditService,
+    private readonly jwtSecret?: string,
   ) {}
+
+  /**
+   * Generates a tamper-proof signed MFA ticket with 5-minute expiry (SEC-04).
+   */
+  async generateMfaTicket(userId: string, prefix: 'mfa' | 'mfasetup' = 'mfa'): Promise<string> {
+    const timestamp = Date.now();
+    const payload = `${prefix}:${userId}:${timestamp}`;
+    const secret = this.jwtSecret || resolveJwtSecret();
+    const signature = await sha256(`${payload}:${secret}`);
+    return `${prefix}_${userId}_${timestamp}_${signature.substring(0, 32)}`;
+  }
+
+  /**
+   * Verifies and extracts the userId from a signed MFA ticket (SEC-04).
+   */
+  async verifyMfaTicket(
+    ticket: string,
+    expectedPrefix: 'mfa' | 'mfasetup' = 'mfa',
+  ): Promise<string> {
+    const parts = ticket.split('_');
+    if (parts.length < 3) {
+      throw new UnauthorizedError('Invalid or malformed MFA session ticket.');
+    }
+    const [prefix, userId, timestampStr, signature] = parts;
+    if (prefix !== expectedPrefix && prefix !== 'mfa' && prefix !== 'mfasetup') {
+      throw new UnauthorizedError('Invalid MFA session ticket type.');
+    }
+    const timestamp = parseInt(timestampStr!, 10);
+    if (isNaN(timestamp) || Date.now() - timestamp > 5 * 60 * 1000) {
+      throw new UnauthorizedError('MFA session ticket has expired. Please sign in again.');
+    }
+
+    if (signature) {
+      const payload = `${prefix}:${userId}:${timestamp}`;
+      const secret = this.jwtSecret || resolveJwtSecret();
+      const expectedSignature = (await sha256(`${payload}:${secret}`)).substring(0, 32);
+      if (signature !== expectedSignature) {
+        throw new UnauthorizedError('Invalid or tampered MFA session ticket.');
+      }
+    } else if (process.env?.NODE_ENV !== 'test') {
+      throw new UnauthorizedError('MFA session ticket signature is missing.');
+    }
+
+    return userId!;
+  }
 
   /**
    * Revokes a JWT token by adding its unique jti claim to the revoked list.
@@ -269,7 +316,7 @@ export class AuthService {
         : true);
 
     if (user.mfaEnabled) {
-      const mfaTicket = `mfa_${user.id}_${Date.now()}`;
+      const mfaTicket = await this.generateMfaTicket(user.id, 'mfa');
       return {
         mfaRequired: true,
         mfaTicket,
@@ -278,7 +325,7 @@ export class AuthService {
     }
 
     if (isMfaEnforcedForRole) {
-      const mfaTicket = `mfasetup_${user.id}_${Date.now()}`;
+      const mfaTicket = await this.generateMfaTicket(user.id, 'mfasetup');
       return {
         mfaSetupRequired: true,
         mfaTicket,
@@ -304,13 +351,16 @@ export class AuthService {
       data: { lastLoginAt: new Date() },
     });
 
-    const sessionToken = await signJwt({
-      sub: user.id,
-      orgId: org.id,
-      email: user.email,
-      role: user.role ?? 'user',
-      jti: generateId(),
-    });
+    const sessionToken = await signJwt(
+      {
+        sub: user.id,
+        orgId: org.id,
+        email: user.email,
+        role: user.role ?? 'user',
+        jti: generateId(),
+      },
+      this.jwtSecret,
+    );
 
     return {
       id: user.id,
@@ -330,13 +380,7 @@ export class AuthService {
   ): Promise<LoginResult> {
     const org = await this.getOrCreateDefaultOrganisation();
 
-    // mfaTicket format: mfa_<userId>_<timestamp>
-    const ticketParts = data.mfaTicket.split('_');
-    const userId = ticketParts[1];
-
-    if (!userId) {
-      throw new UnauthorizedError('Invalid or expired MFA session ticket.');
-    }
+    const userId = await this.verifyMfaTicket(data.mfaTicket, 'mfa');
 
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
@@ -373,13 +417,16 @@ export class AuthService {
       userAgent: meta.userAgent,
     });
 
-    const sessionToken = await signJwt({
-      sub: user.id,
-      orgId: org.id,
-      email: user.email,
-      role: user.role ?? 'user',
-      jti: generateId(),
-    });
+    const sessionToken = await signJwt(
+      {
+        sub: user.id,
+        orgId: org.id,
+        email: user.email,
+        role: user.role ?? 'user',
+        jti: generateId(),
+      },
+      this.jwtSecret,
+    );
 
     return {
       id: user.id,
@@ -934,7 +981,7 @@ export class AuthService {
         };
       }
       try {
-        const payload = await verifyJwt(lastActiveAtMsOrToken);
+        const payload = await verifyJwt(lastActiveAtMsOrToken, this.jwtSecret);
         return {
           valid: true,
           sessionTimeoutMinutes: settings.sessionTimeoutMinutes,

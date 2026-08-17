@@ -83,20 +83,41 @@ interface AuditLogItem {
   createdAt: string;
 }
 
+type OrgTab =
+  | 'general'
+  | 'branding'
+  | 'members'
+  | 'teams'
+  | 'roles'
+  | 'domains'
+  | 'audit'
+  | 'usage'
+  | 'compliance';
+
 function OrganisationSettingsContent() {
   const router = useRouter();
 
-  const [activeTab, setActiveTab] = useState<
-    | 'general'
-    | 'branding'
-    | 'members'
-    | 'teams'
-    | 'roles'
-    | 'domains'
-    | 'audit'
-    | 'usage'
-    | 'compliance'
-  >('general');
+  const [activeTab, setActiveTab] = useState<OrgTab>(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const tabParam = params.get('tab');
+      const validTabs: OrgTab[] = [
+        'general',
+        'branding',
+        'members',
+        'teams',
+        'roles',
+        'domains',
+        'audit',
+        'usage',
+        'compliance',
+      ];
+      if (tabParam && validTabs.includes(tabParam as OrgTab)) {
+        return tabParam as OrgTab;
+      }
+    }
+    return 'general';
+  });
 
   // Loading & Feedback
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -159,6 +180,30 @@ function OrganisationSettingsContent() {
   const [isDeletingAccount, setIsDeletingAccount] = useState<boolean>(false);
 
   const [userOrgs, setUserOrgs] = useState<{ id: string; name: string; role: string }[]>([]);
+
+  // Auto-dismiss banners after timeout (UI-02)
+  useEffect(() => {
+    if (!message) return;
+    const timer = setTimeout(() => setMessage(''), 5000);
+    return () => clearTimeout(timer);
+  }, [message]);
+
+  useEffect(() => {
+    if (!error) return;
+    const timer = setTimeout(() => setError(''), 8000);
+    return () => clearTimeout(timer);
+  }, [error]);
+
+  const handleTabSwitch = (tabId: typeof activeTab) => {
+    setActiveTab(tabId);
+    setMessage('');
+    setError('');
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      url.searchParams.set('tab', tabId);
+      window.history.replaceState({}, '', url.toString());
+    }
+  };
 
   // Fetch Organisation Data
   useEffect(() => {
@@ -616,21 +661,37 @@ function OrganisationSettingsContent() {
         {/* Global Banners */}
         {message && (
           <div
-            className="rounded-xl border border-green-200 bg-green-50 p-4 text-sm text-green-800"
+            className="flex items-center justify-between rounded-xl border border-green-200 bg-green-50 p-4 text-sm text-green-800 shadow-xs"
             role="status"
             data-testid="success-message"
           >
-            {message}
+            <span>{message}</span>
+            <button
+              type="button"
+              onClick={() => setMessage('')}
+              className="text-green-600 hover:text-green-800 font-bold ml-4 p-1 text-sm leading-none"
+              aria-label="Dismiss message"
+            >
+              ✕
+            </button>
           </div>
         )}
 
         {error && (
           <div
-            className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700"
+            className="flex items-center justify-between rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 shadow-xs"
             role="alert"
             data-testid="error-message"
           >
-            {error}
+            <span>{error}</span>
+            <button
+              type="button"
+              onClick={() => setError('')}
+              className="text-red-600 hover:text-red-800 font-bold ml-4 p-1 text-sm leading-none"
+              aria-label="Dismiss error"
+            >
+              ✕
+            </button>
           </div>
         )}
 
@@ -649,11 +710,7 @@ function OrganisationSettingsContent() {
           ].map((tab) => (
             <button
               key={tab.id}
-              onClick={() => {
-                setActiveTab(tab.id as typeof activeTab);
-                setMessage('');
-                setError('');
-              }}
+              onClick={() => handleTabSwitch(tab.id as typeof activeTab)}
               className={`pb-3 text-xs font-bold border-b-2 whitespace-nowrap uppercase tracking-wider transition-colors ${
                 activeTab === tab.id
                   ? 'border-[#ba0000] text-[#ba0000]'
@@ -894,27 +951,33 @@ function OrganisationSettingsContent() {
                 </form>
 
                 <div className="divide-y border rounded-xl">
-                  {invitations.map((inv) => (
-                    <div key={inv.id} className="p-4 flex justify-between items-center">
-                      <div>
-                        <span className="font-bold text-sm text-neutral-900">{inv.email}</span>
-                        <p className="text-xs text-neutral-500">Role: {inv.role}</p>
+                  {invitations.length > 0 ? (
+                    invitations.map((inv) => (
+                      <div key={inv.id} className="p-4 flex justify-between items-center">
+                        <div>
+                          <span className="font-bold text-sm text-neutral-900">{inv.email}</span>
+                          <p className="text-xs text-neutral-500">Role: {inv.role}</p>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className="text-xs font-bold uppercase px-2 py-0.5 rounded bg-amber-100 text-amber-800">
+                            {inv.status}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleResendInvitation(inv.id)}
+                            className="px-2.5 py-1 text-xs font-semibold text-neutral-700 bg-neutral-100 hover:bg-neutral-200 rounded border border-neutral-300 transition-colors"
+                            data-testid="reinvite-button"
+                          >
+                            Reinvite ✉️
+                          </button>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-3">
-                        <span className="text-xs font-bold uppercase px-2 py-0.5 rounded bg-amber-100 text-amber-800">
-                          {inv.status}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => handleResendInvitation(inv.id)}
-                          className="px-2.5 py-1 text-xs font-semibold text-neutral-700 bg-neutral-100 hover:bg-neutral-200 rounded border border-neutral-300 transition-colors"
-                          data-testid="reinvite-button"
-                        >
-                          Reinvite ✉️
-                        </button>
-                      </div>
+                    ))
+                  ) : (
+                    <div className="p-8 text-center text-xs text-neutral-400">
+                      No invitations sent yet. Use the form above to invite team members.
                     </div>
-                  ))}
+                  )}
                 </div>
               </div>
             )}
@@ -953,19 +1016,25 @@ function OrganisationSettingsContent() {
                 </form>
 
                 <div className="divide-y border rounded-xl">
-                  {teams.map((team) => (
-                    <div key={team.id} className="p-4 flex justify-between items-center">
-                      <div>
-                        <span className="font-bold text-sm text-neutral-900">{team.name}</span>
-                        <p className="text-xs text-neutral-500">
-                          {team.description || 'No description'}
-                        </p>
+                  {teams.length > 0 ? (
+                    teams.map((team) => (
+                      <div key={team.id} className="p-4 flex justify-between items-center">
+                        <div>
+                          <span className="font-bold text-sm text-neutral-900">{team.name}</span>
+                          <p className="text-xs text-neutral-500">
+                            {team.description || 'No description'}
+                          </p>
+                        </div>
+                        <span className="text-xs font-semibold text-neutral-600 bg-neutral-100 px-2.5 py-1 rounded-full">
+                          {team.members?.length || 0} Members
+                        </span>
                       </div>
-                      <span className="text-xs font-semibold text-neutral-600 bg-neutral-100 px-2.5 py-1 rounded-full">
-                        {team.members?.length || 0} Members
-                      </span>
+                    ))
+                  ) : (
+                    <div className="p-8 text-center text-xs text-neutral-400">
+                      No teams created yet. Create your first team using the form above.
                     </div>
-                  ))}
+                  )}
                 </div>
               </div>
             )}
@@ -1024,17 +1093,24 @@ function OrganisationSettingsContent() {
                 </form>
 
                 <div className="divide-y border rounded-xl">
-                  {roles.map((r) => (
-                    <div key={r.id} className="p-4 flex justify-between items-center">
-                      <div>
-                        <span className="font-bold text-sm text-neutral-900">{r.name}</span>
-                        <p className="text-xs text-neutral-500">{r.description}</p>
+                  {roles.length > 0 ? (
+                    roles.map((r) => (
+                      <div key={r.id} className="p-4 flex justify-between items-center">
+                        <div>
+                          <span className="font-bold text-sm text-neutral-900">{r.name}</span>
+                          <p className="text-xs text-neutral-500">{r.description}</p>
+                        </div>
+                        <span className="text-xs font-mono bg-neutral-100 px-2 py-0.5 rounded text-neutral-600">
+                          {r.permissions?.length || 0} permissions
+                        </span>
                       </div>
-                      <span className="text-xs font-mono bg-neutral-100 px-2 py-0.5 rounded text-neutral-600">
-                        {r.permissions?.length || 0} permissions
-                      </span>
+                    ))
+                  ) : (
+                    <div className="p-8 text-center text-xs text-neutral-400">
+                      No custom roles defined yet. Create a custom role to grant tailored
+                      permissions.
                     </div>
-                  ))}
+                  )}
                 </div>
               </div>
             )}
@@ -1068,20 +1144,26 @@ function OrganisationSettingsContent() {
                 </form>
 
                 <div className="divide-y border rounded-xl">
-                  {domains.map((d) => (
-                    <div key={d.id} className="p-4 space-y-1">
-                      <div className="flex justify-between items-center">
-                        <span className="font-bold text-sm text-neutral-900">{d.domain}</span>
-                        <span className="text-xs font-bold uppercase px-2 py-0.5 rounded bg-amber-100 text-amber-800">
-                          {d.status}
-                        </span>
+                  {domains.length > 0 ? (
+                    domains.map((d) => (
+                      <div key={d.id} className="p-4 space-y-1">
+                        <div className="flex justify-between items-center">
+                          <span className="font-bold text-sm text-neutral-900">{d.domain}</span>
+                          <span className="text-xs font-bold uppercase px-2 py-0.5 rounded bg-amber-100 text-amber-800">
+                            {d.status}
+                          </span>
+                        </div>
+                        <p className="text-xs font-mono text-neutral-500">
+                          DNS TXT:{' '}
+                          <code className="bg-neutral-100 px-1 rounded">{d.verificationToken}</code>
+                        </p>
                       </div>
-                      <p className="text-xs font-mono text-neutral-500">
-                        DNS TXT:{' '}
-                        <code className="bg-neutral-100 px-1 rounded">{d.verificationToken}</code>
-                      </p>
+                    ))
+                  ) : (
+                    <div className="p-8 text-center text-xs text-neutral-400">
+                      No custom domains added yet. Add a domain above to configure custom branding.
                     </div>
-                  ))}
+                  )}
                 </div>
               </div>
             )}

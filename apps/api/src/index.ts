@@ -38,11 +38,20 @@ app.use('*', async (c, next) => {
   const allowedOriginSetting = c.env?.WEB_URL;
   const corsMiddleware = cors({
     origin: (requestOrigin) => {
-      if (!requestOrigin) return '*';
-      if (!allowedOriginSetting || allowedOriginSetting === '*') return requestOrigin;
+      if (!requestOrigin) return '';
+      if (!allowedOriginSetting) {
+        return requestOrigin.startsWith('http://localhost:') ||
+          requestOrigin.startsWith('http://127.0.0.1:')
+          ? requestOrigin
+          : '';
+      }
 
       const origins = allowedOriginSetting.split(',').map((o) => o.trim());
-      if (origins.includes(requestOrigin) || requestOrigin.startsWith('http://localhost:')) {
+      if (
+        origins.includes(requestOrigin) ||
+        requestOrigin.startsWith('http://localhost:') ||
+        requestOrigin.startsWith('http://127.0.0.1:')
+      ) {
         return requestOrigin;
       }
 
@@ -59,9 +68,18 @@ app.use('*', async (c, next) => {
   return corsMiddleware(c, next);
 });
 
-// Request ID middleware
+// Security Response Headers (TECH-08) & Request ID Tracing (CQ-02)
 app.use('*', async (c, next) => {
-  c.set('requestId', crypto.randomUUID());
+  const requestId = c.req.header('x-request-id') || crypto.randomUUID();
+  c.set('requestId', requestId);
+  c.header('X-Request-Id', requestId);
+  c.header('X-Content-Type-Options', 'nosniff');
+  c.header('X-Frame-Options', 'DENY');
+  c.header('Referrer-Policy', 'strict-origin-when-cross-origin');
+  c.header('X-XSS-Protection', '1; mode=block');
+  if (c.env?.NODE_ENV === 'production') {
+    c.header('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  }
   await next();
 });
 

@@ -22,7 +22,12 @@ export function createRateLimiter(
     if (process.env.NODE_ENV === 'test') {
       return await next();
     }
-    const ip = c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown';
+    // Resolve client IP securely: prioritize Cloudflare's cf-connecting-ip (SEC-08)
+    const ip =
+      c.req.header('cf-connecting-ip')?.trim() ||
+      c.req.header('x-real-ip')?.trim() ||
+      c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ||
+      'unknown';
     const now = Date.now();
 
     // Lazy cleanup of expired entries on request

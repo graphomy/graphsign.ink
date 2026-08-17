@@ -174,13 +174,17 @@ export function createOrganisationRoutes(deps?: OrganisationDeps) {
     }
 
     // Issue updated JWT with new org context
-    const token = await signJwt({
-      sub: payload.sub,
-      orgId: targetOrg.id,
-      email: payload.email,
-      role: targetOrg.role,
-      jti: crypto.randomUUID(),
-    });
+    const jwtSecret = c.env?.JWT_SECRET || process.env.JWT_SECRET;
+    const token = await signJwt(
+      {
+        sub: payload.sub,
+        orgId: targetOrg.id,
+        email: payload.email,
+        role: targetOrg.role,
+        jti: crypto.randomUUID(),
+      },
+      jwtSecret,
+    );
 
     c.header('Set-Cookie', `graphsign_session=${token}; HttpOnly; Path=/; SameSite=Strict; Secure`);
 
