@@ -8,6 +8,9 @@ import { PrismaNeon } from '@prisma/adapter-neon';
  * @prisma/adapter-neon v6.x expects a PoolConfig object (not a Pool instance).
  * It creates and manages its own Pool internally.
  */
+// Cache PrismaClient instances by database URL to prevent repeated connection pool creation
+const prismaClientCache = new Map<string, PrismaClient>();
+
 export function createPrismaClient(databaseUrl: string): PrismaClient {
   if (
     !databaseUrl ||
@@ -19,8 +22,14 @@ export function createPrismaClient(databaseUrl: string): PrismaClient {
       `Invalid DATABASE_URL provided to createPrismaClient: "${preview}". Must be a valid postgresql:// or postgres:// connection string.`,
     );
   }
+  const cached = prismaClientCache.get(databaseUrl);
+  if (cached) {
+    return cached;
+  }
   const adapter = new PrismaNeon({ connectionString: databaseUrl });
-  return new PrismaClient({ adapter } as any);
+  const client = new PrismaClient({ adapter } as any);
+  prismaClientCache.set(databaseUrl, client);
+  return client;
 }
 
 // ── Legacy singleton for backward compatibility (local dev, tests) ──

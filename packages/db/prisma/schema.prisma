@@ -259,6 +259,9 @@ model Agreement {
   @@index([status])
   @@index([isArchived])
   @@index([expiresAt])
+  @@index([organisationId, isArchived, status, updatedAt(sort: Desc)])
+  @@index([organisationId, authorId, isArchived, updatedAt(sort: Desc)])
+  @@index([organisationId, deletedAt])
   @@map("agreements")
 }
 

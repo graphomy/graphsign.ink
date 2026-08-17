@@ -44,6 +44,42 @@ export function AgreementEditModal({
   const [activating, setActivating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [autosaveStatus, setAutosaveStatus] = useState<string>('');
+  const [isLoadingDetails, setIsLoadingDetails] = useState<boolean>(
+    !initialMarkdown && !!agreementId,
+  );
+
+  // Fetch full agreement details if markdownContent was omitted in list query
+  useEffect(() => {
+    if (!initialMarkdown && agreementId) {
+      let isMounted = true;
+      async function loadFullAgreement() {
+        try {
+          const res = await fetch(`${getApiUrl()}/api/v1/agreements/${agreementId}`, {
+            headers: { Authorization: `Bearer ${getToken()}` },
+          });
+          if (res.ok) {
+            const data = await res.json();
+            if (isMounted) {
+              if (data.markdownContent) setMarkdown(data.markdownContent);
+              if (data.title) setTitle((prev) => prev || data.title);
+              if (data.description) setDescription((prev) => prev || data.description);
+              if (data.tags) setTags((prev) => (prev.length === 0 ? data.tags : prev));
+            }
+          }
+        } catch (e) {
+          console.error('Failed to load full agreement details:', e);
+        } finally {
+          if (isMounted) {
+            setIsLoadingDetails(false);
+          }
+        }
+      }
+      loadFullAgreement();
+      return () => {
+        isMounted = false;
+      };
+    }
+  }, [agreementId, initialMarkdown]);
 
   // Autosave Draft interval (every 30 seconds)
   useEffect(() => {
@@ -203,6 +239,13 @@ export function AgreementEditModal({
         </div>
 
         {/* Global Error Banner */}
+        {isLoadingDetails && (
+          <div className="mb-4 p-2 bg-blue-50 border border-blue-200 rounded-lg text-xs font-medium text-blue-700 flex items-center gap-2">
+            <div className="w-3.5 h-3.5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+            <span>Loading full agreement content...</span>
+          </div>
+        )}
+
         {error && (
           <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-xs font-medium text-red-700 flex items-center justify-between">
             <span>{error}</span>
