@@ -172,7 +172,17 @@ export class AgreementService {
       });
     }
 
-    return agreement;
+    // Strip large fileData binary from the returned agreement object to keep response lightweight (<1KB)
+    const { metadata, ...rest } = agreement;
+    const cleanMetadata =
+      metadata && typeof metadata === 'object' ? { ...(metadata as Record<string, unknown>) } : {};
+    delete cleanMetadata.fileData;
+    delete cleanMetadata.fileBase64;
+
+    return {
+      ...rest,
+      metadata: cleanMetadata,
+    };
   }
 
   /**
@@ -690,7 +700,17 @@ export class AgreementService {
       });
     }
 
-    return cloned;
+    // Strip large fileData binary from the returned cloned agreement object
+    const { metadata, ...rest } = cloned;
+    const cleanMetadata =
+      metadata && typeof metadata === 'object' ? { ...(metadata as Record<string, unknown>) } : {};
+    delete cleanMetadata.fileData;
+    delete cleanMetadata.fileBase64;
+
+    return {
+      ...rest,
+      metadata: cleanMetadata,
+    };
   }
 
   /**

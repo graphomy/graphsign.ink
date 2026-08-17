@@ -407,6 +407,8 @@ model AuditLog {
   organisation Organisation @relation(fields: [organisationId], references: [id])
   user         User?        @relation(fields: [userId], references: [id])
 
+  @@index([organisationId, createdAt(sort: Desc)])
+  @@index([organisationId])
   @@index([resourceType, resourceId])
   @@index([userId])
   @@index([createdAt])
