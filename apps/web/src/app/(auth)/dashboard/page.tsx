@@ -239,7 +239,6 @@ function DashboardContent() {
                     <th className="px-5 py-3">Status</th>
                     <th className="px-5 py-3">Author</th>
                     <th className="px-5 py-3">Created</th>
-                    <th className="px-5 py-3 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-neutral-100">
@@ -264,14 +263,6 @@ function DashboardContent() {
                       </td>
                       <td className="px-5 py-3.5 text-neutral-500 font-medium">
                         {formatDate(agreement.createdAt)}
-                      </td>
-                      <td className="px-5 py-3.5 text-right">
-                        <Link
-                          href="/agreements"
-                          className="text-xs font-semibold text-[#ba0000] hover:underline"
-                        >
-                          Manage →
-                        </Link>
                       </td>
                     </tr>
                   ))}

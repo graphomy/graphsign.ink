@@ -69,7 +69,7 @@ describe('AgreementManagementPage Unit Tests (Epic INK-8)', () => {
       expect(screen.getByText('Agreement Management')).toBeInTheDocument();
     });
 
-    expect(screen.getByText(/Upload PDF\/DOCX\/MD/i)).toBeInTheDocument();
+    expect(screen.getByText(/Upload Agreement/i)).toBeInTheDocument();
     expect(screen.getAllByText(/Create from Scratch/i)[0]).toBeInTheDocument();
   });
 
@@ -83,7 +83,7 @@ describe('AgreementManagementPage Unit Tests (Epic INK-8)', () => {
     });
   });
 
-  it('renders active agreements in table rows without Edit or Clone buttons', async () => {
+  it('renders active agreements in table rows with Send for Signature, PDF, and 3-dots dropdown', async () => {
     render(<AgreementManagementPage />);
 
     await waitFor(() => {
@@ -98,16 +98,23 @@ describe('AgreementManagementPage Unit Tests (Epic INK-8)', () => {
     expect(screen.getByText('Document Details')).toBeInTheDocument();
     expect(screen.getByText('Last Modified')).toBeInTheDocument();
 
-    // Edit and Clone buttons MUST NOT be present in Active tab
+    // Edit button MUST NOT be present in Active tab for active agreements
     expect(screen.queryByRole('button', { name: /Edit/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /Clone/i })).not.toBeInTheDocument();
 
-    // PDF and History buttons MUST be present
+    // Send for Signature, PDF and 3-dots buttons MUST be present
+    expect(screen.getByTitle('Send for Signature')).toBeInTheDocument();
     expect(screen.getByTitle('View PDF')).toBeInTheDocument();
-    expect(screen.getByTitle('Change History')).toBeInTheDocument();
+    expect(screen.getByTitle('More actions')).toBeInTheDocument();
+
+    // Clicking 3-dots button reveals Clone, History, Tags, Archive
+    fireEvent.click(screen.getByTitle('More actions'));
+    expect(screen.getByRole('button', { name: /Clone/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /History/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Tags/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Archive$/i })).toBeInTheDocument();
   });
 
-  it('renders draft agreements with Edit and Clone buttons in Drafts tab', async () => {
+  it('renders draft agreements with Review and Edit buttons in Drafts tab', async () => {
     render(<AgreementManagementPage />);
 
     await waitFor(() => {
@@ -120,9 +127,15 @@ describe('AgreementManagementPage Unit Tests (Epic INK-8)', () => {
       expect(screen.getByText('Vendor Master Agreement Draft')).toBeInTheDocument();
     });
 
-    // In Drafts tab, Edit and Clone buttons MUST be present
+    // In Drafts tab, Review and Edit buttons MUST be present directly on the row
+    expect(screen.getByRole('button', { name: /Review/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Edit/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Clone/i })).toBeInTheDocument();
+    expect(screen.getByTitle('Send for Signature')).toBeInTheDocument();
+    expect(screen.getByTitle('View PDF')).toBeInTheDocument();
+
+    // Dropdown contains Clone
+    fireEvent.click(screen.getByTitle('More actions'));
+    expect(screen.getByText(/Clone/i)).toBeInTheDocument();
   });
 
   it('opens PDF viewer modal when PDF button is clicked', async () => {

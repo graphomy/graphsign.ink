@@ -858,7 +858,11 @@ export class AgreementService {
     }
 
     if (query.status) {
-      where.status = query.status;
+      if (query.status === 'ACTIVE') {
+        where.status = { not: 'DRAFT' };
+      } else {
+        where.status = query.status;
+      }
     }
 
     if (query.search) {
@@ -905,7 +909,6 @@ export class AgreementService {
           createdAt: true,
           updatedAt: true,
           deletedAt: true,
-          fields: true,
           author: { select: { id: true, name: true, email: true } },
         },
       }),

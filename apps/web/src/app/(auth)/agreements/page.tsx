@@ -113,7 +113,16 @@ function AgreementManagementContent() {
 
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
   const searchParams = useSearchParams();
+
+  useEffect(() => {
+    function handleClickOutside() {
+      setOpenDropdownId(null);
+    }
+    window.addEventListener('click', handleClickOutside);
+    return () => window.removeEventListener('click', handleClickOutside);
+  }, []);
 
   useEffect(() => {
     const action = searchParams?.get('action');
@@ -128,9 +137,12 @@ function AgreementManagementContent() {
   function handleTabChange(tab: 'active' | 'drafts' | 'archived') {
     setActiveTab(tab);
     setCurrentPage(1);
+    setAgreements([]);
+    setOpenDropdownId(null);
   }
 
   useEffect(() => {
+    const controller = new AbortController();
     let ignore = false;
     async function load() {
       setLoading(true);
@@ -145,6 +157,7 @@ function AgreementManagementContent() {
 
         const res = await fetch(url, {
           headers: { Authorization: `Bearer ${getToken()}` },
+          signal: controller.signal,
         });
 
         if (res.status === 401) {
@@ -187,8 +200,10 @@ function AgreementManagementContent() {
           }
         }
       } catch (err: unknown) {
-        if (!ignore) {
+        if (!ignore && !(err instanceof DOMException && err.name === 'AbortError')) {
           console.error(err);
+          setActionError(err instanceof Error ? err.message : 'Failed to load agreements.');
+          setAgreements([]);
         }
       } finally {
         if (!ignore) {
@@ -199,6 +214,7 @@ function AgreementManagementContent() {
     load();
     return () => {
       ignore = true;
+      controller.abort();
     };
   }, [activeTab, searchQuery, tagFilter, currentPage, pageSize, refreshTrigger]);
 
@@ -495,7 +511,7 @@ function AgreementManagementContent() {
               }}
               className="px-4 py-2 bg-[#ba0000] hover:bg-red-700 text-white text-xs font-semibold rounded-lg shadow-sm transition-all flex items-center gap-1.5"
             >
-              <span>📄</span> Upload PDF/DOCX/MD
+              <span>📄</span> Upload Agreement
             </button>
             <button
               onClick={() => {
@@ -710,9 +726,11 @@ function AgreementManagementContent() {
 
                       {/* Actions Column */}
                       <td className="py-3.5 px-4 text-right whitespace-nowrap">
-                        <div className="flex items-center justify-end gap-1.5 flex-wrap">
-                          {/* Workflow: Submit for Review (INK-87) */}
-                          {(agreement.status === 'DRAFT' || agreement.status === 'REJECTED') && (
+                        <div className="flex items-center justify-end gap-1.5">
+                          {/* Review Button: shown on Draft screen or for DRAFT / REJECTED agreements */}
+                          {(activeTab === 'drafts' ||
+                            agreement.status === 'DRAFT' ||
+                            agreement.status === 'REJECTED') && (
                             <button
                               onClick={() => {
                                 setSelectedAgreement(agreement);
@@ -725,52 +743,10 @@ function AgreementManagementContent() {
                             </button>
                           )}
 
-                          {/* Workflow: Review Decision (Approve / Reject) (INK-88, INK-89) */}
-                          {agreement.status === 'IN_REVIEW' && (
-                            <button
-                              onClick={() => {
-                                setSelectedAgreement(agreement);
-                                setShowReviewDecisionModal(true);
-                              }}
-                              className="px-2.5 py-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded transition-colors flex items-center gap-1"
-                              title="Review Decision"
-                            >
-                              <span>⚖️</span> Decide
-                            </button>
-                          )}
-
-                          {/* Workflow: Send for Signature (INK-90, INK-91, INK-92) */}
-                          {(agreement.status === 'DRAFT' ||
-                            agreement.status === 'APPROVED' ||
+                          {/* Edit Button: shown on Draft screen or for DRAFT / REJECTED agreements */}
+                          {(activeTab === 'drafts' ||
+                            agreement.status === 'DRAFT' ||
                             agreement.status === 'REJECTED') && (
-                            <button
-                              onClick={() => {
-                                setSelectedAgreement(agreement);
-                                setShowSendAgreementModal(true);
-                              }}
-                              className="px-2.5 py-1 text-[11px] font-bold text-white bg-blue-600 hover:bg-blue-700 rounded transition-colors flex items-center gap-1 shadow-xs"
-                              title="Send for Signature"
-                            >
-                              <span>🚀</span> Send
-                            </button>
-                          )}
-
-                          {/* Workflow: Cancel Agreement (INK-95) */}
-                          {(agreement.status === 'SENT' || agreement.status === 'IN_REVIEW') && (
-                            <button
-                              onClick={() => {
-                                setSelectedAgreement(agreement);
-                                setShowCancelAgreementModal(true);
-                              }}
-                              className="px-2.5 py-1 text-[11px] font-semibold text-red-600 bg-red-50 hover:bg-red-100 border border-red-200 rounded transition-colors flex items-center gap-1"
-                              title="Cancel Agreement"
-                            >
-                              <span>🛑</span> Void
-                            </button>
-                          )}
-
-                          {/* Edit button: shown for Drafts and Rejected */}
-                          {(agreement.status === 'DRAFT' || agreement.status === 'REJECTED') && (
                             <button
                               onClick={() => openEditModal(agreement)}
                               className="px-2.5 py-1 text-[11px] font-semibold text-[#ba0000] bg-red-50 hover:bg-red-100 border border-red-200 rounded transition-colors flex items-center gap-1"
@@ -780,16 +756,14 @@ function AgreementManagementContent() {
                             </button>
                           )}
 
-                          {/* Design / Place Fields Visual Editor Button (INK-78 to INK-85) */}
-                          {agreement.status !== 'COMPLETED' && agreement.status !== 'CANCELLED' && (
-                            <button
-                              onClick={() => openDocumentEditor(agreement)}
-                              className="px-2.5 py-1 text-[11px] font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded transition-colors flex items-center gap-1"
-                              title="Send for Signature"
-                            >
-                              <span>✍️</span> Send for Signature
-                            </button>
-                          )}
+                          {/* Send for Signature Button */}
+                          <button
+                            onClick={() => openDocumentEditor(agreement)}
+                            className="px-2.5 py-1 text-[11px] font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded transition-colors flex items-center gap-1"
+                            title="Send for Signature"
+                          >
+                            <span>✍️</span> Send for Signature
+                          </button>
 
                           {/* View PDF Button */}
                           <button
@@ -800,51 +774,118 @@ function AgreementManagementContent() {
                             <span>👁️</span> PDF
                           </button>
 
-                          {/* Clone Button */}
-                          {activeTab === 'drafts' && (
+                          {/* 3 Dots Dropdown Menu */}
+                          <div className="relative inline-block text-left">
                             <button
-                              onClick={() => handleClone(agreement.id)}
-                              disabled={cloningId === agreement.id}
-                              className="px-2.5 py-1 text-[11px] font-medium text-neutral-700 hover:text-neutral-900 bg-neutral-50 hover:bg-neutral-100 border border-neutral-200 rounded transition-colors disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-1"
-                              title="Clone Draft"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setOpenDropdownId(
+                                  openDropdownId === agreement.id ? null : agreement.id,
+                                );
+                              }}
+                              className="p-1.5 text-neutral-500 hover:text-neutral-900 hover:bg-neutral-100 rounded border border-neutral-200 transition-colors"
+                              title="More actions"
+                              aria-label="More actions"
                             >
-                              {cloningId === agreement.id ? 'Cloning...' : '📋 Clone'}
+                              <span className="text-xs font-bold leading-none select-none px-0.5">
+                                •••
+                              </span>
                             </button>
-                          )}
 
-                          {/* Concise History Button */}
-                          <button
-                            onClick={() => openHistoryModal(agreement)}
-                            className="px-2 py-1 text-[11px] font-medium text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100 rounded transition-colors"
-                            title="Change History"
-                          >
-                            🕒 History
-                          </button>
+                            {openDropdownId === agreement.id && (
+                              <div
+                                onClick={(e) => e.stopPropagation()}
+                                className="absolute right-0 mt-1 w-44 bg-white border border-neutral-200 rounded-lg shadow-lg z-50 py-1 text-left"
+                              >
+                                <button
+                                  onClick={() => {
+                                    setOpenDropdownId(null);
+                                    handleClone(agreement.id);
+                                  }}
+                                  disabled={cloningId === agreement.id}
+                                  className="w-full px-3 py-1.5 text-xs text-neutral-700 hover:bg-neutral-50 flex items-center gap-2 transition-colors disabled:opacity-50"
+                                >
+                                  <span>📋</span>{' '}
+                                  {cloningId === agreement.id ? 'Cloning...' : 'Clone'}
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setOpenDropdownId(null);
+                                    openHistoryModal(agreement);
+                                  }}
+                                  className="w-full px-3 py-1.5 text-xs text-neutral-700 hover:bg-neutral-50 flex items-center gap-2 transition-colors"
+                                >
+                                  <span>🕒</span> History
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setOpenDropdownId(null);
+                                    openMetadataModal(agreement);
+                                  }}
+                                  className="w-full px-3 py-1.5 text-xs text-neutral-700 hover:bg-neutral-50 flex items-center gap-2 transition-colors"
+                                >
+                                  <span>🏷️</span> Tags
+                                </button>
 
-                          {/* Tags Button */}
-                          <button
-                            onClick={() => openMetadataModal(agreement)}
-                            className="p-1 text-neutral-500 hover:text-neutral-900 hover:bg-neutral-100 rounded transition-colors"
-                            title="Edit Tags"
-                          >
-                            🏷️
-                          </button>
+                                {agreement.status === 'IN_REVIEW' && (
+                                  <button
+                                    onClick={() => {
+                                      setOpenDropdownId(null);
+                                      setSelectedAgreement(agreement);
+                                      setShowReviewDecisionModal(true);
+                                    }}
+                                    className="w-full px-3 py-1.5 text-xs text-emerald-700 hover:bg-emerald-50 flex items-center gap-2 transition-colors"
+                                  >
+                                    <span>⚖️</span> Review Decision
+                                  </button>
+                                )}
 
-                          {/* Archive / Unarchive Button */}
-                          <button
-                            onClick={() => handleArchiveToggle(agreement.id, !agreement.isArchived)}
-                            disabled={isArchivingId === agreement.id}
-                            className="text-[11px] font-semibold text-neutral-400 hover:text-red-600 px-1.5 py-0.5 rounded transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-                            title={
-                              agreement.isArchived ? 'Unarchive Agreement' : 'Archive Agreement'
-                            }
-                          >
-                            {isArchivingId === agreement.id
-                              ? 'Updating...'
-                              : agreement.isArchived
-                                ? 'Unarchive'
-                                : 'Archive'}
-                          </button>
+                                {(agreement.status === 'SENT' ||
+                                  agreement.status === 'IN_REVIEW') && (
+                                  <button
+                                    onClick={() => {
+                                      setOpenDropdownId(null);
+                                      setSelectedAgreement(agreement);
+                                      setShowCancelAgreementModal(true);
+                                    }}
+                                    className="w-full px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 flex items-center gap-2 transition-colors"
+                                  >
+                                    <span>🛑</span> Void Agreement
+                                  </button>
+                                )}
+
+                                <div className="border-t border-neutral-100 my-1" />
+
+                                {activeTab === 'archived' || agreement.isArchived ? (
+                                  <button
+                                    onClick={() => {
+                                      setOpenDropdownId(null);
+                                      handleArchiveToggle(agreement.id, false);
+                                    }}
+                                    disabled={isArchivingId === agreement.id}
+                                    className="w-full px-3 py-1.5 text-xs text-neutral-700 hover:bg-neutral-50 flex items-center gap-2 transition-colors disabled:opacity-50"
+                                  >
+                                    <span>📥</span>{' '}
+                                    {isArchivingId === agreement.id
+                                      ? 'Unarchiving...'
+                                      : 'Unarchive'}
+                                  </button>
+                                ) : (
+                                  <button
+                                    onClick={() => {
+                                      setOpenDropdownId(null);
+                                      handleArchiveToggle(agreement.id, true);
+                                    }}
+                                    disabled={isArchivingId === agreement.id}
+                                    className="w-full px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 flex items-center gap-2 transition-colors disabled:opacity-50"
+                                  >
+                                    <span>📦</span>{' '}
+                                    {isArchivingId === agreement.id ? 'Archiving...' : 'Archive'}
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </td>
                     </tr>
