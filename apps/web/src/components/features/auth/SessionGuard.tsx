@@ -21,6 +21,22 @@ export function SessionGuard({
     return !!localStorage.getItem('graphsign_session_token');
   });
 
+  const handleSignOutDueToTimeout = useCallback((reason: string = 'timeout') => {
+    const currentPath = window.location.pathname + window.location.search;
+
+    localStorage.removeItem('token');
+    localStorage.removeItem('graphsign_session_token');
+    localStorage.removeItem('graphsign_user_email');
+    localStorage.removeItem('graphsign_org_id');
+    localStorage.removeItem('graphsign_user_id');
+
+    const apiUrl = getApiUrl();
+    fetch(`${apiUrl}/api/v1/auth/logout`, { method: 'POST' }).catch(() => null);
+
+    const redirectTarget = `/login?reason=${encodeURIComponent(reason)}&returnTo=${encodeURIComponent(currentPath)}`;
+    window.location.href = redirectTarget;
+  }, []);
+
   // Fetch session settings from backend if available
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -33,7 +49,13 @@ export function SessionGuard({
         Authorization: `Bearer ${localStorage.getItem('graphsign_session_token') ?? ''}`,
       },
     })
-      .then((res) => (res.ok ? res.json() : null))
+      .then((res) => {
+        if (res.status === 401) {
+          handleSignOutDueToTimeout('session_expired');
+          return null;
+        }
+        return res.ok ? res.json() : null;
+      })
       .then((data) => {
         if (
           isMounted &&
@@ -48,22 +70,7 @@ export function SessionGuard({
     return () => {
       isMounted = false;
     };
-  }, [isAuthenticated]);
-
-  const handleSignOutDueToTimeout = useCallback(() => {
-    const currentPath = window.location.pathname + window.location.search;
-
-    localStorage.removeItem('token');
-    localStorage.removeItem('graphsign_session_token');
-    localStorage.removeItem('graphsign_user_email');
-    localStorage.removeItem('graphsign_org_id');
-
-    const apiUrl = getApiUrl();
-    fetch(`${apiUrl}/api/v1/auth/logout`, { method: 'POST' }).catch(() => null);
-
-    const redirectTarget = `/login?reason=timeout&returnTo=${encodeURIComponent(currentPath)}`;
-    window.location.href = redirectTarget;
-  }, []);
+  }, [handleSignOutDueToTimeout, isAuthenticated]);
 
   useEffect(() => {
     if (!isAuthenticated) {
