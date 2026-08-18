@@ -46,6 +46,6 @@ prisma/generated/
 # Local Environment Setup Guides
 Environment_Setup/
 
-# Next.js generated agent rules
-AGENTS.md
+# Wrangler / Cloudflare
+.wrangler/
 
