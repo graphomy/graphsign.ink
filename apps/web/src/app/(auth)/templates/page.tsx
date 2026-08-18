@@ -109,7 +109,22 @@ function TemplateManagementContent() {
           headers: { Authorization: `Bearer ${getToken()}` },
         });
 
-        if (!res.ok) throw new Error('Failed to load templates.');
+        if (res.status === 401) {
+          localStorage.removeItem('token');
+          localStorage.removeItem('graphsign_session_token');
+          localStorage.removeItem('graphsign_user_email');
+          localStorage.removeItem('graphsign_org_id');
+          localStorage.removeItem('graphsign_user_id');
+          window.location.href = '/login?reason=session_expired';
+          return;
+        }
+
+        if (!res.ok) {
+          const errData = await res.json().catch(() => null);
+          throw new Error(
+            errData?.error?.message || errData?.message || 'Failed to load templates.',
+          );
+        }
         const data = await res.json();
         if (!ignore) {
           setTemplates(data.items || []);

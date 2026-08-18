@@ -38,6 +38,8 @@ function arrayBufferToBase64Url(buffer: ArrayBuffer): string {
 
 /**
  * Resolves JWT secret with strict validation to prevent hardcoded secret vulnerabilities (SEC-01).
+ * In production (NODE_ENV === 'production'), strictly requires JWT_SECRET in environment bindings.
+ * In development or testing, provides a deterministic local fallback key for seamless developer onboarding.
  */
 export function resolveJwtSecret(secret?: string): string {
   if (secret && secret.trim().length > 0) {
@@ -47,10 +49,12 @@ export function resolveJwtSecret(secret?: string): string {
   if (envSecret && envSecret.trim().length > 0) {
     return envSecret.trim();
   }
-  if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'test') {
-    return 'test_jwt_secret_key_minimum_32_bytes_long!';
+  const nodeEnv = typeof process !== 'undefined' ? process.env?.NODE_ENV : undefined;
+  if (nodeEnv === 'production') {
+    throw new Error('JWT_SECRET configuration is missing in environment bindings.');
   }
-  throw new Error('JWT_SECRET configuration is missing in environment bindings.');
+  // Local development & test fallback secret
+  return 'graphsign_jwt_dev_local_secret_key_minimum_32_bytes!';
 }
 
 async function getHmacKey(secret?: string): Promise<CryptoKey> {

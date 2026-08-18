@@ -64,4 +64,19 @@ describe('JWT Utility (Web Crypto HMAC-SHA256)', () => {
     const token = await signJwt(expiredPayload);
     await expect(verifyJwt(token)).rejects.toThrow('JWT token expired');
   });
+
+  it('should throw in production if JWT_SECRET is missing', async () => {
+    const originalEnv = process.env.NODE_ENV;
+    const originalSecret = process.env.JWT_SECRET;
+    try {
+      process.env.NODE_ENV = 'production';
+      delete process.env.JWT_SECRET;
+      await expect(signJwt(mockPayload)).rejects.toThrow(
+        'JWT_SECRET configuration is missing in environment bindings.',
+      );
+    } finally {
+      process.env.NODE_ENV = originalEnv;
+      if (originalSecret !== undefined) process.env.JWT_SECRET = originalSecret;
+    }
+  });
 });
