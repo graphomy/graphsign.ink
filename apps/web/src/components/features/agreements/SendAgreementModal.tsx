@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import { getApiUrl } from '@/lib/api';
 
 interface RecipientItem {
   id?: string;
@@ -17,11 +18,6 @@ interface SendAgreementModalProps {
   defaultRecipients?: RecipientItem[];
   onClose: () => void;
   onSuccess: (message: string) => void;
-}
-
-function getApiUrl(): string {
-  if (typeof window === 'undefined') return 'http://localhost:8787';
-  return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8787';
 }
 
 function getToken(): string {

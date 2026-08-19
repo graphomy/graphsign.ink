@@ -8,13 +8,24 @@ export function getApiUrl(): string {
   }
 
   if (typeof window !== 'undefined') {
-    const hostname = window.location.hostname;
+    const hostname = window?.location?.hostname || '';
     if (hostname === 'localhost' || hostname === '127.0.0.1') {
       return 'http://localhost:8787';
     }
-    // In production published deployments where NEXT_PUBLIC_API_URL was not set at build time,
-    // fallback to relative base URL (or current origin)
-    return window.location.origin;
+    // Intelligent domain fallbacks for Cloudflare Pages preview & production environments
+    if (hostname && (hostname.includes('dev-graphsign-web') || hostname.includes('dev.'))) {
+      return 'https://dev-graphsign-api.kunal-f9f.workers.dev';
+    }
+    if (
+      hostname &&
+      (hostname === 'graphsign.ink' ||
+        hostname === 'www.graphsign.ink' ||
+        hostname.includes('graphsign-web.pages.dev'))
+    ) {
+      return 'https://graphsign-api.kunal-f9f.workers.dev';
+    }
+    // Fallback to relative base URL (or current origin)
+    return window.location?.origin || 'http://localhost:8787';
   }
 
   return 'http://localhost:8787';

@@ -859,7 +859,9 @@ export class AgreementService {
 
     if (query.status) {
       if (query.status === 'ACTIVE') {
-        where.status = { not: 'DRAFT' };
+        where.status = { notIn: ['DRAFT', 'IN_REVIEW', 'REJECTED'] };
+      } else if (query.status === 'DRAFT') {
+        where.status = { in: ['DRAFT', 'IN_REVIEW', 'REJECTED'] };
       } else {
         where.status = query.status;
       }
