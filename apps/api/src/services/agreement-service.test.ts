@@ -284,6 +284,77 @@ describe('AgreementService Unit Tests (Epic INK-8)', () => {
       );
     });
 
+    it('listAgreements - filters ACTIVE status by excluding DRAFT, IN_REVIEW, and REJECTED', async () => {
+      mockPrisma.agreement.findMany.mockResolvedValue([
+        { id: 'ag-1', title: 'Active Contract', status: 'ACTIVE' },
+      ]);
+      mockPrisma.agreement.count.mockResolvedValue(1);
+
+      await service.listAgreements(
+        'org-1',
+        { page: 1, limit: 20, status: 'ACTIVE' },
+        'admin-1',
+        'admin',
+      );
+
+      expect(mockPrisma.agreement.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            organisationId: 'org-1',
+            isArchived: false,
+            status: { notIn: ['DRAFT', 'IN_REVIEW', 'REJECTED'] },
+          }),
+        }),
+      );
+    });
+
+    it('listAgreements - filters DRAFT status by including DRAFT, IN_REVIEW, and REJECTED', async () => {
+      mockPrisma.agreement.findMany.mockResolvedValue([
+        { id: 'ag-1', title: 'Draft Contract', status: 'DRAFT' },
+      ]);
+      mockPrisma.agreement.count.mockResolvedValue(1);
+
+      await service.listAgreements(
+        'org-1',
+        { page: 1, limit: 20, status: 'DRAFT' },
+        'admin-1',
+        'admin',
+      );
+
+      expect(mockPrisma.agreement.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            organisationId: 'org-1',
+            isArchived: false,
+            status: { in: ['DRAFT', 'IN_REVIEW', 'REJECTED'] },
+          }),
+        }),
+      );
+    });
+
+    it('listAgreements - filters archived agreements when isArchived is true', async () => {
+      mockPrisma.agreement.findMany.mockResolvedValue([
+        { id: 'ag-archived', title: 'Archived Agreement', isArchived: true },
+      ]);
+      mockPrisma.agreement.count.mockResolvedValue(1);
+
+      await service.listAgreements(
+        'org-1',
+        { page: 1, limit: 20, isArchived: true },
+        'admin-1',
+        'admin',
+      );
+
+      expect(mockPrisma.agreement.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            organisationId: 'org-1',
+            isArchived: true,
+          }),
+        }),
+      );
+    });
+
     it('getAgreementById - allows author to access their own agreement', async () => {
       mockPrisma.agreement.findFirst.mockResolvedValue({
         id: 'ag-1',

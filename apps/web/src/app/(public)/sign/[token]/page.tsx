@@ -3,6 +3,7 @@
 export const runtime = 'edge';
 
 import React, { useState, useEffect, useRef, useMemo, use } from 'react';
+import { getApiUrl } from '@/lib/api';
 
 interface RecipientInfo {
   id: string;
@@ -62,11 +63,6 @@ interface AgreementDetails {
   expiresAt?: string;
   senderName: string;
   organisationName: string;
-}
-
-function getApiUrl(): string {
-  if (typeof window === 'undefined') return 'http://localhost:8787';
-  return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8787';
 }
 
 export default function SignDocumentPage({
