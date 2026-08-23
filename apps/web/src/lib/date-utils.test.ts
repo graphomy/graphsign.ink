@@ -1,5 +1,11 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { formatDate, formatDateTime, getUserTimezone, setUserTimezone } from './date-utils';
+import {
+  formatDate,
+  formatDateTime,
+  formatStatus,
+  getUserTimezone,
+  setUserTimezone,
+} from './date-utils';
 
 describe('date-utils (DD-MON-YYYY)', () => {
   beforeEach(() => {
@@ -46,5 +52,16 @@ describe('date-utils (DD-MON-YYYY)', () => {
     expect(formatDate(undefined)).toBe('');
     expect(formatDate('invalid-date')).toBe('');
     expect(formatDateTime(null)).toBe('');
+  });
+
+  it('formats status strings correctly without underscores and IN_REVIEW as In Review', () => {
+    expect(formatStatus('IN_REVIEW')).toBe('In Review');
+    expect(formatStatus('in_review')).toBe('In Review');
+    expect(formatStatus('SENT_FOR_SIGNATURE')).toBe('SENT FOR SIGNATURE');
+    expect(formatStatus('PENDING_REVIEW')).toBe('PENDING REVIEW');
+    expect(formatStatus('DRAFT')).toBe('DRAFT');
+    expect(formatStatus('COMPLETED')).toBe('COMPLETED');
+    expect(formatStatus(null)).toBe('');
+    expect(formatStatus(undefined)).toBe('');
   });
 });

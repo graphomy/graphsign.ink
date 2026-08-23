@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { renderMarkdownToHtml } from './MarkdownEditor';
 import { getApiUrl } from '@/lib/api';
+import { formatStatus } from '@/lib/date-utils';
 
 interface AgreementData {
   id: string;
@@ -220,12 +221,12 @@ export function PdfViewerModal({ agreement, onClose, onOpenEditor }: PdfViewerMo
     // Markdown file download
     const content =
       agreement.markdownContent ||
-      `# ${agreement.title}\n\n${agreement.description || ''}\n\nStatus: ${agreement.status}\nVersion: ${versionDisplay}`;
-    const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
+      `# ${agreement.title}\n\n${agreement.description || ''}\n\nStatus: ${formatStatus(agreement.status)}\nVersion: ${versionDisplay}`;
+    const blob = new Blob([content], { type: 'text/markdown' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = fileName;
+    a.download = isPdf ? `${cleanTitle}.pdf` : `${cleanTitle}_v${agreement.version}.md`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -244,7 +245,7 @@ export function PdfViewerModal({ agreement, onClose, onOpenEditor }: PdfViewerMo
                 {agreement.title}
               </h2>
               <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-green-600/30 text-green-400 border border-green-500/40">
-                {agreement.status} {versionDisplay}
+                {formatStatus(agreement.status)} {versionDisplay}
               </span>
             </div>
             <p className="text-[11px] text-neutral-400">

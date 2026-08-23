@@ -419,7 +419,7 @@ export class AgreementService {
       throw new NotFoundError('Agreement not found.');
     }
 
-    // Non-admin users can only view their own agreements (INK-248)
+    // Non-admin users can only view their own agreements or agreements assigned to them for review (INK-248, INK-263)
     if (
       userRole &&
       userRole !== 'org_admin' &&
@@ -427,7 +427,8 @@ export class AgreementService {
       userRole !== 'super_admin' &&
       userId &&
       userId !== 'unknown' &&
-      agreement.authorId !== userId
+      agreement.authorId !== userId &&
+      agreement.reviewerId !== userId
     ) {
       throw new ForbiddenError('You do not have permission to access this agreement.');
     }
@@ -845,7 +846,7 @@ export class AgreementService {
       isArchived: query.isArchived ?? false,
     };
 
-    // Non-admin users are strictly scoped to their authored documents (INK-248)
+    // Non-admin users are strictly scoped to their authored documents or documents assigned to them for review (INK-248, INK-263)
     if (
       userRole &&
       userRole !== 'org_admin' &&
@@ -854,7 +855,7 @@ export class AgreementService {
       userId &&
       userId !== 'unknown'
     ) {
-      where.authorId = userId;
+      where.OR = [{ authorId: userId }, { reviewerId: userId }];
     }
 
     if (query.status) {
@@ -868,10 +869,16 @@ export class AgreementService {
     }
 
     if (query.search) {
-      where.OR = [
+      const searchConditions = [
         { title: { contains: query.search, mode: 'insensitive' } },
         { description: { contains: query.search, mode: 'insensitive' } },
       ];
+      if (where.OR) {
+        where.AND = [{ OR: where.OR }, { OR: searchConditions }];
+        delete where.OR;
+      } else {
+        where.OR = searchConditions;
+      }
     }
 
     // Filter by tag using Prisma JsonB array_contains
