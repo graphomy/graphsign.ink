@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { getApiUrl } from '@/lib/api';
+import { formatStatus } from '@/lib/date-utils';
 import { renderMarkdownToHtml } from './MarkdownEditor';
 
 export type FieldType =
@@ -198,6 +199,63 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
     }
     return null;
   }, [rawFileData, agreement.mimeType]);
+
+  const [fetchedBlobUrl, setFetchedBlobUrl] = useState<string | null>(null);
+  const [isLoadingPdf, setIsLoadingPdf] = useState<boolean>(false);
+  const [pdfFetchError, setPdfFetchError] = useState<string | null>(null);
+
+  // Fetch binary file with authorization headers when inline base64 is not present
+  useEffect(() => {
+    if (inlinePdfUrl || isMarkdown) {
+      return;
+    }
+
+    let isMounted = true;
+    let createdUrl: string | null = null;
+
+    async function loadPdfBinary() {
+      setIsLoadingPdf(true);
+      setPdfFetchError(null);
+
+      try {
+        const token = getToken();
+        const res = await fetch(`${getApiUrl()}/api/v1/agreements/${agreement.id}/file`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        if (!res.ok) {
+          const errData = await res.json().catch(() => null);
+          throw new Error(errData?.error?.message || `Failed to fetch document (${res.status})`);
+        }
+
+        const blob = await res.blob();
+        if (!isMounted) return;
+
+        createdUrl = URL.createObjectURL(blob);
+        setFetchedBlobUrl(createdUrl);
+      } catch (err: unknown) {
+        if (!isMounted) return;
+        setPdfFetchError((err as Error).message);
+      } finally {
+        if (isMounted) {
+          setIsLoadingPdf(false);
+        }
+      }
+    }
+
+    loadPdfBinary();
+
+    return () => {
+      isMounted = false;
+      if (createdUrl) {
+        URL.revokeObjectURL(createdUrl);
+      }
+    };
+  }, [agreement.id, inlinePdfUrl, isMarkdown]);
+
+  const effectivePdfUrl = inlinePdfUrl || fetchedBlobUrl;
 
   // Load existing fields on mount from server if not populated
   useEffect(() => {
@@ -597,7 +655,7 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
             <h1 className="text-sm font-bold text-neutral-900 truncate flex items-center gap-2">
               <span>{agreement.title}</span>
               <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-neutral-100 border border-neutral-300 text-neutral-600 uppercase">
-                {agreement.status}
+                {formatStatus(agreement.status)}
               </span>
             </h1>
             <p className="text-[10px] text-neutral-400">
@@ -892,16 +950,22 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
                   __html: renderMarkdownToHtml(agreement.markdownContent || ''),
                 }}
               />
-            ) : inlinePdfUrl ? (
+            ) : effectivePdfUrl ? (
               <iframe
-                src={`${inlinePdfUrl}#toolbar=0&navpanes=0`}
-                className="w-full h-full min-h-[1100px] border-none pointer-events-none"
+                src={`${effectivePdfUrl}#toolbar=0&navpanes=0&scrollbar=0`}
+                className="w-full h-full min-h-[1100px] border-none pointer-events-none flex-1"
                 title="Document PDF Preview"
               />
+            ) : isLoadingPdf ? (
+              <div className="p-16 text-center text-neutral-400 flex flex-col items-center justify-center min-h-[600px] space-y-3">
+                <div className="w-8 h-8 border-3 border-neutral-300 border-t-neutral-800 rounded-full animate-spin" />
+                <p className="text-xs font-semibold text-neutral-600">Loading PDF document...</p>
+              </div>
             ) : (
               <div className="p-16 text-center text-neutral-400 flex flex-col items-center justify-center min-h-[600px]">
                 <span className="text-4xl mb-2">📄</span>
                 <p className="text-xs font-semibold text-neutral-600">{agreement.title}</p>
+                {pdfFetchError && <p className="text-[11px] text-red-500 mt-1">{pdfFetchError}</p>}
                 <p className="text-[11px] text-neutral-400 mt-1">
                   Drag & drop fields anywhere onto this page canvas.
                 </p>

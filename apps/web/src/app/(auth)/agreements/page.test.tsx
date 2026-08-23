@@ -10,6 +10,11 @@ vi.mock('@/components/features/auth/SessionGuard', () => ({
 
 describe('AgreementManagementPage Unit Tests (Epic INK-8)', () => {
   beforeEach(() => {
+    localStorage.clear();
+    localStorage.setItem('graphsign_user_id', 'user-reviewer-1');
+    localStorage.setItem('graphsign_user_email', 'reviewer@graphsign.ink');
+    localStorage.setItem('graphsign_session_token', 'test-token');
+
     vi.stubGlobal(
       'fetch',
       vi.fn().mockImplementation((url: string) => {
@@ -59,6 +64,8 @@ describe('AgreementManagementPage Unit Tests (Epic INK-8)', () => {
                     title: 'NDA Under Legal Review',
                     description: 'In review NDA',
                     status: 'IN_REVIEW',
+                    reviewerId: 'user-reviewer-1',
+                    reviewer: { id: 'user-reviewer-1', email: 'reviewer@graphsign.ink' },
                     version: '0.2',
                     markdownContent: '# NDA Review',
                     isArchived: false,
@@ -168,14 +175,35 @@ describe('AgreementManagementPage Unit Tests (Epic INK-8)', () => {
     expect(screen.queryByTitle('Send for Signature')).not.toBeInTheDocument();
     expect(screen.getAllByTitle('View PDF')[0]).toBeInTheDocument();
 
-    // IN_REVIEW agreement should have Review Decision button
+    // IN_REVIEW agreement should have In Review status badge and Review Decision button for reviewer
     expect(screen.getByText('NDA Under Legal Review')).toBeInTheDocument();
+    expect(screen.getByText('In Review')).toBeInTheDocument();
     expect(screen.getByTitle('Review Decision')).toBeInTheDocument();
 
     // Dropdown contains Clone
     const moreActionsButtons = screen.getAllByTitle('More actions');
     fireEvent.click(moreActionsButtons[0]);
     expect(screen.getByText(/Clone/i)).toBeInTheDocument();
+  });
+
+  it('does not render Review Decision button if current user is not the designated reviewer (INK-263)', async () => {
+    localStorage.setItem('graphsign_user_id', 'different-user-999');
+    localStorage.setItem('graphsign_user_email', 'other@graphsign.ink');
+
+    render(<AgreementManagementPage />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Drafts' })).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Drafts' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('NDA Under Legal Review')).toBeInTheDocument();
+    });
+
+    // Review Decision button MUST NOT be rendered for non-reviewers
+    expect(screen.queryByTitle('Review Decision')).not.toBeInTheDocument();
   });
 
   it('renders archived agreements with only PDF button and Unarchive in dropdown on Archived tab', async () => {

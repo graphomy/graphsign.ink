@@ -39,13 +39,23 @@ describe('DocumentEditorModal Component Tests (INK-78 to INK-85)', () => {
   };
 
   beforeEach(() => {
+    global.URL.createObjectURL = vi.fn().mockReturnValue('blob:http://localhost/mock-pdf');
+    global.URL.revokeObjectURL = vi.fn();
+
     vi.stubGlobal(
       'fetch',
-      vi.fn().mockImplementation((_url: string, opts?: RequestInit) => {
+      vi.fn().mockImplementation((url: string, opts?: RequestInit) => {
         if (opts?.method === 'PUT') {
           return Promise.resolve({
             ok: true,
             json: () => Promise.resolve({ success: true }),
+          });
+        }
+        if (url.includes('/file')) {
+          return Promise.resolve({
+            ok: true,
+            blob: () =>
+              Promise.resolve(new Blob(['mock pdf content'], { type: 'application/pdf' })),
           });
         }
         return Promise.resolve({
@@ -128,6 +138,25 @@ describe('DocumentEditorModal Component Tests (INK-78 to INK-85)', () => {
     await waitFor(() => {
       expect(onSuccessMock).toHaveBeenCalled();
       expect(onCloseMock).toHaveBeenCalled();
+    });
+  });
+
+  it('renders PDF preview iframe when agreement is a PDF document', async () => {
+    const pdfAgreement = {
+      id: 'ag-pdf-1',
+      title: 'Vendor Master Agreement.pdf',
+      version: '0.1',
+      status: 'IN_REVIEW',
+      mimeType: 'application/pdf',
+      fileName: 'Vendor Master Agreement.pdf',
+      fields: { fields: [], recipients: [] },
+    };
+
+    render(<DocumentEditorModal agreement={pdfAgreement} onClose={vi.fn()} onSuccess={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(screen.getByTitle('Document PDF Preview')).toBeInTheDocument();
+      expect(screen.getByText('In Review')).toBeInTheDocument();
     });
   });
 });

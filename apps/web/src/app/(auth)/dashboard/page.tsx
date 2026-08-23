@@ -1,28 +1,31 @@
 'use client';
 
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, Suspense, useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import { SessionGuard } from '@/components/features/auth/SessionGuard';
 import { HeaderNav } from '@/components/layout/HeaderNav';
 import { Footer } from '@/components/layout/Footer';
 import { getApiUrl } from '@/lib/api';
-import { formatDate } from '@/lib/date-utils';
-
-interface UserSession {
-  email: string;
-  token: string;
-  organisationId: string;
-}
+import { formatDate, formatStatus } from '@/lib/date-utils';
 
 interface AgreementItem {
   id: string;
   title: string;
   description?: string;
   status: string;
+  reviewerId?: string | null;
   fileName?: string;
   createdAt: string;
   updatedAt: string;
   author?: { name?: string; email: string };
+}
+
+const emptySubscribe = () => () => {};
+function getStoredEmail() {
+  return localStorage.getItem('graphsign_user_email') || 'user@graphsign.ink';
+}
+function getServerEmail() {
+  return 'user@graphsign.ink';
 }
 
 function getToken(): string {
@@ -31,14 +34,8 @@ function getToken(): string {
 }
 
 function DashboardContent() {
-  const [user] = useState<UserSession | null>(() => {
-    if (typeof window === 'undefined') return null;
-    return {
-      email: localStorage.getItem('graphsign_user_email') ?? 'user@graphsign.ink',
-      token: getToken(),
-      organisationId: localStorage.getItem('graphsign_org_id') ?? '',
-    };
-  });
+  const userEmail = useSyncExternalStore(emptySubscribe, getStoredEmail, getServerEmail);
+  const displayName = (userEmail || 'user').split('@')[0];
 
   const [agreements, setAgreements] = useState<AgreementItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -93,8 +90,20 @@ function DashboardContent() {
     };
   }, []);
 
+  const currentUserId =
+    typeof window !== 'undefined' ? localStorage.getItem('graphsign_user_id') || '' : '';
+  const currentUserEmail =
+    typeof window !== 'undefined' ? localStorage.getItem('graphsign_user_email') || '' : '';
+
   const pendingCount = agreements.filter(
     (a) => a.status === 'DRAFT' || a.status === 'PENDING' || a.status === 'SENT',
+  ).length;
+  const reviewCount = agreements.filter(
+    (a) =>
+      a.status === 'IN_REVIEW' &&
+      (!a.reviewerId ||
+        a.reviewerId === currentUserId ||
+        (currentUserEmail && a.author?.email !== currentUserEmail)),
   ).length;
   const completedCount = agreements.filter(
     (a) => a.status === 'COMPLETED' || a.status === 'SEALED',
@@ -110,7 +119,10 @@ function DashboardContent() {
         <div className="bg-white border border-neutral-200 rounded-2xl p-6 sm:p-8 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="space-y-1">
             <h1 className="text-2xl font-bold tracking-tight text-neutral-900">
-              Welcome back, <span className="text-[#ba0000]">{user?.email.split('@')[0]}</span>
+              Welcome back,{' '}
+              <span className="text-[#ba0000]" suppressHydrationWarning>
+                {displayName}
+              </span>
             </h1>
             <p className="text-xs text-neutral-600">
               Manage e-signatures, document templates, custom permissions, and audit logs.
@@ -146,7 +158,7 @@ function DashboardContent() {
         )}
 
         {/* Live Workspace Metrics */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           <div className="bg-white border border-neutral-200 rounded-xl p-5 shadow-sm space-y-1">
             <span className="text-xs font-semibold text-neutral-500 uppercase tracking-wider block">
               Pending Actions
@@ -155,6 +167,18 @@ function DashboardContent() {
               <span className="text-3xl font-extrabold text-neutral-900">{pendingCount}</span>
               <span className="text-xs font-medium text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
                 Requires Signature
+              </span>
+            </div>
+          </div>
+
+          <div className="bg-white border border-neutral-200 rounded-xl p-5 shadow-sm space-y-1">
+            <span className="text-xs font-semibold text-neutral-500 uppercase tracking-wider block">
+              Requiring My Review
+            </span>
+            <div className="flex items-baseline justify-between">
+              <span className="text-3xl font-extrabold text-neutral-900">{reviewCount}</span>
+              <span className="text-xs font-medium text-purple-700 bg-purple-50 px-2 py-0.5 rounded border border-purple-200">
+                In Review
               </span>
             </div>
           </div>
@@ -252,10 +276,12 @@ function DashboardContent() {
                           className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
                             agreement.status === 'COMPLETED' || agreement.status === 'SEALED'
                               ? 'bg-green-100 text-green-800 border border-green-200'
-                              : 'bg-amber-100 text-amber-800 border border-amber-200'
+                              : agreement.status === 'IN_REVIEW'
+                                ? 'bg-purple-100 text-purple-800 border border-purple-200'
+                                : 'bg-amber-100 text-amber-800 border border-amber-200'
                           }`}
                         >
-                          {agreement.status}
+                          {formatStatus(agreement.status)}
                         </span>
                       </td>
                       <td className="px-5 py-3.5 text-neutral-600">

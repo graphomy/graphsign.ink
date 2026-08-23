@@ -254,7 +254,7 @@ describe('AgreementService Unit Tests (Epic INK-8)', () => {
         expect.objectContaining({
           where: expect.objectContaining({
             organisationId: 'org-1',
-            authorId: 'user-1',
+            OR: [{ authorId: 'user-1' }, { reviewerId: 'user-1' }],
           }),
         }),
       );

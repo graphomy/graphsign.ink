@@ -133,3 +133,16 @@ export function formatDateTime(
     return `${dateStr} ${hours}:${minutes}`;
   }
 }
+
+/**
+ * Formats an agreement status string:
+ * - IN_REVIEW -> 'In Review'
+ * - Removes underscores across all statuses (e.g. SENT_FOR_SIGNATURE -> 'SENT FOR SIGNATURE').
+ */
+export function formatStatus(status: string | null | undefined): string {
+  if (!status) return '';
+  if (status.toUpperCase() === 'IN_REVIEW') {
+    return 'In Review';
+  }
+  return status.replace(/_/g, ' ');
+}

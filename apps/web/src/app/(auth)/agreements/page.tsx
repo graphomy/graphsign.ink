@@ -21,7 +21,7 @@ import { ReviewDecisionModal } from '@/components/features/agreements/ReviewDeci
 import { SendAgreementModal } from '@/components/features/agreements/SendAgreementModal';
 import { CancelAgreementModal } from '@/components/features/agreements/CancelAgreementModal';
 import { getApiUrl } from '@/lib/api';
-import { formatDateTime } from '@/lib/date-utils';
+import { formatDateTime, formatStatus } from '@/lib/date-utils';
 
 interface AgreementItem {
   id: string;
@@ -37,9 +37,12 @@ interface AgreementItem {
   isArchived: boolean;
   tags?: string[];
   metadata?: Record<string, unknown>;
+  reviewerId?: string | null;
+  reviewer?: { id?: string; name?: string; email: string };
   createdAt: string;
   updatedAt: string;
-  author?: { name?: string; email: string };
+  authorId?: string;
+  author?: { id?: string; name?: string; email: string };
   fields?: {
     fields?: DocumentField[];
     recipients?: Recipient[];
@@ -56,6 +59,27 @@ interface PaginationState {
 function getToken(): string {
   if (typeof window === 'undefined') return '';
   return localStorage.getItem('graphsign_session_token') || localStorage.getItem('token') || '';
+}
+
+function getCurrentUserInfo(): { userId: string; userEmail: string } {
+  if (typeof window === 'undefined') return { userId: '', userEmail: '' };
+  let userId = localStorage.getItem('graphsign_user_id') || '';
+  let userEmail = localStorage.getItem('graphsign_user_email') || '';
+  if (!userId || !userEmail) {
+    const token =
+      localStorage.getItem('graphsign_session_token') || localStorage.getItem('token') || '';
+    if (token) {
+      try {
+        const parts = token.split('.');
+        if (parts.length >= 2) {
+          const payload = JSON.parse(atob(parts[1]));
+          if (!userId && payload?.sub) userId = payload.sub;
+          if (!userEmail && payload?.email) userEmail = payload.email;
+        }
+      } catch {}
+    }
+  }
+  return { userId, userEmail };
 }
 
 function AgreementManagementContent() {
@@ -93,6 +117,10 @@ function AgreementManagementContent() {
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploadTags, setUploadTags] = useState<string[]>([]);
   const [uploadTagInput, setUploadTagInput] = useState('');
+  const [currentUser] = useState<{ userId: string; userEmail: string }>(() => {
+    if (typeof window === 'undefined') return { userId: '', userEmail: '' };
+    return getCurrentUserInfo();
+  });
 
   const [scratchTitle, setScratchTitle] = useState('');
   const [scratchDesc, setScratchDesc] = useState('');
@@ -724,7 +752,7 @@ function AgreementManagementContent() {
                                       : 'bg-red-100 text-red-800 border border-red-200'
                           }`}
                         >
-                          {agreement.status}
+                          {formatStatus(agreement.status)}
                         </span>
                       </td>
 
@@ -768,10 +796,14 @@ function AgreementManagementContent() {
                               </>
                             )}
 
-                          {/* IN_REVIEW on Drafts screen */}
+                          {/* IN_REVIEW: Review Decision button strictly scoped to designated reviewer (INK-263) */}
                           {activeTab !== 'archived' &&
                             !agreement.isArchived &&
-                            agreement.status === 'IN_REVIEW' && (
+                            agreement.status === 'IN_REVIEW' &&
+                            ((currentUser.userId && agreement.reviewerId === currentUser.userId) ||
+                              (currentUser.userEmail &&
+                                agreement.reviewer?.email?.toLowerCase() ===
+                                  currentUser.userEmail.toLowerCase())) && (
                               <button
                                 onClick={() => {
                                   setSelectedAgreement(agreement);
@@ -1531,19 +1563,24 @@ function AgreementManagementContent() {
                     <span>🏷️</span> Tags
                   </button>
 
-                  {dropdownAnchor.agreement.status === 'IN_REVIEW' && (
-                    <button
-                      onClick={() => {
-                        const ag = dropdownAnchor.agreement;
-                        setDropdownAnchor(null);
-                        setSelectedAgreement(ag);
-                        setShowReviewDecisionModal(true);
-                      }}
-                      className="w-full px-3 py-1.5 text-xs text-emerald-700 hover:bg-emerald-50 flex items-center gap-2 transition-colors"
-                    >
-                      <span>⚖️</span> Review Decision
-                    </button>
-                  )}
+                  {dropdownAnchor.agreement.status === 'IN_REVIEW' &&
+                    ((currentUser.userId &&
+                      dropdownAnchor.agreement.reviewerId === currentUser.userId) ||
+                      (currentUser.userEmail &&
+                        dropdownAnchor.agreement.reviewer?.email?.toLowerCase() ===
+                          currentUser.userEmail.toLowerCase())) && (
+                      <button
+                        onClick={() => {
+                          const ag = dropdownAnchor.agreement;
+                          setDropdownAnchor(null);
+                          setSelectedAgreement(ag);
+                          setShowReviewDecisionModal(true);
+                        }}
+                        className="w-full px-3 py-1.5 text-xs text-emerald-700 hover:bg-emerald-50 flex items-center gap-2 transition-colors"
+                      >
+                        <span>⚖️</span> Review Decision
+                      </button>
+                    )}
 
                   {(dropdownAnchor.agreement.status === 'SENT' ||
                     dropdownAnchor.agreement.status === 'IN_REVIEW') && (
