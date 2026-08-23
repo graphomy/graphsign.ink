@@ -1,18 +1,12 @@
 'use client';
 
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, Suspense, useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import { SessionGuard } from '@/components/features/auth/SessionGuard';
 import { HeaderNav } from '@/components/layout/HeaderNav';
 import { Footer } from '@/components/layout/Footer';
 import { getApiUrl } from '@/lib/api';
 import { formatDate, formatStatus } from '@/lib/date-utils';
-
-interface UserSession {
-  email: string;
-  token: string;
-  organisationId: string;
-}
 
 interface AgreementItem {
   id: string;
@@ -26,20 +20,22 @@ interface AgreementItem {
   author?: { name?: string; email: string };
 }
 
+const emptySubscribe = () => () => {};
+function getStoredEmail() {
+  return localStorage.getItem('graphsign_user_email') || 'user@graphsign.ink';
+}
+function getServerEmail() {
+  return 'user@graphsign.ink';
+}
+
 function getToken(): string {
   if (typeof window === 'undefined') return '';
   return localStorage.getItem('graphsign_session_token') || localStorage.getItem('token') || '';
 }
 
 function DashboardContent() {
-  const [user] = useState<UserSession | null>(() => {
-    if (typeof window === 'undefined') return null;
-    return {
-      email: localStorage.getItem('graphsign_user_email') ?? 'user@graphsign.ink',
-      token: getToken(),
-      organisationId: localStorage.getItem('graphsign_org_id') ?? '',
-    };
-  });
+  const userEmail = useSyncExternalStore(emptySubscribe, getStoredEmail, getServerEmail);
+  const displayName = (userEmail || 'user').split('@')[0];
 
   const [agreements, setAgreements] = useState<AgreementItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -123,7 +119,10 @@ function DashboardContent() {
         <div className="bg-white border border-neutral-200 rounded-2xl p-6 sm:p-8 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="space-y-1">
             <h1 className="text-2xl font-bold tracking-tight text-neutral-900">
-              Welcome back, <span className="text-[#ba0000]">{user?.email.split('@')[0]}</span>
+              Welcome back,{' '}
+              <span className="text-[#ba0000]" suppressHydrationWarning>
+                {displayName}
+              </span>
             </h1>
             <p className="text-xs text-neutral-600">
               Manage e-signatures, document templates, custom permissions, and audit logs.
