@@ -1,22 +1,23 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { getApiUrl } from '@/lib/api';
 import { ProfileDropdown } from '@/components/features/auth/ProfileDropdown';
 
+const emptySubscribe = () => () => {};
+function getStoredEmail() {
+  return localStorage.getItem('graphsign_user_email') || '';
+}
+function getServerEmail() {
+  return '';
+}
+
 export function HeaderNav() {
   const pathname = usePathname();
   const [orgName, setOrgName] = useState<string>('Workspace');
-  const [userEmail, setUserEmail] = useState<string>('');
-
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const storedEmail = localStorage.getItem('graphsign_user_email');
-      if (storedEmail) setUserEmail(storedEmail);
-    }
-  }, []);
+  const userEmail = useSyncExternalStore(emptySubscribe, getStoredEmail, getServerEmail);
 
   useEffect(() => {
     async function fetchOrg() {

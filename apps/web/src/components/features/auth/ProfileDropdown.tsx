@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import { getApiUrl } from '@/lib/api';
 
@@ -10,6 +10,44 @@ interface ProfileDropdownProps {
   orgName?: string;
 }
 
+const emptySubscribe = () => () => {};
+
+function getStoredEmailSnapshot() {
+  return localStorage.getItem('graphsign_user_email') || 'user@graphsign.ink';
+}
+function getServerEmailSnapshot() {
+  return 'user@graphsign.ink';
+}
+
+function getStoredOrgSnapshot() {
+  return localStorage.getItem('graphsign_org_name') || '';
+}
+function getServerOrgSnapshot() {
+  return '';
+}
+
+function getStoredRoleSnapshot() {
+  const stored = localStorage.getItem('graphsign_user_role');
+  if (stored) return stored;
+  const sessionToken =
+    localStorage.getItem('graphsign_session_token') ||
+    localStorage.getItem('token') ||
+    '';
+  if (sessionToken) {
+    try {
+      const parts = sessionToken.split('.');
+      if (parts.length >= 2) {
+        const payload = JSON.parse(atob(parts[1]));
+        if (payload?.role) return payload.role;
+      }
+    } catch {}
+  }
+  return '';
+}
+function getServerRoleSnapshot() {
+  return '';
+}
+
 /**
  * ProfileDropdown component provides a modern, accessible avatar menu
  * in the top right header containing Profile, Security (MFA), Session Settings,
@@ -17,45 +55,39 @@ interface ProfileDropdownProps {
  */
 export function ProfileDropdown({ email, token, orgName }: ProfileDropdownProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [mounted, setMounted] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  const clientEmail = useSyncExternalStore(
+    emptySubscribe,
+    getStoredEmailSnapshot,
+    getServerEmailSnapshot,
+  );
+  const clientOrg = useSyncExternalStore(
+    emptySubscribe,
+    getStoredOrgSnapshot,
+    getServerOrgSnapshot,
+  );
+  const clientRole = useSyncExternalStore(
+    emptySubscribe,
+    getStoredRoleSnapshot,
+    getServerRoleSnapshot,
+  );
 
-  const displayEmail =
-    email ||
-    (mounted && typeof window !== 'undefined'
-      ? (localStorage.getItem('graphsign_user_email') ?? 'user@graphsign.ink')
-      : 'user@graphsign.ink');
+  const displayEmail = email || clientEmail;
+  const displayOrgName = orgName || clientOrg;
 
-  const displayOrgName =
-    orgName ||
-    (mounted && typeof window !== 'undefined'
-      ? (localStorage.getItem('graphsign_org_name') ?? '')
-      : '');
-
-  const userRole = (() => {
-    if (!mounted || typeof window === 'undefined') return '';
-    const stored = localStorage.getItem('graphsign_user_role');
-    if (stored) return stored;
-    const sessionToken =
-      token ||
-      localStorage.getItem('graphsign_session_token') ||
-      localStorage.getItem('token') ||
-      '';
-    if (sessionToken) {
-      try {
-        const parts = sessionToken.split('.');
-        if (parts.length >= 2) {
-          const payload = JSON.parse(atob(parts[1]));
-          if (payload?.role) return payload.role;
-        }
-      } catch {}
-    }
-    return '';
-  })();
+  const userRole = token
+    ? (() => {
+        try {
+          const parts = token.split('.');
+          if (parts.length >= 2) {
+            const payload = JSON.parse(atob(parts[1]));
+            if (payload?.role) return payload.role;
+          }
+        } catch {}
+        return '';
+      })()
+    : clientRole;
 
   const userInitial = displayEmail.trim()[0]?.toUpperCase() ?? 'U';
 
