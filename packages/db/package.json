@@ -1,0 +1,27 @@
+{
+  "name": "@graphsign/db",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "generate": "prisma generate",
+    "build": "prisma generate",
+    "migrate": "prisma migrate dev",
+    "push": "prisma db push",
+    "studio": "prisma studio",
+    "test": "echo \"No tests yet\"",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.19.3",
+    "@prisma/adapter-neon": "^6.19.3",
+    "@neondatabase/serverless": "^1.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.2.0",
+    "prisma": "^6.9.0",
+    "typescript": "^5.9.3"
+  }
+}

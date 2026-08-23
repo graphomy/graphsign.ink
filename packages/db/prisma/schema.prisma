@@ -1,0 +1,428 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// Tenant organisation model — multi-tenant isolation unit.
+model Organisation {
+  id                    String    @id @db.Uuid
+  name                  String    @db.VarChar(255)
+  slug                  String    @unique @db.VarChar(100)
+  tenantId              String    @unique @default(uuid()) @map("tenant_id") @db.Uuid
+  status                String    @default("active") @db.VarChar(20)
+  domain                String?   @db.VarChar(255)
+  sessionTimeoutMinutes Int       @default(15) @map("session_timeout_minutes")
+  mfaRequired           Boolean   @default(false) @map("mfa_required")
+  mfaRequiredRoles      Json?     @map("mfa_required_roles") @db.JsonB
+
+  // Branding Customisations
+  logoUrl               String?   @map("logo_url") @db.VarChar(512)
+  primaryColor          String?   @default("#ba0000") @map("primary_color") @db.VarChar(7)
+  secondaryColor        String?   @default("#1e293b") @map("secondary_color") @db.VarChar(7)
+  companyAddress        String?   @map("company_address") @db.VarChar(512)
+  defaultSenderName     String?   @map("default_sender_name") @db.VarChar(255)
+  emailFooterText       String?   @map("email_footer_text") @db.VarChar(1000)
+
+  // Storage Quotas & Limits
+  storageQuotaBytes     BigInt    @default(5368709120) @map("storage_quota_bytes")
+  storageUsedBytes      BigInt    @default(0) @map("storage_used_bytes")
+  maxDocuments          Int       @default(1000) @map("max_documents")
+  documentCount         Int       @default(0) @map("document_count")
+  maxUsers              Int       @default(50) @map("max_users")
+
+  // Compliance Settings
+  allowedEsignStandards      Json?    @map("allowed_esign_standards") @db.JsonB
+  requireReauthBeforeSigning Boolean  @default(false) @map("require_reauth_before_signing")
+  signatureReasonRequired    Boolean  @default(false) @map("signature_reason_required")
+  documentRetentionDays      Int      @default(30) @map("document_retention_days")
+
+  createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt             DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
+  deletedAt             DateTime? @map("deleted_at") @db.Timestamptz()
+
+  users        User[]
+  memberships  UserOrganisation[]
+  invitations  OrganisationInvitation[]
+  teams        Team[]
+  customRoles  CustomRole[]
+  domains      OrganisationDomain[]
+  agreements   Agreement[]
+  templates    Template[]
+  auditLogs    AuditLog[]
+
+  @@index([slug])
+  @@index([status])
+  @@index([tenantId])
+  @@map("organisations")
+}
+
+/// Platform user — auth, profile, roles.
+model User {
+  id                              String    @id @db.Uuid
+  organisationId                  String    @map("organisation_id") @db.Uuid
+  email                           String    @db.VarChar(255)
+  passwordHash                    String    @map("password_hash") @db.VarChar(255)
+  emailVerified                   Boolean   @default(false) @map("email_verified")
+  emailVerificationTokenHash      String?   @map("email_verification_token_hash") @db.VarChar(255)
+  emailVerificationTokenExpiresAt DateTime? @map("email_verification_token_expires_at") @db.Timestamptz()
+  passwordResetTokenHash          String?   @map("password_reset_token_hash") @db.VarChar(255)
+  passwordResetTokenExpiresAt     DateTime? @map("password_reset_token_expires_at") @db.Timestamptz()
+  name                            String?   @db.VarChar(255)
+  timezone                        String?   @default("UTC") @db.VarChar(100)
+  pendingEmail                    String?   @map("pending_email") @db.VarChar(255)
+  pendingEmailTokenHash           String?   @map("pending_email_token_hash") @db.VarChar(255)
+  pendingEmailTokenExpiresAt      DateTime? @map("pending_email_token_expires_at") @db.Timestamptz()
+  role                            String    @default("user") @db.VarChar(50)
+  mfaEnabled                      Boolean   @default(false) @map("mfa_enabled")
+  mfaSecret                       String?   @map("mfa_secret") @db.VarChar(255)
+  mfaPendingSecret                String?   @map("mfa_pending_secret") @db.VarChar(255)
+  mfaBackupCodes                  Json?     @map("mfa_backup_codes") @db.JsonB
+  status                          String    @default("pending_verification") @db.VarChar(20)
+
+  // Per-user storage quotas (INK-206)
+  storageQuotaBytes               BigInt    @default(262144000) @map("storage_quota_bytes")  // 250 MB
+  storageUsedBytes                BigInt    @default(0) @map("storage_used_bytes")
+  lastLoginAt                     DateTime? @map("last_login_at") @db.Timestamptz()
+
+  createdAt                       DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt                       DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
+  deletedAt                       DateTime? @map("deleted_at") @db.Timestamptz()
+
+  organisation    Organisation             @relation(fields: [organisationId], references: [id])
+  memberships     UserOrganisation[]
+  sentInvitations OrganisationInvitation[]
+  ledTeams        Team[]                   @relation("TeamLead")
+  teamMemberships TeamMember[]
+  agreements      Agreement[]
+  templates       Template[]
+  auditLogs       AuditLog[]
+
+  @@unique([organisationId, email])
+  @@index([status])
+  @@map("users")
+}
+
+/// UserOrganisation junction for multi-tenant users.
+model UserOrganisation {
+  id             String   @id @db.Uuid
+  userId         String   @map("user_id") @db.Uuid
+  organisationId String   @map("organisation_id") @db.Uuid
+  role           String   @default("user") @db.VarChar(50)
+  isDefault      Boolean  @default(false) @map("is_default")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz()
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organisation Organisation @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, organisationId])
+  @@index([userId])
+  @@index([organisationId])
+  @@map("user_organisations")
+}
+
+/// Organisation member invitation.
+model OrganisationInvitation {
+  id             String    @id @db.Uuid
+  organisationId String    @map("organisation_id") @db.Uuid
+  email          String    @db.VarChar(255)
+  role           String    @default("user") @db.VarChar(50)
+  teamId         String?   @map("team_id") @db.Uuid
+  tokenHash      String    @map("token_hash") @db.VarChar(255)
+  invitedById    String    @map("invited_by_id") @db.Uuid
+  status         String    @default("pending") @db.VarChar(20)
+  expiresAt      DateTime  @map("expires_at") @db.Timestamptz()
+  acceptedAt     DateTime? @map("accepted_at") @db.Timestamptz()
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
+
+  organisation Organisation @relation(fields: [organisationId], references: [id])
+  invitedBy    User         @relation(fields: [invitedById], references: [id])
+
+  @@index([organisationId])
+  @@index([email])
+  @@map("organisation_invitations")
+}
+
+/// Team model for grouping users within an organisation.
+model Team {
+  id             String   @id @db.Uuid
+  organisationId String   @map("organisation_id") @db.Uuid
+  name           String   @db.VarChar(255)
+  description    String?  @db.VarChar(512)
+  leadId         String?  @map("lead_id") @db.Uuid
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz()
+
+  organisation Organisation @relation(fields: [organisationId], references: [id])
+  lead         User?        @relation("TeamLead", fields: [leadId], references: [id])
+  members      TeamMember[]
+
+  @@unique([organisationId, name])
+  @@map("teams")
+}
+
+/// TeamMember junction table
+model TeamMember {
+  id        String   @id @db.Uuid
+  teamId    String   @map("team_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, userId])
+  @@map("team_members")
+}
+
+/// Custom roles with granular permission arrays
+model CustomRole {
+  id             String   @id @db.Uuid
+  organisationId String   @map("organisation_id") @db.Uuid
+  name           String   @db.VarChar(100)
+  description    String?  @db.VarChar(255)
+  permissions    Json     @db.JsonB
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz()
+
+  organisation Organisation @relation(fields: [organisationId], references: [id])
+
+  @@unique([organisationId, name])
+  @@map("custom_roles")
+}
+
+/// Organisation custom domain verification
+model OrganisationDomain {
+  id                String    @id @db.Uuid
+  organisationId    String    @map("organisation_id") @db.Uuid
+  domain            String    @unique @db.VarChar(255)
+  verificationToken String    @map("verification_token") @db.VarChar(255)
+  status            String    @default("pending") @db.VarChar(20)
+  verifiedAt        DateTime? @map("verified_at") @db.Timestamptz()
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
+
+  organisation Organisation @relation(fields: [organisationId], references: [id])
+
+  @@index([organisationId])
+  @@map("organisation_domains")
+}
+
+/// Agreement model — lifecycle, document uploads, drafts, metadata, and archiving.
+model Agreement {
+  id             String    @id @db.Uuid
+  organisationId String    @map("organisation_id") @db.Uuid
+  authorId       String    @map("author_id") @db.Uuid
+  title          String    @db.VarChar(255)
+  description    String?   @db.VarChar(1000)
+  status         String    @default("DRAFT") @db.VarChar(50)
+  fileUrl        String?   @map("file_url") @db.VarChar(512)
+  fileName       String?   @map("file_name") @db.VarChar(255)
+  fileSize       Int?      @map("file_size")
+  mimeType       String?   @map("mime_type") @db.VarChar(100)
+  markdownContent String?   @map("markdown_content") @db.Text
+  fields          Json?     @db.JsonB
+  templateId      String?   @map("template_id") @db.Uuid
+  templateVersion Int?      @map("template_version")
+  version         String    @default("0.1") @db.VarChar(20)
+  isArchived      Boolean   @default(false) @map("is_archived")
+  archivedAt      DateTime? @map("archived_at") @db.Timestamptz()
+  tags            Json?     @db.JsonB
+  metadata        Json?     @db.JsonB
+  signingOrder    String    @default("PARALLEL") @map("signing_order") @db.VarChar(20)
+  currentStep     Int       @default(1) @map("current_step")
+  expiresAt       DateTime? @map("expires_at") @db.Timestamptz()
+  reviewerId      String?   @map("reviewer_id") @db.Uuid
+  reviewedAt      DateTime? @map("reviewed_at") @db.Timestamptz()
+  rejectionReason String?   @map("rejection_reason") @db.VarChar(1000)
+  cancellationReason String? @map("cancellation_reason") @db.VarChar(1000)
+  completedAt     DateTime? @map("completed_at") @db.Timestamptz()
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
+  deletedAt       DateTime? @map("deleted_at") @db.Timestamptz()
+
+  organisation Organisation       @relation(fields: [organisationId], references: [id])
+  author       User               @relation(fields: [authorId], references: [id])
+  template     Template?          @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  versions     AgreementVersion[]
+  recipients   AgreementRecipient[]
+
+  @@index([organisationId])
+  @@index([authorId])
+  @@index([templateId])
+  @@index([status])
+  @@index([isArchived])
+  @@index([expiresAt])
+  @@index([organisationId, isArchived, status, updatedAt(sort: Desc)])
+  @@index([organisationId, authorId, isArchived, updatedAt(sort: Desc)])
+  @@index([organisationId, deletedAt])
+  @@map("agreements")
+}
+
+/// Agreement recipient envelope model for workflow routing, signing tokens, and tracking.
+model AgreementRecipient {
+  id               String    @id @db.Uuid
+  agreementId      String    @map("agreement_id") @db.Uuid
+  name             String    @db.VarChar(255)
+  email            String    @db.VarChar(255)
+  role             String    @default("signer") @db.VarChar(50)
+  routingOrder     Int       @default(1) @map("routing_order")
+  status           String    @default("PENDING") @db.VarChar(50)
+  signingTokenHash String?   @unique @map("signing_token_hash") @db.VarChar(255)
+  tokenExpiresAt   DateTime? @map("token_expires_at") @db.Timestamptz()
+  viewedAt         DateTime? @map("viewed_at") @db.Timestamptz()
+  signedAt         DateTime? @map("signed_at") @db.Timestamptz()
+  declinedAt       DateTime? @map("declined_at") @db.Timestamptz()
+  declineReason    String?   @map("decline_reason") @db.VarChar(500)
+  color            String?   @db.VarChar(50)
+  fieldsData       Json?     @map("fields_data") @db.JsonB
+  signatureData    Json?     @map("signature_data") @db.JsonB
+  ipAddress        String?   @map("ip_address") @db.VarChar(45)
+  userAgent        String?   @map("user_agent") @db.VarChar(512)
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
+
+  agreement Agreement @relation(fields: [agreementId], references: [id], onDelete: Cascade)
+
+  @@index([agreementId])
+  @@index([email])
+  @@index([status])
+  @@map("agreement_recipients")
+}
+
+/// Agreement version history model.
+model AgreementVersion {
+  id              String   @id @db.Uuid
+  agreementId     String   @map("agreement_id") @db.Uuid
+  version         String   @db.VarChar(20)
+  title           String   @db.VarChar(255)
+  fileUrl         String?  @map("file_url") @db.VarChar(512)
+  markdownContent String?  @map("markdown_content") @db.Text
+  fields          Json?    @db.JsonB
+  changeSummary   String?  @map("change_summary") @db.VarChar(512)
+  authorId        String   @map("author_id") @db.Uuid
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  agreement Agreement @relation(fields: [agreementId], references: [id], onDelete: Cascade)
+
+  @@unique([agreementId, version])
+  @@map("agreement_versions")
+}
+
+/// Template model — reusable agreement blueprints, versioning, publishing, and sharing.
+model Template {
+  id             String    @id @db.Uuid
+  organisationId String    @map("organisation_id") @db.Uuid
+  authorId       String    @map("author_id") @db.Uuid
+  title          String    @db.VarChar(255)
+  description    String?   @db.VarChar(1000)
+  fileUrl        String?   @map("file_url") @db.VarChar(512)
+  fileName       String?   @map("file_name") @db.VarChar(255)
+  fileSize       Int?      @map("file_size")
+  mimeType       String?   @map("mime_type") @db.VarChar(100)
+  htmlContent    String?   @map("html_content") @db.Text
+  fields         Json?     @db.JsonB
+  version        Int       @default(1)
+  isPublished    Boolean   @default(false) @map("is_published")
+  publishedAt    DateTime? @map("published_at") @db.Timestamptz()
+  isArchived     Boolean   @default(false) @map("is_archived")
+  archivedAt     DateTime? @map("archived_at") @db.Timestamptz()
+  tags           Json?     @db.JsonB
+  metadata       Json?     @db.JsonB
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
+  deletedAt      DateTime? @map("deleted_at") @db.Timestamptz()
+
+  organisation Organisation       @relation(fields: [organisationId], references: [id])
+  author       User               @relation(fields: [authorId], references: [id])
+  versions     TemplateVersion[]
+  shares       TemplateShare[]
+  agreements   Agreement[]
+
+  @@index([organisationId])
+  @@index([authorId])
+  @@index([isPublished])
+  @@index([isArchived])
+  @@map("templates")
+}
+
+/// Template version history model.
+model TemplateVersion {
+  id            String   @id @db.Uuid
+  templateId    String   @map("template_id") @db.Uuid
+  version       Int
+  title         String   @db.VarChar(255)
+  fileUrl       String?  @map("file_url") @db.VarChar(512)
+  htmlContent   String?  @map("html_content") @db.Text
+  fields        Json?    @db.JsonB
+  changeSummary String?  @map("change_summary") @db.VarChar(512)
+  authorId      String   @map("author_id") @db.Uuid
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  template Template @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@unique([templateId, version])
+  @@map("template_versions")
+}
+
+/// Template ACL sharing model (share with user or team).
+model TemplateShare {
+  id          String   @id @db.Uuid
+  templateId  String   @map("template_id") @db.Uuid
+  targetType  String   @map("target_type") @db.VarChar(20)
+  targetId    String   @map("target_id") @db.Uuid
+  accessLevel String   @map("access_level") @db.VarChar(20)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  template Template @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@unique([templateId, targetType, targetId])
+  @@index([templateId])
+  @@index([targetId])
+  @@index([targetType, targetId])
+  @@map("template_shares")
+}
+
+/// Immutable, append-only, hash-chained audit trail.
+model AuditLog {
+  id             String   @id @db.Uuid
+  organisationId String   @map("organisation_id") @db.Uuid
+  userId         String?  @map("user_id") @db.Uuid
+  action         String   @db.VarChar(100)
+  resourceType   String   @map("resource_type") @db.VarChar(50)
+  resourceId     String   @map("resource_id") @db.Uuid
+  metadata       Json?    @db.JsonB
+  previousHash   String?  @map("previous_hash") @db.VarChar(128)
+  currentHash    String   @map("current_hash") @db.VarChar(128)
+  ipAddress      String?  @map("ip_address") @db.VarChar(45)
+  userAgent      String?  @map("user_agent") @db.VarChar(512)
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  organisation Organisation @relation(fields: [organisationId], references: [id])
+  user         User?        @relation(fields: [userId], references: [id])
+
+  @@index([organisationId, createdAt(sort: Desc)])
+  @@index([organisationId])
+  @@index([resourceType, resourceId])
+  @@index([userId])
+  @@index([createdAt])
+  @@map("audit_log")
+}
+
+/// Platform-wide configuration managed by super admin (INK-206).
+model PlatformConfig {
+  id        String   @id @db.Uuid
+  key       String   @unique @db.VarChar(100)
+  value     String   @db.VarChar(500)
+  updatedBy String?  @map("updated_by") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz()
+
+  @@map("platform_config")
+}

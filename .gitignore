@@ -1,0 +1,52 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+.next/
+out/
+build/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Prisma
+packages/db/prisma/*.db
+
+# Test coverage
+coverage/
+
+# Debug
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+
+# Turbo
+.turbo/
+
+# Vercel
+.vercel/
+
+# Generated
+*.generated.ts
+prisma/generated/
+
+# Wrangler / Cloudflare
+.wrangler/
+
+
+# Environment variables & local secrets
+.env
+.env.*
+.env.local
+.env.*.local
+.dev.vars
+.dev.vars.*
+*.dev.vars
