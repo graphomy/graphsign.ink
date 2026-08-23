@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import { getApiUrl } from '@/lib/api';
 
@@ -8,6 +8,42 @@ interface ProfileDropdownProps {
   email?: string;
   token?: string;
   orgName?: string;
+}
+
+const emptySubscribe = () => () => {};
+
+function getStoredEmailSnapshot() {
+  return localStorage.getItem('graphsign_user_email') || 'user@graphsign.ink';
+}
+function getServerEmailSnapshot() {
+  return 'user@graphsign.ink';
+}
+
+function getStoredOrgSnapshot() {
+  return localStorage.getItem('graphsign_org_name') || '';
+}
+function getServerOrgSnapshot() {
+  return '';
+}
+
+function getStoredRoleSnapshot() {
+  const stored = localStorage.getItem('graphsign_user_role');
+  if (stored) return stored;
+  const sessionToken =
+    localStorage.getItem('graphsign_session_token') || localStorage.getItem('token') || '';
+  if (sessionToken) {
+    try {
+      const parts = sessionToken.split('.');
+      if (parts.length >= 2) {
+        const payload = JSON.parse(atob(parts[1]));
+        if (payload?.role) return payload.role;
+      }
+    } catch {}
+  }
+  return '';
+}
+function getServerRoleSnapshot() {
+  return '';
 }
 
 /**
@@ -19,15 +55,37 @@ export function ProfileDropdown({ email, token, orgName }: ProfileDropdownProps)
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const displayEmail =
-    email ||
-    (typeof window !== 'undefined'
-      ? (localStorage.getItem('graphsign_user_email') ?? 'user@graphsign.ink')
-      : 'user@graphsign.ink');
+  const clientEmail = useSyncExternalStore(
+    emptySubscribe,
+    getStoredEmailSnapshot,
+    getServerEmailSnapshot,
+  );
+  const clientOrg = useSyncExternalStore(
+    emptySubscribe,
+    getStoredOrgSnapshot,
+    getServerOrgSnapshot,
+  );
+  const clientRole = useSyncExternalStore(
+    emptySubscribe,
+    getStoredRoleSnapshot,
+    getServerRoleSnapshot,
+  );
 
-  const displayOrgName =
-    orgName ||
-    (typeof window !== 'undefined' ? (localStorage.getItem('graphsign_org_name') ?? '') : '');
+  const displayEmail = email || clientEmail;
+  const displayOrgName = orgName || clientOrg;
+
+  const userRole = token
+    ? (() => {
+        try {
+          const parts = token.split('.');
+          if (parts.length >= 2) {
+            const payload = JSON.parse(atob(parts[1]));
+            if (payload?.role) return payload.role;
+          }
+        } catch {}
+        return '';
+      })()
+    : clientRole;
 
   const userInitial = displayEmail.trim()[0]?.toUpperCase() ?? 'U';
 
@@ -216,27 +274,29 @@ export function ProfileDropdown({ email, token, orgName }: ProfileDropdownProps)
               Organisation Settings
             </Link>
 
-            <Link
-              href="/settings/admin"
-              onClick={() => setIsOpen(false)}
-              className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-medium text-neutral-700 hover:bg-neutral-100 hover:text-neutral-900 transition-colors"
-              data-testid="admin-settings-link"
-            >
-              <svg
-                className="h-4 w-4 text-neutral-500 shrink-0"
-                fill="none"
-                viewBox="0 0 24 24"
-                strokeWidth="1.75"
-                stroke="currentColor"
+            {userRole === 'super_admin' && (
+              <Link
+                href="/settings/admin"
+                onClick={() => setIsOpen(false)}
+                className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-medium text-neutral-700 hover:bg-neutral-100 hover:text-neutral-900 transition-colors"
+                data-testid="admin-settings-link"
               >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M10.5 6h9.75M10.5 6a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 18H7.5m3-6h9.75m-9.75 0a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 12H7.5"
-                />
-              </svg>
-              Admin Dashboard
-            </Link>
+                <svg
+                  className="h-4 w-4 text-neutral-500 shrink-0"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  strokeWidth="1.75"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M10.5 6h9.75M10.5 6a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 18H7.5m3-6h9.75m-9.75 0a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 12H7.5"
+                  />
+                </svg>
+                Graphomy Administration
+              </Link>
+            )}
           </div>
 
           {/* Divider */}

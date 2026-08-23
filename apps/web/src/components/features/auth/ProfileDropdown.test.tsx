@@ -80,4 +80,23 @@ describe('ProfileDropdown', () => {
     expect(localStorage.getItem('graphsign_session_token')).toBeNull();
     expect(window.location.href).toBe('/login');
   });
+
+  it('should render Graphomy Administration menu link for super_admin role', () => {
+    localStorage.setItem('graphsign_user_role', 'super_admin');
+    render(<ProfileDropdown email="admin@graphsign.ink" />);
+
+    fireEvent.click(screen.getByTestId('profile-menu-button'));
+    expect(screen.getByTestId('admin-settings-link')).toBeInTheDocument();
+    expect(screen.getByText('Graphomy Administration')).toBeInTheDocument();
+  });
+
+  it('should not render Graphomy Administration or Admin Dashboard for regular roles', () => {
+    localStorage.setItem('graphsign_user_role', 'signer');
+    render(<ProfileDropdown email="signer@graphsign.ink" />);
+
+    fireEvent.click(screen.getByTestId('profile-menu-button'));
+    expect(screen.queryByTestId('admin-settings-link')).not.toBeInTheDocument();
+    expect(screen.queryByText('Graphomy Administration')).not.toBeInTheDocument();
+    expect(screen.queryByText('Admin Dashboard')).not.toBeInTheDocument();
+  });
 });

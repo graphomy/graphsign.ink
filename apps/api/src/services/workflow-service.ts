@@ -754,8 +754,6 @@ export class WorkflowService {
       where: { id: agreementId },
       data: {
         status: 'CANCELLED',
-        cancelledAt: new Date(),
-        cancellationReason: input.reason,
       },
     });
 

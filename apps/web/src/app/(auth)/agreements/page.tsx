@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, Suspense } from 'react';
+import { createPortal } from 'react-dom';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { SessionGuard } from '@/components/features/auth/SessionGuard';
@@ -113,15 +114,28 @@ function AgreementManagementContent() {
 
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
+  const [dropdownAnchor, setDropdownAnchor] = useState<{
+    id: string;
+    agreement: AgreementItem;
+    top: number;
+    bottom: number;
+    right: number;
+    isBottom: boolean;
+  } | null>(null);
   const searchParams = useSearchParams();
 
   useEffect(() => {
-    function handleClickOutside() {
-      setOpenDropdownId(null);
+    function handleClose() {
+      setDropdownAnchor(null);
     }
-    window.addEventListener('click', handleClickOutside);
-    return () => window.removeEventListener('click', handleClickOutside);
+    window.addEventListener('click', handleClose);
+    window.addEventListener('scroll', handleClose, true);
+    window.addEventListener('resize', handleClose);
+    return () => {
+      window.removeEventListener('click', handleClose);
+      window.removeEventListener('scroll', handleClose, true);
+      window.removeEventListener('resize', handleClose);
+    };
   }, []);
 
   useEffect(() => {
@@ -140,7 +154,7 @@ function AgreementManagementContent() {
     setAgreements([]);
     setActionError(null);
     setActionMessage(null);
-    setOpenDropdownId(null);
+    setDropdownAnchor(null);
   }
 
   useEffect(() => {
@@ -636,8 +650,8 @@ function AgreementManagementContent() {
             </div>
           </div>
         ) : (
-          <div className="bg-white border border-neutral-200 rounded-xl shadow-sm overflow-hidden flex flex-col">
-            <div className="overflow-x-auto">
+          <div className="bg-white border border-neutral-200 rounded-xl shadow-sm flex flex-col min-h-[300px]">
+            <div className="overflow-x-auto pb-16">
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
                   <tr className="bg-neutral-50/80 border-b border-neutral-200 text-neutral-600 font-semibold uppercase tracking-wider text-[10px]">
@@ -650,7 +664,7 @@ function AgreementManagementContent() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-neutral-100">
-                  {agreements.map((agreement) => (
+                  {agreements.map((agreement, idx) => (
                     <tr
                       key={agreement.id}
                       className="hover:bg-neutral-50/80 transition-colors group"
@@ -668,16 +682,11 @@ function AgreementManagementContent() {
                             <h3 className="text-xs font-bold text-neutral-900 truncate">
                               {agreement.title}
                             </h3>
-                            {agreement.description && (
-                              <p className="text-[11px] text-neutral-500 line-clamp-1">
-                                {agreement.description}
-                              </p>
-                            )}
                             {agreement.tags && agreement.tags.length > 0 && (
                               <div className="flex flex-wrap gap-1 pt-0.5">
-                                {agreement.tags.map((tag, idx) => (
+                                {agreement.tags.map((tag, tIdx) => (
                                   <span
-                                    key={idx}
+                                    key={tIdx}
                                     className="text-[9px] font-semibold bg-neutral-100 text-neutral-600 px-1.5 py-0.5 rounded border border-neutral-200"
                                   >
                                     #{tag}
@@ -775,8 +784,8 @@ function AgreementManagementContent() {
                               </button>
                             )}
 
-                          {/* Send for Signature Button: Only on Active / Draft non-archived documents */}
-                          {activeTab !== 'archived' &&
+                          {/* Send for Signature Button: Only on Active tab (INK-259) */}
+                          {activeTab === 'active' &&
                             !agreement.isArchived &&
                             agreement.status !== 'IN_REVIEW' && (
                               <button
@@ -797,14 +806,25 @@ function AgreementManagementContent() {
                             <span>👁️</span> PDF
                           </button>
 
-                          {/* 3 Dots Dropdown Menu */}
+                          {/* 3 Dots Dropdown Trigger */}
                           <div className="relative inline-block text-left">
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                setOpenDropdownId(
-                                  openDropdownId === agreement.id ? null : agreement.id,
-                                );
+                                if (dropdownAnchor?.id === agreement.id) {
+                                  setDropdownAnchor(null);
+                                } else {
+                                  const rect = e.currentTarget.getBoundingClientRect();
+                                  const isBottom = rect.bottom + 260 > window.innerHeight;
+                                  setDropdownAnchor({
+                                    id: agreement.id,
+                                    agreement,
+                                    top: rect.bottom + 4,
+                                    bottom: rect.top - 4,
+                                    right: window.innerWidth - rect.right,
+                                    isBottom,
+                                  });
+                                }
                               }}
                               className="p-1.5 text-neutral-500 hover:text-neutral-900 hover:bg-neutral-100 rounded border border-neutral-200 transition-colors"
                               title="More actions"
@@ -814,124 +834,6 @@ function AgreementManagementContent() {
                                 •••
                               </span>
                             </button>
-
-                            {openDropdownId === agreement.id && (
-                              <div
-                                onClick={(e) => e.stopPropagation()}
-                                className="absolute right-0 mt-1 w-44 bg-white border border-neutral-200 rounded-lg shadow-lg z-50 py-1 text-left"
-                              >
-                                {activeTab === 'archived' || agreement.isArchived ? (
-                                  <>
-                                    <button
-                                      onClick={() => {
-                                        setOpenDropdownId(null);
-                                        handleArchiveToggle(agreement.id, false);
-                                      }}
-                                      disabled={isArchivingId === agreement.id}
-                                      className="w-full px-3 py-1.5 text-xs text-neutral-700 hover:bg-neutral-50 flex items-center gap-2 transition-colors disabled:opacity-50"
-                                    >
-                                      <span>📥</span>{' '}
-                                      {isArchivingId === agreement.id
-                                        ? 'Unarchiving...'
-                                        : 'Unarchive'}
-                                    </button>
-                                    <button
-                                      onClick={() => {
-                                        setOpenDropdownId(null);
-                                        openHistoryModal(agreement);
-                                      }}
-                                      className="w-full px-3 py-1.5 text-xs text-neutral-700 hover:bg-neutral-50 flex items-center gap-2 transition-colors"
-                                    >
-                                      <span>🕒</span> History
-                                    </button>
-                                    <button
-                                      onClick={() => {
-                                        setOpenDropdownId(null);
-                                        handleClone(agreement.id);
-                                      }}
-                                      disabled={cloningId === agreement.id}
-                                      className="w-full px-3 py-1.5 text-xs text-neutral-700 hover:bg-neutral-50 flex items-center gap-2 transition-colors disabled:opacity-50"
-                                    >
-                                      <span>📋</span>{' '}
-                                      {cloningId === agreement.id ? 'Cloning...' : 'Clone'}
-                                    </button>
-                                  </>
-                                ) : (
-                                  <>
-                                    <button
-                                      onClick={() => {
-                                        setOpenDropdownId(null);
-                                        handleClone(agreement.id);
-                                      }}
-                                      disabled={cloningId === agreement.id}
-                                      className="w-full px-3 py-1.5 text-xs text-neutral-700 hover:bg-neutral-50 flex items-center gap-2 transition-colors disabled:opacity-50"
-                                    >
-                                      <span>📋</span>{' '}
-                                      {cloningId === agreement.id ? 'Cloning...' : 'Clone'}
-                                    </button>
-                                    <button
-                                      onClick={() => {
-                                        setOpenDropdownId(null);
-                                        openHistoryModal(agreement);
-                                      }}
-                                      className="w-full px-3 py-1.5 text-xs text-neutral-700 hover:bg-neutral-50 flex items-center gap-2 transition-colors"
-                                    >
-                                      <span>🕒</span> History
-                                    </button>
-                                    <button
-                                      onClick={() => {
-                                        setOpenDropdownId(null);
-                                        openMetadataModal(agreement);
-                                      }}
-                                      className="w-full px-3 py-1.5 text-xs text-neutral-700 hover:bg-neutral-50 flex items-center gap-2 transition-colors"
-                                    >
-                                      <span>🏷️</span> Tags
-                                    </button>
-
-                                    {agreement.status === 'IN_REVIEW' && (
-                                      <button
-                                        onClick={() => {
-                                          setOpenDropdownId(null);
-                                          setSelectedAgreement(agreement);
-                                          setShowReviewDecisionModal(true);
-                                        }}
-                                        className="w-full px-3 py-1.5 text-xs text-emerald-700 hover:bg-emerald-50 flex items-center gap-2 transition-colors"
-                                      >
-                                        <span>⚖️</span> Review Decision
-                                      </button>
-                                    )}
-
-                                    {(agreement.status === 'SENT' ||
-                                      agreement.status === 'IN_REVIEW') && (
-                                      <button
-                                        onClick={() => {
-                                          setOpenDropdownId(null);
-                                          setSelectedAgreement(agreement);
-                                          setShowCancelAgreementModal(true);
-                                        }}
-                                        className="w-full px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 flex items-center gap-2 transition-colors"
-                                      >
-                                        <span>🛑</span> Void Agreement
-                                      </button>
-                                    )}
-
-                                    <div className="border-t border-neutral-100 my-1" />
-
-                                    <button
-                                      onClick={() => {
-                                        setOpenDropdownId(null);
-                                        handleArchiveToggle(agreement.id, true);
-                                      }}
-                                      disabled={isArchivingId === agreement.id}
-                                      className="w-full px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 flex items-center gap-2 transition-colors disabled:opacity-50"
-                                    >
-                                      <span>📦</span>{' '}
-                                      {isArchivingId === agreement.id ? 'Archiving...' : 'Archive'}
-                                    </button>
-                                  </>
-                                )}
-                              </div>
-                            )}
                           </div>
                         </div>
                       </td>
@@ -1539,6 +1441,144 @@ function AgreementManagementContent() {
             }}
           />
         )}
+
+        {/* Floating 3-Dots Dropdown Portal */}
+        {dropdownAnchor &&
+          typeof document !== 'undefined' &&
+          createPortal(
+            <div
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                position: 'fixed',
+                top: dropdownAnchor.isBottom ? 'auto' : `${dropdownAnchor.top}px`,
+                bottom: dropdownAnchor.isBottom
+                  ? `${window.innerHeight - dropdownAnchor.bottom}px`
+                  : 'auto',
+                right: `${Math.max(8, dropdownAnchor.right)}px`,
+                zIndex: 99999,
+              }}
+              className="w-44 bg-white border border-neutral-200 rounded-lg shadow-xl py-1 text-left animate-in fade-in zoom-in-95 duration-100"
+            >
+              {activeTab === 'archived' || dropdownAnchor.agreement.isArchived ? (
+                <>
+                  <button
+                    onClick={() => {
+                      const ag = dropdownAnchor.agreement;
+                      setDropdownAnchor(null);
+                      handleArchiveToggle(ag.id, false);
+                    }}
+                    disabled={isArchivingId === dropdownAnchor.agreement.id}
+                    className="w-full px-3 py-1.5 text-xs text-neutral-700 hover:bg-neutral-50 flex items-center gap-2 transition-colors disabled:opacity-50"
+                  >
+                    <span>📥</span>{' '}
+                    {isArchivingId === dropdownAnchor.agreement.id ? 'Unarchiving...' : 'Unarchive'}
+                  </button>
+                  <button
+                    onClick={() => {
+                      const ag = dropdownAnchor.agreement;
+                      setDropdownAnchor(null);
+                      openHistoryModal(ag);
+                    }}
+                    className="w-full px-3 py-1.5 text-xs text-neutral-700 hover:bg-neutral-50 flex items-center gap-2 transition-colors"
+                  >
+                    <span>🕒</span> History
+                  </button>
+                  <button
+                    onClick={() => {
+                      const ag = dropdownAnchor.agreement;
+                      setDropdownAnchor(null);
+                      handleClone(ag.id);
+                    }}
+                    disabled={cloningId === dropdownAnchor.agreement.id}
+                    className="w-full px-3 py-1.5 text-xs text-neutral-700 hover:bg-neutral-50 flex items-center gap-2 transition-colors disabled:opacity-50"
+                  >
+                    <span>📋</span>{' '}
+                    {cloningId === dropdownAnchor.agreement.id ? 'Cloning...' : 'Clone'}
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    onClick={() => {
+                      const ag = dropdownAnchor.agreement;
+                      setDropdownAnchor(null);
+                      handleClone(ag.id);
+                    }}
+                    disabled={cloningId === dropdownAnchor.agreement.id}
+                    className="w-full px-3 py-1.5 text-xs text-neutral-700 hover:bg-neutral-50 flex items-center gap-2 transition-colors disabled:opacity-50"
+                  >
+                    <span>📋</span>{' '}
+                    {cloningId === dropdownAnchor.agreement.id ? 'Cloning...' : 'Clone'}
+                  </button>
+                  <button
+                    onClick={() => {
+                      const ag = dropdownAnchor.agreement;
+                      setDropdownAnchor(null);
+                      openHistoryModal(ag);
+                    }}
+                    className="w-full px-3 py-1.5 text-xs text-neutral-700 hover:bg-neutral-50 flex items-center gap-2 transition-colors"
+                  >
+                    <span>🕒</span> History
+                  </button>
+                  <button
+                    onClick={() => {
+                      const ag = dropdownAnchor.agreement;
+                      setDropdownAnchor(null);
+                      openMetadataModal(ag);
+                    }}
+                    className="w-full px-3 py-1.5 text-xs text-neutral-700 hover:bg-neutral-50 flex items-center gap-2 transition-colors"
+                  >
+                    <span>🏷️</span> Tags
+                  </button>
+
+                  {dropdownAnchor.agreement.status === 'IN_REVIEW' && (
+                    <button
+                      onClick={() => {
+                        const ag = dropdownAnchor.agreement;
+                        setDropdownAnchor(null);
+                        setSelectedAgreement(ag);
+                        setShowReviewDecisionModal(true);
+                      }}
+                      className="w-full px-3 py-1.5 text-xs text-emerald-700 hover:bg-emerald-50 flex items-center gap-2 transition-colors"
+                    >
+                      <span>⚖️</span> Review Decision
+                    </button>
+                  )}
+
+                  {(dropdownAnchor.agreement.status === 'SENT' ||
+                    dropdownAnchor.agreement.status === 'IN_REVIEW') && (
+                    <button
+                      onClick={() => {
+                        const ag = dropdownAnchor.agreement;
+                        setDropdownAnchor(null);
+                        setSelectedAgreement(ag);
+                        setShowCancelAgreementModal(true);
+                      }}
+                      className="w-full px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 flex items-center gap-2 transition-colors"
+                    >
+                      <span>🛑</span> Void Agreement
+                    </button>
+                  )}
+
+                  <div className="border-t border-neutral-100 my-1" />
+
+                  <button
+                    onClick={() => {
+                      const ag = dropdownAnchor.agreement;
+                      setDropdownAnchor(null);
+                      handleArchiveToggle(ag.id, true);
+                    }}
+                    disabled={isArchivingId === dropdownAnchor.agreement.id}
+                    className="w-full px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 flex items-center gap-2 transition-colors disabled:opacity-50"
+                  >
+                    <span>📦</span>{' '}
+                    {isArchivingId === dropdownAnchor.agreement.id ? 'Archiving...' : 'Archive'}
+                  </button>
+                </>
+              )}
+            </div>,
+            document.body,
+          )}
       </main>
 
       <Footer />

@@ -113,6 +113,15 @@ export function AgreementEditModal({
       setError('Agreement title must be at least 2 characters long.');
       return;
     }
+    if (cleanTitle.length > 50) {
+      setError('Agreement title must not exceed 50 characters.');
+      return;
+    }
+    const cleanDesc = (description || '').trim();
+    if (cleanDesc.length > 260) {
+      setError('Description / Reference must not exceed 260 characters.');
+      return;
+    }
 
     setSaving(true);
     setError(null);
@@ -126,7 +135,7 @@ export function AgreementEditModal({
         },
         body: JSON.stringify({
           title: cleanTitle,
-          description: (description || '').trim() || undefined,
+          description: cleanDesc || undefined,
           markdownContent: markdown || '',
           tags: tags || [],
         }),
@@ -157,6 +166,17 @@ export function AgreementEditModal({
       setActivating(false);
       return;
     }
+    if (cleanTitle.length > 50) {
+      setError('Agreement title must not exceed 50 characters.');
+      setActivating(false);
+      return;
+    }
+    const cleanDesc = (description || '').trim();
+    if (cleanDesc.length > 260) {
+      setError('Description / Reference must not exceed 260 characters.');
+      setActivating(false);
+      return;
+    }
 
     try {
       // First save current edits if any
@@ -168,7 +188,7 @@ export function AgreementEditModal({
         },
         body: JSON.stringify({
           title: cleanTitle,
-          description: (description || '').trim() || undefined,
+          description: cleanDesc || undefined,
           markdownContent: markdown || '',
           tags: tags || [],
         }),
@@ -259,27 +279,35 @@ export function AgreementEditModal({
         <div className="space-y-4 flex-1">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-semibold text-neutral-700 mb-1">
-                Agreement Title *
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-semibold text-neutral-700">
+                  Agreement Title *
+                </label>
+                <span className="text-[10px] text-neutral-400">{title.length}/50</span>
+              </div>
               <input
                 type="text"
                 required
+                maxLength={50}
                 value={title}
-                onChange={(e) => setTitle(e.target.value)}
+                onChange={(e) => setTitle(e.target.value.slice(0, 50))}
                 placeholder="e.g. Master Services Agreement 2026"
                 className="w-full bg-neutral-50 border border-neutral-300 rounded-lg px-3 py-2 text-xs text-neutral-900 focus:outline-none focus:border-[#ba0000]"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-neutral-700 mb-1">
-                Description / Reference (Optional)
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-semibold text-neutral-700">
+                  Description / Reference (Optional)
+                </label>
+                <span className="text-[10px] text-neutral-400">{description.length}/260</span>
+              </div>
               <input
                 type="text"
+                maxLength={260}
                 value={description}
-                onChange={(e) => setDescription(e.target.value)}
+                onChange={(e) => setDescription(e.target.value.slice(0, 260))}
                 placeholder="e.g. Annual client vendor contract"
                 className="w-full bg-neutral-50 border border-neutral-300 rounded-lg px-3 py-2 text-xs text-neutral-900 focus:outline-none focus:border-[#ba0000]"
               />

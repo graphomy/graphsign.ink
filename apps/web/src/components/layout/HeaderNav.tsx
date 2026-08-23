@@ -1,18 +1,23 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { getApiUrl } from '@/lib/api';
 import { ProfileDropdown } from '@/components/features/auth/ProfileDropdown';
 
+const emptySubscribe = () => () => {};
+function getStoredEmail() {
+  return localStorage.getItem('graphsign_user_email') || '';
+}
+function getServerEmail() {
+  return '';
+}
+
 export function HeaderNav() {
   const pathname = usePathname();
   const [orgName, setOrgName] = useState<string>('Workspace');
-  const [userEmail] = useState<string>(() => {
-    if (typeof window === 'undefined') return '';
-    return localStorage.getItem('graphsign_user_email') || '';
-  });
+  const userEmail = useSyncExternalStore(emptySubscribe, getStoredEmail, getServerEmail);
 
   useEffect(() => {
     async function fetchOrg() {
@@ -28,7 +33,8 @@ export function HeaderNav() {
           if (data.name) setOrgName(data.name);
         }
       } catch (err) {
-        console.error('Failed to load org name in header:', err);
+        // Non-blocking background fetch for organisation header badge
+        console.debug('Failed to load org name in header:', err);
       }
     }
     fetchOrg();

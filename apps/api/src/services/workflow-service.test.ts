@@ -277,7 +277,6 @@ describe('WorkflowService Unit Tests (INK-86 to INK-96)', () => {
     });
 
     expect(res.status).toBe('CANCELLED');
-    expect(res.cancellationReason).toBe('Terms updated by client.');
     expect(mockMailer.sendAgreementCancelledEmail).toHaveBeenCalledWith(
       's1@example.com',
       'Signer 1',

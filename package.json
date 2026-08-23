@@ -28,8 +28,8 @@
     "typecheck": "pnpm -r typecheck"
   },
   "devDependencies": {
-    "@types/node": "^26.1.2",
+    "@types/node": "^26.2.0",
     "prettier": "^3.3.0",
-    "typescript": "^7.0.2"
+    "typescript": "^5.9.3"
   }
 }

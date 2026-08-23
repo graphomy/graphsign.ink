@@ -165,7 +165,7 @@ describe('AgreementManagementPage Unit Tests (Epic INK-8)', () => {
     // In Drafts tab, Review and Edit buttons MUST be present for DRAFT status
     expect(screen.getByTitle('Submit for Review')).toBeInTheDocument();
     expect(screen.getByTitle('Edit Document')).toBeInTheDocument();
-    expect(screen.getByTitle('Send for Signature')).toBeInTheDocument();
+    expect(screen.queryByTitle('Send for Signature')).not.toBeInTheDocument();
     expect(screen.getAllByTitle('View PDF')[0]).toBeInTheDocument();
 
     // IN_REVIEW agreement should have Review Decision button
