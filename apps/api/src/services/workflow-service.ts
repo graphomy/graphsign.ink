@@ -1,5 +1,4 @@
 import type { PrismaClient } from '@graphsign/db';
-import crypto from 'crypto';
 import {
   SubmitReviewInput,
   ReviewDecisionInput,
@@ -11,6 +10,7 @@ import {
 import { AuditService } from './audit-service.js';
 import { MailerService } from './mailer-service.js';
 import { ForbiddenError, NotFoundError, ValidationError } from '../utils/errors.js';
+import { generateId, generateToken, hashToken } from '../utils/crypto.js';
 
 export interface WorkflowContext {
   userId: string;
@@ -20,14 +20,6 @@ export interface WorkflowContext {
   role: string;
   ipAddress?: string;
   userAgent?: string;
-}
-
-function hashToken(token: string): string {
-  return crypto.createHash('sha256').update(token).digest('hex');
-}
-
-function generateRawToken(): string {
-  return crypto.randomBytes(32).toString('hex');
 }
 
 export class WorkflowService {
@@ -289,13 +281,13 @@ export class WorkflowService {
 
     for (let i = 0; i < input.recipients.length; i++) {
       const r = input.recipients[i]!;
-      const rawToken = generateRawToken();
-      const tokenHash = hashToken(rawToken);
+      const rawToken = generateToken();
+      const tokenHash = await hashToken(rawToken);
       const routingOrder = signingOrder === 'SEQUENTIAL' ? r.routingOrder || i + 1 : 1;
 
       const recipientRecord = await this.prisma.agreementRecipient.create({
         data: {
-          id: crypto.randomUUID(),
+          id: generateId(),
           agreementId,
           email: r.email.toLowerCase().trim(),
           name: r.name.trim(),
@@ -379,7 +371,7 @@ export class WorkflowService {
    * INK-90, INK-91: Get public signing session by raw token
    */
   async getPublicSigningSession(rawToken: string) {
-    const tokenHash = hashToken(rawToken);
+    const tokenHash = await hashToken(rawToken);
 
     const recipient = await this.prisma.agreementRecipient.findUnique({
       where: { signingTokenHash: tokenHash },
@@ -467,7 +459,7 @@ export class WorkflowService {
    * INK-93: Track viewed status
    */
   async trackRecipientView(rawToken: string, ip?: string, userAgent?: string) {
-    const tokenHash = hashToken(rawToken);
+    const tokenHash = await hashToken(rawToken);
     const recipient = await this.prisma.agreementRecipient.findUnique({
       where: { signingTokenHash: tokenHash },
       include: {
@@ -517,7 +509,7 @@ export class WorkflowService {
     ip?: string,
     userAgent?: string,
   ) {
-    const tokenHash = hashToken(rawToken);
+    const tokenHash = await hashToken(rawToken);
     const recipient = await this.prisma.agreementRecipient.findUnique({
       where: { signingTokenHash: tokenHash },
       include: {
@@ -669,7 +661,7 @@ export class WorkflowService {
     ip?: string,
     userAgent?: string,
   ) {
-    const tokenHash = hashToken(rawToken);
+    const tokenHash = await hashToken(rawToken);
     const recipient = await this.prisma.agreementRecipient.findUnique({
       where: { signingTokenHash: tokenHash },
       include: {
