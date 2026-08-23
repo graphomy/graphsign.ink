@@ -7,11 +7,6 @@ dist/
 out/
 build/
 
-# Environment variables
-.env
-.env.local
-.env.*.local
-
 # IDE
 .vscode/
 .idea/
@@ -43,9 +38,15 @@ yarn-debug.log*
 *.generated.ts
 prisma/generated/
 
-# Local Environment Setup Guides
-Environment_Setup/
-
 # Wrangler / Cloudflare
 .wrangler/
 
+
+# Environment variables & local secrets
+.env
+.env.*
+.env.local
+.env.*.local
+.dev.vars
+.dev.vars.*
+*.dev.vars
