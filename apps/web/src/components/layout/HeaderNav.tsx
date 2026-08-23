@@ -28,7 +28,8 @@ export function HeaderNav() {
           if (data.name) setOrgName(data.name);
         }
       } catch (err) {
-        console.error('Failed to load org name in header:', err);
+        // Non-blocking background fetch for organisation header badge
+        console.debug('Failed to load org name in header:', err);
       }
     }
     fetchOrg();

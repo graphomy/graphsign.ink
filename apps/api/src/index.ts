@@ -39,19 +39,25 @@ app.use('*', async (c, next) => {
   const corsMiddleware = cors({
     origin: (requestOrigin) => {
       if (!requestOrigin) return '';
+
+      const isLocal =
+        requestOrigin.startsWith('http://localhost:') ||
+        requestOrigin.startsWith('http://127.0.0.1:') ||
+        requestOrigin.startsWith('http://192.168.') ||
+        requestOrigin.startsWith('http://10.') ||
+        requestOrigin.startsWith('http://172.') ||
+        requestOrigin.includes('.local:');
+
+      if (isLocal) {
+        return requestOrigin;
+      }
+
       if (!allowedOriginSetting) {
-        return requestOrigin.startsWith('http://localhost:') ||
-          requestOrigin.startsWith('http://127.0.0.1:')
-          ? requestOrigin
-          : '';
+        return '';
       }
 
       const origins = allowedOriginSetting.split(',').map((o) => o.trim());
-      if (
-        origins.includes(requestOrigin) ||
-        requestOrigin.startsWith('http://localhost:') ||
-        requestOrigin.startsWith('http://127.0.0.1:')
-      ) {
+      if (origins.includes(requestOrigin)) {
         return requestOrigin;
       }
 
