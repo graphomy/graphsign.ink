@@ -30,9 +30,7 @@ function getStoredRoleSnapshot() {
   const stored = localStorage.getItem('graphsign_user_role');
   if (stored) return stored;
   const sessionToken =
-    localStorage.getItem('graphsign_session_token') ||
-    localStorage.getItem('token') ||
-    '';
+    localStorage.getItem('graphsign_session_token') || localStorage.getItem('token') || '';
   if (sessionToken) {
     try {
       const parts = sessionToken.split('.');

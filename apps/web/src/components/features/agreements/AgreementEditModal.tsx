@@ -283,9 +283,7 @@ export function AgreementEditModal({
                 <label className="block text-xs font-semibold text-neutral-700">
                   Agreement Title *
                 </label>
-                <span className="text-[10px] text-neutral-400">
-                  {title.length}/50
-                </span>
+                <span className="text-[10px] text-neutral-400">{title.length}/50</span>
               </div>
               <input
                 type="text"
@@ -303,9 +301,7 @@ export function AgreementEditModal({
                 <label className="block text-xs font-semibold text-neutral-700">
                   Description / Reference (Optional)
                 </label>
-                <span className="text-[10px] text-neutral-400">
-                  {description.length}/260
-                </span>
+                <span className="text-[10px] text-neutral-400">{description.length}/260</span>
               </div>
               <input
                 type="text"
