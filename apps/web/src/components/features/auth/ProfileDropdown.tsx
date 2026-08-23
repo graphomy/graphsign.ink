@@ -17,20 +17,27 @@ interface ProfileDropdownProps {
  */
 export function ProfileDropdown({ email, token, orgName }: ProfileDropdownProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const displayEmail =
     email ||
-    (typeof window !== 'undefined'
+    (mounted && typeof window !== 'undefined'
       ? (localStorage.getItem('graphsign_user_email') ?? 'user@graphsign.ink')
       : 'user@graphsign.ink');
 
   const displayOrgName =
     orgName ||
-    (typeof window !== 'undefined' ? (localStorage.getItem('graphsign_org_name') ?? '') : '');
+    (mounted && typeof window !== 'undefined'
+      ? (localStorage.getItem('graphsign_org_name') ?? '')
+      : '');
 
   const userRole = (() => {
-    if (typeof window === 'undefined') return '';
+    if (!mounted || typeof window === 'undefined') return '';
     const stored = localStorage.getItem('graphsign_user_role');
     if (stored) return stored;
     const sessionToken =

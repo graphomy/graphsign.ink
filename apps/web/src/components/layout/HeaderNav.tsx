@@ -9,10 +9,14 @@ import { ProfileDropdown } from '@/components/features/auth/ProfileDropdown';
 export function HeaderNav() {
   const pathname = usePathname();
   const [orgName, setOrgName] = useState<string>('Workspace');
-  const [userEmail] = useState<string>(() => {
-    if (typeof window === 'undefined') return '';
-    return localStorage.getItem('graphsign_user_email') || '';
-  });
+  const [userEmail, setUserEmail] = useState<string>('');
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const storedEmail = localStorage.getItem('graphsign_user_email');
+      if (storedEmail) setUserEmail(storedEmail);
+    }
+  }, []);
 
   useEffect(() => {
     async function fetchOrg() {
