@@ -636,8 +636,8 @@ function AgreementManagementContent() {
             </div>
           </div>
         ) : (
-          <div className="bg-white border border-neutral-200 rounded-xl shadow-sm overflow-hidden flex flex-col">
-            <div className="overflow-x-auto">
+          <div className="bg-white border border-neutral-200 rounded-xl shadow-sm flex flex-col min-h-[300px]">
+            <div className="overflow-x-auto pb-16">
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
                   <tr className="bg-neutral-50/80 border-b border-neutral-200 text-neutral-600 font-semibold uppercase tracking-wider text-[10px]">
@@ -650,7 +650,7 @@ function AgreementManagementContent() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-neutral-100">
-                  {agreements.map((agreement) => (
+                  {agreements.map((agreement, idx) => (
                     <tr
                       key={agreement.id}
                       className="hover:bg-neutral-50/80 transition-colors group"
@@ -675,9 +675,9 @@ function AgreementManagementContent() {
                             )}
                             {agreement.tags && agreement.tags.length > 0 && (
                               <div className="flex flex-wrap gap-1 pt-0.5">
-                                {agreement.tags.map((tag, idx) => (
+                                {agreement.tags.map((tag, tIdx) => (
                                   <span
-                                    key={idx}
+                                    key={tIdx}
                                     className="text-[9px] font-semibold bg-neutral-100 text-neutral-600 px-1.5 py-0.5 rounded border border-neutral-200"
                                   >
                                     #{tag}
@@ -775,8 +775,8 @@ function AgreementManagementContent() {
                               </button>
                             )}
 
-                          {/* Send for Signature Button: Only on Active / Draft non-archived documents */}
-                          {activeTab !== 'archived' &&
+                          {/* Send for Signature Button: Only on Active tab (INK-259) */}
+                          {activeTab === 'active' &&
                             !agreement.isArchived &&
                             agreement.status !== 'IN_REVIEW' && (
                               <button
@@ -818,7 +818,11 @@ function AgreementManagementContent() {
                             {openDropdownId === agreement.id && (
                               <div
                                 onClick={(e) => e.stopPropagation()}
-                                className="absolute right-0 mt-1 w-44 bg-white border border-neutral-200 rounded-lg shadow-lg z-50 py-1 text-left"
+                                className={`absolute right-0 w-44 bg-white border border-neutral-200 rounded-lg shadow-lg z-50 py-1 text-left ${
+                                  idx >= Math.max(1, agreements.length - 2) && agreements.length > 2
+                                    ? 'bottom-full mb-1'
+                                    : 'top-full mt-1'
+                                }`}
                               >
                                 {activeTab === 'archived' || agreement.isArchived ? (
                                   <>
