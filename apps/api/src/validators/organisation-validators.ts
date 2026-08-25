@@ -110,6 +110,14 @@ export const auditLogQuerySchema = z.object({
   endDate: z.string().optional(),
 });
 
+export const updateNotificationSettingsSchema = z.object({
+  sendReminders: z.boolean().optional(),
+  reminderFrequencyDays: z.number().int().min(1).max(30).optional(),
+  sendExpiryWarnings: z.boolean().optional(),
+  sendCompletionEmails: z.boolean().optional(),
+  customFooterText: z.string().max(1000).nullable().optional(),
+});
+
 export const upgradeToTeamsSchema = z.object({
   companyName: z.string().min(2, 'Company name must be at least 2 characters').max(255).optional(),
 });
@@ -120,6 +128,7 @@ export type AcceptInvitationInput = z.infer<typeof acceptInvitationSchema>;
 export type UpdateBrandingInput = z.infer<typeof updateBrandingSchema>;
 export type UpdateOrganisationSettingsInput = z.infer<typeof updateOrganisationSettingsSchema>;
 export type UpdateComplianceSettingsInput = z.infer<typeof updateComplianceSettingsSchema>;
+export type UpdateNotificationSettingsInput = z.infer<typeof updateNotificationSettingsSchema>;
 export type SuspendOrganisationInput = z.infer<typeof suspendOrganisationSchema>;
 export type CreateTeamInput = z.infer<typeof createTeamSchema>;
 export type CreateCustomRoleInput = z.infer<typeof createCustomRoleSchema>;

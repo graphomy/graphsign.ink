@@ -21,6 +21,8 @@ import { ReviewDecisionModal } from '@/components/features/agreements/ReviewDeci
 import { SendAgreementModal } from '@/components/features/agreements/SendAgreementModal';
 import { CancelAgreementModal } from '@/components/features/agreements/CancelAgreementModal';
 import { ChooseTemplateModal } from '@/components/features/agreements/ChooseTemplateModal';
+import { NotificationHistoryModal } from '@/components/features/agreements/NotificationHistoryModal';
+import { SendReminderModal } from '@/components/features/agreements/SendReminderModal';
 import { getApiUrl } from '@/lib/api';
 import { formatDateTime, formatStatus } from '@/lib/date-utils';
 
@@ -112,6 +114,8 @@ function AgreementManagementContent() {
   const [showReviewDecisionModal, setShowReviewDecisionModal] = useState(false);
   const [showSendAgreementModal, setShowSendAgreementModal] = useState(false);
   const [showCancelAgreementModal, setShowCancelAgreementModal] = useState(false);
+  const [showNotificationModal, setShowNotificationModal] = useState(false);
+  const [showReminderModal, setShowReminderModal] = useState(false);
   const [selectedAgreement, setSelectedAgreement] = useState<AgreementItem | null>(null);
 
   // Form states
@@ -832,13 +836,30 @@ function AgreementManagementContent() {
                           {/* Send for Signature Button: Only on Active tab (INK-259) */}
                           {activeTab === 'active' &&
                             !agreement.isArchived &&
-                            agreement.status !== 'IN_REVIEW' && (
+                            agreement.status !== 'IN_REVIEW' &&
+                            agreement.status !== 'SENT' && (
                               <button
                                 onClick={() => openDocumentEditor(agreement)}
                                 className="px-2.5 py-1 text-[11px] font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded transition-colors flex items-center gap-1"
                                 title="Send for Signature"
                               >
                                 <span>✍️</span> Send for Signature
+                              </button>
+                            )}
+
+                          {/* INK-108: Send Reminder Button for active SENT agreements */}
+                          {activeTab === 'active' &&
+                            !agreement.isArchived &&
+                            agreement.status === 'SENT' && (
+                              <button
+                                onClick={() => {
+                                  setSelectedAgreement(agreement);
+                                  setShowReminderModal(true);
+                                }}
+                                className="px-2.5 py-1 text-[11px] font-semibold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded transition-colors flex items-center gap-1"
+                                title="Send Reminder"
+                              >
+                                <span>⚡</span> Remind
                               </button>
                             )}
 
@@ -1500,6 +1521,37 @@ function AgreementManagementContent() {
           />
         )}
 
+        {/* Notification History Modal (INK-113) */}
+        {showNotificationModal && selectedAgreement && (
+          <NotificationHistoryModal
+            isOpen={showNotificationModal}
+            agreementId={selectedAgreement.id}
+            agreementTitle={selectedAgreement.title}
+            onClose={() => {
+              setShowNotificationModal(false);
+              setSelectedAgreement(null);
+            }}
+          />
+        )}
+
+        {/* Send Reminder Modal (INK-108) */}
+        {showReminderModal && selectedAgreement && (
+          <SendReminderModal
+            isOpen={showReminderModal}
+            agreementId={selectedAgreement.id}
+            agreementTitle={selectedAgreement.title}
+            recipients={selectedAgreement.fields?.recipients || []}
+            onClose={() => {
+              setShowReminderModal(false);
+              setSelectedAgreement(null);
+            }}
+            onSuccess={() => {
+              setActionMessage('Reminder successfully dispatched to pending signers.');
+              setRefreshTrigger((prev) => prev + 1);
+            }}
+          />
+        )}
+
         {/* Floating 3-Dots Dropdown Portal */}
         {dropdownAnchor &&
           typeof document !== 'undefined' &&
@@ -1588,6 +1640,31 @@ function AgreementManagementContent() {
                   >
                     <span>🏷️</span> Tags
                   </button>
+                  <button
+                    onClick={() => {
+                      const ag = dropdownAnchor.agreement;
+                      setDropdownAnchor(null);
+                      setSelectedAgreement(ag);
+                      setShowNotificationModal(true);
+                    }}
+                    className="w-full px-3 py-1.5 text-xs text-neutral-700 hover:bg-neutral-50 flex items-center gap-2 transition-colors"
+                  >
+                    <span>🔔</span> Notifications
+                  </button>
+
+                  {dropdownAnchor.agreement.status === 'SENT' && (
+                    <button
+                      onClick={() => {
+                        const ag = dropdownAnchor.agreement;
+                        setDropdownAnchor(null);
+                        setSelectedAgreement(ag);
+                        setShowReminderModal(true);
+                      }}
+                      className="w-full px-3 py-1.5 text-xs text-amber-700 hover:bg-amber-50 flex items-center gap-2 transition-colors"
+                    >
+                      <span>⚡</span> Send Reminder
+                    </button>
+                  )}
 
                   {dropdownAnchor.agreement.status === 'IN_REVIEW' &&
                     ((currentUser.userId &&

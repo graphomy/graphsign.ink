@@ -18,6 +18,7 @@ import type {
   UpdateBrandingInput,
   UpdateOrganisationSettingsInput,
   UpdateComplianceSettingsInput,
+  UpdateNotificationSettingsInput,
   CreateTeamInput,
   CreateCustomRoleInput,
   AddDomainInput,
@@ -1085,5 +1086,70 @@ export class OrganisationService {
         'Organisation storage quota exceeded. Please upgrade your plan or delete existing files.',
       );
     }
+  }
+
+  /**
+   * INK-114: Retrieves notification trigger preferences.
+   */
+  async getNotificationSettings(orgId: string): Promise<{
+    sendReminders: boolean;
+    reminderFrequencyDays: number;
+    sendExpiryWarnings: boolean;
+    sendCompletionEmails: boolean;
+    customFooterText: string | null;
+  }> {
+    const org = await this.getOrganisationById(orgId);
+    const defaults = {
+      sendReminders: true,
+      reminderFrequencyDays: 3,
+      sendExpiryWarnings: true,
+      sendCompletionEmails: true,
+      customFooterText: (org as any).emailFooterText || null,
+    };
+
+    const saved = (org as any).notificationSettings as any;
+    if (!saved) return defaults;
+
+    return {
+      sendReminders: saved.sendReminders ?? defaults.sendReminders,
+      reminderFrequencyDays: saved.reminderFrequencyDays ?? defaults.reminderFrequencyDays,
+      sendExpiryWarnings: saved.sendExpiryWarnings ?? defaults.sendExpiryWarnings,
+      sendCompletionEmails: saved.sendCompletionEmails ?? defaults.sendCompletionEmails,
+      customFooterText: saved.customFooterText ?? defaults.customFooterText,
+    };
+  }
+
+  /**
+   * INK-114: Updates notification trigger preferences.
+   */
+  async updateNotificationSettings(
+    orgId: string,
+    actorUserId: string,
+    data: UpdateNotificationSettingsInput,
+  ) {
+    const current = await this.getNotificationSettings(orgId);
+    const merged = {
+      ...current,
+      ...data,
+    };
+
+    await this.prisma.organisation.update({
+      where: { id: orgId },
+      data: {
+        notificationSettings: merged as any,
+        ...(data.customFooterText !== undefined && { emailFooterText: data.customFooterText }),
+      },
+    });
+
+    await this.auditService.log({
+      organisationId: orgId,
+      userId: actorUserId,
+      action: 'ORGANISATION_NOTIFICATION_SETTINGS_UPDATED',
+      resourceType: 'organisation',
+      resourceId: orgId,
+      metadata: { settings: merged },
+    });
+
+    return merged;
   }
 }

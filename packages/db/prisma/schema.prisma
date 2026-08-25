@@ -42,19 +42,23 @@ model Organisation {
   signatureReasonRequired    Boolean  @default(false) @map("signature_reason_required")
   documentRetentionDays      Int      @default(30) @map("document_retention_days")
 
+  // Notification Preferences & Triggers (INK-114)
+  notificationSettings       Json?    @map("notification_settings") @db.JsonB
+
   createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz()
   updatedAt             DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
   deletedAt             DateTime? @map("deleted_at") @db.Timestamptz()
 
-  users        User[]
-  memberships  UserOrganisation[]
-  invitations  OrganisationInvitation[]
-  teams        Team[]
-  customRoles  CustomRole[]
-  domains      OrganisationDomain[]
-  agreements   Agreement[]
-  templates    Template[]
-  auditLogs    AuditLog[]
+  users            User[]
+  memberships      UserOrganisation[]
+  invitations      OrganisationInvitation[]
+  teams            Team[]
+  customRoles      CustomRole[]
+  domains          OrganisationDomain[]
+  agreements       Agreement[]
+  templates        Template[]
+  auditLogs        AuditLog[]
+  notificationLogs NotificationLog[]
 
   @@index([slug])
   @@index([status])
@@ -248,11 +252,12 @@ model Agreement {
   updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
   deletedAt       DateTime? @map("deleted_at") @db.Timestamptz()
 
-  organisation Organisation       @relation(fields: [organisationId], references: [id])
-  author       User               @relation(fields: [authorId], references: [id])
-  template     Template?          @relation(fields: [templateId], references: [id], onDelete: SetNull)
-  versions     AgreementVersion[]
-  recipients   AgreementRecipient[]
+  organisation     Organisation         @relation(fields: [organisationId], references: [id])
+  author           User                 @relation(fields: [authorId], references: [id])
+  template         Template?            @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  versions         AgreementVersion[]
+  recipients       AgreementRecipient[]
+  notificationLogs NotificationLog[]
 
   @@index([organisationId])
   @@index([authorId])
@@ -427,3 +432,35 @@ model PlatformConfig {
 
   @@map("platform_config")
 }
+
+/// Notification delivery tracking and audit log (INK-113, INK-116).
+model NotificationLog {
+  id                String    @id @db.Uuid
+  organisationId    String    @map("organisation_id") @db.Uuid
+  agreementId       String?   @map("agreement_id") @db.Uuid
+  recipientId       String?   @map("recipient_id") @db.Uuid
+  recipientEmail    String    @map("recipient_email") @db.VarChar(255)
+  recipientName     String?   @map("recipient_name") @db.VarChar(255)
+  eventType         String    @map("event_type") @db.VarChar(50)
+  channel           String    @default("EMAIL") @db.VarChar(20)
+  status            String    @default("SENT") @db.VarChar(20)
+  providerMessageId String?   @map("provider_message_id") @db.VarChar(255)
+  attempts          Int       @default(1)
+  lastError         String?   @map("last_error") @db.VarChar(1000)
+  metadata          Json?     @db.JsonB
+  sentAt            DateTime? @map("sent_at") @db.Timestamptz()
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
+
+  organisation Organisation @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+  agreement    Agreement?   @relation(fields: [agreementId], references: [id], onDelete: Cascade)
+
+  @@index([organisationId])
+  @@index([agreementId])
+  @@index([recipientEmail])
+  @@index([eventType])
+  @@index([status])
+  @@index([createdAt])
+  @@map("notification_logs")
+}
+

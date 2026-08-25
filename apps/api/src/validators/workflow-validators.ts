@@ -88,3 +88,9 @@ export const electronicConsentSchema = z.object({
   ersdVersion: z.string().default('v1.0'),
 });
 export type ElectronicConsentInput = z.infer<typeof electronicConsentSchema>;
+
+export const sendReminderSchema = z.object({
+  recipientId: z.string().uuid('Invalid recipient ID').optional(),
+  note: z.string().max(1000).optional(),
+});
+export type SendReminderInput = z.infer<typeof sendReminderSchema>;

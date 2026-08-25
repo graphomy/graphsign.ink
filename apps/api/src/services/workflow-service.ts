@@ -7,6 +7,7 @@ import {
   DeclineSignInput,
   CancelAgreementInput,
   ElectronicConsentInput,
+  SendReminderInput,
 } from '../validators/workflow-validators.js';
 import { AuditService } from './audit-service.js';
 import { MailerService } from './mailer-service.js';
@@ -95,12 +96,17 @@ export class WorkflowService {
       userAgent: ctx.userAgent,
     });
 
-    // Dispatch email notification to reviewer
+    // Dispatch email notification to reviewer (INK-107, INK-113)
     await this.mailerService.sendReviewRequestEmail(
       reviewer.email,
       agreement.title,
       ctx.userName || agreement.author.name || 'An author',
       input.notes,
+      {
+        organisationId: ctx.organisationId,
+        agreementId,
+        eventType: 'REVIEW_REQUEST',
+      },
     );
 
     return updated;
@@ -157,20 +163,25 @@ export class WorkflowService {
       userAgent: ctx.userAgent,
     });
 
-    // Notify author of approval
+    // Notify author of approval (INK-113)
     await this.mailerService.sendReviewDecisionEmail(
       agreement.author.email,
       agreement.title,
       ctx.userName || 'The reviewer',
       'APPROVE',
       input.comments,
+      {
+        organisationId: ctx.organisationId,
+        agreementId,
+        eventType: 'REVIEW_APPROVED',
+      },
     );
 
     return updated;
   }
 
   /**
-   * INK-89: Reject document
+   * INK-89: Reject document (INK-110)
    */
   async rejectAgreement(ctx: WorkflowContext, agreementId: string, input: ReviewDecisionInput) {
     const agreement = await this.prisma.agreement.findFirst({
@@ -220,20 +231,25 @@ export class WorkflowService {
       userAgent: ctx.userAgent,
     });
 
-    // Notify author of rejection
+    // Notify author of rejection (INK-110, INK-113)
     await this.mailerService.sendReviewDecisionEmail(
       agreement.author.email,
       agreement.title,
       ctx.userName || 'The reviewer',
       'REJECT',
       input.comments,
+      {
+        organisationId: ctx.organisationId,
+        agreementId,
+        eventType: 'REVIEW_REJECTED',
+      },
     );
 
     return updated;
   }
 
   /**
-   * INK-90, INK-91, INK-92: Send agreement for signature
+   * INK-90, INK-91, INK-92, INK-107, INK-115: Send agreement for signature with role-aware invites & custom message
    */
   async sendForSignature(ctx: WorkflowContext, agreementId: string, input: SendAgreementInput) {
     const agreement = await this.prisma.agreement.findFirst({
@@ -332,14 +348,13 @@ export class WorkflowService {
         signingOrder,
         recipientCount: input.recipients.length,
         expiresAt: expiresAt?.toISOString(),
+        hasCustomMessage: !!input.message,
       },
       ipAddress: ctx.ipAddress,
       userAgent: ctx.userAgent,
     });
 
-    // Dispatch invitations:
-    // If SEQUENTIAL: only invite recipients where routingOrder === 1
-    // If PARALLEL: invite all recipients simultaneously
+    // Dispatch invitations (INK-107, INK-113, INK-115)
     const senderName = ctx.userName || agreement.author.name || 'Agreement Sender';
 
     for (const recip of createdRecipients) {
@@ -358,6 +373,15 @@ export class WorkflowService {
           senderName,
           recip.rawToken,
           expiresAt,
+          input.message,
+          recip.role,
+          {
+            organisationId: ctx.organisationId,
+            agreementId: agreement.id,
+            recipientId: recip.id,
+            recipientName: recip.name,
+            eventType: 'INVITATION',
+          },
         );
       }
     }
@@ -448,23 +472,28 @@ export class WorkflowService {
         signingOrder: agreement.signingOrder,
         currentStep: agreement.currentStep,
         expiresAt: agreement.expiresAt,
-        senderName: agreement.author.name || agreement.author.email,
-        organisationName: agreement.organisation.name,
+        author: {
+          name: agreement.author.name,
+        },
+        organisation: {
+          name: agreement.organisation.name,
+        },
       },
-      allRecipients,
+      recipients: allRecipients,
       isTurn,
     };
   }
 
   /**
-   * INK-93: Track viewed status
+   * INK-98: Record recipient view beacon
    */
-  async trackRecipientView(rawToken: string, ip?: string, userAgent?: string) {
+  async recordRecipientView(rawToken: string, ip?: string, userAgent?: string) {
     const tokenHash = await hashToken(rawToken);
+
     const recipient = await this.prisma.agreementRecipient.findUnique({
       where: { signingTokenHash: tokenHash },
       include: {
-        agreement: { select: { id: true, organisationId: true, status: true } },
+        agreement: { select: { organisationId: true } },
       },
     });
 
@@ -472,11 +501,10 @@ export class WorkflowService {
       throw new NotFoundError('Invalid signing link.');
     }
 
-    if (recipient.status === 'INVITED' || recipient.status === 'PENDING') {
+    if (!recipient.viewedAt) {
       await this.prisma.agreementRecipient.update({
         where: { id: recipient.id },
         data: {
-          status: 'VIEWED',
           viewedAt: new Date(),
           ipAddress: ip,
           userAgent,
@@ -485,7 +513,7 @@ export class WorkflowService {
 
       await this.auditService.log({
         organisationId: recipient.agreement.organisationId,
-        action: 'AGREEMENT_VIEWED',
+        action: 'AGREEMENT_VIEWED_BY_RECIPIENT',
         resourceType: 'agreement',
         resourceId: recipient.agreementId,
         metadata: {
@@ -502,7 +530,14 @@ export class WorkflowService {
   }
 
   /**
-   * INK-99: Capture electronic consent (ERSD)
+   * INK-98: Alias for recordRecipientView
+   */
+  async trackRecipientView(rawToken: string, ip?: string, userAgent?: string) {
+    return this.recordRecipientView(rawToken, ip, userAgent);
+  }
+
+  /**
+   * INK-99: Record Electronic Record and Signature Disclosure (ERSD) consent
    */
   async recordElectronicConsent(
     rawToken: string,
@@ -511,17 +546,11 @@ export class WorkflowService {
     userAgent?: string,
   ) {
     const tokenHash = await hashToken(rawToken);
+
     const recipient = await this.prisma.agreementRecipient.findUnique({
       where: { signingTokenHash: tokenHash },
       include: {
-        agreement: {
-          select: {
-            id: true,
-            organisationId: true,
-            title: true,
-            status: true,
-          },
-        },
+        agreement: { select: { organisationId: true, id: true } },
       },
     });
 
@@ -529,23 +558,17 @@ export class WorkflowService {
       throw new NotFoundError('Invalid signing link.');
     }
 
-    if (recipient.agreement.status === 'CANCELLED' || recipient.agreement.status === 'EXPIRED') {
-      throw new ValidationError(
-        `Cannot consent to a ${recipient.agreement.status.toLowerCase()} agreement.`,
-      );
-    }
-
     const consentTimestamp = new Date();
 
     await this.auditService.log({
       organisationId: recipient.agreement.organisationId,
-      action: 'ELECTRONIC_CONSENT_CAPTURED',
+      action: 'ERSD_CONSENT_ACCEPTED',
       resourceType: 'agreement',
-      resourceId: recipient.agreementId,
+      resourceId: recipient.agreement.id,
       metadata: {
         recipientId: recipient.id,
-        email: recipient.email,
-        name: recipient.name,
+        recipientEmail: recipient.email,
+        recipientName: recipient.name,
         ersdVersion: input.ersdVersion,
         consentTimestamp: consentTimestamp.toISOString(),
       },
@@ -595,7 +618,7 @@ export class WorkflowService {
   }
 
   /**
-   * INK-94, INK-96, INK-104: Submit recipient signature and advance workflow
+   * INK-94, INK-96, INK-104, INK-109: Submit recipient signature and advance workflow
    */
   async submitRecipientSignature(
     rawToken: string,
@@ -681,7 +704,7 @@ export class WorkflowService {
       userAgent,
     });
 
-    // Evaluate progression and completion (INK-91, INK-94)
+    // Evaluate progression and completion (INK-91, INK-94, INK-109)
     const allRecipients = await this.prisma.agreementRecipient.findMany({
       where: { agreementId: agreement.id },
     });
@@ -692,7 +715,7 @@ export class WorkflowService {
     const allFinished = activeSigners.every((r: any) => r.status === 'SIGNED');
 
     if (allFinished) {
-      // Mark workflow COMPLETED (INK-94)
+      // Mark workflow COMPLETED (INK-94, INK-109)
       await this.prisma.agreement.update({
         where: { id: agreement.id },
         data: {
@@ -714,9 +737,33 @@ export class WorkflowService {
         userAgent,
       });
 
-      // Send completion confirmation emails to all participants
+      // Send completion confirmation emails to author and all participants (INK-109, INK-113)
+      await this.mailerService.sendAgreementCompletedEmail(
+        agreement.author.email,
+        agreement.author.name || 'Author',
+        agreement.title,
+        undefined,
+        {
+          organisationId: agreement.organisationId,
+          agreementId: agreement.id,
+          eventType: 'COMPLETED',
+        },
+      );
+
       for (const r of allRecipients) {
-        await this.mailerService.sendAgreementCompletedEmail(r.email, r.name, agreement.title);
+        await this.mailerService.sendAgreementCompletedEmail(
+          r.email,
+          r.name,
+          agreement.title,
+          undefined,
+          {
+            organisationId: agreement.organisationId,
+            agreementId: agreement.id,
+            recipientId: r.id,
+            recipientName: r.name,
+            eventType: 'COMPLETED',
+          },
+        );
       }
     } else if (agreement.signingOrder === 'SEQUENTIAL') {
       // Advance to next sequential tier if current tier is finished
@@ -742,21 +789,34 @@ export class WorkflowService {
           const senderName = agreement.author.name || 'Author';
 
           for (const nextRecip of nextTierRecipients) {
+            const nextRawToken = generateToken();
+            const nextTokenHash = await hashToken(nextRawToken);
+
             await this.prisma.agreementRecipient.update({
               where: { id: nextRecip.id },
-              data: { status: 'INVITED' },
+              data: {
+                status: 'INVITED',
+                signingTokenHash: nextTokenHash,
+              },
             });
 
-            if (nextRecip.signingTokenHash) {
-              await this.mailerService.sendSigningInvitationEmail(
-                nextRecip.email,
-                nextRecip.name,
-                agreement.title,
-                senderName,
-                rawToken, // or recipient link
-                agreement.expiresAt,
-              );
-            }
+            await this.mailerService.sendSigningInvitationEmail(
+              nextRecip.email,
+              nextRecip.name,
+              agreement.title,
+              senderName,
+              nextRawToken,
+              agreement.expiresAt,
+              undefined,
+              nextRecip.role,
+              {
+                organisationId: agreement.organisationId,
+                agreementId: agreement.id,
+                recipientId: nextRecip.id,
+                recipientName: nextRecip.name,
+                eventType: 'INVITATION',
+              },
+            );
           }
         }
       }
@@ -770,7 +830,7 @@ export class WorkflowService {
   }
 
   /**
-   * INK-95: Decline signing
+   * INK-95, INK-111: Decline signing and notify author
    */
   async declineRecipientSignature(
     rawToken: string,
@@ -787,7 +847,7 @@ export class WorkflowService {
             id: true,
             organisationId: true,
             title: true,
-            author: { select: { email: true } },
+            author: { select: { name: true, email: true } },
           },
         },
       },
@@ -802,6 +862,7 @@ export class WorkflowService {
       data: {
         status: 'DECLINED',
         declinedAt: new Date(),
+        declineReason: input.reason,
         ipAddress: ip,
         userAgent,
       },
@@ -829,6 +890,25 @@ export class WorkflowService {
       ipAddress: ip,
       userAgent,
     });
+
+    // Notify author of decline (INK-111, INK-113)
+    if (recipient.agreement.author?.email) {
+      await this.mailerService.sendAgreementDeclinedEmail(
+        recipient.agreement.author.email,
+        recipient.agreement.author.name || 'Author',
+        recipient.agreement.title,
+        recipient.name,
+        recipient.email,
+        input.reason,
+        {
+          organisationId: recipient.agreement.organisationId,
+          agreementId: recipient.agreementId,
+          recipientId: recipient.id,
+          recipientName: recipient.name,
+          eventType: 'DECLINED',
+        },
+      );
+    }
 
     return { success: true };
   }
@@ -886,13 +966,20 @@ export class WorkflowService {
       userAgent: ctx.userAgent,
     });
 
-    // Notify all recipients
+    // Notify all recipients (INK-113)
     for (const r of agreement.recipients) {
       await this.mailerService.sendAgreementCancelledEmail(
         r.email,
         r.name,
         agreement.title,
         input.reason,
+        {
+          organisationId: ctx.organisationId,
+          agreementId,
+          recipientId: r.id,
+          recipientName: r.name,
+          eventType: 'CANCELLED',
+        },
       );
     }
 
@@ -900,15 +987,182 @@ export class WorkflowService {
   }
 
   /**
-   * INK-95: Auto-expire agreements past deadline
+   * INK-108: Send manual reminder to pending signers
    */
-  async checkExpiredAgreements() {
+  async sendManualReminder(ctx: WorkflowContext, agreementId: string, input?: SendReminderInput) {
+    const agreement = await this.prisma.agreement.findFirst({
+      where: {
+        id: agreementId,
+        organisationId: ctx.organisationId,
+        deletedAt: null,
+      },
+      include: {
+        author: { select: { name: true, email: true } },
+        recipients: true,
+      },
+    });
+
+    if (!agreement) {
+      throw new NotFoundError('Agreement not found.');
+    }
+
+    if (agreement.status !== 'SENT') {
+      throw new ValidationError(
+        `Cannot send reminder for agreement in '${agreement.status}' status. Only SENT agreements can be reminded.`,
+      );
+    }
+
+    // Determine candidate recipients
+    let candidateRecipients = agreement.recipients.filter(
+      (r) => r.status === 'PENDING' || r.status === 'INVITED',
+    );
+
+    // In sequential mode, filter to current step
+    if (agreement.signingOrder === 'SEQUENTIAL') {
+      candidateRecipients = candidateRecipients.filter(
+        (r) => r.routingOrder === agreement.currentStep,
+      );
+    }
+
+    if (input?.recipientId) {
+      candidateRecipients = candidateRecipients.filter((r) => r.id === input.recipientId);
+      if (candidateRecipients.length === 0) {
+        throw new ValidationError(
+          'Specified recipient is not currently in a pending signing state.',
+        );
+      }
+    }
+
+    if (candidateRecipients.length === 0) {
+      throw new ValidationError('No active pending recipients found to remind.');
+    }
+
+    const senderName = ctx.userName || agreement.author.name || 'Sender';
+    const reminded: Array<{ id: string; name: string; email: string }> = [];
+
+    for (const recip of candidateRecipients) {
+      const rawToken = generateToken();
+      const tokenHash = await hashToken(rawToken);
+
+      await this.prisma.agreementRecipient.update({
+        where: { id: recip.id },
+        data: {
+          signingTokenHash: tokenHash,
+          tokenExpiresAt:
+            recip.tokenExpiresAt ||
+            agreement.expiresAt ||
+            new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+          status: 'INVITED',
+        },
+      });
+
+      await this.mailerService.sendReminderEmail(
+        recip.email,
+        recip.name,
+        agreement.title,
+        senderName,
+        rawToken,
+        agreement.expiresAt,
+        input?.note,
+        {
+          organisationId: ctx.organisationId,
+          agreementId: agreement.id,
+          recipientId: recip.id,
+          recipientName: recip.name,
+          eventType: 'REMINDER',
+        },
+      );
+
+      reminded.push({ id: recip.id, name: recip.name, email: recip.email });
+    }
+
+    await this.auditService.log({
+      organisationId: ctx.organisationId,
+      userId: ctx.userId,
+      action: 'AGREEMENT_REMINDER_SENT',
+      resourceType: 'agreement',
+      resourceId: agreementId,
+      metadata: {
+        remindedCount: reminded.length,
+        recipients: reminded.map((r) => r.email),
+        note: input?.note,
+      },
+      ipAddress: ctx.ipAddress,
+      userAgent: ctx.userAgent,
+    });
+
+    return {
+      success: true,
+      remindedCount: reminded.length,
+      recipients: reminded,
+    };
+  }
+
+  /**
+   * INK-113: Get notification delivery logs for an agreement
+   */
+  async getAgreementNotificationHistory(ctx: WorkflowContext, agreementId: string) {
+    const agreement = await this.prisma.agreement.findFirst({
+      where: {
+        id: agreementId,
+        organisationId: ctx.organisationId,
+        deletedAt: null,
+      },
+      select: { id: true, title: true },
+    });
+
+    if (!agreement) {
+      throw new NotFoundError('Agreement not found.');
+    }
+
+    const logs = await this.prisma.notificationLog.findMany({
+      where: {
+        agreementId,
+        organisationId: ctx.organisationId,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return {
+      agreementId,
+      agreementTitle: agreement.title,
+      logs: logs.map((l) => ({
+        id: l.id,
+        recipientEmail: l.recipientEmail,
+        recipientName: l.recipientName,
+        eventType: l.eventType,
+        channel: l.channel,
+        status: l.status,
+        providerMessageId: l.providerMessageId,
+        attempts: l.attempts,
+        lastError: l.lastError,
+        sentAt: l.sentAt?.toISOString() || null,
+        createdAt: l.createdAt.toISOString(),
+      })),
+    };
+  }
+
+  /**
+   * INK-108, INK-112: Process automated expirations, 24h pre-expiry warnings, and policy reminders
+   */
+  async processAutomatedRemindersAndExpirations() {
     const now = new Date();
+    const results = {
+      expiredCount: 0,
+      warningCount: 0,
+      reminderCount: 0,
+    };
+
+    // 1. Process Expired Agreements (deadline passed)
     const expiredAgreements = await this.prisma.agreement.findMany({
       where: {
         status: 'SENT',
         expiresAt: { lt: now },
         deletedAt: null,
+      },
+      include: {
+        author: { select: { name: true, email: true } },
+        recipients: true,
       },
     });
 
@@ -928,8 +1182,106 @@ export class WorkflowService {
           deadline: ag.expiresAt?.toISOString(),
         },
       });
+
+      // Notify author (INK-112)
+      await this.mailerService.sendAgreementExpiredEmail(
+        ag.author.email,
+        ag.author.name || 'Author',
+        ag.title,
+        {
+          organisationId: ag.organisationId,
+          agreementId: ag.id,
+          eventType: 'EXPIRED',
+        },
+      );
+
+      // Notify pending recipients (INK-112)
+      for (const r of ag.recipients) {
+        if (r.status === 'PENDING' || r.status === 'INVITED') {
+          await this.mailerService.sendAgreementExpiredEmail(r.email, r.name, ag.title, {
+            organisationId: ag.organisationId,
+            agreementId: ag.id,
+            recipientId: r.id,
+            recipientName: r.name,
+            eventType: 'EXPIRED',
+          });
+        }
+      }
+
+      results.expiredCount++;
     }
 
-    return { expiredCount: expiredAgreements.length };
+    // 2. Process Expiry Warnings (within 24 hours of deadline)
+    const in24Hours = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+    const expiringSoonAgreements = await this.prisma.agreement.findMany({
+      where: {
+        status: 'SENT',
+        expiresAt: { gt: now, lte: in24Hours },
+        deletedAt: null,
+      },
+      include: {
+        author: { select: { name: true, email: true } },
+        recipients: true,
+      },
+    });
+
+    for (const ag of expiringSoonAgreements) {
+      if (!ag.expiresAt) continue;
+
+      // Check if expiry warning was already sent
+      const existingWarning = await this.prisma.notificationLog.findFirst({
+        where: {
+          agreementId: ag.id,
+          eventType: 'EXPIRY_WARNING',
+          status: 'SENT',
+        },
+      });
+
+      if (existingWarning) continue;
+
+      // Find active pending recipients whose turn it is
+      let pendingRecips = ag.recipients.filter(
+        (r) => r.status === 'PENDING' || r.status === 'INVITED',
+      );
+      if (ag.signingOrder === 'SEQUENTIAL') {
+        pendingRecips = pendingRecips.filter((r) => r.routingOrder === ag.currentStep);
+      }
+
+      for (const recip of pendingRecips) {
+        const rawToken = generateToken();
+        const tokenHash = await hashToken(rawToken);
+
+        await this.prisma.agreementRecipient.update({
+          where: { id: recip.id },
+          data: { signingTokenHash: tokenHash },
+        });
+
+        await this.mailerService.sendExpiryWarningEmail(
+          recip.email,
+          recip.name,
+          ag.title,
+          ag.expiresAt,
+          rawToken,
+          {
+            organisationId: ag.organisationId,
+            agreementId: ag.id,
+            recipientId: recip.id,
+            recipientName: recip.name,
+            eventType: 'EXPIRY_WARNING',
+          },
+        );
+
+        results.warningCount++;
+      }
+    }
+
+    return results;
+  }
+
+  /**
+   * INK-95: Auto-expire agreements past deadline (backward compatibility alias)
+   */
+  async checkExpiredAgreements() {
+    return this.processAutomatedRemindersAndExpirations();
   }
 }
