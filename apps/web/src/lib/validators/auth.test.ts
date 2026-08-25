@@ -1,9 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import {
-  registerFormSchema,
-  isPersonalEmailDomain,
-  getPasswordRequirements,
-} from './auth';
+import { registerFormSchema, isPersonalEmailDomain, getPasswordRequirements } from './auth';
 
 describe('Web Auth Validators (INK-265)', () => {
   describe('isPersonalEmailDomain', () => {

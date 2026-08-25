@@ -782,8 +782,7 @@ export class OrganisationService {
         where: { id: data.teamId, organisationId: orgId },
       });
       if (team && existingMembership) {
-        const memberUserId =
-          (existingMembership as any).userId || (existingMembership as any).id;
+        const memberUserId = (existingMembership as any).userId || (existingMembership as any).id;
         if (memberUserId) {
           await this.prisma.teamMember.upsert({
             where: { teamId_userId: { teamId: data.teamId, userId: memberUserId } },

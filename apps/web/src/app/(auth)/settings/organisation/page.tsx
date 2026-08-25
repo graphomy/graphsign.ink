@@ -191,9 +191,7 @@ function OrganisationSettingsContent() {
     setMessage('');
     try {
       const token =
-        localStorage.getItem('graphsign_session_token') ||
-        localStorage.getItem('token') ||
-        '';
+        localStorage.getItem('graphsign_session_token') || localStorage.getItem('token') || '';
       const apiUrl = getApiUrl();
       const res = await fetch(`${apiUrl}/api/v1/organisations/me/upgrade-to-teams`, {
         method: 'POST',
@@ -216,9 +214,7 @@ function OrganisationSettingsContent() {
       }
 
       setOrg((prev) =>
-        prev
-          ? { ...prev, planType: 'teams', name: data.organisationName || prev.name }
-          : null,
+        prev ? { ...prev, planType: 'teams', name: data.organisationName || prev.name } : null,
       );
       setMessage(
         '🎉 Workspace successfully upgraded to Teams Plan! Role management and collaboration features are now unlocked.',
@@ -1138,7 +1134,8 @@ function OrganisationSettingsContent() {
                           Role Management is available on the Teams Plan
                         </h4>
                         <p className="text-xs text-neutral-600 mt-0.5">
-                          Upgrade your workspace to assign roles, delegate admin privileges, and create custom permission matrices.
+                          Upgrade your workspace to assign roles, delegate admin privileges, and
+                          create custom permission matrices.
                         </p>
                       </div>
                       <button
@@ -1158,9 +1155,7 @@ function OrganisationSettingsContent() {
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
                     <div>
-                      <h3 className="text-sm font-bold text-neutral-900">
-                        Default System Roles
-                      </h3>
+                      <h3 className="text-sm font-bold text-neutral-900">Default System Roles</h3>
                       <p className="text-xs text-neutral-500 mt-0.5">
                         Overview of built-in roles and their capabilities across the workspace.
                       </p>
@@ -1181,7 +1176,8 @@ function OrganisationSettingsContent() {
                         </span>
                       </div>
                       <p className="text-xs text-neutral-600">
-                        Full workspace administration, member invitations, compliance settings, session timeout, audit logs, and role delegation (can assign other admins).
+                        Full workspace administration, member invitations, compliance settings,
+                        session timeout, audit logs, and role delegation (can assign other admins).
                       </p>
                     </div>
 
@@ -1195,7 +1191,8 @@ function OrganisationSettingsContent() {
                         </span>
                       </div>
                       <p className="text-xs text-neutral-600">
-                        Can draft, create, upload, activate, and dispatch agreements for electronic signature. Can also create and manage workspace templates.
+                        Can draft, create, upload, activate, and dispatch agreements for electronic
+                        signature. Can also create and manage workspace templates.
                       </p>
                     </div>
 
@@ -1209,7 +1206,8 @@ function OrganisationSettingsContent() {
                         </span>
                       </div>
                       <p className="text-xs text-neutral-600">
-                        Authorized to review and formally approve or reject agreements during multi-stage approval workflows prior to external dispatch.
+                        Authorized to review and formally approve or reject agreements during
+                        multi-stage approval workflows prior to external dispatch.
                       </p>
                     </div>
 
@@ -1223,7 +1221,8 @@ function OrganisationSettingsContent() {
                         </span>
                       </div>
                       <p className="text-xs text-neutral-600">
-                        Can inspect draft agreements and submit feedback notes, comments, or modification requests before signing.
+                        Can inspect draft agreements and submit feedback notes, comments, or
+                        modification requests before signing.
                       </p>
                     </div>
 
@@ -1237,7 +1236,8 @@ function OrganisationSettingsContent() {
                         </span>
                       </div>
                       <p className="text-xs text-neutral-600">
-                        Dedicated participant role with access to view and execute signature, initial, and date fields assigned to their account.
+                        Dedicated participant role with access to view and execute signature,
+                        initial, and date fields assigned to their account.
                       </p>
                     </div>
 
@@ -1251,7 +1251,8 @@ function OrganisationSettingsContent() {
                         </span>
                       </div>
                       <p className="text-xs text-neutral-600">
-                        Read-only access to view immutable audit trails, completion certificates, and verify ESIGN/eIDAS compliance.
+                        Read-only access to view immutable audit trails, completion certificates,
+                        and verify ESIGN/eIDAS compliance.
                       </p>
                     </div>
 
@@ -1265,7 +1266,8 @@ function OrganisationSettingsContent() {
                         </span>
                       </div>
                       <p className="text-xs text-neutral-600">
-                        Base team member role with self-service agreement management and personal workspace access.
+                        Base team member role with self-service agreement management and personal
+                        workspace access.
                       </p>
                     </div>
                   </div>
@@ -1273,7 +1275,10 @@ function OrganisationSettingsContent() {
                   <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-900 flex items-center gap-2">
                     <span className="text-base shrink-0">💡</span>
                     <span>
-                      <strong>Admin Delegation:</strong> Organisation Admins have full permissions to assign the <code>Organisation Admin</code> (<code>org_admin</code>) role to add more admins to the workspace. Super Admin is strictly reserved for designated system maintainers.
+                      <strong>Admin Delegation:</strong> Organisation Admins have full permissions
+                      to assign the <code>Organisation Admin</code> (<code>org_admin</code>) role to
+                      add more admins to the workspace. Super Admin is strictly reserved for
+                      designated system maintainers.
                     </span>
                   </div>
                 </div>
@@ -1282,11 +1287,10 @@ function OrganisationSettingsContent() {
                 <div className="space-y-4 pt-4 border-t border-neutral-200">
                   <div className="flex items-center justify-between">
                     <div>
-                      <h3 className="text-sm font-bold text-neutral-900">
-                        Custom Role Builder
-                      </h3>
+                      <h3 className="text-sm font-bold text-neutral-900">Custom Role Builder</h3>
                       <p className="text-xs text-neutral-500 mt-0.5">
-                        Define custom roles with granular access controls for specialized team workflows.
+                        Define custom roles with granular access controls for specialized team
+                        workflows.
                       </p>
                     </div>
                   </div>
@@ -1382,7 +1386,9 @@ function OrganisationSettingsContent() {
                         <div key={r.id} className="p-4 flex justify-between items-center">
                           <div>
                             <span className="font-bold text-sm text-neutral-900">{r.name}</span>
-                            <p className="text-xs text-neutral-500">{r.description || 'Custom defined role'}</p>
+                            <p className="text-xs text-neutral-500">
+                              {r.description || 'Custom defined role'}
+                            </p>
                           </div>
                           <div className="flex flex-wrap gap-1 max-w-xs justify-end">
                             {r.permissions?.map((p) => (
@@ -1398,7 +1404,8 @@ function OrganisationSettingsContent() {
                       ))
                     ) : (
                       <div className="p-8 text-center text-xs text-neutral-400">
-                        No custom roles defined yet. Use the builder above to configure tailored roles.
+                        No custom roles defined yet. Use the builder above to configure tailored
+                        roles.
                       </div>
                     )}
                   </div>

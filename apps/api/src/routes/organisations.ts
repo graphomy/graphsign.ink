@@ -252,10 +252,7 @@ export function createOrganisationRoutes(deps?: OrganisationDeps) {
       jwtSecret,
     );
 
-    c.header(
-      'Set-Cookie',
-      `graphsign_session=${token}; HttpOnly; Path=/; SameSite=Strict; Secure`,
-    );
+    c.header('Set-Cookie', `graphsign_session=${token}; HttpOnly; Path=/; SameSite=Strict; Secure`);
 
     return c.json({
       token,
