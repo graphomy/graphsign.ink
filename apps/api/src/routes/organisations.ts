@@ -16,6 +16,7 @@ import {
   addDomainSchema,
   switchOrganisationSchema,
   auditLogQuerySchema,
+  upgradeToTeamsSchema,
 } from '../validators/organisation-validators.js';
 import { OrganisationService } from '../services/organisation-service.js';
 import type { MailerService } from '../services/mailer-service.js';
@@ -28,6 +29,7 @@ import { jwtAuth } from '../middleware/jwt-auth.js';
 import { enforceTenantActiveStatus } from '../middleware/tenant-status-middleware.js';
 import { requirePermission, requireRole } from '../middleware/rbac-middleware.js';
 import { signJwt } from '../utils/jwt.js';
+import { isSuperAdmin } from '../config/roles.js';
 import type { Env } from '../index.js';
 
 export interface OrganisationDeps {
@@ -212,10 +214,53 @@ export function createOrganisationRoutes(deps?: OrganisationDeps) {
       name: org.name,
       slug: org.slug,
       status: org.status,
+      planType: org.planType || 'individual',
       sessionTimeoutMinutes: org.sessionTimeoutMinutes,
       mfaRequired: org.mfaRequired,
       mfaRequiredRoles: org.mfaRequiredRoles,
       createdAt: org.createdAt.toISOString(),
+    });
+  });
+
+  // POST /api/v1/organisations/me/upgrade-to-teams
+  orgs.post('/me/upgrade-to-teams', jwtAuth(), enforceTenantActiveStatus(), async (c) => {
+    const body = await c.req.json().catch(() => ({}));
+    const parsed = upgradeToTeamsSchema.safeParse(body);
+    if (!parsed.success) {
+      const firstError = parsed.error.errors[0];
+      throw new ValidationError(firstError?.message ?? 'Invalid upgrade data.');
+    }
+
+    const payload = c.get('userPayload');
+    const service = getService(c);
+    const updated = await service.upgradeToTeams(
+      payload.orgId,
+      payload.sub,
+      parsed.data.companyName,
+    );
+
+    const jwtSecret = c.env?.JWT_SECRET || process.env.JWT_SECRET;
+    const assignedRole = isSuperAdmin(payload.email) ? 'super_admin' : 'org_admin';
+    const token = await signJwt(
+      {
+        sub: payload.sub,
+        orgId: updated.id,
+        email: payload.email,
+        role: assignedRole,
+        jti: crypto.randomUUID(),
+      },
+      jwtSecret,
+    );
+
+    c.header('Set-Cookie', `graphsign_session=${token}; HttpOnly; Path=/; SameSite=Strict; Secure`);
+
+    return c.json({
+      token,
+      organisationId: updated.id,
+      organisationName: updated.name,
+      planType: updated.planType,
+      role: assignedRole,
+      message: 'Workspace successfully upgraded to Teams plan.',
     });
   });
 

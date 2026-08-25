@@ -70,6 +70,7 @@ export class OrganisationService {
       throw new ConflictError(`An organisation with slug "${slug}" already exists.`);
     }
 
+    const planType = (data as any).planType ?? 'teams';
     const orgId = generateId();
     const tenantId = generateId();
 
@@ -79,6 +80,7 @@ export class OrganisationService {
         name: data.name,
         slug,
         tenantId,
+        planType,
         status: 'active',
         sessionTimeoutMinutes: 15,
         mfaRequired: false,
@@ -222,10 +224,77 @@ export class OrganisationService {
   }
 
   /**
+   * Helper to ensure the organisation is on the Teams plan for team features.
+   */
+  private async requireTeamsPlan(
+    orgId: string,
+    featureName = 'This feature',
+  ): Promise<Organisation> {
+    const org = await this.getOrganisationById(orgId);
+    if (org.planType === 'individual') {
+      throw new ForbiddenError(
+        `${featureName} is only available on the Teams plan. Please upgrade your workspace to access team collaboration features.`,
+      );
+    }
+    return org;
+  }
+
+  /**
+   * Upgrades an individual workspace to a Teams plan.
+   */
+  async upgradeToTeams(
+    orgId: string,
+    actorUserId: string,
+    companyName?: string,
+  ): Promise<Organisation> {
+    const org = await this.getOrganisationById(orgId);
+
+    const updated = await this.prisma.organisation.update({
+      where: { id: orgId },
+      data: {
+        planType: 'teams',
+        ...(companyName && { name: companyName.trim() }),
+      },
+    });
+
+    if (actorUserId) {
+      await this.prisma.user.update({
+        where: { id: actorUserId },
+        data: { role: 'org_admin' },
+      });
+
+      if (this.prisma.userOrganisation) {
+        await this.prisma.userOrganisation.upsert({
+          where: { userId_organisationId: { userId: actorUserId, organisationId: orgId } },
+          create: {
+            id: generateId(),
+            userId: actorUserId,
+            organisationId: orgId,
+            role: 'org_admin',
+            isDefault: true,
+          },
+          update: { role: 'org_admin' },
+        });
+      }
+    }
+
+    await this.auditService.log({
+      organisationId: orgId,
+      userId: actorUserId,
+      action: 'ORGANISATION_PLAN_UPGRADED',
+      resourceType: 'organisation',
+      resourceId: orgId,
+      metadata: { previousPlan: org.planType, newPlan: 'teams' },
+    });
+
+    return updated;
+  }
+
+  /**
    * INK-52: Creates a new Team under the organisation.
    */
   async createTeam(orgId: string, actorUserId: string, data: CreateTeamInput): Promise<Team> {
-    await this.getOrganisationById(orgId);
+    await this.requireTeamsPlan(orgId, 'Team management');
 
     const existingTeam = await this.prisma.team.findFirst({
       where: { organisationId: orgId, name: data.name },
@@ -263,7 +332,7 @@ export class OrganisationService {
    * Lists teams in an organisation.
    */
   async listTeams(orgId: string): Promise<any[]> {
-    await this.getOrganisationById(orgId);
+    await this.requireTeamsPlan(orgId, 'Team management');
 
     return this.prisma.team.findMany({
       where: { organisationId: orgId },
@@ -387,7 +456,7 @@ export class OrganisationService {
     actorUserId: string,
     data: CreateCustomRoleInput,
   ): Promise<CustomRole> {
-    await this.getOrganisationById(orgId);
+    await this.requireTeamsPlan(orgId, 'Custom role management');
 
     const existingRole = await this.prisma.customRole.findFirst({
       where: { organisationId: orgId, name: data.name },
@@ -423,7 +492,7 @@ export class OrganisationService {
    * Lists custom roles for an organisation.
    */
   async listCustomRoles(orgId: string): Promise<CustomRole[]> {
-    await this.getOrganisationById(orgId);
+    await this.requireTeamsPlan(orgId, 'Custom role management');
     return this.prisma.customRole.findMany({
       where: { organisationId: orgId },
       orderBy: { name: 'asc' },
@@ -489,6 +558,7 @@ export class OrganisationService {
       name: m.organisation.name,
       slug: m.organisation.slug,
       status: m.organisation.status,
+      planType: m.organisation.planType || 'individual',
       role: m.role,
     }));
   }
@@ -501,7 +571,7 @@ export class OrganisationService {
     actorUserId: string,
     data: AddDomainInput,
   ): Promise<OrganisationDomain> {
-    await this.getOrganisationById(orgId);
+    await this.requireTeamsPlan(orgId, 'Custom domain verification');
 
     const existingDomain = await this.prisma.organisationDomain.findUnique({
       where: { domain: data.domain },
@@ -573,7 +643,7 @@ export class OrganisationService {
    * Lists registered custom domains for an organisation.
    */
   async listDomains(orgId: string): Promise<OrganisationDomain[]> {
-    await this.getOrganisationById(orgId);
+    await this.requireTeamsPlan(orgId, 'Custom domain verification');
     return this.prisma.organisationDomain.findMany({
       where: { organisationId: orgId },
       orderBy: { createdAt: 'desc' },
@@ -667,14 +737,21 @@ export class OrganisationService {
     actorUserId: string,
     data: InviteMemberInput,
   ): Promise<OrganisationInvitation> {
-    const org = await this.getOrganisationById(orgId);
+    const org = await this.requireTeamsPlan(orgId, 'Member invitations');
     const email = data.email.toLowerCase().trim();
 
-    const existingUser = await this.prisma.user.findFirst({
-      where: { organisationId: orgId, email },
-    });
+    const existingMembership = this.prisma.userOrganisation
+      ? await this.prisma.userOrganisation.findFirst({
+          where: {
+            organisationId: orgId,
+            user: { email, deletedAt: null },
+          },
+        })
+      : await this.prisma.user.findFirst({
+          where: { organisationId: orgId, email, deletedAt: null },
+        });
 
-    if (existingUser) {
+    if (existingMembership) {
       throw new ConflictError('User is already a member of this organisation.');
     }
 
@@ -704,12 +781,15 @@ export class OrganisationService {
       const team = await this.prisma.team.findFirst({
         where: { id: data.teamId, organisationId: orgId },
       });
-      if (team && existingUser) {
-        await this.prisma.teamMember.upsert({
-          where: { teamId_userId: { teamId: data.teamId, userId: (existingUser as any).id } },
-          create: { id: generateId(), teamId: data.teamId, userId: (existingUser as any).id },
-          update: {},
-        });
+      if (team && existingMembership) {
+        const memberUserId = (existingMembership as any).userId || (existingMembership as any).id;
+        if (memberUserId) {
+          await this.prisma.teamMember.upsert({
+            where: { teamId_userId: { teamId: data.teamId, userId: memberUserId } },
+            create: { id: generateId(), teamId: data.teamId, userId: memberUserId },
+            update: {},
+          });
+        }
       }
     }
 

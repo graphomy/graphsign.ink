@@ -113,6 +113,21 @@ describe('AgreementManagementPage Unit Tests (Epic INK-8)', () => {
 
     expect(screen.getByText(/Upload Agreement/i)).toBeInTheDocument();
     expect(screen.getAllByText(/Create from Scratch/i)[0]).toBeInTheDocument();
+    expect(screen.getByText(/From Template/i)).toBeInTheDocument();
+  });
+
+  it('opens ChooseTemplateModal when clicking From Template button (INK-264)', async () => {
+    render(<AgreementManagementPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/From Template/i)).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText(/From Template/i));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Create Agreement from Template/i)).toBeInTheDocument();
+    });
   });
 
   it('renders tab buttons renamed to Active, Drafts, and Archived', async () => {

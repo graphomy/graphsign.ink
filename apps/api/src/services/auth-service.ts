@@ -32,6 +32,7 @@ import {
   ValidationError,
 } from '../utils/errors.js';
 import { isSuperAdmin } from '../config/roles.js';
+import { isPersonalEmailDomain, extractEmailDomain } from '../utils/email-validation.js';
 
 /** Verification tokens expire in 24 hours. */
 const VERIFICATION_TOKEN_EXPIRY_HOURS = 24;
@@ -142,49 +143,144 @@ export class AuthService {
   }
 
   /**
+   * Universal user lookup by email, compatible with multi-tenancy and test mocks.
+   */
+  private async findUserByEmail(email: string) {
+    let user: any = null;
+    if (this.prisma.user.findFirst) {
+      user = await this.prisma.user.findFirst({
+        where: { email, deletedAt: null },
+        include: {
+          organisation: true,
+          memberships: {
+            include: { organisation: true },
+          },
+        },
+      });
+    }
+    if (!user && this.prisma.user.findUnique) {
+      const defaultOrg = await this.getOrCreateDefaultOrganisation();
+      user = await this.prisma.user.findUnique({
+        where: {
+          organisationId_email: {
+            organisationId: defaultOrg.id,
+            email,
+          },
+        },
+        include: {
+          organisation: true,
+          memberships: {
+            include: { organisation: true },
+          },
+        },
+      });
+    }
+    return user;
+  }
+
+  /**
    * Registers a new user account.
    *
    * Flow:
-   * 1. Check email uniqueness within the default organisation
-   * 2. Hash password with scrypt
-   * 3. Generate email verification token (SHA-256 hashed for storage)
-   * 4. Create user record
-   * 5. Send verification email
-   * 6. Log audit event
+   * 1. Validate email uniqueness across active accounts
+   * 2. Provision organisation workspace (Individual vs Teams Plan)
+   * 3. Hash password using scrypt
+   * 4. Generate email verification token (SHA-256 hashed for storage)
+   * 5. Create user record and organisation membership
+   * 6. Send verification email
+   * 7. Log audit event
    */
   async register(
     data: RegisterRequest,
     meta: { ipAddress?: string; userAgent?: string } = {},
   ): Promise<RegisterResult> {
-    // For MVP, use or create a default organisation.
-    // Multi-org registration will be a separate story.
-    const org = await this.getOrCreateDefaultOrganisation();
-
-    // Check email uniqueness within organisation
-    const existingUser = await this.prisma.user.findUnique({
-      where: {
-        organisationId_email: {
-          organisationId: org.id,
-          email: data.email,
-        },
-      },
-    });
+    const existingUser = await this.findUserByEmail(data.email);
 
     if (existingUser) {
-      // Intentionally vague to prevent user enumeration attacks
       throw new ConflictError('An account with this email already exists.');
+    }
+
+    const planType = data.planType || 'individual';
+    let org;
+
+    if (planType === 'teams') {
+      if (isPersonalEmailDomain(data.email)) {
+        throw new ValidationError(
+          'Teams plan requires a company or business email address (e.g., alex@company.com). Please use your company email or choose the Individual plan.',
+        );
+      }
+
+      const domain = extractEmailDomain(data.email);
+      const domainName = domain ? domain.split('.')[0]! : 'company';
+      const companyName =
+        data.companyName?.trim() ||
+        `${domainName.charAt(0).toUpperCase() + domainName.slice(1)} Workspace`;
+      const baseSlug =
+        companyName
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/^-|-$/g, '') || 'team';
+      const slug = `${baseSlug}-${generateId().slice(0, 8)}`;
+      const orgId = generateId();
+
+      org = (await this.prisma.organisation.create({
+        data: {
+          id: orgId,
+          name: companyName,
+          slug,
+          tenantId: orgId,
+          planType: 'teams',
+          status: 'active',
+        },
+      })) || {
+        id: orgId,
+        name: companyName,
+        slug,
+        tenantId: orgId,
+        planType: 'teams',
+        status: 'active',
+      };
+    } else {
+      const prefix = data.email.split('@')[0] || 'User';
+      const workspaceName = `${prefix.charAt(0).toUpperCase() + prefix.slice(1)}'s Workspace`;
+      const baseSlug = `personal-${prefix.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`.replace(
+        /^-|-$/g,
+        '',
+      );
+      const slug = `${baseSlug}-${generateId().slice(0, 8)}`;
+      const orgId = generateId();
+
+      org = (await this.prisma.organisation.create({
+        data: {
+          id: orgId,
+          name: workspaceName,
+          slug,
+          tenantId: orgId,
+          planType: 'individual',
+          status: 'active',
+        },
+      })) || {
+        id: orgId,
+        name: workspaceName,
+        slug,
+        tenantId: orgId,
+        planType: 'individual',
+        status: 'active',
+      };
     }
 
     const userId = generateId();
     const hashedPassword = await hashPassword(data.password);
 
-    // Generate verification token — raw token goes to email, hash goes to DB
     const rawToken = generateToken();
     const tokenHash = await hashToken(rawToken);
     const tokenExpiresAt = new Date(Date.now() + VERIFICATION_TOKEN_EXPIRY_HOURS * 60 * 60 * 1000);
 
-    // Auto-assign super_admin role if registering email is a designated platform super admin
-    const assignedRole = isSuperAdmin(data.email) ? 'super_admin' : 'user';
+    const assignedRole = isSuperAdmin(data.email)
+      ? 'super_admin'
+      : planType === 'teams'
+        ? 'org_admin'
+        : 'user';
 
     const user = await this.prisma.user.create({
       data: {
@@ -200,22 +296,31 @@ export class AuthService {
       },
     });
 
-    // Send verification email (non-blocking — failure shouldn't block registration)
+    if (this.prisma.userOrganisation) {
+      await this.prisma.userOrganisation.create({
+        data: {
+          id: generateId(),
+          userId: user.id,
+          organisationId: org.id,
+          role: assignedRole,
+          isDefault: true,
+        },
+      });
+    }
+
     try {
       await this.mailer.sendVerificationEmail(data.email, rawToken);
     } catch (err) {
       console.error('Failed to send verification email:', err);
-      // Registration still succeeds — user can request a new verification email
     }
 
-    // Audit log — registration event
     await this.audit.log({
       organisationId: org.id,
       userId: user.id,
       action: 'user.registered',
       resourceType: 'user',
       resourceId: user.id,
-      metadata: { email: data.email },
+      metadata: { email: data.email, planType },
       ipAddress: meta.ipAddress,
       userAgent: meta.userAgent,
     });
@@ -232,29 +337,22 @@ export class AuthService {
    * Authenticates a user with email and password.
    *
    * Flow:
-   * 1. Find user by email within default organisation
+   * 1. Find user by email across organisations
    * 2. Verify password hash using scrypt
    * 3. Check email verification / status (active)
-   * 4. Log audit event
+   * 4. Resolve active organisation and user role
+   * 5. Log audit event
    */
   async login(
     data: LoginRequest,
     meta: { ipAddress?: string; userAgent?: string } = {},
   ): Promise<LoginResult> {
-    const org = await this.getOrCreateDefaultOrganisation();
-
-    const user = await this.prisma.user.findUnique({
-      where: {
-        organisationId_email: {
-          organisationId: org.id,
-          email: data.email,
-        },
-      },
-    });
+    const user = await this.findUserByEmail(data.email);
 
     if (!user || user.deletedAt !== null) {
+      const defaultOrg = await this.getOrCreateDefaultOrganisation();
       await this.audit.log({
-        organisationId: org.id,
+        organisationId: defaultOrg.id,
         action: 'user.login_failed',
         resourceType: 'user',
         resourceId: '00000000-0000-0000-0000-000000000000',
@@ -264,6 +362,17 @@ export class AuthService {
       });
       throw new UnauthorizedError('Invalid email or password.');
     }
+
+    const defaultMembership =
+      user.memberships?.find((m: any) => m.isDefault) || user.memberships?.[0];
+    const org =
+      defaultMembership?.organisation ||
+      user.organisation ||
+      (await this.getOrCreateDefaultOrganisation());
+
+    const activeRole = isSuperAdmin(user.email)
+      ? 'super_admin'
+      : defaultMembership?.role || user.role || 'user';
 
     const isValidPassword = await verifyPassword(data.password, user.passwordHash);
     if (!isValidPassword) {
@@ -312,7 +421,7 @@ export class AuthService {
       org.mfaRequired &&
       (Array.isArray(org.mfaRequiredRoles)
         ? (org.mfaRequiredRoles as string[]).includes('*') ||
-          (org.mfaRequiredRoles as string[]).includes(user.role ?? 'user')
+          (org.mfaRequiredRoles as string[]).includes(activeRole)
         : true);
 
     if (user.mfaEnabled) {
@@ -333,7 +442,6 @@ export class AuthService {
       };
     }
 
-    // Audit log — login event
     await this.audit.log({
       organisationId: org.id,
       userId: user.id,
@@ -345,7 +453,6 @@ export class AuthService {
       userAgent: meta.userAgent,
     });
 
-    // Track last login timestamp (INK-206)
     await this.prisma.user.update({
       where: { id: user.id },
       data: { lastLoginAt: new Date() },
@@ -356,7 +463,7 @@ export class AuthService {
         sub: user.id,
         orgId: org.id,
         email: user.email,
-        role: user.role ?? 'user',
+        role: activeRole,
         jti: generateId(),
       },
       this.jwtSecret,
@@ -378,17 +485,32 @@ export class AuthService {
     data: LoginMfaRequest,
     meta: { ipAddress?: string; userAgent?: string } = {},
   ): Promise<LoginResult> {
-    const org = await this.getOrCreateDefaultOrganisation();
-
     const userId = await this.verifyMfaTicket(data.mfaTicket, 'mfa');
 
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
+      include: {
+        organisation: true,
+        memberships: {
+          include: { organisation: true },
+        },
+      },
     });
 
     if (!user || user.deletedAt !== null || !user.mfaEnabled || !user.mfaSecret) {
       throw new UnauthorizedError('Invalid MFA credentials or MFA not enabled.');
     }
+
+    const defaultMembership =
+      user.memberships?.find((m: any) => m.isDefault) || user.memberships?.[0];
+    const org =
+      defaultMembership?.organisation ||
+      user.organisation ||
+      (await this.getOrCreateDefaultOrganisation());
+
+    const activeRole = isSuperAdmin(user.email)
+      ? 'super_admin'
+      : defaultMembership?.role || user.role || 'user';
 
     const isValidCode = await verifyTotpToken(user.mfaSecret, data.code);
 
@@ -422,7 +544,7 @@ export class AuthService {
         sub: user.id,
         orgId: org.id,
         email: user.email,
-        role: user.role ?? 'user',
+        role: activeRole,
         jti: generateId(),
       },
       this.jwtSecret,
@@ -515,18 +637,9 @@ export class AuthService {
     email: string,
     meta: { ipAddress?: string; userAgent?: string } = {},
   ): Promise<{ message: string }> {
-    const org = await this.getOrCreateDefaultOrganisation();
+    const user = await this.findUserByEmail(email);
 
-    const user = await this.prisma.user.findUnique({
-      where: {
-        organisationId_email: {
-          organisationId: org.id,
-          email,
-        },
-      },
-    });
-
-    if (!user || user.deletedAt !== null) {
+    if (!user) {
       // Return success without revealing account existence
       return {
         message: 'If an account exists with this email, a verification link has been sent.',
@@ -556,7 +669,7 @@ export class AuthService {
     }
 
     await this.audit.log({
-      organisationId: org.id,
+      organisationId: user.organisationId,
       userId: user.id,
       action: 'user.verification_resent',
       resourceType: 'user',
@@ -575,7 +688,7 @@ export class AuthService {
    * Initiates a password reset request for a registered user.
    *
    * Flow:
-   * 1. Find user by email within default organisation
+   * 1. Find user by email across organisations
    * 2. If user doesn't exist or is deleted, return gracefully (prevents email enumeration)
    * 3. Generate raw reset token and token hash with 1-hour expiration
    * 4. Update user record with token hash & expiration
@@ -586,18 +699,9 @@ export class AuthService {
     email: string,
     meta: { ipAddress?: string; userAgent?: string } = {},
   ): Promise<{ message: string }> {
-    const org = await this.getOrCreateDefaultOrganisation();
+    const user = await this.findUserByEmail(email);
 
-    const user = await this.prisma.user.findUnique({
-      where: {
-        organisationId_email: {
-          organisationId: org.id,
-          email,
-        },
-      },
-    });
-
-    if (!user || user.deletedAt !== null) {
+    if (!user) {
       // Intentionally vague to prevent user enumeration
       return {
         message: 'If an account exists with this email, a password reset link has been sent.',
@@ -625,7 +729,7 @@ export class AuthService {
     }
 
     await this.audit.log({
-      organisationId: org.id,
+      organisationId: user.organisationId,
       userId: user.id,
       action: 'user.password_reset_requested',
       resourceType: 'user',

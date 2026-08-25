@@ -14,6 +14,7 @@ model Organisation {
   name                  String    @db.VarChar(255)
   slug                  String    @unique @db.VarChar(100)
   tenantId              String    @unique @default(uuid()) @map("tenant_id") @db.Uuid
+  planType              String    @default("individual") @map("plan_type") @db.VarChar(20)
   status                String    @default("active") @db.VarChar(20)
   domain                String?   @db.VarChar(255)
   sessionTimeoutMinutes Int       @default(15) @map("session_timeout_minutes")

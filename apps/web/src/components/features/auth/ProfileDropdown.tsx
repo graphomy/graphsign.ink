@@ -73,6 +73,33 @@ export function ProfileDropdown({ email, token, orgName }: ProfileDropdownProps)
 
   const displayEmail = email || clientEmail;
   const displayOrgName = orgName || clientOrg;
+  const [planType, setPlanType] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('graphsign_plan_type') || 'individual';
+    }
+    return 'individual';
+  });
+
+  useEffect(() => {
+    const sessionToken =
+      token ||
+      localStorage.getItem('graphsign_session_token') ||
+      localStorage.getItem('token') ||
+      '';
+    if (!sessionToken) return;
+    const apiUrl = getApiUrl();
+    fetch(`${apiUrl}/api/v1/organisations/me`, {
+      headers: { Authorization: `Bearer ${sessionToken}` },
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.planType) {
+          setPlanType(data.planType);
+          localStorage.setItem('graphsign_plan_type', data.planType);
+        }
+      })
+      .catch(() => {});
+  }, [token]);
 
   const userRole = token
     ? (() => {
@@ -122,19 +149,26 @@ export function ProfileDropdown({ email, token, orgName }: ProfileDropdownProps)
           ? (localStorage.getItem('graphsign_session_token') ?? '')
           : '');
 
-      await fetch(`${apiUrl}/api/v1/auth/logout`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${sessionToken}`,
-        },
-      }).catch(() => null);
+      if (sessionToken) {
+        await fetch(`${apiUrl}/api/v1/auth/logout`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${sessionToken}`,
+          },
+        }).catch(() => null);
+      }
     } finally {
       localStorage.removeItem('token');
       localStorage.removeItem('graphsign_session_token');
       localStorage.removeItem('graphsign_user_email');
       localStorage.removeItem('graphsign_org_id');
       localStorage.removeItem('graphsign_user_id');
+      localStorage.removeItem('graphsign_user_role');
+      localStorage.removeItem('graphsign_org_name');
+      localStorage.removeItem('graphsign_plan_type');
+      document.cookie =
+        'graphsign_session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT; SameSite=Strict; Secure';
       window.location.href = '/login';
     }
   }
@@ -182,15 +216,32 @@ export function ProfileDropdown({ email, token, orgName }: ProfileDropdownProps)
           aria-orientation="vertical"
           aria-labelledby="profile-menu-button"
           data-testid="profile-dropdown-menu"
-          className="absolute right-0 mt-2 w-60 origin-top-right rounded-xl bg-white p-1.5 shadow-lg ring-1 ring-black/5 border border-neutral-100 focus:outline-none z-50 animate-in fade-in slide-in-from-top-2 duration-150"
+          className="absolute right-0 mt-2 w-64 origin-top-right rounded-xl bg-white p-1.5 shadow-lg ring-1 ring-black/5 border border-neutral-100 focus:outline-none z-50 animate-in fade-in slide-in-from-top-2 duration-150"
         >
           {/* User Info Header */}
           <div className="px-3 py-2.5 border-b border-neutral-100 mb-1">
-            <p className="text-[11px] text-neutral-400 font-medium uppercase tracking-wider">
-              Signed in as
-            </p>
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-[11px] text-neutral-400 font-medium uppercase tracking-wider">
+                Signed in as
+              </p>
+              {planType === 'teams' ? (
+                <span
+                  className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-red-50 text-[#ba0000] border border-[#ba0000]/20"
+                  data-testid="plan-badge-teams"
+                >
+                  <span>🏢</span> Teams Plan
+                </span>
+              ) : (
+                <span
+                  className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full bg-neutral-100 text-neutral-600 border border-neutral-200"
+                  data-testid="plan-badge-individual"
+                >
+                  <span>👤</span> Individual
+                </span>
+              )}
+            </div>
             <p
-              className="text-xs font-semibold text-neutral-900 truncate mt-0.5"
+              className="text-xs font-semibold text-neutral-900 truncate mt-1"
               title={displayEmail}
             >
               {displayEmail}
@@ -198,9 +249,9 @@ export function ProfileDropdown({ email, token, orgName }: ProfileDropdownProps)
             {displayOrgName && (
               <div
                 className="mt-1.5 flex items-center gap-1.5 text-[11px] font-medium text-neutral-600 bg-neutral-50 px-2 py-1 rounded border border-neutral-200/80 truncate"
-                title={`Organisation: ${displayOrgName}`}
+                title={`Workspace: ${displayOrgName}`}
               >
-                <span className="text-xs shrink-0">🏢</span>
+                <span className="text-xs shrink-0">{planType === 'teams' ? '🏢' : '📁'}</span>
                 <span className="truncate">{displayOrgName}</span>
               </div>
             )}
@@ -252,27 +303,44 @@ export function ProfileDropdown({ email, token, orgName }: ProfileDropdownProps)
               Security
             </Link>
 
-            <Link
-              href="/settings/organisation"
-              onClick={() => setIsOpen(false)}
-              className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-medium text-neutral-700 hover:bg-neutral-100 hover:text-neutral-900 transition-colors"
-              data-testid="organisation-settings-link"
-            >
-              <svg
-                className="h-4 w-4 text-neutral-500 shrink-0"
-                fill="none"
-                viewBox="0 0 24 24"
-                strokeWidth="1.75"
-                stroke="currentColor"
+            {planType === 'teams' ? (
+              <Link
+                href="/settings/organisation"
+                onClick={() => setIsOpen(false)}
+                className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-medium text-neutral-700 hover:bg-neutral-100 hover:text-neutral-900 transition-colors"
+                data-testid="organisation-settings-link"
               >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M2.25 21h19.5m-18-18v18m10.5-18v18m6-13.5V21M6.75 6.75h.75m-.75 3h.75m-.75 3h.75m3-6h.75m-.75 3h.75m-.75 3h.75M6.75 21v-3.375c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21"
-                />
-              </svg>
-              Organisation Settings
-            </Link>
+                <svg
+                  className="h-4 w-4 text-neutral-500 shrink-0"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  strokeWidth="1.75"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M2.25 21h19.5m-18-18v18m10.5-18v18m6-13.5V21M6.75 6.75h.75m-.75 3h.75m-.75 3h.75m3-6h.75m-.75 3h.75m-.75 3h.75M6.75 21v-3.375c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21"
+                  />
+                </svg>
+                Organisation Settings
+              </Link>
+            ) : (
+              <Link
+                href="/settings/organisation"
+                onClick={() => setIsOpen(false)}
+                className="flex items-center justify-between rounded-lg px-3 py-2 text-xs font-semibold text-[#ba0000] bg-red-50/70 hover:bg-red-100/70 transition-colors"
+                data-testid="upgrade-to-teams-link"
+              >
+                <span className="flex items-center gap-2">
+                  <span className="text-sm">✨</span>
+                  Upgrade to Teams
+                </span>
+                <span className="text-[10px] font-bold uppercase tracking-wider bg-[#ba0000] text-white px-1.5 py-0.5 rounded">
+                  UPGRADE
+                </span>
+              </Link>
+            )}
 
             {userRole === 'super_admin' && (
               <Link
