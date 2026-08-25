@@ -6,6 +6,7 @@ import {
   RecipientSignInput,
   DeclineSignInput,
   CancelAgreementInput,
+  ElectronicConsentInput,
 } from '../validators/workflow-validators.js';
 import { AuditService } from './audit-service.js';
 import { MailerService } from './mailer-service.js';
@@ -501,7 +502,100 @@ export class WorkflowService {
   }
 
   /**
-   * INK-94, INK-96: Submit recipient signature and advance workflow
+   * INK-99: Capture electronic consent (ERSD)
+   */
+  async recordElectronicConsent(
+    rawToken: string,
+    input: ElectronicConsentInput,
+    ip?: string,
+    userAgent?: string,
+  ) {
+    const tokenHash = await hashToken(rawToken);
+    const recipient = await this.prisma.agreementRecipient.findUnique({
+      where: { signingTokenHash: tokenHash },
+      include: {
+        agreement: {
+          select: {
+            id: true,
+            organisationId: true,
+            title: true,
+            status: true,
+          },
+        },
+      },
+    });
+
+    if (!recipient) {
+      throw new NotFoundError('Invalid signing link.');
+    }
+
+    if (recipient.agreement.status === 'CANCELLED' || recipient.agreement.status === 'EXPIRED') {
+      throw new ValidationError(
+        `Cannot consent to a ${recipient.agreement.status.toLowerCase()} agreement.`,
+      );
+    }
+
+    const consentTimestamp = new Date();
+
+    await this.auditService.log({
+      organisationId: recipient.agreement.organisationId,
+      action: 'ELECTRONIC_CONSENT_CAPTURED',
+      resourceType: 'agreement',
+      resourceId: recipient.agreementId,
+      metadata: {
+        recipientId: recipient.id,
+        email: recipient.email,
+        name: recipient.name,
+        ersdVersion: input.ersdVersion,
+        consentTimestamp: consentTimestamp.toISOString(),
+      },
+      ipAddress: ip,
+      userAgent,
+    });
+
+    return {
+      success: true,
+      consentTimestamp: consentTimestamp.toISOString(),
+      ersdVersion: input.ersdVersion,
+    };
+  }
+
+  /**
+   * INK-105: Get signing document file for public recipient download
+   */
+  async getSigningDocumentFile(rawToken: string) {
+    const tokenHash = await hashToken(rawToken);
+    const recipient = await this.prisma.agreementRecipient.findUnique({
+      where: { signingTokenHash: tokenHash },
+      include: {
+        agreement: true,
+      },
+    });
+
+    if (!recipient) {
+      throw new NotFoundError('Invalid or expired signing link.');
+    }
+
+    const agreement = recipient.agreement;
+    if (agreement.deletedAt || agreement.status === 'CANCELLED') {
+      throw new NotFoundError('Agreement file is not available.');
+    }
+
+    return {
+      id: agreement.id,
+      title: agreement.title,
+      fileName:
+        agreement.fileName || `${agreement.title.toLowerCase().replace(/[^a-z0-9]/g, '-')}.pdf`,
+      mimeType: agreement.mimeType || 'application/pdf',
+      fileUrl: agreement.fileUrl,
+      fileData: (agreement as any).fileData,
+      markdownContent: agreement.markdownContent,
+      status: agreement.status,
+    };
+  }
+
+  /**
+   * INK-94, INK-96, INK-104: Submit recipient signature and advance workflow
    */
   async submitRecipientSignature(
     rawToken: string,
@@ -534,6 +628,29 @@ export class WorkflowService {
 
     if (recipient.status === 'SIGNED') {
       throw new ValidationError('You have already signed this document.');
+    }
+
+    // Backend validation for assigned required fields (INK-104)
+    const envelopeFields = (agreement.fields as any)?.fields || [];
+    const assignedRequiredFields = envelopeFields.filter(
+      (f: any) => f.recipientId === recipient.id && f.isRequired,
+    );
+
+    const missingFields: string[] = [];
+    for (const f of assignedRequiredFields) {
+      if (f.type === 'SIGNATURE' || f.type === 'INITIALS') {
+        const val = input.fieldsData?.[f.id] || input.signatureData?.data;
+        if (!val) missingFields.push(f.label || f.type);
+      } else {
+        const val = input.fieldsData?.[f.id];
+        if (val === undefined || val === null || val === '') {
+          missingFields.push(f.label || f.type);
+        }
+      }
+    }
+
+    if (missingFields.length > 0) {
+      throw new ValidationError(`Required fields must be completed: ${missingFields.join(', ')}`);
     }
 
     // Save recipient signature submission

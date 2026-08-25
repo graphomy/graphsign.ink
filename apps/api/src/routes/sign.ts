@@ -6,7 +6,11 @@ import type { AuditService } from '../services/audit-service.js';
 import { PrismaAuditService } from '../services/audit-service.js';
 import type { MailerService } from '../services/mailer-service.js';
 import { createMailerService } from '../services/mailer-service.js';
-import { recipientSignSchema, declineSignSchema } from '../validators/workflow-validators.js';
+import {
+  recipientSignSchema,
+  declineSignSchema,
+  electronicConsentSchema,
+} from '../validators/workflow-validators.js';
 import { BadRequestError } from '../utils/errors.js';
 import { createRateLimiter } from '../middleware/rate-limiter.js';
 import type { Env } from '../index.js';
@@ -68,6 +72,27 @@ export function createSignRoutes(deps?: SignDeps) {
   });
 
   /**
+   * POST /api/v1/sign/:token/consent
+   * INK-99: Capture explicit Electronic Record & Signature Disclosure (ERSD) consent
+   */
+  sign.post('/:token/consent', async (c) => {
+    const rawToken = c.req.param('token');
+    const body = await c.req.json().catch(() => ({}));
+    const parseResult = electronicConsentSchema.safeParse(body);
+
+    if (!parseResult.success) {
+      throw new BadRequestError(parseResult.error.errors.map((e) => e.message).join(', '));
+    }
+
+    const ip = c.req.header('x-forwarded-for') || c.req.header('cf-connecting-ip');
+    const userAgent = c.req.header('user-agent');
+    const { service } = getServices(c);
+
+    const result = await service.recordElectronicConsent(rawToken, parseResult.data, ip, userAgent);
+    return c.json({ success: true, data: result });
+  });
+
+  /**
    * POST /api/v1/sign/:token/view
    * INK-93: Mark document viewed event
    */
@@ -83,7 +108,7 @@ export function createSignRoutes(deps?: SignDeps) {
 
   /**
    * POST /api/v1/sign/:token/complete
-   * INK-94, INK-96: Submit recipient signature and filled fields
+   * INK-94, INK-96, INK-104: Submit recipient signature and filled fields
    */
   sign.post('/:token/complete', async (c) => {
     const rawToken = c.req.param('token');
@@ -133,6 +158,43 @@ export function createSignRoutes(deps?: SignDeps) {
     );
 
     return c.json({ success: true, data: result });
+  });
+
+  /**
+   * GET /api/v1/sign/:token/download
+   * INK-105: Public tokenized download for executed / signed document
+   */
+  sign.get('/:token/download', async (c) => {
+    const rawToken = c.req.param('token');
+    const { service } = getServices(c);
+
+    const file = await service.getSigningDocumentFile(rawToken);
+
+    if (file.fileData) {
+      const buffer = Buffer.from(file.fileData, 'base64');
+      c.header('Content-Type', file.mimeType || 'application/pdf');
+      c.header('Content-Disposition', `attachment; filename="${file.fileName}"`);
+      return c.body(buffer as any);
+    }
+
+    if (file.markdownContent) {
+      c.header('Content-Type', 'text/markdown; charset=utf-8');
+      c.header(
+        'Content-Disposition',
+        `attachment; filename="${file.fileName.replace(/\.pdf$/, '.md')}"`,
+      );
+      return c.text(file.markdownContent);
+    }
+
+    return c.json({
+      success: true,
+      data: {
+        id: file.id,
+        title: file.title,
+        fileUrl: file.fileUrl,
+        fileName: file.fileName,
+      },
+    });
   });
 
   return sign;
