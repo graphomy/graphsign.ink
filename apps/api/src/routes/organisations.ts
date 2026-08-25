@@ -8,6 +8,7 @@ import {
   updateBrandingSchema,
   updateOrganisationSettingsSchema,
   updateComplianceSettingsSchema,
+  updateNotificationSettingsSchema,
   suspendOrganisationSchema,
   createTeamSchema,
   addTeamMemberSchema,
@@ -354,6 +355,44 @@ export function createOrganisationRoutes(deps?: OrganisationDeps) {
         defaultSenderName: updated.defaultSenderName,
         emailFooterText: updated.emailFooterText,
         message: 'Organisation branding updated successfully.',
+      });
+    },
+  );
+
+  // INK-114: GET & PATCH notification trigger settings
+  orgs.get('/me/notifications', jwtAuth(), enforceTenantActiveStatus(), async (c) => {
+    const payload = c.get('userPayload');
+    const service = getService(c);
+    const settings = await service.getNotificationSettings(payload.orgId);
+    return c.json(settings);
+  });
+
+  orgs.patch(
+    '/me/notifications',
+    jwtAuth(),
+    enforceTenantActiveStatus(),
+    requirePermission('organisation:manage'),
+    async (c) => {
+      const body = await c.req.json().catch(() => null);
+      if (!body) throw new ValidationError('Request body is required.');
+
+      const parsed = updateNotificationSettingsSchema.safeParse(body);
+      if (!parsed.success) {
+        const firstError = parsed.error.errors[0];
+        throw new ValidationError(firstError?.message ?? 'Invalid input.');
+      }
+
+      const payload = c.get('userPayload');
+      const service = getService(c);
+      const updated = await service.updateNotificationSettings(
+        payload.orgId,
+        payload.sub,
+        parsed.data,
+      );
+
+      return c.json({
+        ...updated,
+        message: 'Notification trigger settings updated successfully.',
       });
     },
   );

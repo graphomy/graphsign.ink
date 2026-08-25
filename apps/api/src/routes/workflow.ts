@@ -12,6 +12,7 @@ import {
   reviewDecisionSchema,
   sendAgreementSchema,
   cancelAgreementSchema,
+  sendReminderSchema,
 } from '../validators/workflow-validators.js';
 import { BadRequestError } from '../utils/errors.js';
 import { enforceTenantActiveStatus } from '../middleware/tenant-status-middleware.js';
@@ -52,11 +53,14 @@ export function createWorkflowRoutes(deps?: WorkflowDeps) {
     const audit = deps?.audit || new PrismaAuditService(prisma);
     const mailer =
       deps?.mailer ||
-      createMailerService({
-        RESEND_API_KEY: c.env?.RESEND_API_KEY,
-        EMAIL_FROM: c.env?.EMAIL_FROM,
-        WEB_URL: c.env?.WEB_URL,
-      });
+      createMailerService(
+        {
+          RESEND_API_KEY: c.env?.RESEND_API_KEY,
+          EMAIL_FROM: c.env?.EMAIL_FROM,
+          WEB_URL: c.env?.WEB_URL,
+        },
+        prisma,
+      );
 
     const service = new WorkflowService(prisma, audit, mailer);
     return { service };
@@ -232,12 +236,70 @@ export function createWorkflowRoutes(deps?: WorkflowDeps) {
   });
 
   /**
+   * POST /api/v1/agreements/:id/remind
+   * INK-108: Send manual reminder to pending signers
+   */
+  workflow.post('/:id/remind', async (c) => {
+    const agreementId = c.req.param('id');
+    const body = await c.req.json().catch(() => ({}));
+    const parseResult = sendReminderSchema.safeParse(body);
+
+    if (!parseResult.success) {
+      throw new BadRequestError(parseResult.error.errors.map((e) => e.message).join(', '));
+    }
+
+    const userPayload = c.get('userPayload') as any;
+    const { service } = getServices(c);
+
+    const result = await service.sendManualReminder(
+      {
+        userId: userPayload?.sub || 'unknown',
+        userEmail: userPayload?.email,
+        userName: userPayload?.name,
+        organisationId: userPayload?.orgId || 'default-org-id',
+        role: userPayload?.role || 'user',
+        ipAddress: c.req.header('x-forwarded-for') || c.req.header('cf-connecting-ip'),
+        userAgent: c.req.header('user-agent'),
+      },
+      agreementId,
+      parseResult.data,
+    );
+
+    return c.json({ success: true, data: result });
+  });
+
+  /**
+   * GET /api/v1/agreements/:id/notifications
+   * INK-113: Get delivery tracking & notification history
+   */
+  workflow.get('/:id/notifications', async (c) => {
+    const agreementId = c.req.param('id');
+    const userPayload = c.get('userPayload') as any;
+    const { service } = getServices(c);
+
+    const result = await service.getAgreementNotificationHistory(
+      {
+        userId: userPayload?.sub || 'unknown',
+        userEmail: userPayload?.email,
+        userName: userPayload?.name,
+        organisationId: userPayload?.orgId || 'default-org-id',
+        role: userPayload?.role || 'user',
+        ipAddress: c.req.header('x-forwarded-for') || c.req.header('cf-connecting-ip'),
+        userAgent: c.req.header('user-agent'),
+      },
+      agreementId,
+    );
+
+    return c.json({ success: true, data: result });
+  });
+
+  /**
    * POST /api/v1/agreements/cron/check-expired
-   * INK-95: Check expired agreements cron hook
+   * INK-95, INK-108, INK-112: Process expirations, warnings, and policy reminders
    */
   workflow.post('/cron/check-expired', async (c) => {
     const { service } = getServices(c);
-    const result = await service.checkExpiredAgreements();
+    const result = await service.processAutomatedRemindersAndExpirations();
     return c.json({ success: true, data: result });
   });
 

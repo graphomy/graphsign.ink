@@ -36,6 +36,15 @@ describe('Workflow Route Integration Tests (INK-86 to INK-95)', () => {
       }),
       cancelAgreement: vi.fn().mockResolvedValue({ id: 'ag-1', status: 'CANCELLED' }),
       checkExpiredAgreements: vi.fn().mockResolvedValue({ expiredCount: 2 }),
+      sendManualReminder: vi.fn().mockResolvedValue({
+        success: true,
+        remindedCount: 1,
+        recipients: [{ id: 'r-1', email: 'signer@example.com' }],
+      }),
+      getAgreementNotificationHistory: vi.fn().mockResolvedValue({
+        agreementId: 'ag-1',
+        logs: [{ id: 'n-1', eventType: 'INVITATION', status: 'SENT' }],
+      }),
     };
 
     const mockPrisma = {
@@ -148,5 +157,42 @@ describe('Workflow Route Integration Tests (INK-86 to INK-95)', () => {
     const body = (await res.json()) as any;
     expect(body.success).toBe(true);
     expect(mockWorkflowService.cancelAgreement).toHaveBeenCalled();
+  });
+
+  it('POST /api/v1/agreements/:id/remind sends manual reminder (INK-108)', async () => {
+    const res = await app.request('/api/v1/agreements/ag-1/remind', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${validToken}`,
+      },
+      body: JSON.stringify({ note: 'Please sign before 5pm.' }),
+    });
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    expect(body.success).toBe(true);
+    expect(mockWorkflowService.sendManualReminder).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: mockUser.id }),
+      'ag-1',
+      expect.objectContaining({ note: 'Please sign before 5pm.' }),
+    );
+  });
+
+  it('GET /api/v1/agreements/:id/notifications retrieves delivery history (INK-113)', async () => {
+    const res = await app.request('/api/v1/agreements/ag-1/notifications', {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${validToken}`,
+      },
+    });
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    expect(body.success).toBe(true);
+    expect(mockWorkflowService.getAgreementNotificationHistory).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: mockUser.id }),
+      'ag-1',
+    );
   });
 });

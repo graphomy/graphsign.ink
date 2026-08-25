@@ -65,8 +65,12 @@ function createMockMailer(): MailerService {
     sendReviewRequestEmail: vi.fn(async () => {}),
     sendReviewDecisionEmail: vi.fn(async () => {}),
     sendSigningInvitationEmail: vi.fn(async () => {}),
+    sendReminderEmail: vi.fn(async () => {}),
     sendAgreementCompletedEmail: vi.fn(async () => {}),
+    sendAgreementDeclinedEmail: vi.fn(async () => {}),
     sendAgreementCancelledEmail: vi.fn(async () => {}),
+    sendExpiryWarningEmail: vi.fn(async () => {}),
+    sendAgreementExpiredEmail: vi.fn(async () => {}),
   };
 }
 

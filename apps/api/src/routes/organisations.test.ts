@@ -145,4 +145,56 @@ describe('Organisation Routes', () => {
       expect(res.status).toBe(201);
     });
   });
+
+  describe('GET & PATCH /api/v1/organisations/me/notifications (INK-114)', () => {
+    it('retrieves notification trigger settings', async () => {
+      mockOrganisationService.getNotificationSettings = vi.fn().mockResolvedValue({
+        sendReminders: true,
+        reminderFrequencyDays: 3,
+        sendExpiryWarnings: true,
+        sendCompletionEmails: true,
+        customFooterText: null,
+      });
+
+      const res = await app.request('/api/v1/organisations/me/notifications', {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${validJwtToken}`,
+        },
+      });
+
+      expect(res.status).toBe(200);
+      const data = (await res.json()) as any;
+      expect(data.sendReminders).toBe(true);
+      expect(data.reminderFrequencyDays).toBe(3);
+    });
+
+    it('updates notification trigger settings', async () => {
+      mockOrganisationService.updateNotificationSettings = vi.fn().mockResolvedValue({
+        sendReminders: false,
+        reminderFrequencyDays: 5,
+        sendExpiryWarnings: true,
+        sendCompletionEmails: true,
+        customFooterText: 'Official document from Acme',
+      });
+
+      const res = await app.request('/api/v1/organisations/me/notifications', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${validJwtToken}`,
+        },
+        body: JSON.stringify({
+          sendReminders: false,
+          reminderFrequencyDays: 5,
+          customFooterText: 'Official document from Acme',
+        }),
+      });
+
+      expect(res.status).toBe(200);
+      const data = (await res.json()) as any;
+      expect(data.sendReminders).toBe(false);
+      expect(data.reminderFrequencyDays).toBe(5);
+    });
+  });
 });

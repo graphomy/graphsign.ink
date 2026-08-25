@@ -87,6 +87,7 @@ interface AuditLogItem {
 type OrgTab =
   | 'general'
   | 'branding'
+  | 'notifications'
   | 'members'
   | 'teams'
   | 'roles'
@@ -105,6 +106,7 @@ function OrganisationSettingsContent() {
       const validTabs: OrgTab[] = [
         'general',
         'branding',
+        'notifications',
         'members',
         'teams',
         'roles',
@@ -138,6 +140,22 @@ function OrganisationSettingsContent() {
   const [companyAddress, setCompanyAddress] = useState<string>('');
   const [defaultSenderName, setDefaultSenderName] = useState<string>('');
   const [emailFooterText, setEmailFooterText] = useState<string>('');
+
+  // Notification Preferences & Triggers (INK-114)
+  const [notificationSettings, setNotificationSettings] = useState<{
+    sendReminders: boolean;
+    reminderFrequencyDays: number;
+    sendExpiryWarnings: boolean;
+    sendCompletionEmails: boolean;
+    customFooterText: string;
+  }>({
+    sendReminders: true,
+    reminderFrequencyDays: 3,
+    sendExpiryWarnings: true,
+    sendCompletionEmails: true,
+    customFooterText: '',
+  });
+  const [isSavingNotifications, setIsSavingNotifications] = useState<boolean>(false);
 
   // Sub-story Features Data
   const [usage, setUsage] = useState<UsageSummary | null>(null);
@@ -272,6 +290,7 @@ function OrganisationSettingsContent() {
           resDom,
           resAudit,
           resUserOrgs,
+          resNotifs,
         ] = await Promise.all([
           fetch(`${apiUrl}/api/v1/organisations/me`, { headers }).catch(() => null),
           fetch(`${apiUrl}/api/v1/organisations/me/branding`, { headers }).catch(() => null),
@@ -285,6 +304,7 @@ function OrganisationSettingsContent() {
             () => null,
           ),
           fetch(`${apiUrl}/api/v1/organisations/my-organisations`, { headers }).catch(() => null),
+          fetch(`${apiUrl}/api/v1/organisations/me/notifications`, { headers }).catch(() => null),
         ]);
 
         if (resOrg?.ok) {
@@ -303,6 +323,17 @@ function OrganisationSettingsContent() {
           setCompanyAddress(data.companyAddress ?? '');
           setDefaultSenderName(data.defaultSenderName ?? '');
           setEmailFooterText(data.emailFooterText ?? '');
+        }
+
+        if (resNotifs?.ok) {
+          const data = await resNotifs.json();
+          setNotificationSettings({
+            sendReminders: data.sendReminders ?? true,
+            reminderFrequencyDays: data.reminderFrequencyDays ?? 3,
+            sendExpiryWarnings: data.sendExpiryWarnings ?? true,
+            sendCompletionEmails: data.sendCompletionEmails ?? true,
+            customFooterText: data.customFooterText ?? '',
+          });
         }
 
         if (resUsage?.ok) setUsage(await resUsage.json());
@@ -507,6 +538,34 @@ function OrganisationSettingsContent() {
       setError(errObj.message ?? 'Unable to save branding.');
     } finally {
       setIsSaving(false);
+    }
+  }
+
+  // Save Notification Trigger Preferences (INK-114)
+  async function handleSaveNotifications(e: React.FormEvent) {
+    e.preventDefault();
+    setIsSavingNotifications(true);
+    setMessage('');
+    setError('');
+
+    try {
+      const token = localStorage.getItem('graphsign_session_token') ?? '';
+      const apiUrl = getApiUrl();
+
+      const res = await fetch(`${apiUrl}/api/v1/organisations/me/notifications`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(notificationSettings),
+      });
+
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error?.message ?? 'Save notification settings failed.');
+      setMessage('Organisation notification trigger settings updated successfully.');
+    } catch (err: unknown) {
+      const errObj = err as Error;
+      setError(errObj.message ?? 'Unable to save notification settings.');
+    } finally {
+      setIsSavingNotifications(false);
     }
   }
 
@@ -746,6 +805,7 @@ function OrganisationSettingsContent() {
           {[
             { id: 'general', label: 'General' },
             { id: 'branding', label: 'Branding' },
+            { id: 'notifications', label: 'Notifications' },
             { id: 'members', label: 'Members' },
             { id: 'teams', label: 'Teams' },
             { id: 'roles', label: 'Custom Roles' },
@@ -981,6 +1041,173 @@ function OrganisationSettingsContent() {
                   className="rounded-lg bg-[#ba0000] px-5 py-2.5 text-xs font-bold text-white hover:bg-[#a00000]"
                 >
                   Save Branding
+                </button>
+              </form>
+            )}
+
+            {/* NOTIFICATIONS TAB (INK-114) */}
+            {activeTab === 'notifications' && (
+              <form
+                onSubmit={handleSaveNotifications}
+                className="space-y-6"
+                data-testid="notifications-section"
+              >
+                <div>
+                  <h3 className="text-sm font-bold text-neutral-900">
+                    Automated Notification Triggers & Policies
+                  </h3>
+                  <p className="text-xs text-neutral-500 mt-1">
+                    Configure automated lifecycle notifications, signature reminder intervals,
+                    expiration alerts, and default email footer notices across your organisation.
+                  </p>
+                </div>
+
+                <div className="rounded-xl border border-neutral-200 bg-white p-5 space-y-5 shadow-xs">
+                  {/* Automated Reminders Switch */}
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <h4 className="text-xs font-bold text-neutral-900">Automated Reminders</h4>
+                      <p className="text-xs text-neutral-500">
+                        Automatically dispatch reminder emails to pending signers based on your
+                        schedule.
+                      </p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={notificationSettings.sendReminders}
+                        onChange={(e) =>
+                          setNotificationSettings((prev) => ({
+                            ...prev,
+                            sendReminders: e.target.checked,
+                          }))
+                        }
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-neutral-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-neutral-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#ba0000]"></div>
+                    </label>
+                  </div>
+
+                  {/* Reminder Frequency */}
+                  {notificationSettings.sendReminders && (
+                    <div className="pt-2 border-t border-neutral-100 flex items-center justify-between gap-4">
+                      <div>
+                        <label
+                          htmlFor="reminderFrequency"
+                          className="block text-xs font-semibold text-neutral-700"
+                        >
+                          Reminder Frequency
+                        </label>
+                        <p className="text-xs text-neutral-400">
+                          Number of days between automated reminder notices.
+                        </p>
+                      </div>
+                      <select
+                        id="reminderFrequency"
+                        value={notificationSettings.reminderFrequencyDays}
+                        onChange={(e) =>
+                          setNotificationSettings((prev) => ({
+                            ...prev,
+                            reminderFrequencyDays: Number(e.target.value),
+                          }))
+                        }
+                        className="rounded-lg border border-neutral-300 px-3.5 py-2 text-xs font-medium bg-white text-neutral-800 focus:outline-none focus:border-[#ba0000]"
+                      >
+                        <option value={1}>Every 1 Day (Daily)</option>
+                        <option value={2}>Every 2 Days</option>
+                        <option value={3}>Every 3 Days (Recommended)</option>
+                        <option value={5}>Every 5 Days</option>
+                        <option value={7}>Every 7 Days (Weekly)</option>
+                        <option value={14}>Every 14 Days (Bi-weekly)</option>
+                      </select>
+                    </div>
+                  )}
+
+                  {/* Expiration Warnings Switch */}
+                  <div className="pt-2 border-t border-neutral-100 flex items-center justify-between gap-4">
+                    <div>
+                      <h4 className="text-xs font-bold text-neutral-900">
+                        24-Hour Expiration Warnings
+                      </h4>
+                      <p className="text-xs text-neutral-500">
+                        Alert pending signers and authors 24 hours prior to document expiration.
+                      </p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={notificationSettings.sendExpiryWarnings}
+                        onChange={(e) =>
+                          setNotificationSettings((prev) => ({
+                            ...prev,
+                            sendExpiryWarnings: e.target.checked,
+                          }))
+                        }
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-neutral-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-neutral-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#ba0000]"></div>
+                    </label>
+                  </div>
+
+                  {/* Completion Copy Switch */}
+                  <div className="pt-2 border-t border-neutral-100 flex items-center justify-between gap-4">
+                    <div>
+                      <h4 className="text-xs font-bold text-neutral-900">Completion Notices</h4>
+                      <p className="text-xs text-neutral-500">
+                        Send a final executed completion copy & download link to all signing
+                        participants.
+                      </p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={notificationSettings.sendCompletionEmails}
+                        onChange={(e) =>
+                          setNotificationSettings((prev) => ({
+                            ...prev,
+                            sendCompletionEmails: e.target.checked,
+                          }))
+                        }
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-neutral-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-neutral-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#ba0000]"></div>
+                    </label>
+                  </div>
+
+                  {/* Custom Notification Footer Text */}
+                  <div className="pt-2 border-t border-neutral-100">
+                    <label
+                      htmlFor="customFooterText"
+                      className="block text-xs font-semibold text-neutral-700"
+                    >
+                      Custom Notification Email Footer
+                    </label>
+                    <p className="text-xs text-neutral-400 mb-2">
+                      Appended to all automated invitation, reminder, and completion emails
+                      dispatched by this organisation.
+                    </p>
+                    <textarea
+                      id="customFooterText"
+                      rows={3}
+                      value={notificationSettings.customFooterText}
+                      onChange={(e) =>
+                        setNotificationSettings((prev) => ({
+                          ...prev,
+                          customFooterText: e.target.value,
+                        }))
+                      }
+                      placeholder="e.g., Confidential document dispatched by Acme Legal Department. For support, contact legal@acme.com."
+                      className="mt-1 block w-full rounded-lg border border-neutral-300 px-3.5 py-2 text-xs text-neutral-900 focus:outline-none focus:border-[#ba0000]"
+                    />
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={isSavingNotifications}
+                  className="rounded-lg bg-[#ba0000] px-5 py-2.5 text-xs font-bold text-white hover:bg-[#a00000] disabled:opacity-50 transition"
+                >
+                  {isSavingNotifications ? 'Saving...' : 'Save Notification Preferences'}
                 </button>
               </form>
             )}
