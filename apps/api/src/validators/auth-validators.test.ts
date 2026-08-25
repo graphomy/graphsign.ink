@@ -140,6 +140,45 @@ describe('registerRequestSchema', () => {
     });
     expect(result.success).toBe(false);
   });
+
+  it('should accept individual plan with personal email like gmail', () => {
+    const result = registerRequestSchema.safeParse({
+      email: 'john@gmail.com',
+      password: 'Str0ng!Pass',
+      planType: 'individual',
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.planType).toBe('individual');
+    }
+  });
+
+  it('should reject teams plan with personal email like gmail', () => {
+    const result = registerRequestSchema.safeParse({
+      email: 'john@gmail.com',
+      password: 'Str0ng!Pass',
+      planType: 'teams',
+      companyName: 'Acme Inc',
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.errors[0]?.message).toContain('Teams plan requires a company');
+    }
+  });
+
+  it('should accept teams plan with business email', () => {
+    const result = registerRequestSchema.safeParse({
+      email: 'admin@acmecorp.com',
+      password: 'Str0ng!Pass',
+      planType: 'teams',
+      companyName: 'Acme Corp',
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.planType).toBe('teams');
+      expect(result.data.companyName).toBe('Acme Corp');
+    }
+  });
 });
 
 describe('verifyEmailRequestSchema', () => {

@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { SessionGuard } from '@/components/features/auth/SessionGuard';
 import { HeaderNav } from '@/components/layout/HeaderNav';
 import { Footer } from '@/components/layout/Footer';
+import { MarkdownEditor } from '@/components/features/agreements/MarkdownEditor';
 import { getApiUrl } from '@/lib/api';
 
 interface TemplateItem {
@@ -26,22 +27,6 @@ interface TemplateItem {
   author?: { name?: string; email: string };
 }
 
-interface ShareItem {
-  id: string;
-  targetType: string;
-  targetId: string;
-  accessLevel: string;
-  createdAt: string;
-}
-
-interface VersionItem {
-  id: string;
-  version: number;
-  title: string;
-  changeSummary?: string;
-  createdAt: string;
-}
-
 function getToken(): string {
   if (typeof window === 'undefined') return '';
   return localStorage.getItem('graphsign_session_token') || localStorage.getItem('token') || '';
@@ -52,21 +37,17 @@ function TemplateManagementContent() {
   const [templates, setTemplates] = useState<TemplateItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [tagFilter, setTagFilter] = useState('');
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   // Modals state
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showUploadModal, setShowUploadModal] = useState(false);
-  const [showEditModal, setShowEditModal] = useState(false);
-  const [showShareModal, setShowShareModal] = useState(false);
-  const [selectedTemplate, setSelectedTemplate] = useState<TemplateItem | null>(null);
 
   // Form states
   const [createTitle, setCreateTitle] = useState('');
   const [createDesc, setCreateDesc] = useState('');
-  const [createHtml, setCreateHtml] = useState(
-    '<h1>Template Blueprint</h1><p>Enter reusable terms and fields here...</p>',
+  const [createMarkdown, setCreateMarkdown] = useState(
+    '# Standard Agreement Blueprint\n\n## 1. Scope and Terms\nEnter reusable contract clauses, obligations, and deliverables in Markdown.\n\n## 2. Execution and Signatures\nThis template blueprint can be instantiated into active agreements.\n',
   );
   const [createTags, setCreateTags] = useState<string[]>([]);
   const [createTagInput, setCreateTagInput] = useState('');
@@ -76,18 +57,11 @@ function TemplateManagementContent() {
   const [uploadTags, setUploadTags] = useState<string[]>([]);
   const [uploadTagInput, setUploadTagInput] = useState('');
 
-  const [editTitle, setEditTitle] = useState('');
-  const [editDesc, setEditDesc] = useState('');
-  const [editHtml, setEditHtml] = useState('');
-
-  const [shareTargetType, setShareTargetType] = useState<'user' | 'team'>('user');
-  const [shareTargetId, setShareTargetId] = useState('');
-  const [shareAccessLevel, setShareAccessLevel] = useState<'USE' | 'EDIT'>('USE');
-
-  const [sharesList, setSharesList] = useState<ShareItem[]>([]);
-  const [versions, setVersions] = useState<VersionItem[]>([]);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [isSubmittingCreate, setIsSubmittingCreate] = useState(false);
+  const [isSubmittingUpload, setIsSubmittingUpload] = useState(false);
+  const [instantiatingId, setInstantiatingId] = useState<string | null>(null);
   const searchParams = useSearchParams();
 
   useEffect(() => {
@@ -101,9 +75,14 @@ function TemplateManagementContent() {
     let ignore = false;
     async function load() {
       setLoading(true);
+      setActionError(null);
       try {
-        let url = `${getApiUrl()}/api/v1/templates`;
-        if (searchQuery) url += `?search=${encodeURIComponent(searchQuery)}`;
+        const viewParam =
+          activeTab === 'my' ? 'mine' : activeTab === 'shared' ? 'shared' : 'library';
+        let url = `${getApiUrl()}/api/v1/templates?view=${viewParam}`;
+        if (searchQuery.trim()) {
+          url += `&search=${encodeURIComponent(searchQuery.trim())}`;
+        }
 
         const res = await fetch(url, {
           headers: { Authorization: `Bearer ${getToken()}` },
@@ -130,7 +109,10 @@ function TemplateManagementContent() {
           setTemplates(data.items || []);
         }
       } catch (err: unknown) {
-        if (!ignore) console.error(err);
+        if (!ignore) {
+          setActionError((err as Error).message);
+          setTemplates([]);
+        }
       } finally {
         if (!ignore) setLoading(false);
       }
@@ -139,7 +121,7 @@ function TemplateManagementContent() {
     return () => {
       ignore = true;
     };
-  }, [activeTab, searchQuery, tagFilter, refreshTrigger]);
+  }, [activeTab, searchQuery, refreshTrigger]);
 
   function handleAddCreateTag() {
     if (!createTagInput.trim()) return;
@@ -157,6 +139,7 @@ function TemplateManagementContent() {
 
   async function handleCreateSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (isSubmittingCreate) return;
     setActionError(null);
     setActionMessage(null);
 
@@ -165,6 +148,7 @@ function TemplateManagementContent() {
       return;
     }
 
+    setIsSubmittingCreate(true);
     try {
       const res = await fetch(`${getApiUrl()}/api/v1/templates`, {
         method: 'POST',
@@ -174,8 +158,8 @@ function TemplateManagementContent() {
         },
         body: JSON.stringify({
           title: createTitle.trim(),
-          description: createDesc,
-          htmlContent: createHtml,
+          description: createDesc.trim() || undefined,
+          htmlContent: createMarkdown,
           tags: createTags,
         }),
       });
@@ -185,19 +169,24 @@ function TemplateManagementContent() {
         throw new Error(data?.error?.message || data?.message || 'Failed to create template.');
       }
 
-      setActionMessage('Template created successfully.');
+      setActionMessage('Template created successfully as draft blueprint.');
       setShowCreateModal(false);
       setCreateTitle('');
       setCreateDesc('');
       setCreateTags([]);
+      // Switch to 'My Templates' tab so the newly created template draft is immediately visible
+      setActiveTab('my');
       setRefreshTrigger((prev) => prev + 1);
     } catch (err: unknown) {
       setActionError((err as Error).message);
+    } finally {
+      setIsSubmittingCreate(false);
     }
   }
 
   async function handleUploadSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (isSubmittingUpload) return;
     setActionError(null);
     setActionMessage(null);
 
@@ -206,6 +195,7 @@ function TemplateManagementContent() {
       return;
     }
 
+    setIsSubmittingUpload(true);
     try {
       const res = await fetch(`${getApiUrl()}/api/v1/templates`, {
         method: 'POST',
@@ -214,7 +204,7 @@ function TemplateManagementContent() {
           Authorization: `Bearer ${getToken()}`,
         },
         body: JSON.stringify({
-          title: uploadTitle || uploadFile.name,
+          title: uploadTitle.trim() || uploadFile.name,
           fileName: uploadFile.name,
           fileSize: uploadFile.size,
           mimeType: uploadFile.type || 'application/pdf',
@@ -232,19 +222,25 @@ function TemplateManagementContent() {
       setUploadTitle('');
       setUploadFile(null);
       setUploadTags([]);
+      setActiveTab('my');
       setRefreshTrigger((prev) => prev + 1);
     } catch (err: unknown) {
       setActionError((err as Error).message);
+    } finally {
+      setIsSubmittingUpload(false);
     }
   }
 
   async function handlePublishToggle(id: string, isPublished: boolean) {
     setActionError(null);
     try {
-      const endpoint = isPublished ? 'publish' : 'unpublish';
-      const res = await fetch(`${getApiUrl()}/api/v1/templates/${id}/${endpoint}`, {
+      const res = await fetch(`${getApiUrl()}/api/v1/templates/${id}/publish`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${getToken()}` },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${getToken()}`,
+        },
+        body: JSON.stringify({ isPublished }),
       });
 
       if (!res.ok) throw new Error('Failed to update published status.');
@@ -255,7 +251,7 @@ function TemplateManagementContent() {
     }
   }
 
-  async function handleArchiveToggle(id: string, isArchived: boolean) {
+  async function handleArchiveToggle(id: string) {
     setActionError(null);
     try {
       const res = await fetch(`${getApiUrl()}/api/v1/templates/${id}`, {
@@ -268,6 +264,36 @@ function TemplateManagementContent() {
       setRefreshTrigger((prev) => prev + 1);
     } catch (err: unknown) {
       setActionError((err as Error).message);
+    }
+  }
+
+  async function handleUseTemplate(template: TemplateItem) {
+    if (instantiatingId) return;
+    setInstantiatingId(template.id);
+    setActionError(null);
+    setActionMessage(null);
+
+    try {
+      const res = await fetch(`${getApiUrl()}/api/v1/templates/${template.id}/instantiate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${getToken()}`,
+        },
+        body: JSON.stringify({}),
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new Error(
+          data?.error?.message || data?.message || 'Failed to instantiate agreement from template.',
+        );
+      }
+
+      window.location.href = '/agreements?action=scratch';
+    } catch (err: unknown) {
+      setActionError((err as Error).message);
+      setInstantiatingId(null);
     }
   }
 
@@ -392,9 +418,15 @@ function TemplateManagementContent() {
             <div className="h-12 w-12 rounded-full bg-neutral-100 text-neutral-400 mx-auto flex items-center justify-center text-xl">
               📐
             </div>
-            <p className="text-sm font-semibold text-neutral-800">No templates found in library.</p>
+            <p className="text-sm font-semibold text-neutral-800">
+              {activeTab === 'my'
+                ? 'No templates found in your personal library.'
+                : activeTab === 'shared'
+                  ? 'No templates shared with you.'
+                  : 'No published templates found in organization library.'}
+            </p>
             <p className="text-xs text-neutral-500 max-w-sm mx-auto">
-              Create a reusable agreement blueprint to streamline agreement creation.
+              Create a reusable agreement blueprint in Markdown to streamline contract workflows.
             </p>
             <div className="pt-2 flex justify-center gap-3">
               <button
@@ -450,23 +482,24 @@ function TemplateManagementContent() {
                 </div>
 
                 <div className="pt-3 border-t border-neutral-100 flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-1.5">
                     <button
                       onClick={() => handlePublishToggle(tpl.id, !tpl.isPublished)}
                       className="px-2.5 py-1 text-[11px] font-medium text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100 rounded transition-colors"
                     >
                       {tpl.isPublished ? 'Unpublish' : 'Publish'}
                     </button>
-                    <Link
-                      href={`/agreements?action=scratch&templateId=${tpl.id}`}
-                      className="px-2.5 py-1 text-[11px] font-semibold text-[#ba0000] hover:bg-red-50 rounded transition-colors"
+                    <button
+                      disabled={instantiatingId === tpl.id}
+                      onClick={() => handleUseTemplate(tpl)}
+                      className="px-2.5 py-1 text-[11px] font-semibold text-[#ba0000] hover:bg-red-50 disabled:opacity-50 rounded transition-colors flex items-center gap-1"
                     >
-                      Use Template
-                    </Link>
+                      {instantiatingId === tpl.id ? 'Creating...' : 'Use Template'}
+                    </button>
                   </div>
 
                   <button
-                    onClick={() => handleArchiveToggle(tpl.id, !tpl.isArchived)}
+                    onClick={() => handleArchiveToggle(tpl.id)}
                     className="text-[11px] font-semibold text-neutral-500 hover:text-red-600 transition-colors"
                   >
                     Archive
@@ -480,10 +513,10 @@ function TemplateManagementContent() {
         {/* Create Template Modal */}
         {showCreateModal && (
           <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
-            <div className="bg-white border border-neutral-200 rounded-2xl p-6 max-w-2xl w-full shadow-xl max-h-[90vh] overflow-y-auto">
+            <div className="bg-white border border-neutral-200 rounded-2xl p-6 max-w-3xl w-full shadow-xl max-h-[90vh] overflow-y-auto">
               <h2 className="text-lg font-bold text-neutral-900 mb-1">Create Agreement Template</h2>
               <p className="text-xs text-neutral-500 mb-4">
-                Build a reusable blueprint for sending agreements.
+                Build a reusable blueprint in Markdown for instantiating agreements.
               </p>
 
               {actionError && (
@@ -522,13 +555,13 @@ function TemplateManagementContent() {
 
                 <div>
                   <label className="block text-xs font-semibold text-neutral-700 mb-1">
-                    Template HTML Content
+                    Template Markdown Content
                   </label>
-                  <textarea
-                    rows={8}
-                    value={createHtml}
-                    onChange={(e) => setCreateHtml(e.target.value)}
-                    className="w-full bg-neutral-50 border border-neutral-300 rounded-lg p-3 text-xs text-neutral-900 font-mono focus:outline-none focus:border-[#ba0000]"
+                  <MarkdownEditor
+                    value={createMarkdown}
+                    onChange={setCreateMarkdown}
+                    placeholder="Write agreement terms in Markdown..."
+                    minHeight="280px"
                   />
                 </div>
 
@@ -587,9 +620,10 @@ function TemplateManagementContent() {
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 bg-[#ba0000] hover:bg-red-700 text-white text-xs font-semibold rounded-lg shadow-sm"
+                    disabled={isSubmittingCreate}
+                    className="px-4 py-2 bg-[#ba0000] hover:bg-red-700 disabled:opacity-50 text-white text-xs font-semibold rounded-lg shadow-sm"
                   >
-                    Save Template
+                    {isSubmittingCreate ? 'Saving...' : 'Save Template'}
                   </button>
                 </div>
               </form>
@@ -694,9 +728,10 @@ function TemplateManagementContent() {
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 bg-[#ba0000] hover:bg-red-700 text-white text-xs font-semibold rounded-lg shadow-sm"
+                    disabled={isSubmittingUpload}
+                    className="px-4 py-2 bg-[#ba0000] hover:bg-red-700 disabled:opacity-50 text-white text-xs font-semibold rounded-lg shadow-sm"
                   >
-                    Upload Template
+                    {isSubmittingUpload ? 'Uploading...' : 'Upload Template'}
                   </button>
                 </div>
               </form>

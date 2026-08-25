@@ -13,6 +13,7 @@ interface OrganisationProfile {
   name: string;
   slug: string;
   status: string;
+  planType?: string;
   sessionTimeoutMinutes: number;
   mfaRequired: boolean;
   createdAt: string;
@@ -180,6 +181,55 @@ function OrganisationSettingsContent() {
   const [isDeletingAccount, setIsDeletingAccount] = useState<boolean>(false);
 
   const [userOrgs, setUserOrgs] = useState<{ id: string; name: string; role: string }[]>([]);
+  const [upgradeCompanyName, setUpgradeCompanyName] = useState<string>('');
+  const [isUpgrading, setIsUpgrading] = useState<boolean>(false);
+
+  async function handleUpgradeToTeams(e?: React.FormEvent) {
+    if (e) e.preventDefault();
+    setIsUpgrading(true);
+    setError('');
+    setMessage('');
+    try {
+      const token =
+        localStorage.getItem('graphsign_session_token') ||
+        localStorage.getItem('token') ||
+        '';
+      const apiUrl = getApiUrl();
+      const res = await fetch(`${apiUrl}/api/v1/organisations/me/upgrade-to-teams`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ companyName: upgradeCompanyName || undefined }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data?.error?.message || data?.message || 'Upgrade failed.');
+      }
+
+      if (data.token) {
+        localStorage.setItem('graphsign_session_token', data.token);
+        localStorage.setItem('graphsign_plan_type', 'teams');
+        localStorage.setItem('graphsign_user_role', data.role || 'org_admin');
+      }
+
+      setOrg((prev) =>
+        prev
+          ? { ...prev, planType: 'teams', name: data.organisationName || prev.name }
+          : null,
+      );
+      setMessage(
+        '🎉 Workspace successfully upgraded to Teams Plan! Role management and collaboration features are now unlocked.',
+      );
+    } catch (err: unknown) {
+      const errObj = err as Error;
+      setError(errObj.message ?? 'Failed to upgrade workspace.');
+    } finally {
+      setIsUpgrading(false);
+    }
+  }
 
   // Auto-dismiss banners after timeout (UI-02)
   useEffect(() => {
@@ -733,6 +783,40 @@ function OrganisationSettingsContent() {
             {/* GENERAL TAB */}
             {activeTab === 'general' && (
               <form onSubmit={handleSaveGeneral} className="space-y-6" data-testid="general-form">
+                {/* Plan Badge Card */}
+                <div className="p-4 rounded-xl border border-neutral-200 bg-neutral-50 flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <span className="text-xs font-semibold text-neutral-500 uppercase tracking-wider">
+                      Current Workspace Plan
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-base font-bold text-neutral-900">
+                        {org?.planType === 'teams' ? 'Teams Plan' : 'Individual Workspace'}
+                      </span>
+                      {org?.planType === 'teams' ? (
+                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-red-50 text-[#ba0000] border border-[#ba0000]/20">
+                          🏢 Multi-user Active
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-neutral-200 text-neutral-700">
+                          👤 Solo Workspace
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  {org?.planType === 'individual' && (
+                    <button
+                      type="button"
+                      onClick={() => handleUpgradeToTeams()}
+                      disabled={isUpgrading}
+                      className="px-4 py-2 bg-[#ba0000] text-white text-xs font-bold rounded-lg shadow-sm hover:bg-[#a00000] disabled:opacity-60 transition-colors"
+                      data-testid="upgrade-general-button"
+                    >
+                      {isUpgrading ? 'Upgrading...' : '✨ Upgrade to Teams'}
+                    </button>
+                  )}
+                </div>
+
                 <div>
                   <label htmlFor="orgName" className="block text-xs font-semibold text-neutral-700">
                     Workspace Name
@@ -1041,76 +1125,283 @@ function OrganisationSettingsContent() {
 
             {/* CUSTOM ROLES TAB (INK-54 & INK-55) */}
             {activeTab === 'roles' && (
-              <div className="space-y-6" data-testid="roles-section">
-                <form
-                  onSubmit={handleCreateCustomRole}
-                  className="rounded-xl border p-4 bg-neutral-50 space-y-3"
-                >
-                  <h4 className="text-xs font-bold text-neutral-900 uppercase">
-                    Create Custom Role
-                  </h4>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <input
-                      type="text"
-                      required
-                      placeholder="Role Name (e.g. Template Editor)"
-                      value={roleName}
-                      onChange={(e) => setRoleName(e.target.value)}
-                      className="rounded-lg border px-3 py-1.5 text-xs bg-white"
-                    />
-                    <input
-                      type="text"
-                      placeholder="Description"
-                      value={roleDesc}
-                      onChange={(e) => setRoleDesc(e.target.value)}
-                      className="rounded-lg border px-3 py-1.5 text-xs bg-white"
-                    />
+              <div className="space-y-8" data-testid="roles-section">
+                {/* Individual Plan Upgrade Banner if on Individual */}
+                {org?.planType === 'individual' && (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50/80 p-5 space-y-3">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <span className="text-xs font-bold uppercase tracking-wider text-amber-800 bg-amber-100 px-2 py-0.5 rounded">
+                          Teams Feature
+                        </span>
+                        <h4 className="text-sm font-bold text-neutral-900 mt-1.5">
+                          Role Management is available on the Teams Plan
+                        </h4>
+                        <p className="text-xs text-neutral-600 mt-0.5">
+                          Upgrade your workspace to assign roles, delegate admin privileges, and create custom permission matrices.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleUpgradeToTeams()}
+                        disabled={isUpgrading}
+                        className="px-4 py-2 bg-[#ba0000] text-white text-xs font-bold rounded-lg shadow-sm hover:bg-[#a00000] disabled:opacity-60 transition-colors shrink-0"
+                        data-testid="upgrade-roles-button"
+                      >
+                        {isUpgrading ? 'Upgrading...' : '✨ Upgrade to Teams'}
+                      </button>
+                    </div>
                   </div>
-                  <div className="flex gap-4 text-xs">
-                    {['document:read', 'document:write', 'template:read', 'template:write'].map(
-                      (perm) => (
-                        <label key={perm} className="flex items-center gap-1">
-                          <input
-                            type="checkbox"
-                            checked={selectedPerms.includes(perm)}
-                            onChange={(e) =>
-                              e.target.checked
-                                ? setSelectedPerms([...selectedPerms, perm])
-                                : setSelectedPerms(selectedPerms.filter((p) => p !== perm))
-                            }
-                          />
-                          {perm}
-                        </label>
-                      ),
-                    )}
-                  </div>
-                  <button
-                    type="submit"
-                    className="px-3 py-1.5 bg-[#ba0000] text-white text-xs font-bold rounded-lg"
-                  >
-                    + Create Custom Role
-                  </button>
-                </form>
+                )}
 
-                <div className="divide-y border rounded-xl">
-                  {roles.length > 0 ? (
-                    roles.map((r) => (
-                      <div key={r.id} className="p-4 flex justify-between items-center">
-                        <div>
-                          <span className="font-bold text-sm text-neutral-900">{r.name}</span>
-                          <p className="text-xs text-neutral-500">{r.description}</p>
-                        </div>
-                        <span className="text-xs font-mono bg-neutral-100 px-2 py-0.5 rounded text-neutral-600">
-                          {r.permissions?.length || 0} permissions
+                {/* System Default Roles Overview */}
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-sm font-bold text-neutral-900">
+                        Default System Roles
+                      </h3>
+                      <p className="text-xs text-neutral-500 mt-0.5">
+                        Overview of built-in roles and their capabilities across the workspace.
+                      </p>
+                    </div>
+                    <span className="text-xs text-neutral-500 font-medium bg-neutral-100 px-2.5 py-1 rounded-full">
+                      7 Standard Roles
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div className="p-3.5 rounded-xl border border-neutral-200 bg-neutral-50/50 space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-neutral-900 flex items-center gap-1.5">
+                          <span>👑</span> Organisation Admin
+                        </span>
+                        <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded bg-red-100 text-red-800">
+                          org_admin
                         </span>
                       </div>
-                    ))
-                  ) : (
-                    <div className="p-8 text-center text-xs text-neutral-400">
-                      No custom roles defined yet. Create a custom role to grant tailored
-                      permissions.
+                      <p className="text-xs text-neutral-600">
+                        Full workspace administration, member invitations, compliance settings, session timeout, audit logs, and role delegation (can assign other admins).
+                      </p>
                     </div>
-                  )}
+
+                    <div className="p-3.5 rounded-xl border border-neutral-200 bg-neutral-50/50 space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-neutral-900 flex items-center gap-1.5">
+                          <span>✉️</span> Sender / Author
+                        </span>
+                        <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded bg-blue-100 text-blue-800">
+                          sender
+                        </span>
+                      </div>
+                      <p className="text-xs text-neutral-600">
+                        Can draft, create, upload, activate, and dispatch agreements for electronic signature. Can also create and manage workspace templates.
+                      </p>
+                    </div>
+
+                    <div className="p-3.5 rounded-xl border border-neutral-200 bg-neutral-50/50 space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-neutral-900 flex items-center gap-1.5">
+                          <span>✅</span> Workflow Approver
+                        </span>
+                        <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded bg-green-100 text-green-800">
+                          approver
+                        </span>
+                      </div>
+                      <p className="text-xs text-neutral-600">
+                        Authorized to review and formally approve or reject agreements during multi-stage approval workflows prior to external dispatch.
+                      </p>
+                    </div>
+
+                    <div className="p-3.5 rounded-xl border border-neutral-200 bg-neutral-50/50 space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-neutral-900 flex items-center gap-1.5">
+                          <span>🔍</span> Document Reviewer
+                        </span>
+                        <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded bg-purple-100 text-purple-800">
+                          reviewer
+                        </span>
+                      </div>
+                      <p className="text-xs text-neutral-600">
+                        Can inspect draft agreements and submit feedback notes, comments, or modification requests before signing.
+                      </p>
+                    </div>
+
+                    <div className="p-3.5 rounded-xl border border-neutral-200 bg-neutral-50/50 space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-neutral-900 flex items-center gap-1.5">
+                          <span>✍️</span> Document Signer
+                        </span>
+                        <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded bg-teal-100 text-teal-800">
+                          signer
+                        </span>
+                      </div>
+                      <p className="text-xs text-neutral-600">
+                        Dedicated participant role with access to view and execute signature, initial, and date fields assigned to their account.
+                      </p>
+                    </div>
+
+                    <div className="p-3.5 rounded-xl border border-neutral-200 bg-neutral-50/50 space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-neutral-900 flex items-center gap-1.5">
+                          <span>📊</span> Compliance Auditor
+                        </span>
+                        <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded bg-amber-100 text-amber-800">
+                          auditor
+                        </span>
+                      </div>
+                      <p className="text-xs text-neutral-600">
+                        Read-only access to view immutable audit trails, completion certificates, and verify ESIGN/eIDAS compliance.
+                      </p>
+                    </div>
+
+                    <div className="p-3.5 rounded-xl border border-neutral-200 bg-neutral-50/50 space-y-1 md:col-span-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-neutral-900 flex items-center gap-1.5">
+                          <span>👤</span> Standard User
+                        </span>
+                        <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded bg-neutral-200 text-neutral-800">
+                          user
+                        </span>
+                      </div>
+                      <p className="text-xs text-neutral-600">
+                        Base team member role with self-service agreement management and personal workspace access.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-900 flex items-center gap-2">
+                    <span className="text-base shrink-0">💡</span>
+                    <span>
+                      <strong>Admin Delegation:</strong> Organisation Admins have full permissions to assign the <code>Organisation Admin</code> (<code>org_admin</code>) role to add more admins to the workspace. Super Admin is strictly reserved for designated system maintainers.
+                    </span>
+                  </div>
+                </div>
+
+                {/* Custom Role Creation Section */}
+                <div className="space-y-4 pt-4 border-t border-neutral-200">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-sm font-bold text-neutral-900">
+                        Custom Role Builder
+                      </h3>
+                      <p className="text-xs text-neutral-500 mt-0.5">
+                        Define custom roles with granular access controls for specialized team workflows.
+                      </p>
+                    </div>
+                  </div>
+
+                  <form
+                    onSubmit={handleCreateCustomRole}
+                    className="rounded-xl border p-4 bg-neutral-50 space-y-4"
+                  >
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-semibold text-neutral-700 mb-1">
+                          Role Name
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          placeholder="e.g. Legal Counsel"
+                          value={roleName}
+                          onChange={(e) => setRoleName(e.target.value)}
+                          className="w-full rounded-lg border px-3 py-1.5 text-xs bg-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-neutral-700 mb-1">
+                          Description
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="e.g. Can review and archive agreements"
+                          value={roleDesc}
+                          onChange={(e) => setRoleDesc(e.target.value)}
+                          className="w-full rounded-lg border px-3 py-1.5 text-xs bg-white"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-neutral-700 mb-2">
+                        Granted Permissions Matrix
+                      </label>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 text-xs">
+                        {[
+                          'document:read',
+                          'document:write',
+                          'document:send',
+                          'document:sign',
+                          'document:archive',
+                          'document:delete',
+                          'template:read',
+                          'template:write',
+                          'template:publish',
+                          'template:archive',
+                          'organisation:read',
+                          'organisation:manage',
+                          'roles:manage',
+                        ].map((perm) => (
+                          <label
+                            key={perm}
+                            className={`flex items-center gap-2 p-2 rounded-lg border text-xs cursor-pointer transition-colors ${
+                              selectedPerms.includes(perm)
+                                ? 'bg-red-50/70 border-[#ba0000]/40 text-[#ba0000] font-semibold'
+                                : 'bg-white border-neutral-200 text-neutral-700 hover:border-neutral-300'
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={selectedPerms.includes(perm)}
+                              onChange={(e) =>
+                                e.target.checked
+                                  ? setSelectedPerms([...selectedPerms, perm])
+                                  : setSelectedPerms(selectedPerms.filter((p) => p !== perm))
+                              }
+                              className="rounded text-[#ba0000] focus:ring-[#ba0000]"
+                            />
+                            <span className="truncate">{perm}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+
+                    <button
+                      type="submit"
+                      className="px-4 py-2 bg-[#ba0000] text-white text-xs font-bold rounded-lg shadow-sm hover:bg-[#a00000] transition-colors"
+                      data-testid="create-custom-role-button"
+                    >
+                      + Create Custom Role
+                    </button>
+                  </form>
+
+                  <div className="divide-y border rounded-xl">
+                    {roles.length > 0 ? (
+                      roles.map((r) => (
+                        <div key={r.id} className="p-4 flex justify-between items-center">
+                          <div>
+                            <span className="font-bold text-sm text-neutral-900">{r.name}</span>
+                            <p className="text-xs text-neutral-500">{r.description || 'Custom defined role'}</p>
+                          </div>
+                          <div className="flex flex-wrap gap-1 max-w-xs justify-end">
+                            {r.permissions?.map((p) => (
+                              <span
+                                key={p}
+                                className="text-[10px] font-mono bg-neutral-100 px-1.5 py-0.5 rounded text-neutral-700 border border-neutral-200"
+                              >
+                                {p}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="p-8 text-center text-xs text-neutral-400">
+                        No custom roles defined yet. Use the builder above to configure tailored roles.
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             )}

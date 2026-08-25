@@ -20,6 +20,7 @@ import { SubmitReviewModal } from '@/components/features/agreements/SubmitReview
 import { ReviewDecisionModal } from '@/components/features/agreements/ReviewDecisionModal';
 import { SendAgreementModal } from '@/components/features/agreements/SendAgreementModal';
 import { CancelAgreementModal } from '@/components/features/agreements/CancelAgreementModal';
+import { ChooseTemplateModal } from '@/components/features/agreements/ChooseTemplateModal';
 import { getApiUrl } from '@/lib/api';
 import { formatDateTime, formatStatus } from '@/lib/date-utils';
 
@@ -101,6 +102,7 @@ function AgreementManagementContent() {
   // Modals state
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [showScratchModal, setShowScratchModal] = useState(false);
+  const [showChooseTemplateModal, setShowChooseTemplateModal] = useState(false);
   const [showPdfModal, setShowPdfModal] = useState(false);
   const [showDocumentEditor, setShowDocumentEditor] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -172,6 +174,8 @@ function AgreementManagementContent() {
       queueMicrotask(() => setShowUploadModal(true));
     } else if (action === 'scratch') {
       queueMicrotask(() => setShowScratchModal(true));
+    } else if (action === 'template') {
+      queueMicrotask(() => setShowChooseTemplateModal(true));
     }
   }, [searchParams]);
 
@@ -570,6 +574,15 @@ function AgreementManagementContent() {
               className="px-4 py-2 bg-white border border-neutral-300 hover:bg-neutral-100 text-neutral-800 text-xs font-semibold rounded-lg shadow-sm transition-all flex items-center gap-1.5"
             >
               <span>✏️</span> Create from Scratch
+            </button>
+            <button
+              onClick={() => {
+                setActionError(null);
+                setShowChooseTemplateModal(true);
+              }}
+              className="px-4 py-2 bg-white border border-neutral-300 hover:bg-neutral-100 text-neutral-800 text-xs font-semibold rounded-lg shadow-sm transition-all flex items-center gap-1.5"
+            >
+              <span>📐</span> From Template
             </button>
           </div>
         </div>
@@ -1234,6 +1247,19 @@ function AgreementManagementContent() {
               </form>
             </div>
           </div>
+        )}
+
+        {/* Choose Template Modal */}
+        {showChooseTemplateModal && (
+          <ChooseTemplateModal
+            onClose={() => setShowChooseTemplateModal(false)}
+            onSuccess={(msg) => {
+              setActionMessage(msg);
+              setActiveTab('drafts');
+              setCurrentPage(1);
+              setRefreshTrigger((prev) => prev + 1);
+            }}
+          />
         )}
 
         {/* Pencil Edit Mode Modal */}

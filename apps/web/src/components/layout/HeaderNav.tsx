@@ -17,6 +17,7 @@ function getServerEmail() {
 export function HeaderNav() {
   const pathname = usePathname();
   const [orgName, setOrgName] = useState<string>('Workspace');
+  const [planType, setPlanType] = useState<string>('individual');
   const userEmail = useSyncExternalStore(emptySubscribe, getStoredEmail, getServerEmail);
 
   useEffect(() => {
@@ -31,6 +32,7 @@ export function HeaderNav() {
         if (res.ok) {
           const data = await res.json();
           if (data.name) setOrgName(data.name);
+          if (data.planType) setPlanType(data.planType);
         }
       } catch (err) {
         // Non-blocking background fetch for organisation header badge
@@ -52,7 +54,9 @@ export function HeaderNav() {
     { label: 'Templates', href: '/templates' },
     { label: 'Profile', href: '/settings/profile' },
     { label: 'Security', href: '/settings/security' },
-    { label: 'Organisation Settings', href: '/settings/organisation' },
+    ...(planType === 'teams'
+      ? [{ label: 'Organisation Settings', href: '/settings/organisation' }]
+      : [{ label: '✨ Upgrade to Teams', href: '/settings/organisation' }]),
   ];
 
   return (
