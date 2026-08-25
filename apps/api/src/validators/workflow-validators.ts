@@ -80,3 +80,11 @@ export const cancelAgreementSchema = z.object({
   reason: z.string().min(1, 'Cancellation reason is required').max(1000),
 });
 export type CancelAgreementInput = z.infer<typeof cancelAgreementSchema>;
+
+export const electronicConsentSchema = z.object({
+  consentGiven: z.boolean().refine((v) => v === true, {
+    message: 'You must explicitly consent to use electronic records and signatures.',
+  }),
+  ersdVersion: z.string().default('v1.0'),
+});
+export type ElectronicConsentInput = z.infer<typeof electronicConsentSchema>;
