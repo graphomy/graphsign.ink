@@ -23,6 +23,7 @@ import { CancelAgreementModal } from '@/components/features/agreements/CancelAgr
 import { ChooseTemplateModal } from '@/components/features/agreements/ChooseTemplateModal';
 import { NotificationHistoryModal } from '@/components/features/agreements/NotificationHistoryModal';
 import { SendReminderModal } from '@/components/features/agreements/SendReminderModal';
+import { AdvancedFilterBar, FilterState } from '@/components/features/agreements/AdvancedFilterBar';
 import { getApiUrl } from '@/lib/api';
 import { formatDateTime, formatStatus } from '@/lib/date-utils';
 
@@ -89,8 +90,19 @@ function AgreementManagementContent() {
   const [activeTab, setActiveTab] = useState<'active' | 'drafts' | 'archived'>('active');
   const [agreements, setAgreements] = useState<AgreementItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [tagFilter, setTagFilter] = useState('');
+  const [filterState, setFilterState] = useState<FilterState>({
+    keyword: '',
+    status: 'ALL',
+    datePreset: 'all',
+    documentType: 'all',
+    tag: '',
+    authorEmail: '',
+    recipientEmail: '',
+    sortBy: 'updatedAt',
+    sortOrder: 'desc',
+  });
+  const [suggestion, setSuggestion] = useState<string | null>(null);
+  const [queryTimeMs, setQueryTimeMs] = useState<number | undefined>(undefined);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize] = useState(10);
   const [pagination, setPagination] = useState<PaginationState>({
@@ -174,6 +186,12 @@ function AgreementManagementContent() {
 
   useEffect(() => {
     const action = searchParams?.get('action');
+    const qParam = searchParams?.get('q') || searchParams?.get('search');
+    if (qParam && !filterState.keyword) {
+      queueMicrotask(() => {
+        setFilterState((prev) => ({ ...prev, keyword: qParam }));
+      });
+    }
     if (action === 'upload') {
       queueMicrotask(() => setShowUploadModal(true));
     } else if (action === 'scratch') {
@@ -181,7 +199,7 @@ function AgreementManagementContent() {
     } else if (action === 'template') {
       queueMicrotask(() => setShowChooseTemplateModal(true));
     }
-  }, [searchParams]);
+  }, [searchParams, filterState.keyword]);
 
   // Reset page to 1 when changing tabs, search, or filters
   function handleTabChange(tab: 'active' | 'drafts' | 'archived') {
@@ -193,6 +211,32 @@ function AgreementManagementContent() {
     setDropdownAnchor(null);
   }
 
+  function handleFilterChange(newFilters: FilterState) {
+    setFilterState(newFilters);
+    setCurrentPage(1);
+  }
+
+  function handleClearFilters() {
+    setFilterState({
+      keyword: '',
+      status: 'ALL',
+      datePreset: 'all',
+      documentType: 'all',
+      tag: '',
+      authorEmail: '',
+      recipientEmail: '',
+      sortBy: 'updatedAt',
+      sortOrder: 'desc',
+    });
+    setSuggestion(null);
+    setCurrentPage(1);
+  }
+
+  function handleApplySuggestion(suggestedKeyword: string) {
+    setFilterState((prev) => ({ ...prev, keyword: suggestedKeyword }));
+    setCurrentPage(1);
+  }
+
   useEffect(() => {
     const controller = new AbortController();
     let ignore = false;
@@ -202,11 +246,30 @@ function AgreementManagementContent() {
       try {
         const isArchivedParam = activeTab === 'archived' ? 'true' : 'false';
         const statusParam =
-          activeTab === 'drafts' ? 'DRAFT' : activeTab === 'active' ? 'ACTIVE' : '';
-        let url = `${getApiUrl()}/api/v1/agreements?isArchived=${isArchivedParam}&page=${currentPage}&limit=${pageSize}`;
-        if (statusParam) url += `&status=${statusParam}`;
-        if (searchQuery) url += `&search=${encodeURIComponent(searchQuery)}`;
-        if (tagFilter) url += `&tag=${encodeURIComponent(tagFilter)}`;
+          filterState.status !== 'ALL'
+            ? filterState.status
+            : activeTab === 'drafts'
+              ? 'DRAFT'
+              : activeTab === 'active'
+                ? 'ACTIVE'
+                : '';
+
+        let url = `${getApiUrl()}/api/v1/search/agreements?isArchived=${isArchivedParam}&page=${currentPage}&limit=${pageSize}&sortBy=${filterState.sortBy}&sortOrder=${filterState.sortOrder}`;
+        if (statusParam) url += `&status=${encodeURIComponent(statusParam)}`;
+        if (filterState.keyword) url += `&q=${encodeURIComponent(filterState.keyword)}`;
+        if (filterState.tag) url += `&tag=${encodeURIComponent(filterState.tag)}`;
+        if (filterState.datePreset && filterState.datePreset !== 'all') {
+          url += `&datePreset=${encodeURIComponent(filterState.datePreset)}`;
+        }
+        if (filterState.documentType && filterState.documentType !== 'all') {
+          url += `&documentType=${encodeURIComponent(filterState.documentType)}`;
+        }
+        if (filterState.authorEmail) {
+          url += `&authorEmail=${encodeURIComponent(filterState.authorEmail)}`;
+        }
+        if (filterState.recipientEmail) {
+          url += `&recipientEmail=${encodeURIComponent(filterState.recipientEmail)}`;
+        }
 
         const res = await fetch(url, {
           headers: { Authorization: `Bearer ${getToken()}` },
@@ -231,8 +294,10 @@ function AgreementManagementContent() {
         }
         const data = await res.json();
         if (!ignore) {
-          const items: AgreementItem[] = data.items || [];
+          const items: AgreementItem[] = data.data || data.items || [];
           setAgreements(items);
+          setSuggestion(data.suggestion || null);
+          setQueryTimeMs(data.queryTimeMs);
           if (data.pagination) {
             setPagination({
               page: data.pagination.page || currentPage,
@@ -273,7 +338,7 @@ function AgreementManagementContent() {
       ignore = true;
       controller.abort();
     };
-  }, [activeTab, searchQuery, tagFilter, currentPage, pageSize, refreshTrigger]);
+  }, [activeTab, filterState, currentPage, pageSize, refreshTrigger]);
 
   function handleAddUploadTag() {
     if (!uploadTagInput.trim()) return;
@@ -609,14 +674,14 @@ function AgreementManagementContent() {
           </div>
         )}
 
-        {/* Navigation Tabs & Search Controls */}
-        <div className="bg-white border border-neutral-200 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm">
-          <div className="flex items-center gap-1 bg-neutral-100 p-1 rounded-lg">
+        {/* Navigation Tabs Bar */}
+        <div className="bg-white border border-neutral-200/80 rounded-2xl p-2.5 flex items-center justify-between shadow-xs">
+          <div className="flex items-center gap-1.5 bg-neutral-100 p-1 rounded-xl">
             <button
               onClick={() => handleTabChange('active')}
-              className={`px-4 py-1.5 rounded-md text-xs font-semibold transition-all ${
+              className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-all ${
                 activeTab === 'active'
-                  ? 'bg-white text-neutral-900 shadow-sm border border-neutral-200'
+                  ? 'bg-white text-neutral-900 shadow-xs border border-neutral-200/60'
                   : 'text-neutral-600 hover:text-neutral-900'
               }`}
             >
@@ -624,9 +689,9 @@ function AgreementManagementContent() {
             </button>
             <button
               onClick={() => handleTabChange('drafts')}
-              className={`px-4 py-1.5 rounded-md text-xs font-semibold transition-all ${
+              className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-all ${
                 activeTab === 'drafts'
-                  ? 'bg-white text-neutral-900 shadow-sm border border-neutral-200'
+                  ? 'bg-white text-neutral-900 shadow-xs border border-neutral-200/60'
                   : 'text-neutral-600 hover:text-neutral-900'
               }`}
             >
@@ -634,65 +699,77 @@ function AgreementManagementContent() {
             </button>
             <button
               onClick={() => handleTabChange('archived')}
-              className={`px-4 py-1.5 rounded-md text-xs font-semibold transition-all ${
+              className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-all ${
                 activeTab === 'archived'
-                  ? 'bg-white text-neutral-900 shadow-sm border border-neutral-200'
+                  ? 'bg-white text-neutral-900 shadow-xs border border-neutral-200/60'
                   : 'text-neutral-600 hover:text-neutral-900'
               }`}
             >
               Archived
             </button>
           </div>
-
-          <div className="flex items-center gap-2">
-            <input
-              type="text"
-              placeholder="Search title..."
-              value={searchQuery}
-              onChange={(e) => {
-                setSearchQuery(e.target.value);
-                setCurrentPage(1);
-              }}
-              className="bg-neutral-50 border border-neutral-300 rounded-lg px-3 py-1.5 text-xs text-neutral-900 focus:outline-none focus:border-[#ba0000]"
-            />
-            <input
-              type="text"
-              placeholder="Filter tag..."
-              value={tagFilter}
-              onChange={(e) => {
-                setTagFilter(e.target.value);
-                setCurrentPage(1);
-              }}
-              className="bg-neutral-50 border border-neutral-300 rounded-lg px-3 py-1.5 text-xs text-neutral-900 focus:outline-none focus:border-[#ba0000] w-28"
-            />
-          </div>
         </div>
+
+        {/* Omnibar Search & Filter Bar (INK-117 through INK-122) */}
+        <AdvancedFilterBar
+          filters={filterState}
+          onFilterChange={handleFilterChange}
+          onClearFilters={handleClearFilters}
+          totalResults={pagination.total}
+          queryTimeMs={queryTimeMs}
+          suggestion={suggestion}
+          onApplySuggestion={handleApplySuggestion}
+        />
 
         {/* Agreements Table (Rows format sorted by last modified date, latest at top) */}
         {loading ? (
-          <div className="text-center py-16 text-xs font-medium text-neutral-500 bg-white rounded-xl border border-neutral-200 shadow-sm">
+          <div className="text-center py-16 text-xs font-medium text-neutral-500 bg-white rounded-2xl border border-neutral-200/80 shadow-xs">
             <div className="w-6 h-6 border-2 border-neutral-400 border-t-[#ba0000] rounded-full animate-spin mx-auto mb-2" />
             Loading agreements...
           </div>
         ) : agreements.length === 0 ? (
-          <div className="text-center py-16 bg-white border border-dashed border-neutral-300 rounded-xl p-8 space-y-3">
+          <div className="text-center py-16 bg-white border border-dashed border-neutral-300 rounded-2xl p-8 space-y-3 shadow-xs">
             <div className="h-12 w-12 rounded-full bg-neutral-100 text-neutral-400 mx-auto flex items-center justify-center text-xl">
-              📄
+              🔍
             </div>
-            <p className="text-sm font-semibold text-neutral-800">
-              No agreements found in {activeTab}.
-            </p>
-            <p className="text-xs text-neutral-500 max-w-sm mx-auto">
-              Draft a new agreement in Markdown or upload documents to send for signatures.
-            </p>
-            <div className="pt-2 flex justify-center gap-3">
-              <button
-                onClick={() => setShowScratchModal(true)}
-                className="px-4 py-2 bg-[#ba0000] text-white text-xs font-semibold rounded-lg"
-              >
-                Create from Scratch
-              </button>
-            </div>
+            {filterState.keyword ||
+            filterState.tag ||
+            (filterState.status && filterState.status !== 'ALL') ? (
+              <>
+                <p className="text-sm font-semibold text-neutral-800">
+                  No documents found matching{' '}
+                  {filterState.keyword ? `"${filterState.keyword}"` : 'active filters'}.
+                </p>
+                <p className="text-xs text-neutral-500 max-w-sm mx-auto">
+                  Try adjusting keywords, broadening date filters, or clearing search criteria.
+                </p>
+                <div className="pt-2 flex justify-center gap-3">
+                  <button
+                    onClick={handleClearFilters}
+                    className="px-4 py-2 bg-neutral-100 hover:bg-neutral-200 text-neutral-800 text-xs font-semibold rounded-xl transition-colors"
+                  >
+                    Clear All Filters
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="text-sm font-semibold text-neutral-800">
+                  No agreements found in {activeTab}.
+                </p>
+                <p className="text-xs text-neutral-500 max-w-sm mx-auto">
+                  Draft a new agreement in Markdown or upload documents to send for signatures.
+                </p>
+                <div className="pt-2 flex justify-center gap-3">
+                  <button
+                    onClick={() => setShowScratchModal(true)}
+                    className="px-4 py-2 bg-[#ba0000] text-white text-xs font-semibold rounded-xl"
+                  >
+                    Create from Scratch
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         ) : (
           <div className="bg-white border border-neutral-200 rounded-xl shadow-sm flex flex-col min-h-[300px]">
