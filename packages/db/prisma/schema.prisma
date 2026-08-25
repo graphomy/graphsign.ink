@@ -59,6 +59,7 @@ model Organisation {
   templates        Template[]
   auditLogs        AuditLog[]
   notificationLogs NotificationLog[]
+  searchFilterPresets SearchFilterPreset[]
 
   @@index([slug])
   @@index([status])
@@ -106,6 +107,7 @@ model User {
   agreements      Agreement[]
   templates       Template[]
   auditLogs       AuditLog[]
+  searchFilterPresets SearchFilterPreset[]
 
   @@unique([organisationId, email])
   @@index([status])
@@ -462,5 +464,25 @@ model NotificationLog {
   @@index([status])
   @@index([createdAt])
   @@map("notification_logs")
+}
+
+/// User-saved custom search & filter presets (INK-120).
+model SearchFilterPreset {
+  id             String   @id @db.Uuid
+  organisationId String   @map("organisation_id") @db.Uuid
+  userId         String   @map("user_id") @db.Uuid
+  name           String   @db.VarChar(100)
+  entityType     String   @default("AGREEMENT") @map("entity_type") @db.VarChar(50)
+  filters        Json     @db.JsonB
+  isDefault      Boolean  @default(false) @map("is_default")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz()
+
+  organisation Organisation @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([organisationId, userId])
+  @@index([userId, entityType])
+  @@map("search_filter_presets")
 }
 

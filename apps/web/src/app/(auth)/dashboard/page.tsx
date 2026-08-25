@@ -151,6 +151,38 @@ function DashboardContent() {
           </div>
         </div>
 
+        {/* Quick Search Omnibar (INK-117) */}
+        <div className="bg-white border border-neutral-200/80 rounded-2xl p-3 shadow-xs flex items-center gap-3">
+          <div className="relative flex-1">
+            <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-neutral-400">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                />
+              </svg>
+            </div>
+            <input
+              type="text"
+              placeholder="Search across all agreements, templates, signers, or tags..."
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && e.currentTarget.value.trim()) {
+                  window.location.href = `/agreements?q=${encodeURIComponent(e.currentTarget.value.trim())}`;
+                }
+              }}
+              className="w-full pl-10 pr-4 py-2 bg-neutral-50 hover:bg-neutral-100/60 focus:bg-white border border-transparent focus:border-[#ba0000] rounded-xl text-xs sm:text-sm text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-[#ba0000]/15 transition-all"
+            />
+          </div>
+          <Link
+            href="/agreements"
+            className="px-4 py-2 bg-neutral-100 hover:bg-neutral-200 text-neutral-800 text-xs font-semibold rounded-xl transition-colors shrink-0"
+          >
+            Advanced Search &rarr;
+          </Link>
+        </div>
+
         {error && (
           <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-xs font-medium text-red-700">
             {error}

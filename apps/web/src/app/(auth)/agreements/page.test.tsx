@@ -192,7 +192,7 @@ describe('AgreementManagementPage Unit Tests (Epic INK-8)', () => {
 
     // IN_REVIEW agreement should have In Review status badge and Review Decision button for reviewer
     expect(screen.getByText('NDA Under Legal Review')).toBeInTheDocument();
-    expect(screen.getByText('In Review')).toBeInTheDocument();
+    expect(screen.getAllByText('In Review')[0]).toBeInTheDocument();
     expect(screen.getByTitle('Review Decision')).toBeInTheDocument();
 
     // Dropdown contains Clone
