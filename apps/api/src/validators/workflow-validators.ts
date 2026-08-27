@@ -55,6 +55,11 @@ export const sendAgreementSchema = z.object({
 });
 export type SendAgreementInput = z.infer<typeof sendAgreementSchema>;
 
+export const verifyOtpSchema = z.object({
+  otpCode: z.string().length(6, 'Verification code must be 6 digits'),
+});
+export type VerifyOtpInput = z.infer<typeof verifyOtpSchema>;
+
 export const recipientSignSchema = z.object({
   fieldsData: z.record(z.union([z.string(), z.boolean(), z.number(), z.null()])).default({}),
   signatureData: z
@@ -68,6 +73,8 @@ export const recipientSignSchema = z.object({
       timestamp: z.string().datetime().optional(),
     })
     .optional(),
+  signedAsGuest: z.boolean().optional(),
+  otpCode: z.string().optional(),
 });
 export type RecipientSignInput = z.infer<typeof recipientSignSchema>;
 

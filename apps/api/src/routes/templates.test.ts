@@ -78,7 +78,7 @@ describe('Template Routes Integration Tests (Epic INK-11)', () => {
     expect(body.isArchived).toBe(true);
   });
 
-  it('POST /api/v1/templates/:id/publish - allows org_admin to publish (INK-76)', async () => {
+  it('POST /api/v1/templates/:id/publish - allows sender/author to publish (INK-76 & INK-270)', async () => {
     mockTemplateService.publishTemplate.mockResolvedValue({
       id: 'tpl-1',
       isPublished: true,
@@ -88,7 +88,7 @@ describe('Template Routes Integration Tests (Epic INK-11)', () => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${adminToken}`,
+        Authorization: `Bearer ${senderToken}`,
       },
       body: JSON.stringify({ isPublished: true }),
     });
@@ -96,12 +96,19 @@ describe('Template Routes Integration Tests (Epic INK-11)', () => {
     expect(res.status).toBe(200);
   });
 
-  it('POST /api/v1/templates/:id/publish - rejects regular sender role from publishing (INK-76)', async () => {
+  it('POST /api/v1/templates/:id/publish - rejects signer role from publishing (INK-76)', async () => {
+    const signerToken = await signJwt({
+      sub: 'signer-123',
+      email: 'signer@acme.com',
+      orgId: 'org-123',
+      role: 'signer',
+    });
+
     const res = await app.request('/api/v1/templates/tpl-1/publish', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${senderToken}`,
+        Authorization: `Bearer ${signerToken}`,
       },
       body: JSON.stringify({ isPublished: true }),
     });

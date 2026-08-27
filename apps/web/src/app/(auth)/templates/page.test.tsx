@@ -7,7 +7,7 @@ vi.mock('@/components/features/auth/SessionGuard', () => ({
   SessionGuard: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }));
 
-describe('TemplateManagementPage Unit Tests (Epic INK-11 & INK-264)', () => {
+describe('TemplateManagementPage Unit Tests (Epic INK-11, INK-264, INK-270)', () => {
   const mockTemplates = [
     {
       id: 'tpl-1',
@@ -63,11 +63,11 @@ describe('TemplateManagementPage Unit Tests (Epic INK-11 & INK-264)', () => {
     expect(screen.getAllByText(/Create Template/i)[0]).toBeInTheDocument();
   });
 
-  it('renders library tabs for Organization Library, My Templates, and Shared with Me', async () => {
+  it('renders library tabs for Library, My Templates, and Shared with Me (INK-270)', async () => {
     render(<TemplateManagementPage />);
 
     await waitFor(() => {
-      expect(screen.getByText('Organization Library')).toBeInTheDocument();
+      expect(screen.getByText('Library')).toBeInTheDocument();
     });
 
     expect(screen.getByText('My Templates')).toBeInTheDocument();
@@ -95,7 +95,7 @@ describe('TemplateManagementPage Unit Tests (Epic INK-11 & INK-264)', () => {
     });
   });
 
-  it('renders template card with Markdown blueprint and provides Use Template action (INK-264)', async () => {
+  it('renders template table row with Active status and provides Use Template and Edit actions (INK-270)', async () => {
     render(<TemplateManagementPage />);
 
     await waitFor(() => {
@@ -103,7 +103,8 @@ describe('TemplateManagementPage Unit Tests (Epic INK-11 & INK-264)', () => {
     });
 
     expect(screen.getByText('v1.0')).toBeInTheDocument();
-    expect(screen.getByText('Published')).toBeInTheDocument();
+    expect(screen.getByText('Active')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument();
 
     const useTemplateBtn = screen.getByRole('button', { name: /Use Template/i });
     expect(useTemplateBtn).toBeInTheDocument();
@@ -118,7 +119,7 @@ describe('TemplateManagementPage Unit Tests (Epic INK-11 & INK-264)', () => {
     });
   });
 
-  it('publishes and unpublishes template with correct JSON payload (INK-264)', async () => {
+  it('publishes and unpublishes template with correct JSON payload (INK-264 & INK-270)', async () => {
     render(<TemplateManagementPage />);
 
     await waitFor(() => {
@@ -137,5 +138,33 @@ describe('TemplateManagementPage Unit Tests (Epic INK-11 & INK-264)', () => {
         }),
       );
     });
+  });
+
+  it('opens 3-dots dropdown menu with Version History, Share, and Delete options (INK-270)', async () => {
+    render(<TemplateManagementPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Master Service Template')).toBeInTheDocument();
+    });
+
+    const moreActionsBtn = screen.getByRole('button', { name: 'More actions' });
+    fireEvent.click(moreActionsBtn);
+
+    expect(screen.getByText('Version History')).toBeInTheDocument();
+    expect(screen.getByText('Share Template')).toBeInTheDocument();
+    expect(screen.getByText('Delete')).toBeInTheDocument();
+  });
+
+  it('renders omnibar search and filters in template filter bar (INK-271)', async () => {
+    render(<TemplateManagementPage />);
+
+    await waitFor(() => {
+      expect(
+        screen.getByPlaceholderText(/Search templates by title, description, content, or tags.../i),
+      ).toBeInTheDocument();
+    });
+
+    expect(screen.getByRole('button', { name: /Filters/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Presets/i })).toBeInTheDocument();
   });
 });

@@ -98,6 +98,13 @@ export interface MailerService {
     agreementTitle: string,
     meta?: EmailTrackingMetadata,
   ): Promise<void>;
+  sendOtpVerificationEmail(
+    to: string,
+    recipientName: string,
+    agreementTitle: string,
+    otpCode: string,
+    meta?: EmailTrackingMetadata,
+  ): Promise<void>;
 }
 
 /**
@@ -600,6 +607,37 @@ export class ResendMailerService implements MailerService {
       { ...meta, recipientName, eventType: 'EXPIRED' },
     );
   }
+
+  async sendOtpVerificationEmail(
+    to: string,
+    recipientName: string,
+    agreementTitle: string,
+    otpCode: string,
+    meta?: EmailTrackingMetadata,
+  ): Promise<void> {
+    await this.dispatch(
+      to,
+      `Your verification code for "${agreementTitle}": ${otpCode}`,
+      `
+        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+          <h1 style="color: #ba0000; font-size: 20px;">Signer Verification Code</h1>
+          <p style="color: #333; font-size: 15px; line-height: 1.5;">
+            Hello ${recipientName},<br/><br/>
+            Please use the following 6-digit one-time verification code to confirm your signature for <strong>"${agreementTitle}"</strong>:
+          </p>
+          <div style="background: #f8fafc; border: 2px dashed #cbd5e1; border-radius: 8px; padding: 16px; margin: 20px 0; text-align: center;">
+            <span style="font-family: monospace; font-size: 32px; font-weight: bold; letter-spacing: 8px; color: #ba0000;">
+              ${otpCode}
+            </span>
+          </div>
+          <p style="color: #64748b; font-size: 13px; line-height: 1.4;">
+            This verification code is valid for 10 minutes. If you did not request this code or attempt to sign this document, please disregard this email.
+          </p>
+        </div>
+      `,
+      { ...meta, recipientName, eventType: 'GUEST_SIGNER_OTP' },
+    );
+  }
 }
 
 /**
@@ -790,6 +828,19 @@ export class ConsoleMailerService implements MailerService {
       `[MAILER] Agreement expired notice for ${recipientName} (${to}) on "${agreementTitle}"`,
     );
     await this.logDelivery(to, 'EXPIRED', meta);
+  }
+
+  async sendOtpVerificationEmail(
+    to: string,
+    recipientName: string,
+    agreementTitle: string,
+    otpCode: string,
+    meta?: EmailTrackingMetadata,
+  ): Promise<void> {
+    console.log(
+      `[MAILER] OTP verification code for ${recipientName} (${to}) on "${agreementTitle}": ${otpCode}`,
+    );
+    await this.logDelivery(to, 'GUEST_SIGNER_OTP', meta);
   }
 }
 

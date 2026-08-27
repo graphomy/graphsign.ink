@@ -71,6 +71,7 @@ function createMockMailer(): MailerService {
     sendAgreementCancelledEmail: vi.fn(async () => {}),
     sendExpiryWarningEmail: vi.fn(async () => {}),
     sendAgreementExpiredEmail: vi.fn(async () => {}),
+    sendOtpVerificationEmail: vi.fn(async () => {}),
   };
 }
 

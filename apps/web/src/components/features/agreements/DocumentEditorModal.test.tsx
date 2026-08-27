@@ -3,7 +3,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import React from 'react';
 import { DocumentEditorModal } from './DocumentEditorModal';
 
-describe('DocumentEditorModal Component Tests (INK-78 to INK-85)', () => {
+describe('DocumentEditorModal Component Tests (INK-78 to INK-85, INK-270)', () => {
   const mockAgreement = {
     id: 'ag-edit-1',
     title: 'Employment Agreement',
@@ -81,7 +81,26 @@ describe('DocumentEditorModal Component Tests (INK-78 to INK-85)', () => {
     expect(screen.getByText('Choice Elements')).toBeDefined();
 
     // Check existing field overlay
-    expect(screen.getByText('Employee Signature')).toBeDefined();
+    expect(screen.getByText(/Employee Signature/)).toBeDefined();
+  });
+
+  it('renders signer dropdown and adds up to 10 signers with limit enforcement (INK-270)', async () => {
+    render(<DocumentEditorModal agreement={mockAgreement} onClose={vi.fn()} onSuccess={vi.fn()} />);
+
+    // Dropdown should exist with initial signer
+    const selectEl = screen.getByLabelText('Active Signer Selector');
+    expect(selectEl).toBeDefined();
+    expect(screen.getByText(/Select Signer \(1\/10\)/i)).toBeDefined();
+
+    const addSignerBtn = screen.getByRole('button', { name: /\+ Add Signer/i });
+
+    // Add up to 10 signers
+    for (let i = 2; i <= 10; i++) {
+      fireEvent.click(addSignerBtn);
+    }
+
+    expect(screen.getByText(/Select Signer \(10\/10\)/i)).toBeDefined();
+    expect(addSignerBtn).toBeDisabled();
   });
 
   it('allows adding a text field from palette onto the canvas (INK-80)', async () => {
@@ -98,7 +117,7 @@ describe('DocumentEditorModal Component Tests (INK-78 to INK-85)', () => {
     render(<DocumentEditorModal agreement={mockAgreement} onClose={vi.fn()} onSuccess={vi.fn()} />);
 
     // Select the existing signature field by clicking on it
-    const fieldBadge = screen.getByText('Employee Signature');
+    const fieldBadge = screen.getByText(/Employee Signature/);
     fireEvent.mouseDown(fieldBadge);
 
     expect(screen.getByText('Field Settings')).toBeDefined();
@@ -120,7 +139,7 @@ describe('DocumentEditorModal Component Tests (INK-78 to INK-85)', () => {
     expect(screen.getByText('✍️ Click to Sign')).toBeDefined();
   });
 
-  it('saves fields and triggers onSuccess callback', async () => {
+  it('allows renaming signers and opening send modal on Done (INK-266)', async () => {
     const onSuccessMock = vi.fn();
     const onCloseMock = vi.fn();
 
@@ -132,12 +151,17 @@ describe('DocumentEditorModal Component Tests (INK-78 to INK-85)', () => {
       />,
     );
 
+    // Rename signer from Jane Signer to Author
+    const nameInput = screen.getByDisplayValue('Jane Signer');
+    fireEvent.change(nameInput, { target: { value: 'Author' } });
+    expect(screen.getByDisplayValue('Author')).toBeDefined();
+
     const doneBtn = screen.getByText('Done');
     fireEvent.click(doneBtn);
 
+    // Send modal should open
     await waitFor(() => {
-      expect(onSuccessMock).toHaveBeenCalled();
-      expect(onCloseMock).toHaveBeenCalled();
+      expect(screen.getByText('Send Agreement for Signature')).toBeDefined();
     });
   });
 

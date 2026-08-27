@@ -2,12 +2,13 @@
 
 export const runtime = 'edge';
 
-import React, { useState, useEffect, useMemo, use } from 'react';
+import React, { useState, useEffect, useMemo, useRef, use } from 'react';
 import Link from 'next/link';
 import { getApiUrl } from '@/lib/api';
 import { ElectronicConsentModal } from '@/components/features/sign/ElectronicConsentModal';
 import { SignatureModal, AdoptedSignature } from '@/components/features/sign/SignatureModal';
-import { SigningFieldGuide } from '@/components/features/sign/SigningFieldGuide';
+import { OtpVerificationModal } from '@/components/features/sign/OtpVerificationModal';
+import { renderMarkdownToHtml } from '@/components/features/agreements/MarkdownEditor';
 
 interface RecipientInfo {
   id: string;
@@ -88,12 +89,27 @@ export default function SignDocumentPage({
   const [allRecipients, setAllRecipients] = useState<RecipientInfo[]>([]);
   const [isTurn, setIsTurn] = useState<boolean>(true);
 
+  // Authentication & Guest Gate (INK-266)
+  const [isAuthenticated] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return Boolean(
+      localStorage.getItem('graphsign_session_token') || localStorage.getItem('token'),
+    );
+  });
+  const [signedAsGuest, setSignedAsGuest] = useState<boolean>(false);
+  const [showAuthGate, setShowAuthGate] = useState<boolean>(false);
+  const [showOtpModal, setShowOtpModal] = useState<boolean>(false);
+
   // ERSD Electronic Consent Modal Gate (INK-99)
   const [showConsentModal, setShowConsentModal] = useState<boolean>(false);
   const [consentAccepted, setConsentAccepted] = useState<boolean>(false);
 
   // Document Viewer & Zoom Controls (INK-98)
   const [zoomLevel, setZoomLevel] = useState<number>(100);
+  const [effectivePdfUrl, setEffectivePdfUrl] = useState<string | null>(null);
+  const [isLoadingPdf, setIsLoadingPdf] = useState(false);
+  const [pdfFetchError, setPdfFetchError] = useState<string | null>(null);
+  const pageContainerRef = useRef<HTMLDivElement | null>(null);
 
   // Adopted Signature State (INK-100, INK-101, INK-102)
   const [adoptedSignature, setAdoptedSignature] = useState<AdoptedSignature | null>(null);
@@ -141,10 +157,18 @@ export default function SignDocumentPage({
         } else if (data.data.recipient.status === 'DECLINED') {
           setIsDeclined(true);
         } else {
-          // Open ERSD Consent Modal on initial load
-          setShowConsentModal(true);
           // Send view tracking beacon (INK-93)
           fetch(`${getApiUrl()}/api/v1/sign/${rawToken}/view`, { method: 'POST' }).catch(() => {});
+
+          const hasToken = Boolean(
+            typeof window !== 'undefined' &&
+              (localStorage.getItem('graphsign_session_token') || localStorage.getItem('token')),
+          );
+          if (!hasToken) {
+            setShowAuthGate(true);
+          } else {
+            setShowConsentModal(true);
+          }
         }
       } catch (err: unknown) {
         setError((err as Error).message);
@@ -157,6 +181,56 @@ export default function SignDocumentPage({
       loadSigningSession();
     }
   }, [rawToken]);
+
+  // Fetch PDF binary for document canvas iframe (INK-272)
+  useEffect(() => {
+    let ignore = false;
+    let objectUrlToRevoke: string | null = null;
+
+    async function fetchPdfBlob() {
+      if (!rawToken || agreement?.markdownContent) return;
+
+      setIsLoadingPdf(true);
+      setPdfFetchError(null);
+
+      try {
+        const res = await fetch(`${getApiUrl()}/api/v1/sign/${rawToken}/file`);
+        if (!res.ok) {
+          throw new Error(`Failed to stream document file (${res.status})`);
+        }
+
+        const blob = await res.blob();
+        if (blob.size === 0) {
+          throw new Error('Received empty document stream.');
+        }
+
+        const blobUrl = URL.createObjectURL(blob);
+        objectUrlToRevoke = blobUrl;
+        if (!ignore) {
+          setEffectivePdfUrl(blobUrl);
+        }
+      } catch (err: unknown) {
+        if (!ignore) {
+          setPdfFetchError((err as Error).message);
+        }
+      } finally {
+        if (!ignore) {
+          setIsLoadingPdf(false);
+        }
+      }
+    }
+
+    if (agreement && !agreement.markdownContent) {
+      fetchPdfBlob();
+    }
+
+    return () => {
+      ignore = true;
+      if (objectUrlToRevoke) {
+        URL.revokeObjectURL(objectUrlToRevoke);
+      }
+    };
+  }, [rawToken, agreement?.markdownContent, agreement?.id]);
 
   const fields: DocumentField[] = useMemo(() => {
     if (!agreement?.fields?.fields) return [];
@@ -247,7 +321,7 @@ export default function SignDocumentPage({
     }
   }
 
-  // Handle Signature Field Click (INK-100 to INK-102)
+  // Handle Signature Field Click (INK-100 to INK-102, INK-272)
   function handleSignatureFieldClick(field: DocumentField) {
     if (field.recipientId !== currentRecipient?.id) return;
 
@@ -268,7 +342,7 @@ export default function SignDocumentPage({
     }
   }
 
-  // Save Adopted Signature from Modal
+  // Save Adopted Signature from Modal (INK-16, INK-272)
   function handleSaveAdoptedSignature(sig: AdoptedSignature) {
     setAdoptedSignature(sig);
     if (activeSignatureFieldId) {
@@ -279,6 +353,13 @@ export default function SignDocumentPage({
           delete next[activeSignatureFieldId];
           return next;
         });
+      }
+    } else {
+      // If opened from sidebar, populate any empty signature fields for convenience
+      for (const f of assignedFields) {
+        if ((f.type === 'SIGNATURE' || f.type === 'INITIALS') && !fieldValues[f.id]) {
+          setFieldValues((prev) => ({ ...prev, [f.id]: sig.dataUrl }));
+        }
       }
     }
     setActiveSignatureFieldId(null);
@@ -306,7 +387,7 @@ export default function SignDocumentPage({
     const targetField = nextField || assignedFields[0];
     if (targetField) {
       setHighlightedFieldId(targetField.id);
-      const el = document.getElementById(`field-container-${targetField.id}`);
+      const el = document.getElementById(`field-overlay-${targetField.id}`);
       if (el) {
         el.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }
@@ -344,13 +425,38 @@ export default function SignDocumentPage({
     return Object.keys(errors).length === 0;
   }
 
-  // Submit Final Signature Action (INK-104)
+  // Submit Final Signature Action (INK-104, INK-266)
   async function handleSubmit() {
     if (!validateForm()) {
       handleNavigateNextField();
       return;
     }
 
+    if (signedAsGuest || !isAuthenticated) {
+      setIsSubmitting(true);
+      try {
+        const res = await fetch(`${getApiUrl()}/api/v1/sign/${rawToken}/otp/send`, {
+          method: 'POST',
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          throw new Error(
+            data.error?.message || data.message || 'Failed to dispatch verification code.',
+          );
+        }
+        setShowOtpModal(true);
+      } catch (err: unknown) {
+        alert((err as Error).message);
+      } finally {
+        setIsSubmitting(false);
+      }
+      return;
+    }
+
+    await finalizeSubmission();
+  }
+
+  async function finalizeSubmission(otpCode?: string) {
     setIsSubmitting(true);
 
     try {
@@ -377,6 +483,8 @@ export default function SignDocumentPage({
             consentGiven: true,
             timestamp: new Date().toISOString(),
           },
+          signedAsGuest: Boolean(signedAsGuest || !isAuthenticated),
+          otpCode,
         }),
       });
 
@@ -386,6 +494,7 @@ export default function SignDocumentPage({
       }
 
       setIsCompleted(true);
+      setShowOtpModal(false);
     } catch (err: unknown) {
       alert((err as Error).message);
     } finally {
@@ -419,7 +528,7 @@ export default function SignDocumentPage({
     }
   }
 
-  // Tokenized Download Action (INK-105)
+  // Tokenized Download Action (INK-105 & INK-272)
   function handleDownloadDocument() {
     window.open(`${getApiUrl()}/api/v1/sign/${rawToken}/download`, '_blank');
   }
@@ -470,40 +579,48 @@ export default function SignDocumentPage({
             🛑
           </div>
           <h1 className="text-lg font-bold mb-2">Document Signing Declined</h1>
-          <p className="text-xs text-neutral-400 mb-4">
-            You have formally declined to sign &quot;{agreement.title}&quot;.
+          <p className="text-xs text-neutral-400 mb-6">
+            You have formally declined to sign{' '}
+            <strong className="text-white">&quot;{agreement.title}&quot;</strong>. The sender has
+            been notified of your decision.
           </p>
-          <p className="text-[11px] text-neutral-500">
-            The document sender ({agreement.senderName}) has been notified.
-          </p>
+          <Link
+            href="/"
+            className="inline-block px-4 py-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-xs font-semibold rounded-lg transition-colors"
+          >
+            Return to Homepage
+          </Link>
         </div>
       </div>
     );
   }
 
-  // --- SUCCESS / COMPLETION VIEW (INK-105) ---
+  // --- COMPLETED SUCCESS VIEW ---
   if (isCompleted) {
     return (
       <div className="min-h-screen bg-neutral-950 flex items-center justify-center p-4 font-sans">
-        <div className="max-w-lg w-full bg-neutral-900 border border-neutral-800 rounded-3xl p-8 sm:p-10 text-center text-white shadow-2xl space-y-6">
-          <div className="w-16 h-16 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 flex items-center justify-center text-3xl mx-auto shadow-inner">
+        <div className="max-w-lg w-full bg-neutral-900 border border-neutral-800 rounded-3xl p-8 text-center text-white shadow-2xl space-y-6">
+          <div className="w-16 h-16 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 flex items-center justify-center text-3xl mx-auto animate-in zoom-in-50 duration-300">
             ✓
           </div>
-          <div>
-            <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest bg-emerald-950/80 px-2.5 py-1 rounded-full border border-emerald-800">
-              Legally Executed
+
+          <div className="space-y-2">
+            <span className="text-[11px] font-bold uppercase tracking-widest text-emerald-400 bg-emerald-950/60 px-3 py-1 rounded-full border border-emerald-800">
+              Signature Recorded
             </span>
-            <h1 className="text-2xl font-black text-white mt-3">You&apos;re All Set!</h1>
-            <p className="text-xs text-neutral-400 mt-1 max-w-sm mx-auto">
-              Thank you, <strong>{currentRecipient?.name}</strong>. Your signature and assigned
-              inputs have been securely cryptographically sealed into the document audit trail.
+            <h1 className="text-2xl font-black pt-2">You&apos;re All Set!</h1>
+            <p className="text-xs text-neutral-400 max-w-sm mx-auto">
+              Thank you, <strong className="text-white">{currentRecipient?.name}</strong>. Your
+              electronic signature has been securely timestamped and applied to the agreement.
             </p>
           </div>
 
           <div className="p-4 bg-neutral-800/60 rounded-2xl text-left text-xs space-y-2 border border-neutral-700/60">
             <div className="flex justify-between text-neutral-400">
               <span>Document:</span>
-              <span className="font-semibold text-white">{agreement.title}</span>
+              <span className="font-semibold text-white truncate max-w-[200px]">
+                {agreement.title}
+              </span>
             </div>
             <div className="flex justify-between text-neutral-400">
               <span>Organization:</span>
@@ -515,7 +632,7 @@ export default function SignDocumentPage({
             </div>
             <div className="flex justify-between text-neutral-400">
               <span>Status:</span>
-              <span className="font-semibold text-emerald-400">Execution Recorded</span>
+              <span className="font-semibold text-emerald-400">Signed &amp; Recorded</span>
             </div>
           </div>
 
@@ -523,10 +640,10 @@ export default function SignDocumentPage({
             <button
               type="button"
               onClick={handleDownloadDocument}
-              className="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-xl shadow-lg transition-all flex items-center justify-center gap-2"
+              className="px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white text-xs sm:text-sm font-bold rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer"
               data-testid="download-signed-document-button"
             >
-              <span>📥</span> Download Copy
+              <span>📥</span> Download Copy (PDF)
             </button>
           </div>
 
@@ -539,42 +656,73 @@ export default function SignDocumentPage({
     );
   }
 
-  // --- MAIN SIGNING EXPERIENCE VIEW ---
+  const isMarkdown = Boolean(agreement.markdownContent);
+
+  // --- MAIN FULLSCREEN SIGNING STUDIO (INK-272) ---
   return (
-    <div className="min-h-screen bg-neutral-100 text-neutral-900 flex flex-col font-sans">
-      {/* Sticky Signing Top Header Bar (INK-106) */}
-      <header className="h-14 bg-white border-b border-neutral-200 px-4 sm:px-8 flex items-center justify-between shadow-xs sticky top-0 z-30">
+    <div className="h-screen w-screen bg-neutral-900 text-neutral-900 flex flex-col font-sans overflow-hidden select-none">
+      {/* Sticky Signing Top Header Bar (INK-106, INK-272) */}
+      <header className="h-14 bg-neutral-900 border-b border-neutral-800 px-4 sm:px-6 flex items-center justify-between shadow-md shrink-0 z-30">
+        {/* Left: Brand & Document Meta */}
         <div className="flex items-center gap-3 min-w-0">
-          <div className="w-8 h-8 rounded-lg bg-blue-600 text-white font-black text-sm flex items-center justify-center shrink-0">
-            G
+          <div className="w-8 h-8 rounded-xl bg-[#ba0000] text-white font-black text-sm flex items-center justify-center shrink-0 shadow-xs">
+            GS
           </div>
           <div className="truncate">
-            <h1 className="text-sm font-bold text-neutral-900 truncate">{agreement.title}</h1>
-            <p className="text-[10px] text-neutral-500 truncate">
-              {agreement.senderName} • {agreement.organisationName}
+            <h1 className="text-xs sm:text-sm font-bold text-white truncate max-w-xs sm:max-w-md">
+              {agreement.title}
+            </h1>
+            <p className="text-[10px] text-neutral-400 truncate">
+              From <span className="text-neutral-300 font-medium">{agreement.senderName}</span> •{' '}
+              {agreement.organisationName}
             </p>
           </div>
         </div>
 
-        {/* Header Actions */}
+        {/* Center: Progress Bar (INK-103) */}
+        <div className="hidden md:flex items-center gap-3 bg-neutral-800/80 px-3.5 py-1.5 rounded-xl border border-neutral-700/60">
+          <div className="text-right">
+            <div className="text-[11px] font-bold text-white">
+              {completedRequiredCount} of {assignedRequiredFields.length} Required
+            </div>
+            <div className="text-[9px] text-neutral-400">Fields Completed</div>
+          </div>
+          <div className="w-24 h-2 bg-neutral-700 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-emerald-500 rounded-full transition-all duration-300"
+              style={{
+                width: `${
+                  assignedRequiredFields.length > 0
+                    ? Math.min(
+                        100,
+                        Math.round((completedRequiredCount / assignedRequiredFields.length) * 100),
+                      )
+                    : 100
+                }%`,
+              }}
+            />
+          </div>
+        </div>
+
+        {/* Right: Studio Controls */}
         <div className="flex items-center gap-2">
           {/* Zoom controls (INK-98) */}
-          <div className="hidden sm:flex items-center border border-neutral-200 rounded-lg p-0.5 bg-neutral-50 text-xs font-semibold">
+          <div className="hidden sm:flex items-center border border-neutral-700 rounded-xl p-0.5 bg-neutral-800 text-xs font-semibold text-neutral-300">
             <button
               type="button"
-              onClick={() => setZoomLevel((z) => Math.max(50, z - 15))}
-              className="px-2 py-1 hover:bg-white rounded text-neutral-600"
+              onClick={() => setZoomLevel((z) => Math.max(50, z - 10))}
+              className="px-2 py-1 hover:bg-neutral-700 rounded text-neutral-300"
               title="Zoom Out"
             >
               −
             </button>
-            <span className="px-1.5 text-[11px] text-neutral-500 font-mono select-none">
+            <span className="px-1.5 text-[11px] text-neutral-400 font-mono select-none">
               {zoomLevel}%
             </span>
             <button
               type="button"
-              onClick={() => setZoomLevel((z) => Math.min(150, z + 15))}
-              className="px-2 py-1 hover:bg-white rounded text-neutral-600"
+              onClick={() => setZoomLevel((z) => Math.min(150, z + 10))}
+              className="px-2 py-1 hover:bg-neutral-700 rounded text-neutral-300"
               title="Zoom In"
             >
               +
@@ -582,26 +730,43 @@ export default function SignDocumentPage({
             <button
               type="button"
               onClick={() => setZoomLevel(100)}
-              className="px-1.5 py-1 text-[10px] hover:bg-white rounded text-neutral-400"
+              className="px-1.5 py-1 text-[10px] hover:bg-neutral-700 rounded text-neutral-400"
               title="Reset Zoom"
             >
-              Reset
+              100%
             </button>
           </div>
 
+          {/* Next Field Assistant (INK-103) */}
+          {assignedRequiredFields.length > 0 &&
+            completedRequiredCount < assignedRequiredFields.length && (
+              <button
+                type="button"
+                onClick={handleNavigateNextField}
+                className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-blue-400 bg-blue-950/60 hover:bg-blue-900/60 border border-blue-800/80 rounded-xl transition-all"
+                title="Scroll to next required field"
+              >
+                <span>Next Field</span>
+                <span>↓</span>
+              </button>
+            )}
+
+          {/* Decline Button */}
           <button
             type="button"
             onClick={() => setShowDeclineModal(true)}
-            className="px-3 py-1.5 text-xs font-semibold text-neutral-600 hover:text-red-600 hover:bg-red-50 rounded-lg border border-neutral-200 transition-colors"
+            className="px-3 py-1.5 text-xs font-semibold text-neutral-400 hover:text-red-400 hover:bg-red-950/40 rounded-xl border border-neutral-800 hover:border-red-900 transition-colors"
           >
             Decline
           </button>
+
+          {/* Finish & Sign Button */}
           <button
             type="button"
             onClick={handleSubmit}
             disabled={isSubmitting || !isTurn}
-            className="px-4 py-1.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 rounded-lg shadow-sm transition-colors flex items-center gap-1.5"
-            data-testid="header-finish-button"
+            className="px-4 py-1.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
+            data-testid="guide-finish-button"
           >
             {isSubmitting ? 'Recording...' : 'Finish & Sign ✓'}
           </button>
@@ -610,349 +775,410 @@ export default function SignDocumentPage({
 
       {/* Sequential Turn Warning Banner */}
       {!isTurn && (
-        <div className="bg-amber-500 text-neutral-950 text-xs font-bold py-2 px-4 text-center">
+        <div className="bg-amber-500 text-neutral-950 text-xs font-bold py-2 px-4 text-center shrink-0">
           ⏳ It is not your turn yet in sequential signing order. Preceding signers are currently
           completing their steps.
         </div>
       )}
 
-      {/* Main Content Area */}
-      <main className="flex-1 max-w-5xl w-full mx-auto p-4 sm:p-8 flex flex-col gap-6">
-        {/* Signer Identification Card */}
-        <div className="bg-white border border-neutral-200 rounded-2xl p-4 sm:p-6 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wider">
-              Assigned Participant
-            </span>
-            <h2 className="text-base font-bold text-neutral-900">
-              {currentRecipient?.name} ({currentRecipient?.email})
-            </h2>
-            <p className="text-xs text-neutral-500 mt-0.5">
-              Please review the document below and complete all required fields highlighted for you.
-            </p>
-          </div>
+      {/* Form Errors Banner */}
+      {Object.keys(formErrors).length > 0 && (
+        <div className="bg-red-950/90 border-b border-red-800 text-red-200 text-xs font-semibold py-2 px-4 text-center shrink-0 flex items-center justify-center gap-2">
+          <span>⚠️</span>
+          <span>Please complete all required fields highlighted in red to proceed.</span>
+        </div>
+      )}
 
-          {/* Participant avatars */}
-          <div className="flex items-center gap-2 text-xs font-medium text-neutral-600 bg-neutral-50 border border-neutral-200 px-3.5 py-2 rounded-xl">
-            <span className="text-[11px] font-semibold text-neutral-500">Envelope:</span>
-            <div className="flex -space-x-1.5">
-              {allRecipients.map((r) => (
-                <div
-                  key={r.id}
-                  title={`${r.name} (${r.status})`}
-                  style={{ backgroundColor: r.color || '#2563EB' }}
-                  className="w-6 h-6 rounded-full text-white text-[10px] font-bold flex items-center justify-center border-2 border-white shadow-xs select-none"
-                >
-                  {r.name.charAt(0).toUpperCase()}
-                </div>
-              ))}
+      {/* Main Studio Body: Sidebar + Document Drafting Canvas */}
+      <div className="flex-1 flex flex-col lg:flex-row overflow-hidden relative">
+        {/* Left Sidebar: Participant Info, Signature Adoption Pill, & Field Checklist */}
+        <aside className="w-full lg:w-80 bg-neutral-900 border-b lg:border-b-0 lg:border-r border-neutral-800 flex flex-col p-4 space-y-4 shrink-0 overflow-y-auto z-10">
+          {/* Signer Profile Card */}
+          <div className="p-3.5 bg-neutral-800/80 border border-neutral-700/60 rounded-2xl space-y-1">
+            <span className="text-[9px] font-bold text-blue-400 uppercase tracking-widest block">
+              Signing Participant
+            </span>
+            <h2 className="text-sm font-bold text-white truncate">{currentRecipient?.name}</h2>
+            <p className="text-[11px] text-neutral-400 truncate">{currentRecipient?.email}</p>
+            <div className="pt-1.5 flex items-center gap-2">
+              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-neutral-700 text-neutral-300">
+                {signedAsGuest || !isAuthenticated ? 'Guest Signer' : 'Authenticated'}
+              </span>
+              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-900/60 text-blue-300 border border-blue-800">
+                {currentRecipient?.role || 'Signer'}
+              </span>
             </div>
           </div>
-        </div>
 
-        {/* Document Viewer Container with Zoom Transform (INK-98) */}
-        <div
-          className="bg-white border border-neutral-200 rounded-2xl shadow-sm p-6 sm:p-12 relative min-h-[750px] transition-transform origin-top duration-150"
-          style={{ transform: `scale(${zoomLevel / 100})` }}
-          data-testid="document-viewer-container"
-        >
-          {/* Document Content */}
-          <div className="prose prose-sm max-w-none text-neutral-800 leading-relaxed mb-8">
-            {agreement.markdownContent ? (
-              <div className="whitespace-pre-wrap font-serif text-sm leading-relaxed">
-                {agreement.markdownContent}
+          {/* Adopted Signature Preview & Creator (INK-16, INK-272) */}
+          <div className="p-3.5 bg-neutral-800/80 border border-neutral-700/60 rounded-2xl space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-[9px] font-bold text-neutral-400 uppercase tracking-widest">
+                My Signature
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveSignatureFieldId('signature-sidebar');
+                  setActiveSignatureType('SIGNATURE');
+                }}
+                className="text-[11px] font-bold text-blue-400 hover:text-blue-300 hover:underline"
+              >
+                {adoptedSignature ? 'Edit ✎' : '+ Adopt'}
+              </button>
+            </div>
+
+            {adoptedSignature ? (
+              <div
+                onClick={() => {
+                  setActiveSignatureFieldId('signature-sidebar');
+                  setActiveSignatureType('SIGNATURE');
+                }}
+                className="h-16 bg-white rounded-xl p-2 flex items-center justify-center cursor-pointer border border-neutral-300 shadow-inner hover:border-blue-400 transition-all"
+                title="Click to change signature"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={adoptedSignature.dataUrl}
+                  alt="My Signature"
+                  className="max-h-full object-contain"
+                />
               </div>
             ) : (
-              <div className="p-8 text-center text-neutral-500 bg-neutral-50 rounded-xl border border-neutral-200">
-                <span className="text-2xl block mb-2">📄</span>
-                <p className="font-bold text-sm text-neutral-800">
-                  {agreement.fileName || 'Uploaded Document Envelope'}
-                </p>
-                <p className="text-xs mt-1">
-                  Complete the fields assigned to you below to execute this agreement.
-                </p>
-              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveSignatureFieldId('signature-sidebar');
+                  setActiveSignatureType('SIGNATURE');
+                }}
+                className="w-full py-2.5 bg-neutral-700 hover:bg-neutral-600 text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 border border-neutral-600"
+              >
+                <span>✍️</span> Create Signature (Type/Draw/Upload)
+              </button>
             )}
           </div>
 
-          {/* Interactive Field Overlays Grid (INK-78 to INK-85 & INK-103) */}
-          <div className="pt-8 border-t border-neutral-200 grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {evaluatedFields
-              .filter((f) => f.computedVisible)
-              .map((field) => {
-                const isAssignedToMe = field.recipientId === currentRecipient?.id;
-                const value = fieldValues[field.id];
-                const hasError = !!formErrors[field.id];
-                const isHighlighted = highlightedFieldId === field.id;
+          {/* Required Fields Checklist (INK-103) */}
+          <div className="space-y-2 flex-1">
+            <span className="text-[9px] font-bold text-neutral-400 uppercase tracking-widest block">
+              Required Fields ({completedRequiredCount}/{assignedRequiredFields.length})
+            </span>
+            <div className="space-y-1.5 max-h-60 overflow-y-auto pr-1">
+              {assignedFields.map((field, idx) => {
+                const val = fieldValues[field.id];
+                const isFilled = val !== undefined && val !== null && val !== '' && val !== false;
 
                 return (
                   <div
                     key={field.id}
-                    id={`field-container-${field.id}`}
-                    className={`p-3.5 rounded-xl border transition-all duration-200 ${
-                      isAssignedToMe
-                        ? isHighlighted
-                          ? 'border-blue-600 ring-4 ring-blue-500/20 bg-blue-50/60 shadow-md'
-                          : hasError
-                            ? 'border-red-500 bg-red-50/50'
-                            : value
-                              ? 'border-emerald-300 bg-emerald-50/20'
-                              : 'border-blue-300 bg-blue-50/30'
-                        : 'border-neutral-200 bg-neutral-50/60 opacity-60 pointer-events-none'
+                    onClick={() => {
+                      const el = document.getElementById(`field-overlay-${field.id}`);
+                      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                      setHighlightedFieldId(field.id);
+                      setTimeout(() => setHighlightedFieldId(null), 2500);
+                    }}
+                    className={`p-2 rounded-xl text-xs flex items-center justify-between cursor-pointer transition-all border ${
+                      isFilled
+                        ? 'bg-neutral-800/40 border-neutral-800 text-neutral-300 hover:bg-neutral-800'
+                        : 'bg-blue-950/40 border-blue-900/60 text-blue-200 hover:bg-blue-900/40 font-semibold'
                     }`}
-                    data-testid={`field-container-${field.id}`}
                   >
-                    <div className="flex items-center justify-between mb-1.5">
-                      <label
-                        htmlFor={`input-field-${field.id}`}
-                        className="text-xs font-bold text-neutral-800 flex items-center gap-1"
-                      >
-                        <span>{field.label || field.type}</span>
-                        {field.computedRequired && (
-                          <span className="text-red-500 font-black" title="Required field">
-                            *
-                          </span>
-                        )}
-                      </label>
-                      {!isAssignedToMe ? (
-                        <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-neutral-200 text-neutral-600">
-                          Other Signer
-                        </span>
-                      ) : value ? (
-                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800">
-                          ✓ Filled
-                        </span>
-                      ) : null}
+                    <div className="flex items-center gap-2 truncate">
+                      <span className="w-4 text-[10px] text-neutral-500 font-mono">#{idx + 1}</span>
+                      <span className="truncate">{field.label || field.type}</span>
+                      {field.computedRequired && <span className="text-red-400">*</span>}
                     </div>
-
-                    {/* Signature / Initials Field (INK-100 to INK-102) */}
-                    {(field.type === 'SIGNATURE' || field.type === 'INITIALS') && (
-                      <div>
-                        {value ? (
-                          <div
-                            onClick={() => isAssignedToMe && handleSignatureFieldClick(field)}
-                            className="h-16 bg-white border border-blue-400 rounded-xl flex items-center justify-center p-2 cursor-pointer hover:border-blue-600 hover:shadow-xs transition-all group relative"
-                            title="Click to adopt a different signature"
-                            data-testid={`signature-applied-${field.id}`}
-                          >
-                            {typeof value === 'string' && value.startsWith('data:') ? (
-                              /* eslint-disable-next-line @next/next/no-img-element */
-                              <img
-                                src={value}
-                                alt="Applied Signature"
-                                className="max-h-full object-contain"
-                              />
-                            ) : (
-                              <span className="font-serif italic text-lg text-blue-900">
-                                {String(value)}
-                              </span>
-                            )}
-                            <span className="absolute bottom-1 right-2 text-[9px] text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity">
-                              Change ✎
-                            </span>
-                          </div>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => isAssignedToMe && handleSignatureFieldClick(field)}
-                            className="w-full h-14 bg-white border-2 border-dashed border-blue-400 hover:border-blue-600 rounded-xl text-xs font-bold text-blue-600 hover:bg-blue-50/50 flex items-center justify-center gap-1.5 transition-all shadow-xs"
-                            data-testid={`click-to-sign-${field.id}`}
-                          >
-                            ✍️ {adoptedSignature ? 'Apply Signature' : 'Click to Sign'}
-                          </button>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Text Field */}
-                    {field.type === 'TEXT' && (
-                      <input
-                        id={`input-field-${field.id}`}
-                        type="text"
-                        placeholder={field.placeholder || 'Enter text...'}
-                        value={typeof value === 'string' ? value : ''}
-                        onChange={(e) => handleInputChange(field.id, e.target.value)}
-                        className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-2 text-xs text-neutral-900 focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
-                        data-testid={`input-text-${field.id}`}
-                      />
-                    )}
-
-                    {/* Date Field */}
-                    {field.type === 'DATE' && (
-                      <input
-                        id={`input-field-${field.id}`}
-                        type="date"
-                        value={typeof value === 'string' ? value : ''}
-                        onChange={(e) => handleInputChange(field.id, e.target.value)}
-                        className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-2 text-xs text-neutral-900 focus:outline-none focus:border-blue-600"
-                        data-testid={`input-date-${field.id}`}
-                      />
-                    )}
-
-                    {/* Email Field */}
-                    {field.type === 'EMAIL' && (
-                      <input
-                        id={`input-field-${field.id}`}
-                        type="email"
-                        placeholder="signer@example.com"
-                        value={typeof value === 'string' ? value : ''}
-                        onChange={(e) => handleInputChange(field.id, e.target.value)}
-                        className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-2 text-xs text-neutral-900 focus:outline-none focus:border-blue-600"
-                        data-testid={`input-email-${field.id}`}
-                      />
-                    )}
-
-                    {/* Company Field */}
-                    {field.type === 'COMPANY' && (
-                      <input
-                        id={`input-field-${field.id}`}
-                        type="text"
-                        placeholder="Company name..."
-                        value={typeof value === 'string' ? value : ''}
-                        onChange={(e) => handleInputChange(field.id, e.target.value)}
-                        className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-2 text-xs text-neutral-900 focus:outline-none focus:border-blue-600"
-                        data-testid={`input-company-${field.id}`}
-                      />
-                    )}
-
-                    {/* Checkbox Field */}
-                    {field.type === 'CHECKBOX' && (
-                      <label className="flex items-center gap-2 cursor-pointer py-1 select-none">
-                        <input
-                          id={`input-field-${field.id}`}
-                          type="checkbox"
-                          checked={!!value}
-                          onChange={(e) => handleInputChange(field.id, e.target.checked)}
-                          className="w-4 h-4 text-blue-600 rounded border-neutral-300 focus:ring-blue-500"
-                          data-testid={`input-checkbox-${field.id}`}
-                        />
-                        <span className="text-xs text-neutral-700">{field.label}</span>
-                      </label>
-                    )}
-
-                    {/* Radio Group Field */}
-                    {field.type === 'RADIO' && (
-                      <div className="space-y-1.5 py-1">
-                        {field.options?.map((opt) => (
-                          <label
-                            key={opt.value}
-                            className="flex items-center gap-2 cursor-pointer text-xs select-none"
-                          >
-                            <input
-                              type="radio"
-                              name={field.groupName || field.id}
-                              value={opt.value}
-                              checked={value === opt.value}
-                              onChange={(e) => handleInputChange(field.id, e.target.value)}
-                              className="text-blue-600"
-                            />
-                            <span className="text-neutral-700">{opt.label}</span>
-                          </label>
-                        ))}
-                      </div>
-                    )}
-
-                    {/* Dropdown Field */}
-                    {field.type === 'DROPDOWN' && (
-                      <select
-                        id={`input-field-${field.id}`}
-                        value={typeof value === 'string' ? value : ''}
-                        onChange={(e) => handleInputChange(field.id, e.target.value)}
-                        className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-2 text-xs text-neutral-900 focus:outline-none focus:border-blue-600"
-                        data-testid={`input-dropdown-${field.id}`}
-                      >
-                        <option value="">Select option...</option>
-                        {field.options?.map((opt) => (
-                          <option key={opt.value} value={opt.value}>
-                            {opt.label}
-                          </option>
-                        ))}
-                      </select>
-                    )}
-
-                    {/* Field Error Message */}
-                    {hasError && (
-                      <p className="text-[10px] text-red-600 font-semibold mt-1">
-                        {formErrors[field.id]}
-                      </p>
-                    )}
+                    <span
+                      className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                        isFilled ? 'bg-emerald-900/80 text-emerald-300' : 'bg-red-900/80 text-red-300'
+                      }`}
+                    >
+                      {isFilled ? '✓' : 'Pending'}
+                    </span>
                   </div>
                 );
               })}
-          </div>
-        </div>
-
-        {/* Electronic Consent Disclosure Box (INK-99) */}
-        <div className="bg-white border border-neutral-200 rounded-2xl p-4 sm:p-6 shadow-xs">
-          <label className="flex items-start gap-3 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={consentAccepted}
-              onChange={(e) => {
-                setConsentAccepted(e.target.checked);
-                if (formErrors['consent']) {
-                  setFormErrors((prev) => {
-                    const next = { ...prev };
-                    delete next['consent'];
-                    return next;
-                  });
-                }
-              }}
-              className="mt-0.5 w-4 h-4 text-blue-600 rounded border-neutral-300 focus:ring-blue-500"
-              data-testid="page-ersd-checkbox"
-            />
-            <div className="text-xs text-neutral-600 leading-relaxed">
-              <span className="font-bold text-neutral-900">
-                Electronic Record and Signature Disclosure:{' '}
-              </span>
-              I agree to use electronic records and signatures for this document. I acknowledge that
-              my electronic signature carries full legal validity and enforceability under
-              applicable laws (ESIGN, UETA &amp; eIDAS).
             </div>
-          </label>
-          {formErrors['consent'] && (
-            <p className="text-[11px] text-red-600 font-bold mt-2 ml-7">{formErrors['consent']}</p>
-          )}
-        </div>
+          </div>
 
-        {/* Bottom Actions Bar */}
-        <div className="flex justify-end gap-3 pb-20">
-          <button
-            type="button"
-            onClick={() => setShowDeclineModal(true)}
-            className="px-4 py-2.5 text-xs font-bold text-neutral-600 hover:text-neutral-900 border border-neutral-300 rounded-xl hover:bg-neutral-50 transition-colors"
-          >
-            Decline Agreement
-          </button>
-          <button
-            type="button"
-            onClick={handleSubmit}
-            disabled={isSubmitting || !isTurn}
-            className="px-6 py-2.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 rounded-xl shadow-sm transition-all"
-            data-testid="bottom-finish-button"
-          >
-            {isSubmitting ? 'Recording Signature...' : 'Complete & Sign Document ✓'}
-          </button>
-        </div>
-      </main>
+          {/* Envelope Participants */}
+          <div className="p-3 bg-neutral-800/40 rounded-2xl border border-neutral-800 space-y-1.5 text-xs text-neutral-400">
+            <span className="text-[9px] font-bold text-neutral-500 uppercase tracking-widest block">
+              Envelope Participants
+            </span>
+            <div className="space-y-1">
+              {allRecipients.map((r) => (
+                <div key={r.id} className="flex items-center justify-between text-[11px]">
+                  <div className="flex items-center gap-1.5 truncate">
+                    <span
+                      style={{ backgroundColor: r.color || '#2563EB' }}
+                      className="w-2 h-2 rounded-full shrink-0"
+                    />
+                    <span className="truncate font-medium text-neutral-300">{r.name}</span>
+                  </div>
+                  <span
+                    className={`text-[9px] font-bold px-1.5 py-0.2 rounded uppercase ${
+                      r.status === 'SIGNED'
+                        ? 'bg-emerald-900/60 text-emerald-400'
+                        : 'bg-neutral-800 text-neutral-400'
+                    }`}
+                  >
+                    {r.status}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </aside>
 
-      {/* Floating Field Completion Guide (INK-103) */}
-      <SigningFieldGuide
-        totalRequired={assignedRequiredFields.length}
-        completedRequired={completedRequiredCount}
-        onNavigateNext={handleNavigateNextField}
-        onSubmit={handleSubmit}
-        isSubmitting={isSubmitting}
-        isTurn={isTurn}
+        {/* Center / Right Drafting Stage (INK-272) */}
+        <main className="flex-1 overflow-auto bg-neutral-800 flex justify-center p-4 sm:p-8 relative">
+          {/* Document Canvas Sheet */}
+          <div
+            ref={pageContainerRef}
+            style={{
+              transform: `scale(${zoomLevel / 100})`,
+              transformOrigin: 'top center',
+              width: '800px',
+              minHeight: '1100px',
+            }}
+            className="bg-white shadow-2xl rounded-sm relative transition-transform duration-100 flex flex-col mb-auto select-none overflow-hidden"
+            data-testid="document-viewer-container"
+          >
+            {/* Document Content Layer */}
+            {isMarkdown ? (
+              <div
+                className="p-12 prose prose-sm max-w-none text-neutral-900 pointer-events-none"
+                dangerouslySetInnerHTML={{
+                  __html: renderMarkdownToHtml(agreement.markdownContent || ''),
+                }}
+              />
+            ) : effectivePdfUrl ? (
+              <iframe
+                src={`${effectivePdfUrl}#toolbar=0&navpanes=0&scrollbar=0`}
+                className="w-full h-full min-h-[1100px] border-none pointer-events-none flex-1 overflow-hidden"
+                title="Document PDF Preview"
+              />
+            ) : isLoadingPdf ? (
+              <div className="p-16 text-center text-neutral-400 flex flex-col items-center justify-center min-h-[600px] space-y-3">
+                <div className="w-8 h-8 border-3 border-neutral-300 border-t-neutral-800 rounded-full animate-spin" />
+                <p className="text-xs font-semibold text-neutral-600">Loading document...</p>
+              </div>
+            ) : (
+              <div className="p-16 text-center text-neutral-400 flex flex-col items-center justify-center min-h-[600px]">
+                <span className="text-4xl mb-2">📄</span>
+                <p className="text-xs font-semibold text-neutral-600">{agreement.title}</p>
+                {pdfFetchError && <p className="text-[11px] text-red-500 mt-1">{pdfFetchError}</p>}
+              </div>
+            )}
+
+            {/* Field Overlay Layer Positioned Directly on Top of Document Canvas (INK-78 to INK-85, INK-272) */}
+            <div className="absolute inset-0 pointer-events-auto">
+              {evaluatedFields
+                .filter((f) => f.computedVisible)
+                .map((field) => {
+                  const isAssignedToMe = field.recipientId === currentRecipient?.id;
+                  const assignedRecip = allRecipients.find((r) => r.id === field.recipientId);
+                  const recipColor = assignedRecip?.color || '#2563EB';
+                  const value = fieldValues[field.id];
+                  const hasError = Boolean(formErrors[field.id]);
+                  const isHighlighted = highlightedFieldId === field.id;
+
+                  return (
+                    <div
+                      key={field.id}
+                      id={`field-overlay-${field.id}`}
+                      style={{
+                        left: `${field.x}%`,
+                        top: `${field.y}%`,
+                        width: `${field.width}%`,
+                        height: `${field.height}%`,
+                        borderColor: recipColor,
+                      }}
+                      className={`absolute rounded transition-all duration-150 flex flex-col justify-between overflow-visible ${
+                        isAssignedToMe
+                          ? isHighlighted
+                            ? 'ring-4 ring-blue-500 border-2 bg-blue-50/90 shadow-xl z-30'
+                            : hasError
+                              ? 'border-2 border-red-500 bg-red-50/90 shadow-md z-20 animate-pulse'
+                              : value
+                                ? 'border-2 border-emerald-500 bg-white/95 shadow-xs z-10'
+                                : 'border-2 border-dashed bg-blue-50/80 shadow-xs hover:border-solid hover:bg-blue-50 z-20'
+                          : 'opacity-40 border border-dashed border-neutral-400 bg-neutral-100/50 pointer-events-none z-0'
+                      }`}
+                      data-testid={`field-container-${field.id}`}
+                    >
+                      {/* Header Badge */}
+                      <div
+                        style={{ backgroundColor: recipColor }}
+                        className="px-1.5 py-0.5 text-white text-[9px] font-bold flex items-center justify-between shrink-0 leading-tight select-none shadow-2xs"
+                      >
+                        <div className="flex items-center gap-1 truncate">
+                          <span className="truncate">{field.label || field.type}</span>
+                          {field.computedRequired && (
+                            <span className="text-red-300 font-extrabold text-xs" title="Required">
+                              *
+                            </span>
+                          )}
+                        </div>
+                        {!isAssignedToMe && (
+                          <span className="text-[8px] opacity-80 uppercase ml-1">Other Signer</span>
+                        )}
+                      </div>
+
+                      {/* Interactive Field Content Body */}
+                      <div className="flex-1 bg-white/90 p-0.5 flex items-center justify-center text-center overflow-hidden">
+                        {/* SIGNATURE / INITIALS FIELD (INK-16, INK-100 to INK-102, INK-272) */}
+                        {(field.type === 'SIGNATURE' || field.type === 'INITIALS') && (
+                          <div className="w-full h-full flex items-center justify-center">
+                            {value ? (
+                              <div
+                                onClick={() => isAssignedToMe && handleSignatureFieldClick(field)}
+                                className="w-full h-full p-1 flex items-center justify-center cursor-pointer group relative"
+                                title="Click to modify signature"
+                                data-testid={`signature-applied-${field.id}`}
+                              >
+                                {typeof value === 'string' && value.startsWith('data:') ? (
+                                  /* eslint-disable-next-line @next/next/no-img-element */
+                                  <img
+                                    src={value}
+                                    alt="Applied Signature"
+                                    className="max-h-full max-w-full object-contain"
+                                  />
+                                ) : (
+                                  <span className="font-serif italic text-sm text-blue-950 font-bold">
+                                    {String(value)}
+                                  </span>
+                                )}
+                                <span className="absolute bottom-0.5 right-1 text-[8px] text-blue-600 bg-white/90 px-1 rounded opacity-0 group-hover:opacity-100 transition-opacity font-bold shadow-2xs">
+                                  Change ✎
+                                </span>
+                              </div>
+                            ) : isAssignedToMe ? (
+                              <button
+                                type="button"
+                                onClick={() => handleSignatureFieldClick(field)}
+                                className="w-full h-full bg-blue-500/10 hover:bg-blue-500/20 text-blue-700 text-[10px] sm:text-xs font-bold rounded flex items-center justify-center gap-1 transition-all cursor-pointer animate-pulse"
+                                data-testid={`click-to-sign-${field.id}`}
+                              >
+                                <span>✍️</span>
+                                <span>{adoptedSignature ? 'Apply' : 'Sign Here'}</span>
+                              </button>
+                            ) : (
+                              <span className="text-[10px] text-neutral-400 italic">
+                                Signature Area
+                              </span>
+                            )}
+                          </div>
+                        )}
+
+                        {/* TEXT FIELD */}
+                        {field.type === 'TEXT' && (
+                          <input
+                            type="text"
+                            disabled={!isAssignedToMe}
+                            placeholder={field.placeholder || 'Enter text...'}
+                            value={typeof value === 'string' ? value : ''}
+                            onChange={(e) => handleInputChange(field.id, e.target.value)}
+                            className="w-full h-full text-xs font-medium px-1.5 bg-transparent border-0 focus:outline-none text-neutral-900 text-center"
+                            data-testid={`input-text-${field.id}`}
+                          />
+                        )}
+
+                        {/* DATE FIELD */}
+                        {field.type === 'DATE' && (
+                          <input
+                            type="date"
+                            disabled={!isAssignedToMe}
+                            value={typeof value === 'string' ? value : ''}
+                            onChange={(e) => handleInputChange(field.id, e.target.value)}
+                            className="w-full h-full text-xs font-medium px-1 bg-transparent border-0 focus:outline-none text-neutral-900 text-center"
+                            data-testid={`input-date-${field.id}`}
+                          />
+                        )}
+
+                        {/* EMAIL FIELD */}
+                        {field.type === 'EMAIL' && (
+                          <input
+                            type="email"
+                            disabled={!isAssignedToMe}
+                            placeholder="email@example.com"
+                            value={typeof value === 'string' ? value : ''}
+                            onChange={(e) => handleInputChange(field.id, e.target.value)}
+                            className="w-full h-full text-xs font-medium px-1.5 bg-transparent border-0 focus:outline-none text-neutral-900 text-center"
+                            data-testid={`input-email-${field.id}`}
+                          />
+                        )}
+
+                        {/* COMPANY / TITLE FIELD */}
+                        {(field.type === 'COMPANY' || field.type === 'TITLE') && (
+                          <input
+                            type="text"
+                            disabled={!isAssignedToMe}
+                            placeholder={field.placeholder || field.label}
+                            value={typeof value === 'string' ? value : ''}
+                            onChange={(e) => handleInputChange(field.id, e.target.value)}
+                            className="w-full h-full text-xs font-medium px-1.5 bg-transparent border-0 focus:outline-none text-neutral-900 text-center"
+                          />
+                        )}
+
+                        {/* CHECKBOX FIELD */}
+                        {field.type === 'CHECKBOX' && (
+                          <input
+                            type="checkbox"
+                            disabled={!isAssignedToMe}
+                            checked={Boolean(value)}
+                            onChange={(e) => handleInputChange(field.id, e.target.checked)}
+                            className="w-4 h-4 text-blue-600 rounded cursor-pointer"
+                            data-testid={`input-checkbox-${field.id}`}
+                          />
+                        )}
+
+                        {/* DROPDOWN FIELD */}
+                        {field.type === 'DROPDOWN' && (
+                          <select
+                            disabled={!isAssignedToMe}
+                            value={typeof value === 'string' ? value : ''}
+                            onChange={(e) => handleInputChange(field.id, e.target.value)}
+                            className="w-full h-full text-xs bg-transparent border-0 focus:outline-none text-neutral-900 text-center"
+                          >
+                            <option value="">Select option...</option>
+                            {field.options?.map((opt, oIdx) => (
+                              <option key={oIdx} value={opt.value}>
+                                {opt.label}
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+          </div>
+        </main>
+      </div>
+
+      {/* ========================================================================= */}
+      {/* MODALS & OVERLAYS (INK-16, INK-99, INK-266, INK-272) */}
+      {/* ========================================================================= */}
+
+      {/* INK-16 & INK-100 to INK-102: Signature Adoption Modal */}
+      <SignatureModal
+        isOpen={Boolean(activeSignatureFieldId)}
+        fieldType={activeSignatureType}
+        defaultSignerName={currentRecipient?.name || ''}
+        onSave={handleSaveAdoptedSignature}
+        onClose={() => setActiveSignatureFieldId(null)}
       />
 
-      {/* ERSD Compliance Gate Modal (INK-99) */}
+      {/* INK-99: Electronic Record & Signature Disclosure Consent Modal */}
       <ElectronicConsentModal
-        isOpen={showConsentModal && !consentAccepted}
-        documentTitle={agreement.title}
-        recipientName={currentRecipient?.name || ''}
-        senderName={agreement.senderName}
-        organisationName={agreement.organisationName}
+        isOpen={showConsentModal}
+        documentTitle={agreement?.title || 'Agreement'}
+        recipientName={currentRecipient?.name || 'Participant'}
+        senderName={agreement?.senderName || 'Sender'}
+        organisationName={agreement?.organisationName || 'Organization'}
         onAcceptConsent={handleAcceptConsent}
         onDecline={() => {
           setShowConsentModal(false);
@@ -960,40 +1186,29 @@ export default function SignDocumentPage({
         }}
       />
 
-      {/* Signature Adoption Modal (INK-100, INK-101, INK-102, INK-106) */}
-      <SignatureModal
-        isOpen={activeSignatureFieldId !== null}
-        fieldType={activeSignatureType}
-        defaultSignerName={currentRecipient?.name || ''}
-        onSave={handleSaveAdoptedSignature}
-        onClose={() => setActiveSignatureFieldId(null)}
-      />
-
       {/* Decline Reason Modal */}
       {showDeclineModal && (
-        <div
-          className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-4"
-          data-testid="decline-modal-overlay"
-        >
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 border border-neutral-200 animate-in fade-in zoom-in-95 duration-150">
-            <h3 className="text-base font-bold text-neutral-900">Decline to Sign</h3>
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4 text-neutral-900 border border-neutral-200">
+            <h3 className="text-base font-bold text-red-600 flex items-center gap-2">
+              <span>🛑</span> Decline Document
+            </h3>
             <p className="text-xs text-neutral-600">
-              Please state why you are declining this agreement. The sender will be notified
-              immediately.
+              Please provide a reason for declining to sign this agreement. This will be recorded in
+              the tamper-evident audit trail and communicated to the sender.
             </p>
             <textarea
-              rows={3}
-              placeholder="Reason for declining..."
               value={declineReason}
               onChange={(e) => setDeclineReason(e.target.value)}
-              className="w-full bg-white border border-neutral-300 rounded-xl p-3 text-xs text-neutral-900 focus:outline-none focus:border-red-500"
+              placeholder="Enter reason for declining..."
+              className="w-full h-24 p-3 border border-neutral-300 rounded-xl text-xs focus:ring-2 focus:ring-red-500 focus:outline-none"
               data-testid="decline-reason-input"
             />
-            <div className="flex justify-end gap-2 pt-1">
+            <div className="flex justify-end gap-2 pt-2 border-t border-neutral-100">
               <button
                 type="button"
                 onClick={() => setShowDeclineModal(false)}
-                className="px-3.5 py-2 text-xs font-semibold text-neutral-600 hover:bg-neutral-100 rounded-lg"
+                className="px-4 py-2 text-xs font-semibold text-neutral-600 hover:bg-neutral-100 rounded-xl transition-colors"
               >
                 Cancel
               </button>
@@ -1001,7 +1216,7 @@ export default function SignDocumentPage({
                 type="button"
                 onClick={handleDecline}
                 disabled={isDeclining || !declineReason.trim()}
-                className="px-4 py-2 text-xs font-bold text-white bg-red-600 hover:bg-red-700 disabled:opacity-50 rounded-lg shadow-sm"
+                className="px-4 py-2 text-xs font-bold text-white bg-red-600 hover:bg-red-700 disabled:opacity-50 rounded-xl shadow-xs"
                 data-testid="confirm-decline-button"
               >
                 {isDeclining ? 'Declining...' : 'Confirm Decline'}
@@ -1010,6 +1225,82 @@ export default function SignDocumentPage({
           </div>
         </div>
       )}
+
+      {/* Signer Authentication & Guest Gate Modal (INK-266) */}
+      {showAuthGate && !signedAsGuest && !isAuthenticated && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-8 shadow-2xl space-y-6 text-neutral-900 border border-neutral-100 text-center animate-in fade-in zoom-in-95 duration-200">
+            <div className="w-14 h-14 bg-red-50 text-[#ba0000] rounded-2xl flex items-center justify-center mx-auto text-2xl font-bold border border-red-100 shadow-xs">
+              ✍️
+            </div>
+
+            <div className="space-y-1.5">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-[#ba0000] bg-red-50 px-2.5 py-1 rounded-full border border-red-200">
+                Signature Invitation
+              </span>
+              <h2 className="text-xl font-black text-neutral-900 pt-1">Sign Document</h2>
+              <p className="text-xs text-neutral-500 max-w-xs mx-auto">
+                You are invited to review and sign{' '}
+                <strong className="text-neutral-900">&quot;{agreement?.title}&quot;</strong> sent by{' '}
+                <strong className="text-neutral-900">{agreement?.senderName}</strong>.
+              </p>
+            </div>
+
+            <div className="space-y-2.5 pt-2">
+              <Link
+                href={`/login?returnTo=${encodeURIComponent(`/sign/${rawToken}`)}`}
+                className="w-full py-3 bg-[#ba0000] hover:bg-red-700 text-white text-xs sm:text-sm font-bold rounded-xl shadow-xs transition-all flex items-center justify-center gap-2"
+              >
+                <span>🔑</span> Log In with Existing Account
+              </Link>
+
+              <Link
+                href={`/register?returnTo=${encodeURIComponent(`/sign/${rawToken}`)}`}
+                className="w-full py-3 bg-neutral-900 hover:bg-neutral-800 text-white text-xs sm:text-sm font-bold rounded-xl shadow-xs transition-all flex items-center justify-center gap-2"
+              >
+                <span>✨</span> Sign Up for GraphSign
+              </Link>
+
+              <div className="relative py-2 flex items-center justify-center">
+                <div className="border-t border-neutral-200 w-full" />
+                <span className="bg-white px-3 text-[11px] text-neutral-400 font-medium absolute">
+                  or continue directly
+                </span>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setSignedAsGuest(true);
+                  setShowAuthGate(false);
+                  setShowConsentModal(true);
+                }}
+                className="w-full py-3 bg-neutral-100 hover:bg-neutral-200 text-neutral-800 text-xs sm:text-sm font-bold rounded-xl transition-all flex items-center justify-center gap-2 border border-neutral-200 cursor-pointer"
+              >
+                <span>👤</span> Sign as Guest (Email OTP Required)
+              </button>
+            </div>
+
+            <p className="text-[11px] text-neutral-400">
+              Guest signers verify a 6-digit OTP code sent to their email (
+              {currentRecipient?.email}) upon signature confirmation.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* 2nd-Layer Email OTP Verification Modal for Guest Signers (INK-266) */}
+      <OtpVerificationModal
+        token={rawToken}
+        recipientEmail={currentRecipient?.email || ''}
+        recipientName={currentRecipient?.name || ''}
+        agreementTitle={agreement?.title || ''}
+        isOpen={showOtpModal}
+        onClose={() => setShowOtpModal(false)}
+        onVerified={async (otpCode) => {
+          await finalizeSubmission(otpCode);
+        }}
+      />
     </div>
   );
 }

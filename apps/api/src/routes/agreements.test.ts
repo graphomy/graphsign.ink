@@ -21,6 +21,7 @@ describe('Agreement Routes Integration Tests (Epic INK-8)', () => {
       listVersions: vi.fn(),
       cloneAgreement: vi.fn(),
       setArchiveStatus: vi.fn(),
+      deleteAgreement: vi.fn(),
       updateMetadataAndTags: vi.fn(),
       listAgreements: vi.fn(),
     };
@@ -405,6 +406,30 @@ describe('Agreement Routes Integration Tests (Epic INK-8)', () => {
       'user-123',
       'ag-fields-1',
       expect.objectContaining({ fields: expect.any(Array), recipients: expect.any(Array) }),
+      'sender',
+    );
+  });
+
+  it('DELETE /api/v1/agreements/:id - deletes agreement record (INK-271)', async () => {
+    mockAgreementService.deleteAgreement.mockResolvedValue({
+      success: true,
+      id: 'ag-del-1',
+    });
+
+    const res = await app.request('/api/v1/agreements/ag-del-1', {
+      method: 'DELETE',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    expect(body.success).toBe(true);
+    expect(mockAgreementService.deleteAgreement).toHaveBeenCalledWith(
+      'org-123',
+      'user-123',
+      'ag-del-1',
       'sender',
     );
   });

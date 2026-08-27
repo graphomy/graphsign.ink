@@ -10,6 +10,7 @@ import {
   recipientSignSchema,
   declineSignSchema,
   electronicConsentSchema,
+  verifyOtpSchema,
 } from '../validators/workflow-validators.js';
 import { BadRequestError } from '../utils/errors.js';
 import { createRateLimiter } from '../middleware/rate-limiter.js';
@@ -107,6 +108,41 @@ export function createSignRoutes(deps?: SignDeps) {
   });
 
   /**
+   * POST /api/v1/sign/:token/otp/send
+   * INK-266: Dispatch 6-digit OTP verification code to recipient email
+   */
+  sign.post('/:token/otp/send', async (c) => {
+    const rawToken = c.req.param('token');
+    const ip = c.req.header('x-forwarded-for') || c.req.header('cf-connecting-ip');
+    const userAgent = c.req.header('user-agent');
+    const { service } = getServices(c);
+
+    const result = await service.sendSignerOtp(rawToken, ip, userAgent);
+    return c.json({ success: true, data: result });
+  });
+
+  /**
+   * POST /api/v1/sign/:token/otp/verify
+   * INK-266: Verify 6-digit OTP verification code
+   */
+  sign.post('/:token/otp/verify', async (c) => {
+    const rawToken = c.req.param('token');
+    const body = await c.req.json().catch(() => ({}));
+    const parseResult = verifyOtpSchema.safeParse(body);
+
+    if (!parseResult.success) {
+      throw new BadRequestError(parseResult.error.errors.map((e) => e.message).join(', '));
+    }
+
+    const ip = c.req.header('x-forwarded-for') || c.req.header('cf-connecting-ip');
+    const userAgent = c.req.header('user-agent');
+    const { service } = getServices(c);
+
+    const result = await service.verifySignerOtp(rawToken, parseResult.data.otpCode, ip, userAgent);
+    return c.json({ success: true, data: result });
+  });
+
+  /**
    * POST /api/v1/sign/:token/complete
    * INK-94, INK-96, INK-104: Submit recipient signature and filled fields
    */
@@ -161,8 +197,44 @@ export function createSignRoutes(deps?: SignDeps) {
   });
 
   /**
+   * GET /api/v1/sign/:token/file
+   * Stream agreement PDF or Markdown binary for public signer preview (INK-272)
+   */
+  sign.get('/:token/file', async (c) => {
+    const rawToken = c.req.param('token');
+    const { service } = getServices(c);
+
+    const file = await service.getSigningDocumentFile(rawToken);
+
+    if (file.fileData) {
+      const base64Content = file.fileData.includes(',')
+        ? file.fileData.split(',')[1]
+        : file.fileData;
+      const buffer = Buffer.from(base64Content || '', 'base64');
+      return c.body(buffer as any, 200, {
+        'Content-Type': file.mimeType || 'application/pdf',
+        'Content-Disposition': `inline; filename="${file.fileName || 'document.pdf'}"`,
+      });
+    }
+
+    if (file.markdownContent) {
+      return c.text(file.markdownContent, 200, {
+        'Content-Type': 'text/markdown; charset=utf-8',
+        'Content-Disposition': `inline; filename="${file.fileName || 'agreement.md'}"`,
+      });
+    }
+
+    // Fallback standard PDF structure if stored without raw binary in metadata
+    const fallbackPdf = `%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n3 0 obj<</Type/Page/MediaBox[0 0 612 792]/Parent 2 0 R/Resources<<>>>>endobj\nxref\n0 4\n0000000000 65535 f\n0000000009 00000 n\n0000000052 00000 n\n0000000101 00000 n\ntrailer<</Size 4/Root 1 0 R>>\nstartxref\n178\n%%EOF`;
+    return c.body(fallbackPdf, 200, {
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `inline; filename="${file.fileName || 'document.pdf'}"`,
+    });
+  });
+
+  /**
    * GET /api/v1/sign/:token/download
-   * INK-105: Public tokenized download for executed / signed document
+   * INK-105 & INK-272: Public tokenized download for executed / signed document
    */
   sign.get('/:token/download', async (c) => {
     const rawToken = c.req.param('token');
@@ -171,9 +243,12 @@ export function createSignRoutes(deps?: SignDeps) {
     const file = await service.getSigningDocumentFile(rawToken);
 
     if (file.fileData) {
-      const buffer = Buffer.from(file.fileData, 'base64');
+      const base64Content = file.fileData.includes(',')
+        ? file.fileData.split(',')[1]
+        : file.fileData;
+      const buffer = Buffer.from(base64Content || '', 'base64');
       c.header('Content-Type', file.mimeType || 'application/pdf');
-      c.header('Content-Disposition', `attachment; filename="${file.fileName}"`);
+      c.header('Content-Disposition', `attachment; filename="${file.fileName || 'signed-document.pdf'}"`);
       return c.body(buffer as any);
     }
 
@@ -186,15 +261,11 @@ export function createSignRoutes(deps?: SignDeps) {
       return c.text(file.markdownContent);
     }
 
-    return c.json({
-      success: true,
-      data: {
-        id: file.id,
-        title: file.title,
-        fileUrl: file.fileUrl,
-        fileName: file.fileName,
-      },
-    });
+    // Fallback standard PDF if raw binary was not stored
+    const fallbackPdf = `%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n3 0 obj<</Type/Page/MediaBox[0 0 612 792]/Parent 2 0 R/Resources<<>>>>endobj\nxref\n0 4\n0000000000 65535 f\n0000000009 00000 n\n0000000052 00000 n\n0000000101 00000 n\ntrailer<</Size 4/Root 1 0 R>>\nstartxref\n178\n%%EOF`;
+    c.header('Content-Type', 'application/pdf');
+    c.header('Content-Disposition', `attachment; filename="${file.fileName || 'signed-document.pdf'}"`);
+    return c.body(fallbackPdf);
   });
 
   return sign;

@@ -207,13 +207,25 @@ describe('SearchService Unit Tests (INK-117 to INK-122)', () => {
     it('applies status filter for active agreements', async () => {
       await service.searchAgreements(mockAdminCtx, { status: 'ACTIVE' });
       const callArgs = mockPrisma.agreement.findMany.mock.calls[0][0];
-      expect(callArgs.where.status).toEqual({ notIn: ['DRAFT', 'IN_REVIEW', 'REJECTED'] });
+      expect(callArgs.where.status).toEqual({
+        notIn: ['DRAFT', 'IN_REVIEW', 'REJECTED', 'CANCELLED', 'COMPLETED', 'SIGNED'],
+      });
     });
 
     it('applies status filter for draft agreements', async () => {
       await service.searchAgreements(mockAdminCtx, { status: 'DRAFT' });
       const callArgs = mockPrisma.agreement.findMany.mock.calls[0][0];
-      expect(callArgs.where.status).toEqual({ in: ['DRAFT', 'IN_REVIEW', 'REJECTED'] });
+      expect(callArgs.where.status).toEqual({
+        in: ['DRAFT', 'IN_REVIEW', 'REJECTED', 'CANCELLED'],
+      });
+    });
+
+    it('applies status filter for signed agreements (INK-271)', async () => {
+      await service.searchAgreements(mockAdminCtx, { status: 'SIGNED' });
+      const callArgs = mockPrisma.agreement.findMany.mock.calls[0][0];
+      expect(callArgs.where.status).toEqual({
+        in: ['COMPLETED', 'SIGNED'],
+      });
     });
 
     it('applies datePreset filter (last_7_days)', async () => {

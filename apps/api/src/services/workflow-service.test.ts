@@ -85,6 +85,7 @@ describe('WorkflowService Unit Tests (INK-86 to INK-116)', () => {
       sendAgreementCancelledEmail: vi.fn().mockResolvedValue(undefined),
       sendExpiryWarningEmail: vi.fn().mockResolvedValue(undefined),
       sendAgreementExpiredEmail: vi.fn().mockResolvedValue(undefined),
+      sendOtpVerificationEmail: vi.fn().mockResolvedValue(undefined),
     };
 
     service = new WorkflowService(mockPrisma, mockAudit, mockMailer);
@@ -425,5 +426,68 @@ describe('WorkflowService Unit Tests (INK-86 to INK-116)', () => {
     expect(res.warningCount).toBe(1);
     expect(mockMailer.sendAgreementExpiredEmail).toHaveBeenCalled();
     expect(mockMailer.sendExpiryWarningEmail).toHaveBeenCalled();
+  });
+
+  it('retracts agreement from review back to draft state (INK-268)', async () => {
+    mockPrisma.agreement.findFirst.mockResolvedValueOnce({
+      ...mockAgreement,
+      status: 'IN_REVIEW',
+      authorId: 'user-author-1',
+    });
+
+    const res = await service.retractReview(mockCtx, 'ag-1');
+
+    expect(res.status).toBe('DRAFT');
+    expect(mockPrisma.agreement.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'ag-1' },
+        data: expect.objectContaining({ status: 'DRAFT', rejectionReason: null }),
+      }),
+    );
+    expect(mockAudit.log).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'REVIEW_RETRACTED',
+        resourceId: 'ag-1',
+      }),
+    );
+  });
+
+  it('voids agreement and moves it to DRAFT status (INK-268)', async () => {
+    mockPrisma.agreement.findFirst.mockResolvedValueOnce({
+      ...mockAgreement,
+      status: 'SENT',
+      authorId: 'user-author-1',
+      recipients: [{ id: 'r1', name: 'Signer 1', email: 's1@example.com' }],
+    });
+
+    const res = await service.cancelAgreement(mockCtx, 'ag-1', {
+      reason: 'Need to change pricing',
+    });
+
+    expect(res.status).toBe('DRAFT');
+    expect(mockPrisma.agreement.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'ag-1' },
+        data: expect.objectContaining({ status: 'DRAFT' }),
+      }),
+    );
+    expect(mockPrisma.agreementRecipient.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { agreementId: 'ag-1' },
+      }),
+    );
+    expect(mockAudit.log).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'AGREEMENT_CANCELLED',
+        metadata: expect.objectContaining({ newStatus: 'DRAFT', reason: 'Need to change pricing' }),
+      }),
+    );
+    expect(mockMailer.sendAgreementCancelledEmail).toHaveBeenCalledWith(
+      's1@example.com',
+      'Signer 1',
+      'Consulting Contract',
+      'Need to change pricing',
+      expect.anything(),
+    );
   });
 });

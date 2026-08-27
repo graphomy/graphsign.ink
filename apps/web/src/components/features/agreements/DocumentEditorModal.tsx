@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { getApiUrl } from '@/lib/api';
 import { formatStatus } from '@/lib/date-utils';
 import { renderMarkdownToHtml } from './MarkdownEditor';
+import { SendAgreementModal } from './SendAgreementModal';
 
 export type FieldType =
   | 'SIGNATURE'
@@ -132,6 +133,7 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
   const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [showSendModal, setShowSendModal] = useState(false);
 
   // Mobile Drawer Tab
   const [mobileTab, setMobileTab] = useState<'palette' | 'properties' | 'recipients'>('palette');
@@ -291,8 +293,16 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
     return fields.find((f) => f.id === selectedFieldId) || null;
   }, [fields, selectedFieldId]);
 
-  // Add Recipient
+  const activeRecipient = useMemo(() => {
+    return recipients.find((r) => r.id === activeRecipientId) || recipients[0] || null;
+  }, [recipients, activeRecipientId]);
+
+  // Add Recipient (Max 10 Limit)
   function handleAddRecipient() {
+    if (recipients.length >= 10) {
+      setErrorMessage('Maximum limit of 10 signers reached for this document.');
+      return;
+    }
     const nextIdx = recipients.length + 1;
     const newColor =
       DEFAULT_RECIPIENT_COLORS[(nextIdx - 1) % DEFAULT_RECIPIENT_COLORS.length] || '#2563EB';
@@ -721,7 +731,10 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
           </button>
 
           <button
-            onClick={() => handleSaveFields(true)}
+            onClick={async () => {
+              await handleSaveFields(false);
+              setShowSendModal(true);
+            }}
             disabled={isSaving}
             className="px-4 py-1.5 bg-[#ba0000] hover:bg-red-700 text-white text-xs font-bold rounded-lg shadow-sm transition-all disabled:opacity-50 flex items-center gap-1.5"
           >
@@ -758,44 +771,81 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
         {/* ========================================================================= */}
         {activeMode === 'editor' && (
           <aside className="w-64 bg-white border-r border-neutral-200 flex flex-col shrink-0 overflow-y-auto hidden md:flex">
-            {/* Recipient Manager Section (INK-79) */}
-            <div className="p-3.5 border-b border-neutral-200 bg-neutral-50/70">
-              <div className="flex items-center justify-between mb-2">
+            {/* Recipient Manager Section (INK-79 / INK-270) */}
+            <div className="p-3.5 border-b border-neutral-200 bg-neutral-50/70 space-y-3">
+              <div className="flex items-center justify-between">
                 <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-600">
-                  Assign Signer
+                  Select Signer ({recipients.length}/10)
                 </span>
                 <button
                   onClick={handleAddRecipient}
-                  className="text-[11px] font-bold text-[#ba0000] hover:underline flex items-center gap-0.5"
+                  disabled={recipients.length >= 10}
+                  className={`text-[11px] font-bold flex items-center gap-0.5 ${
+                    recipients.length >= 10
+                      ? 'text-neutral-400 cursor-not-allowed'
+                      : 'text-[#ba0000] hover:underline'
+                  }`}
+                  title={recipients.length >= 10 ? 'Maximum 10 signers allowed' : 'Add a new signer'}
                 >
                   + Add Signer
                 </button>
               </div>
 
-              <div className="space-y-1.5">
-                {recipients.map((recip) => (
-                  <button
-                    key={recip.id}
-                    onClick={() => setActiveRecipientId(recip.id)}
-                    className={`w-full text-left p-2 rounded-lg text-xs font-semibold flex items-center justify-between transition-all border ${
-                      activeRecipientId === recip.id
-                        ? 'bg-white border-neutral-300 shadow-sm'
-                        : 'border-transparent hover:bg-neutral-100 text-neutral-600'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2 min-w-0">
+              {/* Signer Dropdown */}
+              <div>
+                <select
+                  aria-label="Active Signer Selector"
+                  value={activeRecipientId}
+                  onChange={(e) => setActiveRecipientId(e.target.value)}
+                  className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-2 text-xs font-semibold text-neutral-900 focus:outline-none focus:border-[#ba0000] shadow-2xs"
+                >
+                  {recipients.map((recip) => (
+                    <option key={recip.id} value={recip.id}>
+                      {recip.name} ({recip.role})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Active Selected Signer Editor Card */}
+              {activeRecipient && (
+                <div className="p-2.5 bg-white border border-neutral-200 rounded-lg shadow-2xs space-y-2">
+                  <div className="flex items-center justify-between gap-1.5">
+                    <div className="flex items-center gap-1.5 flex-1 min-w-0">
                       <span
                         className="w-3 h-3 rounded-full shrink-0 border border-white shadow-xs"
-                        style={{ backgroundColor: recip.color }}
+                        style={{ backgroundColor: activeRecipient.color }}
                       />
-                      <span className="truncate">{recip.name}</span>
+                      <input
+                        type="text"
+                        value={activeRecipient.name}
+                        onChange={(e) =>
+                          handleUpdateRecipient(activeRecipient.id, { name: e.target.value })
+                        }
+                        placeholder="e.g. Author, Approver"
+                        className="w-full bg-neutral-50 hover:bg-neutral-100 focus:bg-white border border-neutral-200 focus:border-neutral-400 rounded px-2 py-1 text-xs font-bold text-neutral-900 focus:outline-none"
+                        title="Edit signer label (e.g. Author, Signer 1)"
+                      />
                     </div>
-                    <span className="text-[10px] text-neutral-400 font-mono font-normal truncate">
-                      {recip.email.split('@')[0]}
+                    {recipients.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveRecipient(activeRecipient.id)}
+                        className="text-neutral-400 hover:text-red-600 p-1 rounded text-xs font-bold shrink-0"
+                        title="Remove signer"
+                      >
+                        ×
+                      </button>
+                    )}
+                  </div>
+                  <div className="flex items-center justify-between text-[10px] text-neutral-400 px-1 font-normal">
+                    <span className="capitalize">{activeRecipient.role}</span>
+                    <span className="truncate max-w-[120px]">
+                      {activeRecipient.email || 'Pending email'}
                     </span>
-                  </button>
-                ))}
-              </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Field Palette Toolbar (INK-78 to INK-81) */}
@@ -940,7 +990,7 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
               width: '800px',
               minHeight: '1100px',
             }}
-            className="bg-white shadow-2xl rounded-sm relative transition-transform duration-100 flex flex-col my-auto select-none"
+            className="bg-white shadow-2xl rounded-sm relative transition-transform duration-100 flex flex-col mb-auto select-none overflow-hidden"
           >
             {/* Document Content Layer */}
             {isMarkdown ? (
@@ -953,7 +1003,7 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
             ) : effectivePdfUrl ? (
               <iframe
                 src={`${effectivePdfUrl}#toolbar=0&navpanes=0&scrollbar=0`}
-                className="w-full h-full min-h-[1100px] border-none pointer-events-none flex-1"
+                className="w-full h-full min-h-[1100px] border-none pointer-events-none flex-1 overflow-hidden"
                 title="Document PDF Preview"
               />
             ) : isLoadingPdf ? (
@@ -1017,7 +1067,9 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
                       className="px-1.5 py-0.5 text-white text-[9px] font-bold flex items-center justify-between shrink-0 leading-tight"
                     >
                       <div className="flex items-center gap-1 truncate">
-                        <span className="truncate">{field.label}</span>
+                        <span className="truncate">
+                          {field.label} • {recipients.find((r) => r.id === field.recipientId)?.name || 'Signer'}
+                        </span>
                         {field.isRequired && (
                           <span className="text-red-300 font-extrabold text-xs" title="Required">
                             *
@@ -1585,6 +1637,23 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
           👥 Signers ({recipients.length})
         </button>
       </div>
+
+      {/* Specify Signer Emails & Send Modal (INK-266) */}
+      {showSendModal && (
+        <SendAgreementModal
+          agreementId={agreement.id}
+          agreementTitle={agreement.title}
+          defaultRecipients={recipients}
+          onClose={() => setShowSendModal(false)}
+          onSuccess={(msg) => {
+            setShowSendModal(false);
+            if (onSuccess) {
+              onSuccess(msg);
+            }
+            onClose();
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -95,12 +95,14 @@ export class SearchService {
       }
     }
 
-    // 4. Status Filtering (INK-118)
+    // 4. Status Filtering (INK-118, INK-271)
     if (query.status && query.status !== 'ALL') {
-      if (query.status === 'ACTIVE') {
-        where.status = { notIn: ['DRAFT', 'IN_REVIEW', 'REJECTED'] };
+      if (query.status === 'SIGNED' || query.status === 'COMPLETED') {
+        where.status = { in: ['COMPLETED', 'SIGNED'] };
+      } else if (query.status === 'ACTIVE') {
+        where.status = { notIn: ['DRAFT', 'IN_REVIEW', 'REJECTED', 'CANCELLED', 'COMPLETED', 'SIGNED'] };
       } else if (query.status === 'DRAFT') {
-        where.status = { in: ['DRAFT', 'IN_REVIEW', 'REJECTED'] };
+        where.status = { in: ['DRAFT', 'IN_REVIEW', 'REJECTED', 'CANCELLED'] };
       } else {
         where.status = query.status;
       }

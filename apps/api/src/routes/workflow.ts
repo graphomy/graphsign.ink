@@ -104,6 +104,31 @@ export function createWorkflowRoutes(deps?: WorkflowDeps) {
   });
 
   /**
+   * POST /api/v1/agreements/:id/review/retract
+   * INK-268: Retract document from review back to draft state
+   */
+  workflow.post('/:id/review/retract', async (c) => {
+    const agreementId = c.req.param('id');
+    const userPayload = c.get('userPayload') as any;
+    const { service } = getServices(c);
+
+    const result = await service.retractReview(
+      {
+        userId: userPayload?.sub || 'unknown',
+        userEmail: userPayload?.email,
+        userName: userPayload?.name,
+        organisationId: userPayload?.orgId || 'default-org-id',
+        role: userPayload?.role || 'user',
+        ipAddress: c.req.header('x-forwarded-for') || c.req.header('cf-connecting-ip'),
+        userAgent: c.req.header('user-agent'),
+      },
+      agreementId,
+    );
+
+    return c.json({ success: true, data: result });
+  });
+
+  /**
    * POST /api/v1/agreements/:id/review/approve
    * INK-88: Approve document
    */

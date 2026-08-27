@@ -136,13 +136,44 @@ export function formatDateTime(
 
 /**
  * Formats an agreement status string:
+ * - COMPLETED / SIGNED -> 'Signed'
  * - IN_REVIEW -> 'In Review'
  * - Removes underscores across all statuses (e.g. SENT_FOR_SIGNATURE -> 'SENT FOR SIGNATURE').
  */
 export function formatStatus(status: string | null | undefined): string {
   if (!status) return '';
-  if (status.toUpperCase() === 'IN_REVIEW') {
+  const upper = status.toUpperCase();
+  if (upper === 'COMPLETED' || upper === 'SIGNED') {
+    return 'Signed';
+  }
+  if (upper === 'IN_REVIEW') {
     return 'In Review';
   }
   return status.replace(/_/g, ' ');
 }
+
+/**
+ * Parses user-entered date strings like '15-Sep-2026', '15-SEP-2026', '2026-09-15', or '15/09/2026'.
+ */
+export function parseCustomDate(input: string): Date | null {
+  if (!input || !input.trim()) return null;
+  const val = input.trim();
+
+  // Match DD-MMM-YYYY (e.g. 15-Sep-2026 or 15-SEP-2026)
+  const dmmmyyyy = /^(\d{1,2})[-/ ]([a-zA-Z]{3})[-/ ](\d{4})$/i.exec(val);
+  if (dmmmyyyy) {
+    const day = parseInt(dmmmyyyy[1], 10);
+    const monStr = dmmmyyyy[2].toUpperCase();
+    const year = parseInt(dmmmyyyy[3], 10);
+    const monthIdx = MONTH_NAMES.indexOf(monStr);
+    if (monthIdx !== -1 && day >= 1 && day <= 31) {
+      const d = new Date(Date.UTC(year, monthIdx, day, 23, 59, 59));
+      if (!isNaN(d.getTime())) return d;
+    }
+  }
+
+  // Standard Date parsing fallback
+  const d = new Date(val);
+  return isNaN(d.getTime()) ? null : d;
+}
+

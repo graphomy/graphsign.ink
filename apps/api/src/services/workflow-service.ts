@@ -11,7 +11,12 @@ import {
 } from '../validators/workflow-validators.js';
 import { AuditService } from './audit-service.js';
 import { MailerService } from './mailer-service.js';
-import { ForbiddenError, NotFoundError, ValidationError } from '../utils/errors.js';
+import {
+  BadRequestError,
+  ForbiddenError,
+  NotFoundError,
+  ValidationError,
+} from '../utils/errors.js';
 import { generateId, generateToken, hashToken } from '../utils/crypto.js';
 
 export interface WorkflowContext {
@@ -30,6 +35,11 @@ export class WorkflowService {
     private readonly auditService: AuditService,
     private readonly mailerService: MailerService,
   ) {}
+
+  private static readonly otpStore = new Map<
+    string,
+    { code: string; expiresAt: number; verified?: boolean }
+  >();
 
   /**
    * INK-87: Submit agreement for internal review
@@ -108,6 +118,61 @@ export class WorkflowService {
         eventType: 'REVIEW_REQUEST',
       },
     );
+
+    return updated;
+  }
+
+  /**
+   * INK-268: Retract document from review back to draft state
+   */
+  async retractReview(ctx: WorkflowContext, agreementId: string) {
+    const agreement = await this.prisma.agreement.findFirst({
+      where: {
+        id: agreementId,
+        organisationId: ctx.organisationId,
+        deletedAt: null,
+      },
+      include: { author: { select: { name: true, email: true } } },
+    });
+
+    if (!agreement) {
+      throw new NotFoundError('Agreement not found.');
+    }
+
+    if (agreement.status !== 'IN_REVIEW') {
+      throw new ValidationError(
+        `Cannot retract agreement in '${agreement.status}' status. Only documents in review can be retracted.`,
+      );
+    }
+
+    const isAdmin = ctx.role === 'admin' || ctx.role === 'superadmin' || ctx.role === 'owner';
+    if (agreement.authorId !== ctx.userId && !isAdmin) {
+      throw new ForbiddenError(
+        'Only the document author or an administrator can retract this review request.',
+      );
+    }
+
+    const updated = await this.prisma.agreement.update({
+      where: { id: agreementId },
+      data: {
+        status: 'DRAFT',
+        rejectionReason: null,
+      },
+    });
+
+    await this.auditService.log({
+      organisationId: ctx.organisationId,
+      userId: ctx.userId,
+      action: 'REVIEW_RETRACTED',
+      resourceType: 'agreement',
+      resourceId: agreementId,
+      metadata: {
+        previousStatus: 'IN_REVIEW',
+        retractedBy: ctx.userId,
+      },
+      ipAddress: ctx.ipAddress,
+      userAgent: ctx.userAgent,
+    });
 
     return updated;
   }
@@ -269,12 +334,24 @@ export class WorkflowService {
     }
 
     if (
-      agreement.status !== 'DRAFT' &&
-      agreement.status !== 'APPROVED' &&
-      agreement.status !== 'REJECTED'
+      agreement.status === 'SENT_FOR_SIGNATURE' ||
+      agreement.status === 'PARTIALLY_SIGNED' ||
+      agreement.status === 'COMPLETED' ||
+      agreement.status === 'SIGNED'
     ) {
       throw new ValidationError(
-        `Cannot send agreement in '${agreement.status}' status. Must be DRAFT or APPROVED.`,
+        'Agreement has already been sent for signature. It cannot be resent unless the previous request is rejected.',
+      );
+    }
+
+    if (
+      agreement.status !== 'DRAFT' &&
+      agreement.status !== 'APPROVED' &&
+      agreement.status !== 'REJECTED' &&
+      agreement.status !== 'ACTIVE'
+    ) {
+      throw new ValidationError(
+        `Cannot send agreement in '${agreement.status}' status. Must be DRAFT, APPROVED, or REJECTED.`,
       );
     }
 
@@ -584,6 +661,110 @@ export class WorkflowService {
   }
 
   /**
+   * INK-266: Send 6-digit OTP verification code to recipient's email address
+   */
+  async sendSignerOtp(rawToken: string, ip?: string, userAgent?: string) {
+    const tokenHash = await hashToken(rawToken);
+    const recipient = await this.prisma.agreementRecipient.findUnique({
+      where: { signingTokenHash: tokenHash },
+      include: {
+        agreement: { select: { organisationId: true, id: true, title: true } },
+      },
+    });
+
+    if (!recipient) {
+      throw new NotFoundError('Invalid signing link.');
+    }
+
+    if (recipient.status === 'SIGNED' || recipient.status === 'DECLINED') {
+      throw new ValidationError(
+        `Cannot send verification code for ${recipient.status.toLowerCase()} recipient.`,
+      );
+    }
+
+    // Generate 6-digit code
+    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+    WorkflowService.otpStore.set(tokenHash, {
+      code: otpCode,
+      expiresAt: Date.now() + 10 * 60 * 1000, // 10 minutes
+      verified: false,
+    });
+
+    await this.mailerService.sendOtpVerificationEmail(
+      recipient.email,
+      recipient.name,
+      recipient.agreement.title,
+      otpCode,
+      {
+        organisationId: recipient.agreement.organisationId,
+        agreementId: recipient.agreement.id,
+        recipientId: recipient.id,
+        recipientName: recipient.name,
+      },
+    );
+
+    await this.auditService.log({
+      organisationId: recipient.agreement.organisationId,
+      action: 'GUEST_SIGNER_OTP_SENT',
+      resourceType: 'agreement',
+      resourceId: recipient.agreement.id,
+      metadata: {
+        recipientId: recipient.id,
+        email: recipient.email,
+        name: recipient.name,
+      },
+      ipAddress: ip,
+      userAgent,
+    });
+
+    return {
+      success: true,
+      email: recipient.email,
+      expiresInSeconds: 600,
+    };
+  }
+
+  /**
+   * INK-266: Verify 6-digit OTP code for signer
+   */
+  async verifySignerOtp(rawToken: string, otpCode: string, ip?: string, userAgent?: string) {
+    const tokenHash = await hashToken(rawToken);
+    const recipient = await this.prisma.agreementRecipient.findUnique({
+      where: { signingTokenHash: tokenHash },
+      include: {
+        agreement: { select: { organisationId: true, id: true } },
+      },
+    });
+
+    if (!recipient) {
+      throw new NotFoundError('Invalid signing link.');
+    }
+
+    const entry = WorkflowService.otpStore.get(tokenHash);
+    if (!entry || Date.now() > entry.expiresAt || entry.code !== otpCode.trim()) {
+      throw new BadRequestError('Invalid or expired verification code.');
+    }
+
+    entry.verified = true;
+
+    await this.auditService.log({
+      organisationId: recipient.agreement.organisationId,
+      action: 'GUEST_SIGNER_OTP_VERIFIED',
+      resourceType: 'agreement',
+      resourceId: recipient.agreement.id,
+      metadata: {
+        recipientId: recipient.id,
+        email: recipient.email,
+        name: recipient.name,
+      },
+      ipAddress: ip,
+      userAgent,
+    });
+
+    return { success: true, verified: true };
+  }
+
+  /**
    * INK-105: Get signing document file for public recipient download
    */
   async getSigningDocumentFile(rawToken: string) {
@@ -604,6 +785,13 @@ export class WorkflowService {
       throw new NotFoundError('Agreement file is not available.');
     }
 
+    const meta = (agreement.metadata as Record<string, unknown>) || {};
+    const fileData =
+      (meta.signedPdfBase64 as string | undefined) ||
+      (meta.fileBase64 as string | undefined) ||
+      (meta.fileData as string | undefined) ||
+      (agreement as any).fileData;
+
     return {
       id: agreement.id,
       title: agreement.title,
@@ -611,7 +799,7 @@ export class WorkflowService {
         agreement.fileName || `${agreement.title.toLowerCase().replace(/[^a-z0-9]/g, '-')}.pdf`,
       mimeType: agreement.mimeType || 'application/pdf',
       fileUrl: agreement.fileUrl,
-      fileData: (agreement as any).fileData,
+      fileData,
       markdownContent: agreement.markdownContent,
       status: agreement.status,
     };
@@ -651,6 +839,20 @@ export class WorkflowService {
 
     if (recipient.status === 'SIGNED') {
       throw new ValidationError('You have already signed this document.');
+    }
+
+    // Verify OTP if signed as guest
+    if (input.signedAsGuest) {
+      const entry = WorkflowService.otpStore.get(tokenHash);
+      if (input.otpCode) {
+        if (!entry || Date.now() > entry.expiresAt || entry.code !== input.otpCode.trim()) {
+          throw new BadRequestError('Invalid or expired verification code.');
+        }
+        entry.verified = true;
+      }
+      if (entry && !entry.verified) {
+        throw new BadRequestError('Email OTP verification is required before confirming signature.');
+      }
     }
 
     // Backend validation for assigned required fields (INK-104)
@@ -935,14 +1137,14 @@ export class WorkflowService {
       throw new ForbiddenError('You can only cancel your own agreements.');
     }
 
-    if (agreement.status === 'COMPLETED' || agreement.status === 'CANCELLED') {
-      throw new ValidationError(`Cannot cancel agreement in '${agreement.status}' status.`);
+    if (agreement.status === 'COMPLETED') {
+      throw new ValidationError(`Cannot void agreement in '${agreement.status}' status.`);
     }
 
     const updated = await this.prisma.agreement.update({
       where: { id: agreementId },
       data: {
-        status: 'CANCELLED',
+        status: 'DRAFT',
       },
     });
 
@@ -961,6 +1163,7 @@ export class WorkflowService {
       metadata: {
         reason: input.reason,
         previousStatus: agreement.status,
+        newStatus: 'DRAFT',
       },
       ipAddress: ctx.ipAddress,
       userAgent: ctx.userAgent,
