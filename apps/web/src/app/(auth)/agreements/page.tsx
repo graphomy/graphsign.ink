@@ -172,7 +172,6 @@ function AgreementManagementContent() {
     right: number;
     isBottom: boolean;
   } | null>(null);
-  const searchParams = useSearchParams();
 
   useEffect(() => {
     function handleClose() {
