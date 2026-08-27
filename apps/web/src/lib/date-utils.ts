@@ -176,4 +176,3 @@ export function parseCustomDate(input: string): Date | null {
   const d = new Date(val);
   return isNaN(d.getTime()) ? null : d;
 }
-

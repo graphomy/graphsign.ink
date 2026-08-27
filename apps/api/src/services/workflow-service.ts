@@ -851,7 +851,9 @@ export class WorkflowService {
         entry.verified = true;
       }
       if (entry && !entry.verified) {
-        throw new BadRequestError('Email OTP verification is required before confirming signature.');
+        throw new BadRequestError(
+          'Email OTP verification is required before confirming signature.',
+        );
       }
     }
 

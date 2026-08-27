@@ -162,11 +162,7 @@ describe('Workflow Modals Unit Tests (INK-87 to INK-95, INK-268)', () => {
     };
 
     render(
-      <PdfViewerModal
-        agreement={mockAg}
-        onClose={handleClose}
-        onOpenEditor={handleOpenEditor}
-      />,
+      <PdfViewerModal agreement={mockAg} onClose={handleClose} onOpenEditor={handleOpenEditor} />,
     );
 
     const designFieldsBtn = screen.getByRole('button', { name: /Design Fields/i });

@@ -119,8 +119,7 @@ export function ShareTemplateModal({
     };
   }, [templateId, planType]);
 
-  const isTeamsPlan =
-    planType === 'teams' || planType === 'team' || planType === 'enterprise';
+  const isTeamsPlan = planType === 'teams' || planType === 'team' || planType === 'enterprise';
 
   // Add share
   async function handleAddShare(e: React.FormEvent) {
@@ -172,13 +171,10 @@ export function ShareTemplateModal({
   async function handleRevokeShare(shareId: string) {
     setErrorMessage(null);
     try {
-      const res = await fetch(
-        `${getApiUrl()}/api/v1/templates/${templateId}/shares/${shareId}`,
-        {
-          method: 'DELETE',
-          headers: { Authorization: `Bearer ${getToken()}` },
-        },
-      );
+      const res = await fetch(`${getApiUrl()}/api/v1/templates/${templateId}/shares/${shareId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${getToken()}` },
+      });
 
       if (!res.ok) throw new Error('Failed to revoke template share.');
       setShares((prev) => prev.filter((s) => s.id !== shareId));
@@ -210,7 +206,9 @@ export function ShareTemplateModal({
 
         {/* Loading State */}
         {isLoadingOrg ? (
-          <div className="py-8 text-center text-xs text-neutral-500">Checking workspace plan...</div>
+          <div className="py-8 text-center text-xs text-neutral-500">
+            Checking workspace plan...
+          </div>
         ) : !isTeamsPlan ? (
           /* ========================================================================= */
           /* UPGRADE PROMPT: For users not on Teams Plan */
@@ -224,9 +222,9 @@ export function ShareTemplateModal({
                 This feature is only for users on Teams plan
               </h3>
               <p className="text-xs text-neutral-600 max-w-md mx-auto leading-relaxed">
-                Template sharing across your organization and with specific team members is available
-                exclusively on the <strong>Teams Plan</strong>. Upgrade your workspace to collaborate
-                seamlessly.
+                Template sharing across your organization and with specific team members is
+                available exclusively on the <strong>Teams Plan</strong>. Upgrade your workspace to
+                collaborate seamlessly.
               </p>
             </div>
 
@@ -263,7 +261,10 @@ export function ShareTemplateModal({
               </div>
             )}
 
-            <form onSubmit={handleAddShare} className="space-y-3 bg-neutral-50 p-3.5 rounded-xl border border-neutral-200">
+            <form
+              onSubmit={handleAddShare}
+              className="space-y-3 bg-neutral-50 p-3.5 rounded-xl border border-neutral-200"
+            >
               <span className="text-xs font-bold text-neutral-800 block">Grant New Access</span>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

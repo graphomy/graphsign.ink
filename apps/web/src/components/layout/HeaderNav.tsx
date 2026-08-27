@@ -42,7 +42,6 @@ export function HeaderNav() {
     fetchOrg();
   }, []);
 
-
   const mobileNavItems = [
     { label: 'Dashboard', href: '/dashboard' },
     { label: 'Agreements', href: '/agreements' },

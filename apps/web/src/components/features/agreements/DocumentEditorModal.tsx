@@ -785,7 +785,9 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
                       ? 'text-neutral-400 cursor-not-allowed'
                       : 'text-[#ba0000] hover:underline'
                   }`}
-                  title={recipients.length >= 10 ? 'Maximum 10 signers allowed' : 'Add a new signer'}
+                  title={
+                    recipients.length >= 10 ? 'Maximum 10 signers allowed' : 'Add a new signer'
+                  }
                 >
                   + Add Signer
                 </button>
@@ -1068,7 +1070,8 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
                     >
                       <div className="flex items-center gap-1 truncate">
                         <span className="truncate">
-                          {field.label} • {recipients.find((r) => r.id === field.recipientId)?.name || 'Signer'}
+                          {field.label} •{' '}
+                          {recipients.find((r) => r.id === field.recipientId)?.name || 'Signer'}
                         </span>
                         {field.isRequired && (
                           <span className="text-red-300 font-extrabold text-xs" title="Required">

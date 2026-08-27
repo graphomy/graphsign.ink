@@ -162,7 +162,7 @@ export default function SignDocumentPage({
 
           const hasToken = Boolean(
             typeof window !== 'undefined' &&
-              (localStorage.getItem('graphsign_session_token') || localStorage.getItem('token')),
+            (localStorage.getItem('graphsign_session_token') || localStorage.getItem('token')),
           );
           if (!hasToken) {
             setShowAuthGate(true);
@@ -890,7 +890,9 @@ export default function SignDocumentPage({
                     </div>
                     <span
                       className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
-                        isFilled ? 'bg-emerald-900/80 text-emerald-300' : 'bg-red-900/80 text-red-300'
+                        isFilled
+                          ? 'bg-emerald-900/80 text-emerald-300'
+                          : 'bg-red-900/80 text-red-300'
                       }`}
                     >
                       {isFilled ? '✓' : 'Pending'}
@@ -1282,8 +1284,8 @@ export default function SignDocumentPage({
             </div>
 
             <p className="text-[11px] text-neutral-400">
-              Guest signers verify a 6-digit OTP code sent to their email (
-              {currentRecipient?.email}) upon signature confirmation.
+              Guest signers verify a 6-digit OTP code sent to their email ({currentRecipient?.email}
+              ) upon signature confirmation.
             </p>
           </div>
         </div>

@@ -83,8 +83,7 @@ export function WorkspaceNav({ className = '' }: WorkspaceNavProps) {
     >
       {navItems.map((item) => {
         const isActive =
-          pathname === item.href ||
-          (item.href !== '/dashboard' && pathname?.startsWith(item.href));
+          pathname === item.href || (item.href !== '/dashboard' && pathname?.startsWith(item.href));
 
         return (
           <Link

@@ -248,7 +248,10 @@ export function createSignRoutes(deps?: SignDeps) {
         : file.fileData;
       const buffer = Buffer.from(base64Content || '', 'base64');
       c.header('Content-Type', file.mimeType || 'application/pdf');
-      c.header('Content-Disposition', `attachment; filename="${file.fileName || 'signed-document.pdf'}"`);
+      c.header(
+        'Content-Disposition',
+        `attachment; filename="${file.fileName || 'signed-document.pdf'}"`,
+      );
       return c.body(buffer as any);
     }
 
@@ -264,7 +267,10 @@ export function createSignRoutes(deps?: SignDeps) {
     // Fallback standard PDF if raw binary was not stored
     const fallbackPdf = `%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n3 0 obj<</Type/Page/MediaBox[0 0 612 792]/Parent 2 0 R/Resources<<>>>>endobj\nxref\n0 4\n0000000000 65535 f\n0000000009 00000 n\n0000000052 00000 n\n0000000101 00000 n\ntrailer<</Size 4/Root 1 0 R>>\nstartxref\n178\n%%EOF`;
     c.header('Content-Type', 'application/pdf');
-    c.header('Content-Disposition', `attachment; filename="${file.fileName || 'signed-document.pdf'}"`);
+    c.header(
+      'Content-Disposition',
+      `attachment; filename="${file.fileName || 'signed-document.pdf'}"`,
+    );
     return c.body(fallbackPdf);
   });
 

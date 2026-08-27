@@ -767,12 +767,7 @@ export class AgreementService {
   /**
    * Delete agreement record (INK-271)
    */
-  async deleteAgreement(
-    orgId: string,
-    authorId: string,
-    agreementId: string,
-    userRole?: string,
-  ) {
+  async deleteAgreement(orgId: string, authorId: string, agreementId: string, userRole?: string) {
     const existing = await this.prisma.agreement.findFirst({
       where: { id: agreementId, organisationId: orgId, deletedAt: null },
     });

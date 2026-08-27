@@ -156,7 +156,9 @@ function TemplateManagementContent() {
 
         if (!res.ok) {
           const errData = await res.json().catch(() => null);
-          throw new Error(errData?.error?.message || errData?.message || 'Failed to load templates.');
+          throw new Error(
+            errData?.error?.message || errData?.message || 'Failed to load templates.',
+          );
         }
 
         const data = await res.json();
@@ -170,7 +172,8 @@ function TemplateManagementContent() {
             );
           } else if (filterState.format === 'markdown') {
             items = items.filter(
-              (t) => !t.fileName?.toLowerCase().endsWith('.pdf') && t.mimeType !== 'application/pdf',
+              (t) =>
+                !t.fileName?.toLowerCase().endsWith('.pdf') && t.mimeType !== 'application/pdf',
             );
           }
 
@@ -415,7 +418,9 @@ function TemplateManagementContent() {
 
       if (!res.ok) {
         const errData = await res.json().catch(() => null);
-        throw new Error(errData?.error?.message || errData?.message || 'Failed to delete template.');
+        throw new Error(
+          errData?.error?.message || errData?.message || 'Failed to delete template.',
+        );
       }
 
       setActionMessage('Template deleted successfully.');

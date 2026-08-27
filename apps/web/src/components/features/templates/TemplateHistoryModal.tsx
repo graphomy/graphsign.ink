@@ -89,7 +89,9 @@ export function TemplateHistoryModal({
         )}
 
         {isLoading ? (
-          <div className="py-8 text-center text-xs text-neutral-500">Loading version timeline...</div>
+          <div className="py-8 text-center text-xs text-neutral-500">
+            Loading version timeline...
+          </div>
         ) : versions.length === 0 ? (
           <div className="py-6 text-center text-xs text-neutral-400">
             No version history records found.
@@ -113,9 +115,7 @@ export function TemplateHistoryModal({
                       </span>
                     )}
                   </span>
-                  <span className="text-[11px] text-neutral-400">
-                    {formatDate(ver.createdAt)}
-                  </span>
+                  <span className="text-[11px] text-neutral-400">{formatDate(ver.createdAt)}</span>
                 </div>
                 <p className="text-neutral-600 text-[11px] italic">
                   {ver.changeSummary || 'Version revision'}

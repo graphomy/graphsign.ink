@@ -304,7 +304,9 @@ export function SendAgreementModal({
               onChange={(e) => setExpiresAt(e.target.value)}
               className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-[#ba0000]"
             />
-            <p className="text-[10px] text-neutral-400 mt-1">Format: dd-mmm-yyyy (e.g. 25-Dec-2026)</p>
+            <p className="text-[10px] text-neutral-400 mt-1">
+              Format: dd-mmm-yyyy (e.g. 25-Dec-2026)
+            </p>
           </div>
 
           {/* Custom Message */}

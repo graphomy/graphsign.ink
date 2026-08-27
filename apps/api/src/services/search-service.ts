@@ -100,7 +100,9 @@ export class SearchService {
       if (query.status === 'SIGNED' || query.status === 'COMPLETED') {
         where.status = { in: ['COMPLETED', 'SIGNED'] };
       } else if (query.status === 'ACTIVE') {
-        where.status = { notIn: ['DRAFT', 'IN_REVIEW', 'REJECTED', 'CANCELLED', 'COMPLETED', 'SIGNED'] };
+        where.status = {
+          notIn: ['DRAFT', 'IN_REVIEW', 'REJECTED', 'CANCELLED', 'COMPLETED', 'SIGNED'],
+        };
       } else if (query.status === 'DRAFT') {
         where.status = { in: ['DRAFT', 'IN_REVIEW', 'REJECTED', 'CANCELLED'] };
       } else {

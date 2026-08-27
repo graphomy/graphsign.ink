@@ -128,7 +128,9 @@ export function OtpVerificationModal({
 
       const data = await res.json();
       if (!res.ok || !data.success) {
-        throw new Error(data.error?.message || data.message || 'Invalid or expired verification code.');
+        throw new Error(
+          data.error?.message || data.message || 'Invalid or expired verification code.',
+        );
       }
 
       await onVerified(otpCode);
@@ -160,13 +162,17 @@ export function OtpVerificationModal({
         {error && (
           <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl flex items-center justify-between">
             <span>⚠️ {error}</span>
-            <button onClick={() => setError(null)} className="font-bold text-red-600">×</button>
+            <button onClick={() => setError(null)} className="font-bold text-red-600">
+              ×
+            </button>
           </div>
         )}
         {infoMessage && (
           <div className="p-3 bg-green-50 border border-green-200 text-green-800 text-xs rounded-xl flex items-center justify-between">
             <span>✓ {infoMessage}</span>
-            <button onClick={() => setInfoMessage(null)} className="font-bold text-green-600">×</button>
+            <button onClick={() => setInfoMessage(null)} className="font-bold text-green-600">
+              ×
+            </button>
           </div>
         )}
 

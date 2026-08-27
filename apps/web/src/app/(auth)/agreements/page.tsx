@@ -222,7 +222,11 @@ function AgreementManagementContent() {
     initialQueryProcessedRef.current = true;
     setFilterState(newFilters);
     setCurrentPage(1);
-    if (typeof window !== 'undefined' && !newFilters.keyword && window.location.search.includes('q=')) {
+    if (
+      typeof window !== 'undefined' &&
+      !newFilters.keyword &&
+      window.location.search.includes('q=')
+    ) {
       window.history.replaceState({}, '', window.location.pathname);
     }
   }
@@ -598,7 +602,11 @@ function AgreementManagementContent() {
   }
 
   async function handleDeleteAgreement(id: string) {
-    if (!confirm('Are you sure you want to delete this agreement record? This action cannot be undone.')) {
+    if (
+      !confirm(
+        'Are you sure you want to delete this agreement record? This action cannot be undone.',
+      )
+    ) {
       return;
     }
     setActionError(null);
