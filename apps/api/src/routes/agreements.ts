@@ -394,6 +394,25 @@ export function createAgreementRoutes(deps?: AgreementDeps) {
     },
   );
 
+  // DELETE /api/v1/agreements/:id (INK-271 Delete agreement record)
+  agreements.delete(
+    '/:id',
+    jwtAuth(),
+    enforceTenantActiveStatus(),
+    requirePermission('documents:delete'),
+    async (c) => {
+      const { service } = getServices(c);
+      const agreementId = c.req.param('id');
+      const userPayload = c.get('userPayload') as any;
+      const authorId = userPayload?.sub || 'unknown';
+      const orgId = userPayload?.orgId || 'default-org-id';
+      const userRole = userPayload?.role || 'user';
+
+      const deleted = await service.deleteAgreement(orgId, authorId, agreementId, userRole);
+      return c.json(deleted, 200);
+    },
+  );
+
   // PATCH /api/v1/agreements/:id/metadata (INK-72 Metadata & tags)
   agreements.patch(
     '/:id/metadata',

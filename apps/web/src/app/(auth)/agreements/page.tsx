@@ -1,11 +1,12 @@
 'use client';
 
-import React, { useState, useEffect, Suspense } from 'react';
+import React, { useState, useEffect, useRef, Suspense } from 'react';
 import { createPortal } from 'react-dom';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { SessionGuard } from '@/components/features/auth/SessionGuard';
 import { HeaderNav } from '@/components/layout/HeaderNav';
+import { WorkspaceNav } from '@/components/layout/WorkspaceNav';
 import { Footer } from '@/components/layout/Footer';
 import { MarkdownEditor } from '@/components/features/agreements/MarkdownEditor';
 import { PdfViewerModal } from '@/components/features/agreements/PdfViewerModal';
@@ -87,7 +88,7 @@ function getCurrentUserInfo(): { userId: string; userEmail: string } {
 }
 
 function AgreementManagementContent() {
-  const [activeTab, setActiveTab] = useState<'active' | 'drafts' | 'archived'>('active');
+  const [activeTab, setActiveTab] = useState<'signed' | 'active' | 'drafts' | 'archived'>('signed');
   const [agreements, setAgreements] = useState<AgreementItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterState, setFilterState] = useState<FilterState>({
@@ -156,10 +157,13 @@ function AgreementManagementContent() {
   const [isCreatingScratch, setIsCreatingScratch] = useState(false);
   const [cloningId, setCloningId] = useState<string | null>(null);
   const [isArchivingId, setIsArchivingId] = useState<string | null>(null);
+  const [isDeletingId, setIsDeletingId] = useState<string | null>(null);
   const [isSavingTags, setIsSavingTags] = useState(false);
 
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const searchParams = useSearchParams();
+  const router = useRouter();
   const [dropdownAnchor, setDropdownAnchor] = useState<{
     id: string;
     agreement: AgreementItem;
@@ -168,7 +172,6 @@ function AgreementManagementContent() {
     right: number;
     isBottom: boolean;
   } | null>(null);
-  const searchParams = useSearchParams();
 
   useEffect(() => {
     function handleClose() {
@@ -184,10 +187,13 @@ function AgreementManagementContent() {
     };
   }, []);
 
+  const initialQueryProcessedRef = useRef(false);
+
   useEffect(() => {
     const action = searchParams?.get('action');
     const qParam = searchParams?.get('q') || searchParams?.get('search');
-    if (qParam && !filterState.keyword) {
+    if (qParam && !initialQueryProcessedRef.current) {
+      initialQueryProcessedRef.current = true;
       queueMicrotask(() => {
         setFilterState((prev) => ({ ...prev, keyword: qParam }));
       });
@@ -199,10 +205,10 @@ function AgreementManagementContent() {
     } else if (action === 'template') {
       queueMicrotask(() => setShowChooseTemplateModal(true));
     }
-  }, [searchParams, filterState.keyword]);
+  }, [searchParams]);
 
   // Reset page to 1 when changing tabs, search, or filters
-  function handleTabChange(tab: 'active' | 'drafts' | 'archived') {
+  function handleTabChange(tab: 'signed' | 'active' | 'drafts' | 'archived') {
     setActiveTab(tab);
     setCurrentPage(1);
     setAgreements([]);
@@ -212,11 +218,20 @@ function AgreementManagementContent() {
   }
 
   function handleFilterChange(newFilters: FilterState) {
+    initialQueryProcessedRef.current = true;
     setFilterState(newFilters);
     setCurrentPage(1);
+    if (
+      typeof window !== 'undefined' &&
+      !newFilters.keyword &&
+      window.location.search.includes('q=')
+    ) {
+      window.history.replaceState({}, '', window.location.pathname);
+    }
   }
 
   function handleClearFilters() {
+    initialQueryProcessedRef.current = true;
     setFilterState({
       keyword: '',
       status: 'ALL',
@@ -230,9 +245,13 @@ function AgreementManagementContent() {
     });
     setSuggestion(null);
     setCurrentPage(1);
+    if (typeof window !== 'undefined' && window.location.search) {
+      window.history.replaceState({}, '', window.location.pathname);
+    }
   }
 
   function handleApplySuggestion(suggestedKeyword: string) {
+    initialQueryProcessedRef.current = true;
     setFilterState((prev) => ({ ...prev, keyword: suggestedKeyword }));
     setCurrentPage(1);
   }
@@ -248,11 +267,13 @@ function AgreementManagementContent() {
         const statusParam =
           filterState.status !== 'ALL'
             ? filterState.status
-            : activeTab === 'drafts'
-              ? 'DRAFT'
-              : activeTab === 'active'
-                ? 'ACTIVE'
-                : '';
+            : activeTab === 'signed'
+              ? 'SIGNED'
+              : activeTab === 'drafts'
+                ? 'DRAFT'
+                : activeTab === 'active'
+                  ? 'ACTIVE'
+                  : '';
 
         let url = `${getApiUrl()}/api/v1/search/agreements?isArchived=${isArchivedParam}&page=${currentPage}&limit=${pageSize}&sortBy=${filterState.sortBy}&sortOrder=${filterState.sortOrder}`;
         if (statusParam) url += `&status=${encodeURIComponent(statusParam)}`;
@@ -282,7 +303,7 @@ function AgreementManagementContent() {
           localStorage.removeItem('graphsign_user_email');
           localStorage.removeItem('graphsign_org_id');
           localStorage.removeItem('graphsign_user_id');
-          window.location.href = '/login?reason=session_expired';
+          router.push('/login?reason=session_expired');
           return;
         }
 
@@ -524,6 +545,92 @@ function AgreementManagementContent() {
     }
   }
 
+  async function handleRetractReview(id: string, title: string) {
+    if (
+      !confirm(
+        `Are you sure you want to retract the review request for "${title}"? The document will return to Draft status so you can make updates and resubmit it.`,
+      )
+    ) {
+      return;
+    }
+    setActionError(null);
+    try {
+      const res = await fetch(`${getApiUrl()}/api/v1/agreements/${id}/review/retract`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${getToken()}`,
+        },
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(
+          data?.error?.message || data?.message || 'Failed to retract review request.',
+        );
+      }
+
+      setActionMessage(
+        `Review request for "${title}" has been retracted. Document returned to Draft.`,
+      );
+      setRefreshTrigger((prev) => prev + 1);
+    } catch (err: unknown) {
+      setActionError((err as Error).message);
+    }
+  }
+
+  async function handleDownloadAgreement(agreement: AgreementItem) {
+    try {
+      const res = await fetch(`${getApiUrl()}/api/v1/agreements/${agreement.id}/file`, {
+        headers: { Authorization: `Bearer ${getToken()}` },
+      });
+      if (!res.ok) throw new Error('Failed to download document');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const cleanTitle = agreement.title.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+      a.download = agreement.fileName || `${cleanTitle}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err: unknown) {
+      setActionError((err as Error).message);
+    }
+  }
+
+  async function handleDeleteAgreement(id: string) {
+    if (
+      !confirm(
+        'Are you sure you want to delete this agreement record? This action cannot be undone.',
+      )
+    ) {
+      return;
+    }
+    setActionError(null);
+    setDropdownAnchor(null);
+    setIsDeletingId(id);
+    try {
+      const res = await fetch(`${getApiUrl()}/api/v1/agreements/${id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${getToken()}` },
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.error?.message || data?.message || 'Failed to delete agreement.');
+      }
+
+      setActionMessage('Agreement deleted successfully.');
+      setRefreshTrigger((prev) => prev + 1);
+    } catch (err: unknown) {
+      setActionError((err as Error).message);
+    } finally {
+      setIsDeletingId(null);
+    }
+  }
+
   function openEditModal(agreement: AgreementItem) {
     setSelectedAgreement(agreement);
     setShowEditModal(true);
@@ -656,6 +763,11 @@ function AgreementManagementContent() {
           </div>
         </div>
 
+        {/* Section Navigation (INK-269) */}
+        <div className="flex items-center justify-between">
+          <WorkspaceNav />
+        </div>
+
         {/* Global Notifications Banners */}
         {actionMessage && (
           <div className="rounded-xl border border-green-200 bg-green-50 p-4 text-xs font-medium text-green-800 flex items-center justify-between shadow-2xs">
@@ -677,6 +789,16 @@ function AgreementManagementContent() {
         {/* Navigation Tabs Bar */}
         <div className="bg-white border border-neutral-200/80 rounded-2xl p-2.5 flex items-center justify-between shadow-xs">
           <div className="flex items-center gap-1.5 bg-neutral-100 p-1 rounded-xl">
+            <button
+              onClick={() => handleTabChange('signed')}
+              className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                activeTab === 'signed'
+                  ? 'bg-white text-neutral-900 shadow-xs border border-neutral-200/60'
+                  : 'text-neutral-600 hover:text-neutral-900'
+              }`}
+            >
+              Signed
+            </button>
             <button
               onClick={() => handleTabChange('active')}
               className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-all ${
@@ -786,7 +908,7 @@ function AgreementManagementContent() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-neutral-100">
-                  {agreements.map((agreement, idx) => (
+                  {agreements.map((agreement) => (
                     <tr
                       key={agreement.id}
                       className="hover:bg-neutral-50/80 transition-colors group"
@@ -865,8 +987,33 @@ function AgreementManagementContent() {
                       {/* Actions Column */}
                       <td className="py-3.5 px-4 text-right whitespace-nowrap">
                         <div className="flex items-center justify-end gap-1.5">
+                          {/* SIGNED TAB / COMPLETED / SIGNED AGREEMENTS (INK-271) */}
+                          {(activeTab === 'signed' ||
+                            agreement.status === 'COMPLETED' ||
+                            agreement.status === 'SIGNED') && (
+                            <>
+                              <button
+                                onClick={() => openPdfViewer(agreement)}
+                                className="px-2.5 py-1 text-[11px] font-medium text-neutral-700 hover:text-neutral-900 bg-neutral-50 hover:bg-neutral-100 border border-neutral-200 rounded transition-colors flex items-center gap-1"
+                                title="View Signed PDF"
+                              >
+                                <span>👁️</span> PDF
+                              </button>
+                              <button
+                                onClick={() => handleDownloadAgreement(agreement)}
+                                className="px-2.5 py-1 text-[11px] font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded transition-colors flex items-center gap-1"
+                                title="Download Signed Document"
+                              >
+                                <span>⬇️</span> Download
+                              </button>
+                            </>
+                          )}
+
                           {/* DRAFTS TAB or DRAFT/REJECTED agreements */}
                           {activeTab !== 'archived' &&
+                            activeTab !== 'signed' &&
+                            agreement.status !== 'COMPLETED' &&
+                            agreement.status !== 'SIGNED' &&
                             !agreement.isArchived &&
                             (agreement.status === 'DRAFT' || agreement.status === 'REJECTED') && (
                               <>
@@ -892,6 +1039,7 @@ function AgreementManagementContent() {
 
                           {/* IN_REVIEW: Review Decision button strictly scoped to designated reviewer (INK-263) */}
                           {activeTab !== 'archived' &&
+                            activeTab !== 'signed' &&
                             !agreement.isArchived &&
                             agreement.status === 'IN_REVIEW' &&
                             ((currentUser.userId && agreement.reviewerId === currentUser.userId) ||
@@ -910,11 +1058,29 @@ function AgreementManagementContent() {
                               </button>
                             )}
 
-                          {/* Send for Signature Button: Only on Active tab (INK-259) */}
+                          {/* IN_REVIEW: Retract Review button (INK-268) */}
+                          {activeTab !== 'archived' &&
+                            activeTab !== 'signed' &&
+                            !agreement.isArchived &&
+                            agreement.status === 'IN_REVIEW' && (
+                              <button
+                                onClick={() => handleRetractReview(agreement.id, agreement.title)}
+                                className="px-2.5 py-1 text-[11px] font-semibold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded transition-colors flex items-center gap-1"
+                                title="Retract review request and return to Draft"
+                              >
+                                <span>↩️</span> Retract Review
+                              </button>
+                            )}
+
+                          {/* Send for Signature Button: Only on Active tab for unsent documents (INK-259, INK-271) */}
                           {activeTab === 'active' &&
                             !agreement.isArchived &&
                             agreement.status !== 'IN_REVIEW' &&
-                            agreement.status !== 'SENT' && (
+                            agreement.status !== 'SENT' &&
+                            agreement.status !== 'SENT_FOR_SIGNATURE' &&
+                            agreement.status !== 'PARTIALLY_SIGNED' &&
+                            agreement.status !== 'COMPLETED' &&
+                            agreement.status !== 'SIGNED' && (
                               <button
                                 onClick={() => openDocumentEditor(agreement)}
                                 className="px-2.5 py-1 text-[11px] font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded transition-colors flex items-center gap-1"
@@ -927,7 +1093,9 @@ function AgreementManagementContent() {
                           {/* INK-108: Send Reminder Button for active SENT agreements */}
                           {activeTab === 'active' &&
                             !agreement.isArchived &&
-                            agreement.status === 'SENT' && (
+                            (agreement.status === 'SENT' ||
+                              agreement.status === 'SENT_FOR_SIGNATURE' ||
+                              agreement.status === 'PARTIALLY_SIGNED') && (
                               <button
                                 onClick={() => {
                                   setSelectedAgreement(agreement);
@@ -940,14 +1108,18 @@ function AgreementManagementContent() {
                               </button>
                             )}
 
-                          {/* View PDF Button: Available on all tabs */}
-                          <button
-                            onClick={() => openPdfViewer(agreement)}
-                            className="px-2.5 py-1 text-[11px] font-medium text-neutral-700 hover:text-neutral-900 bg-neutral-50 hover:bg-neutral-100 border border-neutral-200 rounded transition-colors flex items-center gap-1"
-                            title="View PDF"
-                          >
-                            <span>👁️</span> PDF
-                          </button>
+                          {/* View PDF Button: Available for non-signed tabs (signed tab has its own dedicated PDF button above) */}
+                          {activeTab !== 'signed' &&
+                            agreement.status !== 'COMPLETED' &&
+                            agreement.status !== 'SIGNED' && (
+                              <button
+                                onClick={() => openPdfViewer(agreement)}
+                                className="px-2.5 py-1 text-[11px] font-medium text-neutral-700 hover:text-neutral-900 bg-neutral-50 hover:bg-neutral-100 border border-neutral-200 rounded transition-colors flex items-center gap-1"
+                                title="View PDF"
+                              >
+                                <span>👁️</span> PDF
+                              </button>
+                            )}
 
                           {/* 3 Dots Dropdown Trigger */}
                           <div className="relative inline-block text-left">
@@ -1762,6 +1934,19 @@ function AgreementManagementContent() {
                       </button>
                     )}
 
+                  {dropdownAnchor.agreement.status === 'IN_REVIEW' && (
+                    <button
+                      onClick={() => {
+                        const ag = dropdownAnchor.agreement;
+                        setDropdownAnchor(null);
+                        handleRetractReview(ag.id, ag.title);
+                      }}
+                      className="w-full px-3 py-1.5 text-xs text-amber-700 hover:bg-amber-50 flex items-center gap-2 transition-colors"
+                    >
+                      <span>↩️</span> Retract Review
+                    </button>
+                  )}
+
                   {(dropdownAnchor.agreement.status === 'SENT' ||
                     dropdownAnchor.agreement.status === 'IN_REVIEW') && (
                     <button
@@ -1786,10 +1971,22 @@ function AgreementManagementContent() {
                       handleArchiveToggle(ag.id, true);
                     }}
                     disabled={isArchivingId === dropdownAnchor.agreement.id}
-                    className="w-full px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 flex items-center gap-2 transition-colors disabled:opacity-50"
+                    className="w-full px-3 py-1.5 text-xs text-neutral-700 hover:bg-neutral-50 flex items-center gap-2 transition-colors disabled:opacity-50"
                   >
                     <span>📦</span>{' '}
                     {isArchivingId === dropdownAnchor.agreement.id ? 'Archiving...' : 'Archive'}
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      const ag = dropdownAnchor.agreement;
+                      setDropdownAnchor(null);
+                      handleDeleteAgreement(ag.id);
+                    }}
+                    disabled={isDeletingId === dropdownAnchor.agreement.id}
+                    className="w-full px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 flex items-center gap-2 transition-colors font-semibold disabled:opacity-50"
+                  >
+                    <span>🗑️</span> Delete
                   </button>
                 </>
               )}

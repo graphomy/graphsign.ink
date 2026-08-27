@@ -765,6 +765,48 @@ export class AgreementService {
   }
 
   /**
+   * Delete agreement record (INK-271)
+   */
+  async deleteAgreement(orgId: string, authorId: string, agreementId: string, userRole?: string) {
+    const existing = await this.prisma.agreement.findFirst({
+      where: { id: agreementId, organisationId: orgId, deletedAt: null },
+    });
+
+    if (!existing) {
+      throw new NotFoundError('Agreement not found.');
+    }
+
+    if (
+      userRole &&
+      userRole !== 'org_admin' &&
+      userRole !== 'admin' &&
+      userRole !== 'super_admin' &&
+      authorId !== 'unknown' &&
+      existing.authorId !== authorId
+    ) {
+      throw new ForbiddenError('You do not have permission to delete this agreement.');
+    }
+
+    await this.prisma.agreement.update({
+      where: { id: agreementId },
+      data: { deletedAt: new Date() },
+    });
+
+    if (this.audit) {
+      await this.audit.log({
+        organisationId: orgId,
+        userId: authorId,
+        action: 'AGREEMENT_DELETED',
+        resourceType: 'Agreement',
+        resourceId: agreementId,
+        metadata: { title: existing.title },
+      });
+    }
+
+    return { success: true, id: agreementId };
+  }
+
+  /**
    * Update metadata and tags (FR-004.007 / INK-72)
    */
   async updateMetadataAndTags(

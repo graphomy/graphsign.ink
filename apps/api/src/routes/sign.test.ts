@@ -177,4 +177,24 @@ describe('Sign Route Integration Tests (Public Signer Endpoints)', () => {
     expect(res.headers.get('Content-Type')).toBe('application/pdf');
     expect(res.headers.get('Content-Disposition')).toContain('contract.pdf');
   });
+
+  it('GET /api/v1/sign/:token/file streams PDF for document canvas preview (INK-272)', async () => {
+    const fakeBase64 = Buffer.from('%PDF-1.4 simulated pdf content').toString('base64');
+    mockWorkflowService.getSigningDocumentFile = vi.fn().mockResolvedValue({
+      id: 'ag-1',
+      title: 'Contract PDF',
+      fileName: 'contract.pdf',
+      mimeType: 'application/pdf',
+      fileData: fakeBase64,
+      status: 'SENT',
+    });
+
+    const res = await app.request('/api/v1/sign/token-123/file', {
+      method: 'GET',
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get('Content-Type')).toBe('application/pdf');
+    expect(res.headers.get('Content-Disposition')).toContain('inline; filename="contract.pdf"');
+  });
 });

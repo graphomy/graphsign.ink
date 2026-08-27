@@ -4,6 +4,7 @@ import { useState, useEffect, Suspense, useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import { SessionGuard } from '@/components/features/auth/SessionGuard';
 import { HeaderNav } from '@/components/layout/HeaderNav';
+import { WorkspaceNav } from '@/components/layout/WorkspaceNav';
 import { Footer } from '@/components/layout/Footer';
 import { getApiUrl } from '@/lib/api';
 import { formatDate, formatStatus } from '@/lib/date-utils';
@@ -149,6 +150,11 @@ function DashboardContent() {
               <span>📐</span> Upload Template
             </Link>
           </div>
+        </div>
+
+        {/* Section Navigation (INK-269) */}
+        <div className="flex items-center justify-between">
+          <WorkspaceNav />
         </div>
 
         {/* Quick Search Omnibar (INK-117) */}

@@ -5,8 +5,9 @@ import { SubmitReviewModal } from './SubmitReviewModal';
 import { ReviewDecisionModal } from './ReviewDecisionModal';
 import { SendAgreementModal } from './SendAgreementModal';
 import { CancelAgreementModal } from './CancelAgreementModal';
+import { PdfViewerModal } from './PdfViewerModal';
 
-describe('Workflow Modals Unit Tests (INK-87 to INK-95)', () => {
+describe('Workflow Modals Unit Tests (INK-87 to INK-95, INK-268)', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
   });
@@ -140,9 +141,36 @@ describe('Workflow Modals Unit Tests (INK-87 to INK-95)', () => {
 
     await waitFor(() => {
       expect(handleSuccess).toHaveBeenCalledWith(
-        'Agreement "Employment Agreement" has been cancelled.',
+        'Agreement "Employment Agreement" has been voided and returned to Draft.',
       );
       expect(handleClose).toHaveBeenCalled();
     });
+  });
+
+  it('renders PdfViewerModal and triggers onOpenEditor on Design Fields click (INK-268)', () => {
+    const handleClose = vi.fn();
+    const handleOpenEditor = vi.fn();
+
+    const mockAg = {
+      id: 'ag-1',
+      title: 'Sales Order NDA',
+      version: 1,
+      status: 'DRAFT',
+      markdownContent: '# Sales Order\n\nAgreement body text.',
+      createdAt: '2026-08-27T00:00:00Z',
+      updatedAt: '2026-08-27T00:00:00Z',
+    };
+
+    render(
+      <PdfViewerModal agreement={mockAg} onClose={handleClose} onOpenEditor={handleOpenEditor} />,
+    );
+
+    const designFieldsBtn = screen.getByRole('button', { name: /Design Fields/i });
+    expect(designFieldsBtn).toBeDefined();
+
+    fireEvent.click(designFieldsBtn);
+
+    expect(handleOpenEditor).toHaveBeenCalledTimes(1);
+    expect(handleClose).not.toHaveBeenCalled();
   });
 });

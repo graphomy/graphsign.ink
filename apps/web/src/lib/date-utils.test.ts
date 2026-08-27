@@ -60,7 +60,8 @@ describe('date-utils (DD-MON-YYYY)', () => {
     expect(formatStatus('SENT_FOR_SIGNATURE')).toBe('SENT FOR SIGNATURE');
     expect(formatStatus('PENDING_REVIEW')).toBe('PENDING REVIEW');
     expect(formatStatus('DRAFT')).toBe('DRAFT');
-    expect(formatStatus('COMPLETED')).toBe('COMPLETED');
+    expect(formatStatus('COMPLETED')).toBe('Signed');
+    expect(formatStatus('SIGNED')).toBe('Signed');
     expect(formatStatus(null)).toBe('');
     expect(formatStatus(undefined)).toBe('');
   });

@@ -183,25 +183,6 @@ export function PdfViewerModal({ agreement, onClose, onOpenEditor }: PdfViewerMo
     window.print();
   }
 
-  function handleOpenOriginal() {
-    if (effectivePdfUrl) {
-      window.open(effectivePdfUrl, '_blank', 'noopener,noreferrer');
-      return;
-    }
-
-    // For markdown documents, open a clean printable view in new tab
-    const cleanContent =
-      agreement.markdownContent || `# ${agreement.title}\n\n${agreement.description || ''}`;
-    const blob = new Blob(
-      [
-        `<!DOCTYPE html><html><head><title>${agreement.title}</title><style>body{font-family:sans-serif;padding:40px;max-width:800px;margin:auto;line-height:1.6;color:#111;}</style></head><body>${renderMarkdownToHtml(cleanContent)}</body></html>`,
-      ],
-      { type: 'text/html;charset=utf-8' },
-    );
-    const url = URL.createObjectURL(blob);
-    window.open(url, '_blank');
-  }
-
   function handleDownload() {
     const cleanTitle = agreement.title.replace(/[^a-z0-9]/gi, '_').toLowerCase();
     const fileName =
@@ -289,25 +270,13 @@ export function PdfViewerModal({ agreement, onClose, onOpenEditor }: PdfViewerMo
 
           {onOpenEditor && (
             <button
-              onClick={() => {
-                onClose();
-                onOpenEditor();
-              }}
+              onClick={onOpenEditor}
               className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-lg shadow-sm transition-colors flex items-center gap-1.5"
               title="Open Visual Document Editor"
             >
               <span>✏️</span> Design Fields
             </button>
           )}
-
-          {/* Open Original File / New Tab Button */}
-          <button
-            onClick={handleOpenOriginal}
-            className="px-3 py-1.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-xs font-semibold rounded-lg border border-neutral-700 transition-colors flex items-center gap-1.5"
-            title="Open Original File in New Tab"
-          >
-            <span>🔗</span> Open Original File
-          </button>
 
           <button
             onClick={handlePrint}
@@ -336,14 +305,14 @@ export function PdfViewerModal({ agreement, onClose, onOpenEditor }: PdfViewerMo
       </div>
 
       {/* Document View Canvas */}
-      <div className="flex-1 bg-neutral-900 p-2 sm:p-4 md:p-6 overflow-hidden flex justify-center items-center">
+      <div className="flex-1 bg-neutral-900 p-2 sm:p-4 md:p-6 overflow-hidden flex flex-col justify-start items-center">
         {isLoadingFile ? (
-          <div className="flex flex-col items-center justify-center p-12 text-center text-white space-y-3">
+          <div className="flex flex-col items-center justify-center p-12 text-center text-white space-y-3 my-auto">
             <div className="w-8 h-8 border-3 border-neutral-600 border-t-white rounded-full animate-spin" />
             <p className="text-xs text-neutral-300 font-medium">Loading document securely...</p>
           </div>
         ) : fetchError ? (
-          <div className="bg-neutral-800 border border-red-500/40 rounded-xl p-8 max-w-md text-center text-white space-y-4 shadow-xl">
+          <div className="bg-neutral-800 border border-red-500/40 rounded-xl p-8 max-w-md text-center text-white space-y-4 shadow-xl my-auto">
             <div className="text-4xl text-red-400">⚠️</div>
             <h3 className="text-sm font-bold text-neutral-100">Unable to load document</h3>
             <p className="text-xs text-neutral-400">{fetchError}</p>
@@ -355,15 +324,15 @@ export function PdfViewerModal({ agreement, onClose, onOpenEditor }: PdfViewerMo
             </button>
           </div>
         ) : isPdf && effectivePdfUrl ? (
-          <div className="w-full h-full rounded-b-lg overflow-hidden bg-neutral-800 border border-neutral-700 shadow-2xl flex flex-col">
+          <div className="w-full h-full flex-1 rounded-b-lg overflow-hidden bg-neutral-800 border border-neutral-700 shadow-2xl flex flex-col">
             <iframe
               src={effectivePdfUrl}
-              className="w-full h-full min-h-[600px] border-0 bg-white"
+              className="w-full h-full flex-1 border-0 bg-white"
               title={agreement.title}
             />
           </div>
         ) : isMarkdown ? (
-          <div className="w-full h-full overflow-y-auto flex justify-center p-2 sm:p-4">
+          <div className="w-full h-full flex-1 overflow-y-auto flex justify-center p-2 sm:p-4">
             <div
               ref={printableAreaRef}
               style={{ transform: `scale(${zoomLevel / 100})`, transformOrigin: 'top center' }}
@@ -378,22 +347,16 @@ export function PdfViewerModal({ agreement, onClose, onOpenEditor }: PdfViewerMo
             </div>
           </div>
         ) : (
-          <div className="w-full h-full flex flex-col items-center justify-center text-center p-8 bg-neutral-800 rounded-b-lg border border-neutral-700">
+          <div className="w-full h-full flex-1 flex flex-col items-center justify-center text-center p-8 bg-neutral-800 rounded-b-lg border border-neutral-700 my-auto">
             <div className="text-5xl mb-4">📄</div>
             <h3 className="text-base font-bold text-neutral-100 mb-2">
               {agreement.fileName || agreement.title}
             </h3>
             <p className="text-xs text-neutral-400 max-w-md mb-6">
-              Source file is ready for execution. You can view or download the original file
+              Source file is ready for execution. You can download the verified document file
               directly.
             </p>
             <div className="flex items-center gap-3">
-              <button
-                onClick={handleOpenOriginal}
-                className="px-4 py-2 bg-neutral-700 hover:bg-neutral-600 text-white rounded-lg text-xs font-semibold transition-colors inline-flex items-center gap-1.5"
-              >
-                <span>🔗</span> Open Original File
-              </button>
               <button
                 onClick={handleDownload}
                 className="px-4 py-2 bg-[#ba0000] hover:bg-red-700 text-white rounded-lg text-xs font-semibold transition-colors inline-flex items-center gap-1.5"

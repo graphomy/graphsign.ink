@@ -28,6 +28,7 @@ describe('Workflow Route Integration Tests (INK-86 to INK-95)', () => {
 
     mockWorkflowService = {
       submitForReview: vi.fn().mockResolvedValue({ id: 'ag-1', status: 'IN_REVIEW' }),
+      retractReview: vi.fn().mockResolvedValue({ id: 'ag-1', status: 'DRAFT' }),
       approveAgreement: vi.fn().mockResolvedValue({ id: 'ag-1', status: 'APPROVED' }),
       rejectAgreement: vi.fn().mockResolvedValue({ id: 'ag-1', status: 'REJECTED' }),
       sendForSignature: vi.fn().mockResolvedValue({
@@ -191,6 +192,23 @@ describe('Workflow Route Integration Tests (INK-86 to INK-95)', () => {
     const body = (await res.json()) as any;
     expect(body.success).toBe(true);
     expect(mockWorkflowService.getAgreementNotificationHistory).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: mockUser.id }),
+      'ag-1',
+    );
+  });
+
+  it('POST /api/v1/agreements/:id/review/retract retracts review back to draft (INK-268)', async () => {
+    const res = await app.request('/api/v1/agreements/ag-1/review/retract', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${validToken}`,
+      },
+    });
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    expect(body.success).toBe(true);
+    expect(mockWorkflowService.retractReview).toHaveBeenCalledWith(
       expect.objectContaining({ userId: mockUser.id }),
       'ag-1',
     );

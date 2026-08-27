@@ -130,10 +130,11 @@ describe('AgreementManagementPage Unit Tests (Epic INK-8)', () => {
     });
   });
 
-  it('renders tab buttons renamed to Active, Drafts, and Archived', async () => {
+  it('renders tab buttons renamed to Signed, Active, Drafts, and Archived (INK-271)', async () => {
     render(<AgreementManagementPage />);
 
     await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Signed' })).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Active' })).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Drafts' })).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Archived' })).toBeInTheDocument();
@@ -142,6 +143,12 @@ describe('AgreementManagementPage Unit Tests (Epic INK-8)', () => {
 
   it('renders active agreements in table rows with Send for Signature, PDF, and 3-dots dropdown', async () => {
     render(<AgreementManagementPage />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Active' })).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Active' }));
 
     await waitFor(() => {
       expect(screen.getByText('Active NDA Contract')).toBeInTheDocument();
@@ -163,12 +170,13 @@ describe('AgreementManagementPage Unit Tests (Epic INK-8)', () => {
     expect(screen.getByTitle('View PDF')).toBeInTheDocument();
     expect(screen.getByTitle('More actions')).toBeInTheDocument();
 
-    // Clicking 3-dots button reveals Clone, History, Tags, Archive
+    // Clicking 3-dots button reveals Clone, History, Tags, Archive, Delete
     fireEvent.click(screen.getByTitle('More actions'));
     expect(screen.getByRole('button', { name: /Clone/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /History/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Tags/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Archive$/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Delete$/i })).toBeInTheDocument();
   });
 
   it('renders draft agreements with Review and Edit buttons in Drafts tab', async () => {
@@ -250,8 +258,14 @@ describe('AgreementManagementPage Unit Tests (Epic INK-8)', () => {
     expect(screen.getByRole('button', { name: /Clone/i })).toBeInTheDocument();
   });
 
-  it('opens PDF viewer modal when PDF button is clicked', async () => {
+  it('opens PDF viewer modal when PDF button is clicked and displays Download action without Open Original File (INK-271)', async () => {
     render(<AgreementManagementPage />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Active' })).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Active' }));
 
     await waitFor(() => {
       expect(screen.getByText('Active NDA Contract')).toBeInTheDocument();
@@ -261,8 +275,8 @@ describe('AgreementManagementPage Unit Tests (Epic INK-8)', () => {
     fireEvent.click(pdfButtons[0]);
 
     await waitFor(() => {
-      expect(screen.getByText(/Open Original File/i)).toBeInTheDocument();
       expect(screen.getByText(/Download/i)).toBeInTheDocument();
+      expect(screen.queryByText(/Open Original File/i)).not.toBeInTheDocument();
     });
   });
 

@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { getApiUrl } from '@/lib/api';
+import { parseCustomDate } from '@/lib/date-utils';
 
 interface RecipientItem {
   id?: string;
@@ -39,6 +40,7 @@ export function SendAgreementModal({
     if (defaultRecipients && defaultRecipients.length > 0) {
       return defaultRecipients.map((r, idx) => ({
         ...r,
+        email: r.email && !r.email.endsWith('@example.com') ? r.email : '',
         routingOrder: r.routingOrder || idx + 1,
       }));
     }
@@ -93,6 +95,16 @@ export function SendAgreementModal({
       }
     }
 
+    let parsedExpiresAt: string | null = null;
+    if (expiresAt && expiresAt.trim()) {
+      const parsedDate = parseCustomDate(expiresAt.trim());
+      if (!parsedDate) {
+        setError('Please enter a valid expiration date in dd-mmm-yyyy format (e.g., 25-Dec-2026).');
+        return;
+      }
+      parsedExpiresAt = parsedDate.toISOString();
+    }
+
     setIsSending(true);
     setError(null);
 
@@ -105,7 +117,7 @@ export function SendAgreementModal({
         },
         body: JSON.stringify({
           signingOrder,
-          expiresAt: expiresAt ? new Date(expiresAt).toISOString() : null,
+          expiresAt: parsedExpiresAt,
           recipients: recipients.map((r) => ({
             name: r.name.trim(),
             email: r.email.trim(),
@@ -286,11 +298,15 @@ export function SendAgreementModal({
               Expiration Date (Optional)
             </label>
             <input
-              type="date"
+              type="text"
+              placeholder="dd-mmm-yyyy"
               value={expiresAt}
               onChange={(e) => setExpiresAt(e.target.value)}
-              className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-blue-600"
+              className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-[#ba0000]"
             />
+            <p className="text-[10px] text-neutral-400 mt-1">
+              Format: dd-mmm-yyyy (e.g. 25-Dec-2026)
+            </p>
           </div>
 
           {/* Custom Message */}

@@ -42,12 +42,6 @@ export function HeaderNav() {
     fetchOrg();
   }, []);
 
-  const navItems = [
-    { label: 'Dashboard', href: '/dashboard' },
-    { label: 'Agreements', href: '/agreements' },
-    { label: 'Templates', href: '/templates' },
-  ];
-
   const mobileNavItems = [
     { label: 'Dashboard', href: '/dashboard' },
     { label: 'Agreements', href: '/agreements' },
@@ -84,25 +78,7 @@ export function HeaderNav() {
             )}
           </div>
 
-          {/* Navigation Links */}
-          <nav className="hidden lg:flex items-center gap-1">
-            {navItems.map((item) => {
-              const isActive = pathname === item.href;
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={`px-3.5 py-2 rounded-lg text-xs font-semibold transition-all ${
-                    isActive
-                      ? 'bg-red-50 text-[#ba0000] border border-red-200/60'
-                      : 'text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100'
-                  }`}
-                >
-                  {item.label}
-                </Link>
-              );
-            })}
-          </nav>
+          {/* Navigation Links removed in favor of WorkspaceNav below welcome section */}
 
           {/* Profile Section on Top Right */}
           <div className="flex items-center gap-3">
