@@ -230,7 +230,7 @@ export default function SignDocumentPage({
         URL.revokeObjectURL(objectUrlToRevoke);
       }
     };
-  }, [rawToken, agreement?.markdownContent, agreement?.id]);
+  }, [rawToken, agreement]);
 
   const fields: DocumentField[] = useMemo(() => {
     if (!agreement?.fields?.fields) return [];

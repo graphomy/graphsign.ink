@@ -601,7 +601,7 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
         } else {
           delete errors[field.id];
         }
-      } catch (_e) {
+      } catch {
         delete errors[field.id];
       }
     } else {

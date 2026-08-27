@@ -42,11 +42,6 @@ export function HeaderNav() {
     fetchOrg();
   }, []);
 
-  const navItems = [
-    { label: 'Dashboard', href: '/dashboard' },
-    { label: 'Agreements', href: '/agreements' },
-    { label: 'Templates', href: '/templates' },
-  ];
 
   const mobileNavItems = [
     { label: 'Dashboard', href: '/dashboard' },

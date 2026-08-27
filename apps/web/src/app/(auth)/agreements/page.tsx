@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef, Suspense } from 'react';
 import { createPortal } from 'react-dom';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { SessionGuard } from '@/components/features/auth/SessionGuard';
 import { HeaderNav } from '@/components/layout/HeaderNav';
@@ -162,6 +162,8 @@ function AgreementManagementContent() {
 
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const searchParams = useSearchParams();
+  const router = useRouter();
   const [dropdownAnchor, setDropdownAnchor] = useState<{
     id: string;
     agreement: AgreementItem;
@@ -298,7 +300,7 @@ function AgreementManagementContent() {
           localStorage.removeItem('graphsign_user_email');
           localStorage.removeItem('graphsign_org_id');
           localStorage.removeItem('graphsign_user_id');
-          window.location.href = '/login?reason=session_expired';
+          router.push('/login?reason=session_expired');
           return;
         }
 
@@ -899,7 +901,7 @@ function AgreementManagementContent() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-neutral-100">
-                  {agreements.map((agreement, idx) => (
+                  {agreements.map((agreement) => (
                     <tr
                       key={agreement.id}
                       className="hover:bg-neutral-50/80 transition-colors group"

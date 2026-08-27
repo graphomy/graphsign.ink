@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, Suspense } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { SessionGuard } from '@/components/features/auth/SessionGuard';
 import { HeaderNav } from '@/components/layout/HeaderNav';
@@ -96,6 +96,7 @@ function TemplateManagementContent() {
   const [isSubmittingUpload, setIsSubmittingUpload] = useState(false);
   const [instantiatingId, setInstantiatingId] = useState<string | null>(null);
   const searchParams = useSearchParams();
+  const router = useRouter();
 
   // Close 3-dots menu on outside click
   useEffect(() => {
@@ -149,7 +150,7 @@ function TemplateManagementContent() {
           localStorage.removeItem('graphsign_user_email');
           localStorage.removeItem('graphsign_org_id');
           localStorage.removeItem('graphsign_user_id');
-          window.location.href = '/login?reason=session_expired';
+          router.push('/login?reason=session_expired');
           return;
         }
 
@@ -447,7 +448,7 @@ function TemplateManagementContent() {
         );
       }
 
-      window.location.href = '/agreements?action=scratch';
+      router.push('/agreements?action=scratch');
     } catch (err: unknown) {
       setActionError((err as Error).message);
       setInstantiatingId(null);

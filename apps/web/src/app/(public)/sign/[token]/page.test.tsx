@@ -326,7 +326,7 @@ describe('SignDocumentPage Component Tests (FR-007 Workflow Engine)', () => {
     let otpSent = false;
     let otpVerified = false;
 
-    global.fetch = vi.fn().mockImplementation((url, opts) => {
+    global.fetch = vi.fn().mockImplementation((url) => {
       if (typeof url === 'string' && url.includes('/api/v1/sign/token-guest/view')) {
         return Promise.resolve({ ok: true, json: () => Promise.resolve({ success: true }) });
       }

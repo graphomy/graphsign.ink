@@ -149,7 +149,10 @@ export function OtpVerificationModal({
           </div>
           <h2 className="text-lg font-bold text-neutral-900">Verify Your Identity</h2>
           <p className="text-xs text-neutral-500 max-w-xs mx-auto">
-            A 6-digit verification code was sent to <strong className="text-neutral-800">{recipientEmail}</strong> for signing <em>&quot;{agreementTitle}&quot;</em>.
+            A 6-digit verification code was sent to{' '}
+            <strong className="text-neutral-800">{recipientEmail}</strong>
+            {recipientName ? ` for ${recipientName}` : ''} to execute{' '}
+            <em>&quot;{agreementTitle}&quot;</em>.
           </p>
         </div>
 

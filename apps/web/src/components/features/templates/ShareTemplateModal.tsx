@@ -78,7 +78,7 @@ export function ShareTemplateModal({
         } else {
           if (!ignore) setPlanType('individual');
         }
-      } catch (_err) {
+      } catch {
         if (!ignore) setPlanType('individual');
       } finally {
         if (!ignore) setIsLoadingOrg(false);
@@ -105,7 +105,7 @@ export function ShareTemplateModal({
             setShares(data);
           }
         }
-      } catch (_err) {
+      } catch {
         // Ignore
       } finally {
         if (!ignore) setIsLoadingShares(false);
