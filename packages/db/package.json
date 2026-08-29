@@ -21,7 +21,7 @@
   },
   "devDependencies": {
     "@types/node": "^26.2.0",
-    "prisma": "^6.9.0",
+    "prisma": "^7.10.0",
     "typescript": "^5.9.3"
   }
 }
