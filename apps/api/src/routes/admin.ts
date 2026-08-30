@@ -68,7 +68,7 @@ export function createAdminRoutes(deps?: AdminDeps) {
 
     const parsed = queryAdminUsersSchema.safeParse(queryParams);
     if (!parsed.success) {
-      throw new BadRequestError(parsed.error.errors[0]?.message || 'Invalid query parameters');
+      throw new BadRequestError(parsed.error.issues[0]?.message || 'Invalid query parameters');
     }
 
     const page = parsed.data.page;
@@ -173,7 +173,7 @@ export function createAdminRoutes(deps?: AdminDeps) {
     const parsed = updatePlatformConfigSchema.safeParse({ key, value: body?.value });
 
     if (!parsed.success) {
-      throw new BadRequestError(parsed.error.errors[0]?.message || 'Invalid config update payload');
+      throw new BadRequestError(parsed.error.issues[0]?.message || 'Invalid config update payload');
     }
 
     const result = await configService.updateConfig(key, parsed.data.value, actorUserId);

@@ -972,7 +972,10 @@ export class WorkflowService {
           userAgent,
         });
       } catch (sealErr) {
-        console.warn('[WORKFLOW] Automatic sealing failed on completion:', (sealErr as Error).message);
+        console.warn(
+          '[WORKFLOW] Automatic sealing failed on completion:',
+          (sealErr as Error).message,
+        );
       }
 
       await this.auditService.log({

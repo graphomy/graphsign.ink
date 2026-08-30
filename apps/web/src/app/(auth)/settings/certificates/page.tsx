@@ -5,7 +5,16 @@ import { SessionGuard } from '@/components/features/auth/SessionGuard';
 import { HeaderNav } from '@/components/layout/HeaderNav';
 import { Footer } from '@/components/layout/Footer';
 import { getApiUrl } from '@/lib/api';
-import { Award, Plus, Upload, CheckCircle2, Shield, AlertCircle, RefreshCw, ExternalLink } from 'lucide-react';
+import {
+  Award,
+  Plus,
+  Upload,
+  CheckCircle2,
+  Shield,
+  AlertCircle,
+  RefreshCw,
+  ExternalLink,
+} from 'lucide-react';
 import Link from 'next/link';
 
 interface SigningCertificate {
@@ -46,7 +55,9 @@ function CertificatesContent() {
   const [genState, setGenState] = useState('');
   const [genLocality, setGenLocality] = useState('');
   const [genEmail, setGenEmail] = useState('');
-  const [genAlgo, setGenAlgo] = useState<'RSA_2048' | 'RSA_4096' | 'ECDSA_P256' | 'ECDSA_P384'>('RSA_2048');
+  const [genAlgo, setGenAlgo] = useState<'RSA_2048' | 'RSA_4096' | 'ECDSA_P256' | 'ECDSA_P384'>(
+    'RSA_2048',
+  );
   const [genValidityDays, setGenValidityDays] = useState(730);
 
   const [uploadName, setUploadName] = useState('');
@@ -212,7 +223,11 @@ function CertificatesContent() {
   }
 
   async function handleRevoke(id: string) {
-    if (!confirm('Are you sure you want to revoke this signing certificate? Future signatures will not be able to use it.')) {
+    if (
+      !confirm(
+        'Are you sure you want to revoke this signing certificate? Future signatures will not be able to use it.',
+      )
+    ) {
       return;
     }
 
@@ -251,7 +266,8 @@ function CertificatesContent() {
                 </h1>
               </div>
               <p className="text-slate-600 text-sm">
-                Manage X.509 signing certificates, PKCS#11 key handles, and RFC 3161 PAdES sealing profiles.
+                Manage X.509 signing certificates, PKCS#11 key handles, and RFC 3161 PAdES sealing
+                profiles.
               </p>
             </div>
             <div className="flex items-center gap-3">
@@ -295,9 +311,12 @@ function CertificatesContent() {
                 🛡️
               </div>
               <div>
-                <h4 className="text-sm font-bold text-slate-900">Independent Document Verification</h4>
+                <h4 className="text-sm font-bold text-slate-900">
+                  Independent Document Verification
+                </h4>
                 <p className="text-xs text-slate-500">
-                  Anyone can verify documents sealed with these certificates using the public verification portal.
+                  Anyone can verify documents sealed with these certificates using the public
+                  verification portal.
                 </p>
               </div>
             </div>
@@ -320,9 +339,12 @@ function CertificatesContent() {
               <div className="w-12 h-12 rounded-full bg-red-50 text-red-600 flex items-center justify-center mx-auto mb-3 text-xl">
                 <Shield className="w-6 h-6" />
               </div>
-              <h3 className="text-base font-bold text-slate-900">No Signing Certificates Configured</h3>
+              <h3 className="text-base font-bold text-slate-900">
+                No Signing Certificates Configured
+              </h3>
               <p className="text-sm text-slate-600 mt-1 max-w-sm mx-auto">
-                Generate a free self-signed certificate or upload your organization&apos;s BYO X.509 certificate to enable PAdES sealing.
+                Generate a free self-signed certificate or upload your organization&apos;s BYO X.509
+                certificate to enable PAdES sealing.
               </p>
               <div className="mt-6 flex justify-center gap-3">
                 <button
@@ -393,19 +415,27 @@ function CertificatesContent() {
                   <div className="mt-4 pt-4 border-t border-slate-100 grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
                     <div>
                       <span className="text-slate-400 block font-medium">Algorithm</span>
-                      <span className="font-mono text-slate-800 font-semibold">{cert.algorithm}</span>
+                      <span className="font-mono text-slate-800 font-semibold">
+                        {cert.algorithm}
+                      </span>
                     </div>
                     <div>
                       <span className="text-slate-400 block font-medium">PAdES Level</span>
-                      <span className="text-emerald-700 font-semibold">PAdES-{cert.padesLevel.replace('_', '-')}</span>
+                      <span className="text-emerald-700 font-semibold">
+                        PAdES-{cert.padesLevel.replace('_', '-')}
+                      </span>
                     </div>
                     <div>
                       <span className="text-slate-400 block font-medium">Valid Until</span>
-                      <span className="text-slate-700 font-medium">{new Date(cert.validTo).toLocaleDateString()}</span>
+                      <span className="text-slate-700 font-medium">
+                        {new Date(cert.validTo).toLocaleDateString()}
+                      </span>
                     </div>
                     <div>
                       <span className="text-slate-400 block font-medium">Key Fingerprint</span>
-                      <span className="font-mono text-slate-600 truncate block">{cert.keyFingerprint}</span>
+                      <span className="font-mono text-slate-600 truncate block">
+                        {cert.keyFingerprint}
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -420,13 +450,19 @@ function CertificatesContent() {
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
           <div className="bg-white border border-slate-200 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4 my-8">
             <div>
-              <h3 className="text-lg font-bold text-slate-900">Generate Self-Signed X.509 Certificate</h3>
+              <h3 className="text-lg font-bold text-slate-900">
+                Generate Self-Signed X.509 Certificate
+              </h3>
               <p className="text-xs text-slate-500 mt-0.5">
-                Customize your certificate identity credentials to match your organization or personal signing authority.
+                Customize your certificate identity credentials to match your organization or
+                personal signing authority.
               </p>
             </div>
 
-            <form onSubmit={handleGenerate} className="space-y-3.5 max-h-[75vh] overflow-y-auto pr-1">
+            <form
+              onSubmit={handleGenerate}
+              className="space-y-3.5 max-h-[75vh] overflow-y-auto pr-1"
+            >
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
                   Certificate Name <span className="text-red-500">*</span>
@@ -449,7 +485,9 @@ function CertificatesContent() {
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">Common Name (CN)</label>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Common Name (CN)
+                    </label>
                     <input
                       type="text"
                       value={genCommonName}
@@ -459,7 +497,9 @@ function CertificatesContent() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">Organization (O)</label>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Organization (O)
+                    </label>
                     <input
                       type="text"
                       value={genOrg}
@@ -472,7 +512,9 @@ function CertificatesContent() {
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">Organizational Unit (OU)</label>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Organizational Unit (OU)
+                    </label>
                     <input
                       type="text"
                       value={genOrgUnit}
@@ -482,7 +524,9 @@ function CertificatesContent() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">Signer Email</label>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Signer Email
+                    </label>
                     <input
                       type="email"
                       value={genEmail}
@@ -495,7 +539,9 @@ function CertificatesContent() {
 
                 <div className="grid grid-cols-3 gap-2">
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">City / Locality (L)</label>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      City / Locality (L)
+                    </label>
                     <input
                       type="text"
                       value={genLocality}
@@ -505,7 +551,9 @@ function CertificatesContent() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">State / Province (ST)</label>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      State / Province (ST)
+                    </label>
                     <input
                       type="text"
                       value={genState}
@@ -515,7 +563,9 @@ function CertificatesContent() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">Country (2 Letters)</label>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Country (2 Letters)
+                    </label>
                     <input
                       type="text"
                       maxLength={2}
@@ -531,20 +581,26 @@ function CertificatesContent() {
               {/* Cryptographic Parameters */}
               <div className="pt-2 border-t border-slate-100 space-y-3">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Cryptographic Algorithm</label>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Cryptographic Algorithm
+                  </label>
                   <select
                     value={genAlgo}
                     onChange={(e) => setGenAlgo(e.target.value as typeof genAlgo)}
                     className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-red-500 focus:bg-white"
                   >
-                    <option value="RSA_2048">RSA 2048-bit (Standard / Universal Compatibility)</option>
+                    <option value="RSA_2048">
+                      RSA 2048-bit (Standard / Universal Compatibility)
+                    </option>
                     <option value="RSA_4096">RSA 4096-bit (High Security)</option>
                     <option value="ECDSA_P256">ECDSA P-256 (NIST Curve / Modern)</option>
                     <option value="ECDSA_P384">ECDSA P-384 (Suite B Compliant)</option>
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Validity Duration</label>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Validity Duration
+                  </label>
                   <select
                     value={genValidityDays}
                     onChange={(e) => setGenValidityDays(Number(e.target.value))}
@@ -584,13 +640,18 @@ function CertificatesContent() {
       {showUploadModal && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white border border-slate-200 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
-            <h3 className="text-lg font-bold text-slate-900">Import Bring Your Own (BYO) Certificate</h3>
+            <h3 className="text-lg font-bold text-slate-900">
+              Import Bring Your Own (BYO) Certificate
+            </h3>
             <p className="text-xs text-slate-500">
-              Upload your organization&apos;s commercial (e.g. DigiCert AATL) or private CA certificate.
+              Upload your organization&apos;s commercial (e.g. DigiCert AATL) or private CA
+              certificate.
             </p>
             <form onSubmit={handleUpload} className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Certificate Name / Description</label>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Certificate Name / Description
+                </label>
                 <input
                   type="text"
                   required
@@ -601,7 +662,9 @@ function CertificatesContent() {
                 />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Certificate PEM</label>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Certificate PEM
+                </label>
                 <textarea
                   required
                   rows={4}
@@ -612,7 +675,9 @@ function CertificatesContent() {
                 />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Intermediate / Root Chain PEM (Optional for PAdES B-LTA)</label>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Intermediate / Root Chain PEM (Optional for PAdES B-LTA)
+                </label>
                 <textarea
                   rows={3}
                   value={chainPem}
@@ -622,7 +687,9 @@ function CertificatesContent() {
                 />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Custom TSA URL (Optional)</label>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Custom TSA URL (Optional)
+                </label>
                 <input
                   type="url"
                   value={uploadTsaUrl}

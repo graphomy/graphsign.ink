@@ -110,11 +110,7 @@ describe('PadesSealingService Unit Tests', () => {
       Promise.resolve({ id: 'seal-batch', ...data }),
     );
 
-    const batchRes = await sealingService.batchSeal(
-      'org-1',
-      'usr-1',
-      ['agr-1', 'agr-2'],
-    );
+    const batchRes = await sealingService.batchSeal('org-1', 'usr-1', ['agr-1', 'agr-2']);
 
     expect(batchRes.total).toBe(2);
     expect(batchRes.successfulCount).toBe(2);

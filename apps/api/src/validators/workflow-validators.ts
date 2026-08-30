@@ -61,7 +61,9 @@ export const verifyOtpSchema = z.object({
 export type VerifyOtpInput = z.infer<typeof verifyOtpSchema>;
 
 export const recipientSignSchema = z.object({
-  fieldsData: z.record(z.union([z.string(), z.boolean(), z.number(), z.null()])).default({}),
+  fieldsData: z
+    .record(z.string(), z.union([z.string(), z.boolean(), z.number(), z.null()]))
+    .default({}),
   signatureData: z
     .object({
       type: z.enum(['DRAWN', 'TYPED', 'UPLOADED']),

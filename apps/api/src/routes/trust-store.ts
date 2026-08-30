@@ -34,11 +34,13 @@ export function createTrustStoreRoutes(deps?: TrustStoreDeps) {
       }
     }
 
-    const tsa = deps?.tsa || new TsaService({
-      primaryUrl: c.env?.TSA_PRIMARY_URL || process.env.TSA_PRIMARY_URL,
-      fallbackUrl: c.env?.TSA_FALLBACK_URL || process.env.TSA_FALLBACK_URL,
-      fallback2Url: c.env?.TSA_FALLBACK2_URL || process.env.TSA_FALLBACK2_URL,
-    });
+    const tsa =
+      deps?.tsa ||
+      new TsaService({
+        primaryUrl: c.env?.TSA_PRIMARY_URL || process.env.TSA_PRIMARY_URL,
+        fallbackUrl: c.env?.TSA_FALLBACK_URL || process.env.TSA_FALLBACK_URL,
+        fallback2Url: c.env?.TSA_FALLBACK2_URL || process.env.TSA_FALLBACK2_URL,
+      });
 
     const trustService = new TsaTrustService(prisma, tsa);
     return { trustService };
@@ -65,9 +67,7 @@ export function createTrustStoreRoutes(deps?: TrustStoreDeps) {
     const parseResult = addTrustEntrySchema.safeParse(body);
 
     if (!parseResult.success) {
-      throw new ValidationError(
-        parseResult.error.errors.map((e) => e.message).join(', '),
-      );
+      throw new ValidationError(parseResult.error.issues.map((e) => e.message).join(', '));
     }
 
     const entry = await trustService.addCustomTrustEntry(parseResult.data);

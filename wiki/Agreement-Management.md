@@ -73,4 +73,3 @@ An agreement moves through the following lifecycle states:
 | `GET`   | `/api/v1/search/agreements`       | Faceted search across agreements                                       | `documents:read`    |
 | `GET`   | `/api/v1/search/presets`          | List saved search filter presets                                       | `documents:read`    |
 | `POST`  | `/api/v1/search/presets`          | Create custom filter preset                                            | `documents:write`   |
-

@@ -340,9 +340,7 @@ export default function SignDocumentPage({
 
   // Assigned Fields for Current Recipient
   const assignedFields = useMemo(() => {
-    return evaluatedFields.filter(
-      (f) => isFieldAssignedToMe(f.recipientId) && f.computedVisible,
-    );
+    return evaluatedFields.filter((f) => isFieldAssignedToMe(f.recipientId) && f.computedVisible);
   }, [evaluatedFields, isFieldAssignedToMe]);
 
   const assignedRequiredFields = useMemo(() => {
@@ -734,7 +732,10 @@ export default function SignDocumentPage({
             <div className="flex justify-between items-center text-ink-500">
               <span>Completed At</span>
               <span className="text-ink-900 font-medium tabular-nums">
-                {formatDateTime(new Date().toISOString(), { includeSeconds: true, includeTimezone: true })}
+                {formatDateTime(new Date().toISOString(), {
+                  includeSeconds: true,
+                  includeTimezone: true,
+                })}
               </span>
             </div>
             <div className="flex justify-between items-center text-ink-500 pt-1 border-t border-ink-200">

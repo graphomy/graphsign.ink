@@ -71,7 +71,8 @@ describe('CertificateService Unit Tests', () => {
 
     const result = await certService.uploadByoCertificate('org-1', 'usr-1', {
       name: 'AATL Commercial Certificate',
-      certificatePem: '-----BEGIN CERTIFICATE-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8A...\n-----END CERTIFICATE-----',
+      certificatePem:
+        '-----BEGIN CERTIFICATE-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8A...\n-----END CERTIFICATE-----',
       chainPem: '-----BEGIN CERTIFICATE-----\nCA_CHAIN_DATA\n-----END CERTIFICATE-----',
       algorithm: 'RSA_2048',
     });

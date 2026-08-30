@@ -33,7 +33,7 @@ export const createUploadAgreementSchema = z
     markdownContent: z.string().max(MAX_MARKDOWN_CONTENT_LENGTH).optional(),
     isEncrypted: z.boolean().optional(),
     tags: z.array(z.string()).optional(),
-    metadata: z.record(z.unknown()).optional(),
+    metadata: z.record(z.string(), z.unknown()).optional(),
   })
   .refine((data) => !data.isEncrypted, {
     message:
@@ -49,7 +49,7 @@ export const createScratchAgreementSchema = z.object({
     .min(1, 'Document markdown content is required')
     .max(MAX_MARKDOWN_CONTENT_LENGTH, 'Markdown content exceeds maximum allowed size (512KB)'),
   tags: z.array(z.string()).optional(),
-  metadata: z.record(z.unknown()).optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
 });
 
 export const updateDraftSchema = z.object({
@@ -60,7 +60,7 @@ export const updateDraftSchema = z.object({
     .max(MAX_MARKDOWN_CONTENT_LENGTH, 'Markdown content exceeds maximum allowed size (512KB)')
     .optional(),
   tags: z.array(z.string()).optional(),
-  metadata: z.record(z.unknown()).optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
 });
 
 export const activateAgreementSchema = z.object({
@@ -69,7 +69,7 @@ export const activateAgreementSchema = z.object({
 
 export const updateMetadataTagsSchema = z.object({
   tags: z.array(z.string()).optional(),
-  metadata: z.record(z.unknown()).optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
 });
 
 export const queryAgreementsSchema = z.object({

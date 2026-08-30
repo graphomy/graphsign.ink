@@ -7,6 +7,7 @@
 ## 🏛️ Architecture & Security Model
 
 The cryptographic trust core enforces three foundational rules:
+
 1. **Isolated Key Custody**: Private keys are never exposed on application surfaces or logged. Key handles are operated via a PKCS#11-compliant custody boundary.
 2. **PAdES Baseline Compliance**: Sealed documents adhere to ETSI EN 319 142 (PAdES B-T and B-LTA), embedding RFC 3161 timestamps and digital certificates directly into the PDF container.
 3. **Independent Public Verification**: Any third party, auditor, or recipient can independently verify document authenticity, timestamp provenance, and tamper status without logging in.
@@ -30,12 +31,12 @@ flowchart TD
 
 The key custody service manages cryptographic keys behind a software/hardware PKCS#11 abstraction:
 
-| Algorithm | Key Size / Curve | Use Case | Compliance |
-| :--- | :--- | :--- | :--- |
-| **RSA-2048** | 2048-bit modulus | Maximum compatibility with legacy PDF readers | NIST / FIPS / eIDAS |
-| **RSA-4096** | 4096-bit modulus | High-security corporate sealing | NIST / eIDAS |
-| **ECDSA-P256** | NIST P-256 (secp256r1) | Modern, compact signature structures | NSA Suite B / FIPS 186-4 |
-| **ECDSA-P384** | NIST P-384 (secp384r1) | High-grade government & enterprise signing | Suite B High Security |
+| Algorithm      | Key Size / Curve       | Use Case                                      | Compliance               |
+| :------------- | :--------------------- | :-------------------------------------------- | :----------------------- |
+| **RSA-2048**   | 2048-bit modulus       | Maximum compatibility with legacy PDF readers | NIST / FIPS / eIDAS      |
+| **RSA-4096**   | 4096-bit modulus       | High-security corporate sealing               | NIST / eIDAS             |
+| **ECDSA-P256** | NIST P-256 (secp256r1) | Modern, compact signature structures          | NSA Suite B / FIPS 186-4 |
+| **ECDSA-P384** | NIST P-384 (secp384r1) | High-grade government & enterprise signing    | Suite B High Security    |
 
 ---
 
@@ -44,6 +45,7 @@ The key custody service manages cryptographic keys behind a software/hardware PK
 Organizations can control their certificate strategy without paying recurring per-signature licensing fees:
 
 ### Option A: Automated Self-Signed Certificates (Free)
+
 - One-click X.509 certificate generation directly inside the organization dashboard (`/settings/certificates`).
 - **Custom Subject Identity & Credentials**:
   - **Common Name (CN)**: e.g. `Acme Corp Document Signing Authority`
@@ -56,6 +58,7 @@ Organizations can control their certificate strategy without paying recurring pe
 - Paired with free RFC 3161 trusted timestamps to prove exact signing time.
 
 ### Option B: Bring Your Own (BYO) Certificates
+
 - Upload corporate commercial certificates (e.g. DigiCert AATL, GlobalSign, Sectigo, or Private Enterprise CAs).
 - Supports full X.509 certificate chain (`chainPem`) to enable **PAdES B-LTA** (Long-Term Archive).
 - Supports custom internal or dedicated TSA endpoints.
@@ -66,14 +69,16 @@ Organizations can control their certificate strategy without paying recurring pe
 
 To guarantee timestamp reliability without single points of failure or subscription costs, graphsign.ink implements an automated failover chain:
 
-| Priority | Provider | Endpoint URL | Protocol | Cost |
-| :--- | :--- | :--- | :--- | :--- |
-| **Primary** | DigiCert | `http://timestamp.digicert.com` | RFC 3161 (HTTP POST) | Free Public |
-| **Fallback 1**| Sectigo | `http://timestamp.sectigo.com` | RFC 3161 (HTTP POST) | Free Public |
-| **Fallback 2**| FreeTSA | `https://freetsa.org/tsr` | RFC 3161 (HTTPS POST) | Free Open Source |
+| Priority       | Provider | Endpoint URL                    | Protocol              | Cost             |
+| :------------- | :------- | :------------------------------ | :-------------------- | :--------------- |
+| **Primary**    | DigiCert | `http://timestamp.digicert.com` | RFC 3161 (HTTP POST)  | Free Public      |
+| **Fallback 1** | Sectigo  | `http://timestamp.sectigo.com`  | RFC 3161 (HTTP POST)  | Free Public      |
+| **Fallback 2** | FreeTSA  | `https://freetsa.org/tsr`       | RFC 3161 (HTTPS POST) | Free Open Source |
 
 ### Query Construction
+
 Requests are binary ASN.1 DER `TimeStampReq` structures containing:
+
 - `MessageImprint`: SHA-256 hash algorithm OID (`2.16.840.1.101.3.4.2.1`) + document digest bytes.
 - `nonce`: Cryptographically secure random 64-bit integer to prevent replay attacks.
 - `certReq: true`: Requests the TSA certificate chain in the response to populate the trust store.
@@ -107,14 +112,16 @@ graphsign.ink implements the standard **CSC v2.2 Remote Signature API** at `/csc
 
 Public verification is accessible at `/verify` without requiring user authentication:
 
-| Method | Interface | How It Works |
-| :--- | :--- | :--- |
-| **1. Token / Envelope Lookup** | `https://graphsign.ink/verify/GS-7f3a9c2e` | Instant lookup by the unique verification token (`GS-xxxxxxxx`), envelope UUID, or document ID. |
-| **2. Zero-Knowledge PDF Re-upload** | `/verify` (Upload Tab) | Client-side SubtleCrypto computes the document SHA-256 hash in the browser and queries the ledger. The document payload never leaves the browser. |
-| **3. QR Code Scan** | Scanned from mobile or print | Directly opens the verified authenticity certificate report on any smartphone camera without requiring an app. |
+| Method                              | Interface                                  | How It Works                                                                                                                                      |
+| :---------------------------------- | :----------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **1. Token / Envelope Lookup**      | `https://graphsign.ink/verify/GS-7f3a9c2e` | Instant lookup by the unique verification token (`GS-xxxxxxxx`), envelope UUID, or document ID.                                                   |
+| **2. Zero-Knowledge PDF Re-upload** | `/verify` (Upload Tab)                     | Client-side SubtleCrypto computes the document SHA-256 hash in the browser and queries the ledger. The document payload never leaves the browser. |
+| **3. QR Code Scan**                 | Scanned from mobile or print               | Directly opens the verified authenticity certificate report on any smartphone camera without requiring an app.                                    |
 
 ### Downloadable Audit Certificate
+
 Each verified seal includes a downloadable **Certificate of Cryptographic Authenticity** with full evidence:
+
 - Document Title and Issuing Organisation
 - Signer completion timestamps and participant counts
 - PAdES Compliance level (`PAdES-B-T` or `PAdES-B-LTA`)
@@ -126,9 +133,10 @@ Each verified seal includes a downloadable **Certificate of Cryptographic Authen
 
 ## 🟢 7. Adobe Acrobat Reader Green Checkmark Guide
 
-Adobe Acrobat validates signatures against the **Adobe Approved Trust List (AATL)**. When using free self-signed certificates or private CAs, Adobe shows *"At least one signature has problems"* until the organization's certificate is added to the local trust store:
+Adobe Acrobat validates signatures against the **Adobe Approved Trust List (AATL)**. When using free self-signed certificates or private CAs, Adobe shows _"At least one signature has problems"_ until the organization's certificate is added to the local trust store:
 
 ### 4-Step Trust Configuration:
+
 1. **Open the Signed PDF in Adobe Acrobat Reader**:
    Click on the **Signature Panel** at the top left of the window.
 2. **Open Signature Properties**:
