@@ -85,6 +85,9 @@ export class SearchService {
         { description: { contains: keyword, mode: 'insensitive' } },
         { fileName: { contains: keyword, mode: 'insensitive' } },
         { markdownContent: { contains: keyword, mode: 'insensitive' } },
+        { tags: { has: keyword } },
+        { recipients: { some: { email: { contains: keyword, mode: 'insensitive' } } } },
+        { recipients: { some: { name: { contains: keyword, mode: 'insensitive' } } } },
       ];
 
       if (where.OR) {
@@ -97,11 +100,20 @@ export class SearchService {
 
     // 4. Status Filtering (INK-118, INK-271)
     if (query.status && query.status !== 'ALL') {
-      if (query.status === 'SIGNED' || query.status === 'COMPLETED') {
-        where.status = { in: ['COMPLETED', 'SIGNED'] };
+      if (query.status === 'SIGNED' || query.status === 'COMPLETED' || query.status === 'SEALED') {
+        where.status = { in: ['COMPLETED', 'SEALED', 'SIGNED'] };
       } else if (query.status === 'ACTIVE') {
         where.status = {
-          notIn: ['DRAFT', 'IN_REVIEW', 'REJECTED', 'CANCELLED', 'COMPLETED', 'SIGNED'],
+          notIn: [
+            'DRAFT',
+            'IN_REVIEW',
+            'REJECTED',
+            'CANCELLED',
+            'COMPLETED',
+            'SEALED',
+            'SIGNED',
+            'VOIDED',
+          ],
         };
       } else if (query.status === 'DRAFT') {
         where.status = { in: ['DRAFT', 'IN_REVIEW', 'REJECTED', 'CANCELLED'] };
@@ -119,9 +131,9 @@ export class SearchService {
       if (query.datePreset === 'today') {
         startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
         endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
-      } else if (query.datePreset === 'last_7_days') {
+      } else if (query.datePreset === 'week' || query.datePreset === 'last_7_days') {
         startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-      } else if (query.datePreset === 'last_30_days') {
+      } else if (query.datePreset === 'month' || query.datePreset === 'last_30_days') {
         startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
       } else if (query.datePreset === 'last_90_days') {
         startDate = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);

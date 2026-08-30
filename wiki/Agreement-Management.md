@@ -47,6 +47,14 @@ An agreement moves through the following lifecycle states:
 
 ---
 
+## 🔍 Advanced Search & Filter Presets (INK-117 to INK-122)
+
+- **Faceted Filters**: Filter by status (`Signed`, `Active`, `Drafts`, `Archived`), date ranges, and custom tags.
+- **Saved Filter Presets**: Users can create, manage, and default reusable filter presets (`/api/v1/search/presets`).
+- **Privacy Scoping (INK-248)**: Document payload access is strictly scoped to the document author and designated signers. Super administrators are restricted to organizational metadata only and cannot view private document bodies.
+
+---
+
 ## 🔌 API Endpoints for Agreements
 
 | Method  | Endpoint                          | Description                                                            | Permission Required |
@@ -62,3 +70,6 @@ An agreement moves through the following lifecycle states:
 | `GET`   | `/api/v1/agreements/:id/file`     | Stream document binary / text                                          | `documents:read`    |
 | `GET`   | `/api/v1/agreements/:id/history`  | Retrieve concise change history                                        | `documents:read`    |
 | `PATCH` | `/api/v1/agreements/:id/tags`     | Update metadata tags                                                   | `documents:write`   |
+| `GET`   | `/api/v1/search/agreements`       | Faceted search across agreements                                       | `documents:read`    |
+| `GET`   | `/api/v1/search/presets`          | List saved search filter presets                                       | `documents:read`    |
+| `POST`  | `/api/v1/search/presets`          | Create custom filter preset                                            | `documents:write`   |

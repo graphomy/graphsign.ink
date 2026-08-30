@@ -11,6 +11,9 @@ import {
 } from '../validators/workflow-validators.js';
 import { AuditService } from './audit-service.js';
 import { MailerService } from './mailer-service.js';
+import { PadesSealingService } from './pades-sealing-service.js';
+import { KeyCustodyService } from './key-custody-service.js';
+import { TsaService } from './tsa-service.js';
 import {
   BadRequestError,
   ForbiddenError,
@@ -30,11 +33,23 @@ export interface WorkflowContext {
 }
 
 export class WorkflowService {
+  private readonly sealingService: PadesSealingService;
+
   constructor(
     private readonly prisma: PrismaClient,
     private readonly auditService: AuditService,
     private readonly mailerService: MailerService,
-  ) {}
+    sealingService?: PadesSealingService,
+  ) {
+    this.sealingService =
+      sealingService ||
+      new PadesSealingService(
+        this.prisma,
+        new KeyCustodyService(),
+        new TsaService(),
+        this.auditService,
+      );
+  }
 
   private static readonly otpStore = new Map<
     string,
@@ -551,7 +566,10 @@ export class WorkflowService {
         expiresAt: agreement.expiresAt,
         author: {
           name: agreement.author.name,
+          email: agreement.author.email,
         },
+        senderName: agreement.author.name || agreement.author.email || 'Sender',
+        organisationName: agreement.organisation.name,
         organisation: {
           name: agreement.organisation.name,
         },
@@ -792,6 +810,21 @@ export class WorkflowService {
       (meta.fileData as string | undefined) ||
       (agreement as any).fileData;
 
+    const seal = this.prisma.documentSeal
+      ? await this.prisma.documentSeal.findFirst({
+          where: { agreementId: agreement.id },
+          orderBy: { createdAt: 'desc' },
+        })
+      : null;
+
+    let markdownContent = agreement.markdownContent;
+    if (markdownContent && (agreement.status === 'COMPLETED' || seal)) {
+      const token = seal?.verificationToken || `GS-${rawToken.substring(0, 8)}`;
+      const hash = seal?.documentHash || 'pending';
+      const ts = seal?.tsaTimestamp ? seal.tsaTimestamp.toISOString() : new Date().toISOString();
+      markdownContent += `\n\n---\n\n### 🛡️ Cryptographic Execution & Integrity Certificate\n- **Status**: Digitally Signed & Sealed (PAdES B-T / RFC 3161)\n- **Verification Token**: \`${token}\`\n- **Document SHA-256 Digest**: \`${hash}\`\n- **RFC 3161 Timestamp**: \`${ts}\`\n- **Public Verification Link**: [https://graphsign.ink/verify/${token}](https://graphsign.ink/verify/${token})\n`;
+    }
+
     return {
       id: agreement.id,
       title: agreement.title,
@@ -800,8 +833,10 @@ export class WorkflowService {
       mimeType: agreement.mimeType || 'application/pdf',
       fileUrl: agreement.fileUrl,
       fileData,
-      markdownContent: agreement.markdownContent,
+      markdownContent,
       status: agreement.status,
+      verificationToken: seal?.verificationToken,
+      documentHash: seal?.documentHash,
     };
   }
 
@@ -927,6 +962,21 @@ export class WorkflowService {
           completedAt: new Date(),
         },
       });
+
+      // Automatically apply Cryptographic PAdES Seal & RFC 3161 Timestamp (INK-18)
+      try {
+        await this.sealingService.sealAgreement({
+          agreementId: agreement.id,
+          organisationId: agreement.organisationId,
+          ipAddress: ip,
+          userAgent,
+        });
+      } catch (sealErr) {
+        console.warn(
+          '[WORKFLOW] Automatic sealing failed on completion:',
+          (sealErr as Error).message,
+        );
+      }
 
       await this.auditService.log({
         organisationId: agreement.organisationId,

@@ -2,7 +2,7 @@
 
 # 🖋️ Graphsign.ink
 
-**Next-Generation, Open-Source & Globally Compliant Electronic Signature & Document Workflow Platform**
+**Open-Source & Globally Compliant Electronic Signature & Document Workflow Platform**
 
 [![Release](https://img.shields.io/badge/release-v0.1.0-blue.svg?style=flat-square)](https://github.com/graphomy/graphsign.ink/releases)
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-red.svg?style=flat-square)](LICENSE)
@@ -30,7 +30,7 @@
 
 ## 📖 Overview
 
-**Graphsign.ink** is a modern, high-performance, enterprise-grade electronic signature and agreement lifecycle platform. Engineered from the ground up for privacy, edge performance, and global compliance, Graphsign empowers organisations to design, review, sign, and seal contracts with cryptographic auditability and zero vendor lock-in.
+**Graphsign.ink** is a modern, high-performance, enterprise-grade electronic signature and agreement lifecycle platform. Engineered from the ground up for privacy, edge performance, and global compliance, Graphsign empowers everyone to design, review, sign, and seal contracts with cryptographic auditability and zero vendor lock-in.
 
 ---
 
@@ -172,7 +172,6 @@ Graphsign.ink is engineered to comply with major global electronic signature fra
 
 - **United States**: Electronic Signatures in Global and National Commerce Act (**ESIGN**) & Uniform Electronic Transactions Act (**UETA**)
 - **European Union**: Electronic Identification, Authentication and Trust Services (**eIDAS** Regulation EU No 910/2014)
-- **Life Sciences**: FDA **21 CFR Part 11** electronic records and audit trail compliance
 
 ---
 

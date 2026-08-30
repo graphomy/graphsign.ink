@@ -1,11 +1,9 @@
 generator client {
-  provider        = "prisma-client-js"
-  previewFeatures = ["driverAdapters"]
+  provider = "prisma-client-js"
 }
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 /// Tenant organisation model — multi-tenant isolation unit.
@@ -60,6 +58,8 @@ model Organisation {
   auditLogs        AuditLog[]
   notificationLogs NotificationLog[]
   searchFilterPresets SearchFilterPreset[]
+  signingCertificates SigningCertificate[]
+  documentSeals    DocumentSeal[]
 
   @@index([slug])
   @@index([status])
@@ -260,6 +260,7 @@ model Agreement {
   versions         AgreementVersion[]
   recipients       AgreementRecipient[]
   notificationLogs NotificationLog[]
+  documentSeals    DocumentSeal[]
 
   @@index([organisationId])
   @@index([authorId])
@@ -485,4 +486,90 @@ model SearchFilterPreset {
   @@index([userId, entityType])
   @@map("search_filter_presets")
 }
+
+/// Tenant signing certificate — PKCS#11 key handle + X.509 metadata (FR-012.001, FR-012.002).
+model SigningCertificate {
+  id                 String    @id @db.Uuid
+  organisationId     String    @map("organisation_id") @db.Uuid
+  name               String    @db.VarChar(255)
+  type               String    @db.VarChar(20)        // SELF_SIGNED | BYO
+  algorithm          String    @db.VarChar(20)        // RSA_2048 | RSA_4096 | ECDSA_P256 | ECDSA_P384
+  certificatePem     String    @map("certificate_pem") @db.Text
+  chainPem           String?   @map("chain_pem") @db.Text
+  pkcs11KeyId        String    @map("pkcs11_key_id") @db.VarChar(255)  // PKCS#11 object label/key identifier
+  keyFingerprint     String    @map("key_fingerprint") @db.VarChar(128)
+  serialNumber       String    @map("serial_number") @db.VarChar(128)
+  subjectDn          String    @map("subject_dn") @db.VarChar(512)
+  issuerDn           String    @map("issuer_dn") @db.VarChar(512)
+  validFrom          DateTime  @map("valid_from") @db.Timestamptz()
+  validTo            DateTime  @map("valid_to") @db.Timestamptz()
+  isDefault          Boolean   @default(false) @map("is_default")
+  status             String    @default("ACTIVE") @db.VarChar(20)  // ACTIVE | EXPIRED | REVOKED
+  tsaUrl             String?   @map("tsa_url") @db.VarChar(512)
+  padesLevel         String    @default("B_T") @map("pades_level") @db.VarChar(10)
+  createdBy          String    @map("created_by") @db.Uuid
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt          DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
+  deletedAt          DateTime? @map("deleted_at") @db.Timestamptz()
+
+  organisation  Organisation   @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+  documentSeals DocumentSeal[]
+
+  @@index([organisationId])
+  @@index([organisationId, isDefault])
+  @@index([organisationId, status])
+  @@map("signing_certificates")
+}
+
+/// Immutable seal record — one per signed agreement (FR-012.004, FR-012.005).
+model DocumentSeal {
+  id                String    @id @db.Uuid
+  organisationId    String    @map("organisation_id") @db.Uuid
+  agreementId       String    @map("agreement_id") @db.Uuid
+  certificateId     String?   @map("certificate_id") @db.Uuid
+  algorithm         String    @db.VarChar(20)
+  padesLevel        String    @map("pades_level") @db.VarChar(10)
+  tsaUrl            String?   @map("tsa_url") @db.VarChar(512)
+  tsaTimestamp      DateTime? @map("tsa_timestamp") @db.Timestamptz()
+  documentHash      String    @map("document_hash") @db.VarChar(128)
+  sealedFileUrl     String?   @map("sealed_file_url") @db.VarChar(512)
+  verificationToken String    @unique @map("verification_token") @db.VarChar(32)
+  status            String    @db.VarChar(20)  // SUCCESS | FAILED
+  errorMessage      String?   @map("error_message") @db.VarChar(1000)
+  metadata          Json?     @db.JsonB
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+
+  organisation Organisation        @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+  agreement    Agreement           @relation(fields: [agreementId], references: [id], onDelete: Cascade)
+  certificate  SigningCertificate? @relation(fields: [certificateId], references: [id], onDelete: SetNull)
+
+  @@index([organisationId])
+  @@index([agreementId])
+  @@index([verificationToken])
+  @@map("document_seals")
+}
+
+/// TSA trust store — managed root/intermediate certificates for timestamp verification.
+model TsaTrustEntry {
+  id              String    @id @db.Uuid
+  provider        String    @db.VarChar(100)   // DigiCert | Sectigo | FreeTSA | Custom
+  tsaUrl          String    @map("tsa_url") @db.VarChar(512)
+  certificatePem  String    @map("certificate_pem") @db.Text
+  fingerprint     String    @db.VarChar(128)   // SHA-256 of DER
+  subjectDn       String    @map("subject_dn") @db.VarChar(512)
+  issuerDn        String    @map("issuer_dn") @db.VarChar(512)
+  validFrom       DateTime  @map("valid_from") @db.Timestamptz()
+  validTo         DateTime  @map("valid_to") @db.Timestamptz()
+  isActive        Boolean   @default(true) @map("is_active")
+  lastHealthCheck DateTime? @map("last_health_check") @db.Timestamptz()
+  healthStatus    String?   @map("health_status") @db.VarChar(20) // HEALTHY | EXPIRING_SOON | EXPIRED | UNREACHABLE
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
+
+  @@unique([tsaUrl, fingerprint])
+  @@index([tsaUrl])
+  @@index([healthStatus])
+  @@map("tsa_trust_entries")
+}
+
 

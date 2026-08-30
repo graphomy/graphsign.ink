@@ -159,7 +159,7 @@ export type MfaToggleResponse = z.infer<typeof mfaToggleResponseSchema>;
 
 export const updateSessionSettingsSchema = z.object({
   sessionTimeoutMinutes: z
-    .number({ required_error: 'sessionTimeoutMinutes is required.' })
+    .number({ message: 'sessionTimeoutMinutes is required.' })
     .int('sessionTimeoutMinutes must be an integer.')
     .min(1, 'Session timeout must be at least 1 minute.')
     .max(1440, 'Session timeout cannot exceed 1440 minutes (24 hours).'),
@@ -233,7 +233,7 @@ export type ProfileResponse = z.infer<typeof profileResponseSchema>;
 
 export const verifyMfaSetupRequestSchema = z.object({
   code: z
-    .string({ required_error: 'Verification code is required.' })
+    .string({ message: 'Verification code is required.' })
     .length(6, 'Verification code must be exactly 6 digits.')
     .regex(/^\d+$/, 'Verification code must contain digits only.'),
 });
@@ -243,7 +243,7 @@ export type VerifyMfaSetupRequest = z.infer<typeof verifyMfaSetupRequestSchema>;
 export const loginMfaRequestSchema = z.object({
   mfaTicket: z.string().min(1, 'MFA ticket is required.'),
   code: z
-    .string({ required_error: 'Verification code is required.' })
+    .string({ message: 'Verification code is required.' })
     .length(6, 'Verification code must be 6 digits.')
     .regex(/^\d+$/, 'Verification code must contain digits only.'),
 });

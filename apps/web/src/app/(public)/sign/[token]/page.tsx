@@ -2,7 +2,7 @@
 
 export const runtime = 'edge';
 
-import React, { useState, useEffect, useMemo, useRef, use } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef, use } from 'react';
 import Link from 'next/link';
 import { getApiUrl } from '@/lib/api';
 import { orDash, orLabel, formatHash } from '@/lib/format';
@@ -25,6 +25,8 @@ import {
   CheckCheck,
   ZoomIn,
   ZoomOut,
+  ChevronLeft,
+  ChevronRight,
   Sparkles,
 } from 'lucide-react';
 
@@ -84,10 +86,15 @@ interface AgreementDetails {
   signingOrder: string;
   currentStep: number;
   expiresAt?: string;
-  senderName: string;
-  organisationName: string;
+  senderName?: string;
+  author?: {
+    name?: string;
+    email?: string;
+  };
+  organisationName?: string;
   envelopeId?: string;
   certHash?: string;
+  verificationToken?: string;
 }
 
 export default function SignDocumentPage({
@@ -153,6 +160,16 @@ export default function SignDocumentPage({
   const [highlightedFieldId, setHighlightedFieldId] = useState<string | null>(null);
   const [copiedEnvelope, setCopiedEnvelope] = useState(false);
   const [copiedHash, setCopiedHash] = useState(false);
+
+  // Page Navigation State
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const totalPages = useMemo(() => {
+    if (!agreement?.fields?.fields || agreement.fields.fields.length === 0) return 1;
+    const maxPage = Math.max(
+      ...agreement.fields.fields.map((f: { pageNumber?: number }) => f.pageNumber || 1),
+    );
+    return Math.max(1, maxPage);
+  }, [agreement]);
 
   // Fetch signing session on mount
   useEffect(() => {
@@ -302,12 +319,41 @@ export default function SignDocumentPage({
     });
   }, [fields, fieldValues]);
 
+  // Helper to determine if a field belongs to the currently active signer
+  const isFieldAssignedToMe = useCallback(
+    (fieldRecipientId?: string) => {
+      if (!fieldRecipientId) return true;
+      if (!currentRecipient) return true;
+      if (fieldRecipientId === currentRecipient.id) return true;
+      if (fieldRecipientId === currentRecipient.email) return true;
+      if (currentRecipient.role && fieldRecipientId === currentRecipient.role) return true;
+      if (
+        currentRecipient.routingOrder &&
+        (fieldRecipientId === `signer-${currentRecipient.routingOrder}` ||
+          fieldRecipientId === `recip-${currentRecipient.routingOrder}`)
+      ) {
+        return true;
+      }
+      if (
+        (currentRecipient.routingOrder === 1 || !currentRecipient.routingOrder) &&
+        (fieldRecipientId === 'signer-1' ||
+          fieldRecipientId === 'recip-1' ||
+          fieldRecipientId === 'signer' ||
+          fieldRecipientId === 'r-1')
+      ) {
+        return true;
+      }
+      const totalRecipients = agreement?.fields?.recipients?.length || 0;
+      if (totalRecipients <= 1) return true;
+      return false;
+    },
+    [currentRecipient, agreement],
+  );
+
   // Assigned Fields for Current Recipient
   const assignedFields = useMemo(() => {
-    return evaluatedFields.filter(
-      (f) => f.recipientId === currentRecipient?.id && f.computedVisible,
-    );
-  }, [evaluatedFields, currentRecipient?.id]);
+    return evaluatedFields.filter((f) => isFieldAssignedToMe(f.recipientId) && f.computedVisible);
+  }, [evaluatedFields, isFieldAssignedToMe]);
 
   const assignedRequiredFields = useMemo(() => {
     return assignedFields.filter((f) => f.computedRequired);
@@ -341,9 +387,9 @@ export default function SignDocumentPage({
     }
   }
 
-  // Handle Signature Field Click
+  // Handle Signature Field Click (Click-to-sign / Click-to-apply)
   function handleSignatureFieldClick(field: DocumentField) {
-    if (field.recipientId !== currentRecipient?.id) return;
+    if (!isFieldAssignedToMe(field.recipientId)) return;
 
     if (adoptedSignature) {
       setFieldValues((prev) => ({ ...prev, [field.id]: adoptedSignature.dataUrl }));
@@ -663,7 +709,9 @@ export default function SignDocumentPage({
             </div>
             <div className="flex justify-between items-center text-ink-500">
               <span>Sender</span>
-              <span className="font-semibold text-ink-900">{orDash(agreement.senderName)}</span>
+              <span className="font-semibold text-ink-900">
+                {orDash(agreement.senderName || agreement.author?.name || agreement.author?.email)}
+              </span>
             </div>
             <div className="flex justify-between items-center text-ink-500">
               <span>Envelope ID</span>
@@ -688,9 +736,18 @@ export default function SignDocumentPage({
               </div>
             </div>
             <div className="flex justify-between items-center text-ink-500">
+              <span>Verification Token</span>
+              <div className="flex items-center gap-1.5 font-mono text-ink-900 font-semibold tabular-nums">
+                <span>{`GS-${rawToken.substring(0, 8)}`}</span>
+              </div>
+            </div>
+            <div className="flex justify-between items-center text-ink-500">
               <span>Completed At</span>
               <span className="text-ink-900 font-medium tabular-nums">
-                {formatDateTime(new Date().toISOString())}
+                {formatDateTime(new Date().toISOString(), {
+                  includeSeconds: true,
+                  includeTimezone: true,
+                })}
               </span>
             </div>
             <div className="flex justify-between items-center text-ink-500 pt-1 border-t border-ink-200">
@@ -728,14 +785,15 @@ export default function SignDocumentPage({
             >
               Download executed PDF
             </Button>
-            <Button
-              variant="outline"
-              size="lg"
-              leftIcon={<ShieldCheck className="w-4 h-4" />}
-              onClick={() => alert(`Certificate SHA-256:\n${certHash}`)}
+            <a
+              href={`/verify/${envelopeId || rawToken}`}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg border border-ink-300 bg-white hover:bg-ink-50 text-ink-900 font-semibold text-xs transition-colors shadow-xs"
             >
-              View audit certificate
-            </Button>
+              <ShieldCheck className="w-4 h-4 text-emerald-600" />
+              Verify Authenticity (/verify)
+            </a>
             <Button
               variant="ghost"
               size="lg"
@@ -849,6 +907,31 @@ export default function SignDocumentPage({
 
         {/* Right: Studio Controls */}
         <div className="flex items-center gap-2">
+          {/* Page Navigation Controls */}
+          <div className="flex items-center gap-1 bg-ink-50 border border-ink-200 rounded-md p-0.5">
+            <button
+              type="button"
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              disabled={currentPage <= 1}
+              className="p-1 rounded text-ink-600 hover:text-ink-900 hover:bg-ink-100 disabled:opacity-40"
+              title="Previous Page"
+            >
+              <ChevronLeft className="w-3.5 h-3.5" />
+            </button>
+            <span className="px-2 text-xs font-medium text-ink-700 tabular-nums">
+              Page {currentPage} of {totalPages}
+            </span>
+            <button
+              type="button"
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              disabled={currentPage >= totalPages}
+              className="p-1 rounded text-ink-600 hover:text-ink-900 hover:bg-ink-100 disabled:opacity-40"
+              title="Next Page"
+            >
+              <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
           {/* Zoom controls */}
           <div className="hidden sm:flex items-center border border-ink-200 rounded-md p-0.5 bg-ink-50 text-xs font-medium text-ink-700">
             <button
@@ -869,6 +952,13 @@ export default function SignDocumentPage({
               title="Zoom In"
             >
               <ZoomIn className="w-3.5 h-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setZoomLevel(100)}
+              className="px-1.5 py-0.5 text-[11px] text-ink-500 hover:text-ink-900 border-l border-ink-200"
+            >
+              Fit
             </button>
           </div>
 
@@ -1053,7 +1143,7 @@ export default function SignDocumentPage({
               />
             ) : effectivePdfUrl ? (
               <iframe
-                src={`${effectivePdfUrl}#toolbar=0&navpanes=0&scrollbar=0`}
+                src={`${effectivePdfUrl}#page=${currentPage}&toolbar=0&navpanes=0&scrollbar=0`}
                 className="w-full h-full min-h-[1100px] border-none pointer-events-none flex-1 overflow-hidden"
                 title="Document PDF Preview"
               />
@@ -1075,7 +1165,7 @@ export default function SignDocumentPage({
               {evaluatedFields
                 .filter((f) => f.computedVisible)
                 .map((field) => {
-                  const isAssignedToMe = field.recipientId === currentRecipient?.id;
+                  const isAssignedToMe = isFieldAssignedToMe(field.recipientId);
                   const value = fieldValues[field.id];
                   const hasError = Boolean(formErrors[field.id]);
                   const isHighlighted = highlightedFieldId === field.id;

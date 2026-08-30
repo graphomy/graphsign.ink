@@ -196,7 +196,7 @@ export function PdfViewerModal({ agreement, onClose, onOpenEditor }: PdfViewerMo
 
   const effectivePdfUrl = inlineBlobUrl || fetchedBlobUrl;
   const embeddedPdfUrl = effectivePdfUrl
-    ? `${effectivePdfUrl}#toolbar=0&navpanes=0&scrollbar=1`
+    ? `${effectivePdfUrl}#page=${currentPage}&toolbar=0&navpanes=0`
     : null;
 
   function handlePrint() {
@@ -329,7 +329,7 @@ export function PdfViewerModal({ agreement, onClose, onOpenEditor }: PdfViewerMo
 
           {/* Right: Actions */}
           <div className="flex items-center gap-2 shrink-0">
-            {onOpenEditor && (
+            {onOpenEditor && (agreement.status === 'DRAFT' || agreement.status === 'REJECTED') && (
               <Button
                 variant="outline"
                 size="sm"
@@ -399,7 +399,7 @@ export function PdfViewerModal({ agreement, onClose, onOpenEditor }: PdfViewerMo
           )}
 
           {/* Centre Document Viewport */}
-          <div className="flex-1 overflow-y-auto p-4 sm:p-6 flex flex-col items-center justify-start">
+          <div className="flex-1 overflow-hidden p-2 sm:p-4 flex flex-col items-center justify-start h-full">
             {isLoadingFile ? (
               <div className="flex flex-col items-center justify-center p-12 text-center text-ink-600 space-y-3 my-auto">
                 <div className="w-8 h-8 border-2 border-ink-300 border-t-brand-600 rounded-full animate-spin" />
@@ -415,34 +415,32 @@ export function PdfViewerModal({ agreement, onClose, onOpenEditor }: PdfViewerMo
               </div>
             ) : isPdf && embeddedPdfUrl ? (
               <div
-                style={{ transform: `scale(${zoomLevel / 100})`, transformOrigin: 'top center' }}
-                className="w-full max-w-4xl h-[85vh] bg-white rounded-md shadow-lg border border-ink-200 overflow-hidden transition-transform duration-150"
+                style={{
+                  width: zoomLevel === 100 ? '100%' : `${zoomLevel}%`,
+                  maxWidth: zoomLevel <= 100 ? '1000px' : 'none',
+                }}
+                className="w-full h-full bg-white rounded-md shadow-lg border border-ink-200 overflow-hidden flex flex-col"
               >
-                <object
-                  data={embeddedPdfUrl}
-                  type="application/pdf"
-                  className="w-full h-full border-0"
+                <iframe
+                  src={`${embeddedPdfUrl}`}
+                  className="w-full h-full flex-1 border-0 bg-white"
                   title={agreement.title}
-                >
-                  <iframe
-                    src={embeddedPdfUrl}
-                    className="w-full h-full border-0 bg-white"
-                    title={agreement.title}
-                  />
-                </object>
+                />
               </div>
             ) : isMarkdown ? (
-              <div
-                ref={printableAreaRef}
-                style={{ transform: `scale(${zoomLevel / 100})`, transformOrigin: 'top center' }}
-                className="bg-white text-ink-900 w-full max-w-[850px] min-h-[1050px] shadow-lg p-8 sm:p-12 md:p-16 rounded-sm transition-transform duration-150 border border-ink-200 print:p-0 print:shadow-none print:transform-none"
-              >
+              <div className="overflow-y-auto w-full h-full flex justify-center p-4">
                 <div
-                  className="prose prose-sm max-w-none text-ink-900 leading-relaxed text-left font-serif"
-                  dangerouslySetInnerHTML={{
-                    __html: renderMarkdownToHtml(agreement.markdownContent || ''),
-                  }}
-                />
+                  ref={printableAreaRef}
+                  style={{ transform: `scale(${zoomLevel / 100})`, transformOrigin: 'top center' }}
+                  className="bg-white text-ink-900 w-full max-w-[850px] min-h-[1050px] shadow-lg p-8 sm:p-12 md:p-16 rounded-sm transition-transform duration-150 border border-ink-200 print:p-0 print:shadow-none print:transform-none"
+                >
+                  <div
+                    className="prose prose-sm max-w-none text-ink-900 leading-relaxed text-left font-serif"
+                    dangerouslySetInnerHTML={{
+                      __html: renderMarkdownToHtml(agreement.markdownContent || ''),
+                    }}
+                  />
+                </div>
               </div>
             ) : (
               <div className="w-full max-w-md text-center p-8 bg-white rounded-xl border border-ink-200 shadow-md my-auto space-y-3">

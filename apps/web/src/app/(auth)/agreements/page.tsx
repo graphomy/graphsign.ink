@@ -3,8 +3,10 @@
 import React, { useState, useEffect, useRef, Suspense } from 'react';
 import { createPortal } from 'react-dom';
 import { useSearchParams, useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { SessionGuard } from '@/components/features/auth/SessionGuard';
 import { HeaderNav } from '@/components/layout/HeaderNav';
+import { WorkspaceNav } from '@/components/layout/WorkspaceNav';
 import { Footer } from '@/components/layout/Footer';
 import { Button } from '@/components/ui/Button';
 import { StatusPill } from '@/components/ui/Badge';
@@ -725,6 +727,11 @@ function AgreementManagementContent() {
           </div>
         </div>
 
+        {/* Section Navigation */}
+        <div className="flex items-center justify-between">
+          <WorkspaceNav />
+        </div>
+
         {/* Action / Error Alerts */}
         {actionMessage && (
           <div className="rounded-md bg-verified-50 border border-verified-200 p-3.5 text-xs font-medium text-verified-700 flex items-center justify-between shadow-xs">
@@ -748,6 +755,35 @@ function AgreementManagementContent() {
             </button>
           </div>
         )}
+
+        {/* Verification Callout Banner (Issue 5) */}
+        <div className="rounded-xl bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 text-white p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm border border-slate-700">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-red-600/20 text-red-400 border border-red-500/30 flex items-center justify-center font-bold text-lg shrink-0">
+              🛡️
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h4 className="text-sm font-bold text-white">
+                  Independent Document &amp; Seal Verification
+                </h4>
+                <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                  Public Trust
+                </span>
+              </div>
+              <p className="text-xs text-slate-300 mt-0.5">
+                Verify any signed agreement by document token, envelope ID, or by uploading the
+                sealed PDF.
+              </p>
+            </div>
+          </div>
+          <Link
+            href="/verify"
+            className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white text-xs font-bold transition-all shadow-sm shrink-0"
+          >
+            Verify a Document <ChevronRight className="w-3.5 h-3.5" />
+          </Link>
+        </div>
 
         {/* Table Card Container */}
         <Card elevation="e0" className="overflow-hidden border border-ink-200">

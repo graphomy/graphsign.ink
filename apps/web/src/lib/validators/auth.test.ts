@@ -57,7 +57,7 @@ describe('Web Auth Validators (INK-265)', () => {
       });
       expect(result.success).toBe(false);
       if (!result.success) {
-        expect(result.error.errors[0]?.message).toContain('company or business email address');
+        expect(result.error.issues[0]?.message).toContain('company or business email address');
       }
     });
 
@@ -70,7 +70,7 @@ describe('Web Auth Validators (INK-265)', () => {
       });
       expect(result.success).toBe(false);
       if (!result.success) {
-        expect(result.error.errors[0]?.message).toBe('Passwords do not match.');
+        expect(result.error.issues[0]?.message).toBe('Passwords do not match.');
       }
     });
   });

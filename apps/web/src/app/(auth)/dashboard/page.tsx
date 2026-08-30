@@ -39,20 +39,31 @@ function DashboardContent() {
   const displayName = (userEmail || 'user').split('@')[0];
 
   const [agreements, setAgreements] = useState<AgreementItem[]>([]);
+  const [hasNoCertificate, setHasNoCertificate] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let ignore = false;
-    async function loadAgreements() {
+    async function loadDashboardData() {
       setLoading(true);
       setError(null);
       try {
-        const res = await fetch(`${getApiUrl()}/api/v1/agreements`, {
-          headers: { Authorization: `Bearer ${getToken()}` },
-        });
+        const token = getToken();
+        const [agreementsRes, certsRes] = await Promise.all([
+          fetch(`${getApiUrl()}/api/v1/agreements`, {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
+          fetch(`${getApiUrl()}/api/v1/certificates`, {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'x-user-id': localStorage.getItem('graphsign_user_id') ?? '',
+              'x-organisation-id': localStorage.getItem('graphsign_org_id') ?? '',
+            },
+          }).catch(() => null),
+        ]);
 
-        if (res.status === 401) {
+        if (agreementsRes.status === 401) {
           localStorage.removeItem('token');
           localStorage.removeItem('graphsign_session_token');
           localStorage.removeItem('graphsign_user_email');
@@ -62,8 +73,8 @@ function DashboardContent() {
           return;
         }
 
-        if (!res.ok) {
-          const errData = await res.json().catch(() => null);
+        if (!agreementsRes.ok) {
+          const errData = await agreementsRes.json().catch(() => null);
           throw new Error(
             errData?.error?.message ||
               errData?.message ||
@@ -71,9 +82,16 @@ function DashboardContent() {
           );
         }
 
-        const data = await res.json();
+        const data = await agreementsRes.json();
         if (!ignore) {
           setAgreements(data.items || []);
+        }
+
+        if (certsRes && certsRes.ok) {
+          const certsData = await certsRes.json().catch(() => []);
+          if (!ignore) {
+            setHasNoCertificate(Array.isArray(certsData) && certsData.length === 0);
+          }
         }
       } catch (err: unknown) {
         if (!ignore) {
@@ -85,7 +103,7 @@ function DashboardContent() {
         }
       }
     }
-    loadAgreements();
+    loadDashboardData();
     return () => {
       ignore = true;
     };
@@ -116,6 +134,33 @@ function DashboardContent() {
       <HeaderNav />
 
       <main className="flex-1 py-8 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto w-full space-y-6">
+        {/* Certificate Setup Callout Banner (Issue 2) */}
+        {!loading && hasNoCertificate && (
+          <div className="rounded-2xl bg-amber-50 border border-amber-300 p-5 sm:p-6 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-start sm:items-center gap-3.5">
+              <div className="w-10 h-10 rounded-xl bg-amber-100 border border-amber-300 text-amber-800 flex items-center justify-center font-bold text-lg shrink-0">
+                ⚠️
+              </div>
+              <div className="space-y-0.5">
+                <h3 className="text-sm font-bold text-amber-950">
+                  Complete Setup: Create or Upload Your Signing Certificate
+                </h3>
+                <p className="text-xs text-amber-800 leading-relaxed">
+                  Your organisation does not have an active X.509 signing certificate yet. Generate
+                  a self-signed certificate or upload an enterprise PKI certificate to enable
+                  cryptographic sealing and PAdES digital signatures.
+                </p>
+              </div>
+            </div>
+            <Link
+              href="/settings/certificates?action=create"
+              className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg bg-amber-700 hover:bg-amber-800 text-white text-xs font-bold transition-all shadow-xs shrink-0 self-start sm:self-auto"
+            >
+              Complete Setup →
+            </Link>
+          </div>
+        )}
+
         {/* Workspace Banner */}
         <div className="bg-white border border-neutral-200 rounded-2xl p-6 sm:p-8 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="space-y-1">

@@ -79,7 +79,7 @@ export function createTemplateRoutes(deps?: TemplateDeps) {
 
       const parsed = queryTemplatesSchema.safeParse(queryParams);
       if (!parsed.success) {
-        throw new BadRequestError(parsed.error.errors[0]?.message || 'Invalid query parameters');
+        throw new BadRequestError(parsed.error.issues[0]?.message || 'Invalid query parameters');
       }
 
       const result = await service.listTemplates(orgId, userId, parsed.data);
@@ -122,7 +122,7 @@ export function createTemplateRoutes(deps?: TemplateDeps) {
 
       if (!parsed.success) {
         throw new BadRequestError(
-          parsed.error.errors[0]?.message || 'Invalid template creation payload',
+          parsed.error.issues[0]?.message || 'Invalid template creation payload',
         );
       }
 
@@ -147,7 +147,7 @@ export function createTemplateRoutes(deps?: TemplateDeps) {
       const parsed = convertAgreementToTemplateSchema.safeParse(body);
 
       if (!parsed.success) {
-        throw new BadRequestError(parsed.error.errors[0]?.message || 'Invalid conversion payload');
+        throw new BadRequestError(parsed.error.issues[0]?.message || 'Invalid conversion payload');
       }
 
       const template = await service.convertAgreementToTemplate(orgId, authorId, parsed.data);
@@ -172,7 +172,7 @@ export function createTemplateRoutes(deps?: TemplateDeps) {
       const parsed = updateTemplateDraftSchema.safeParse(body);
 
       if (!parsed.success) {
-        throw new BadRequestError(parsed.error.errors[0]?.message || 'Invalid update payload');
+        throw new BadRequestError(parsed.error.issues[0]?.message || 'Invalid update payload');
       }
 
       const updated = await service.updateTemplateDraft(orgId, authorId, templateId, parsed.data);
@@ -215,7 +215,7 @@ export function createTemplateRoutes(deps?: TemplateDeps) {
       const parsed = createTemplateVersionSchema.safeParse(body);
 
       if (!parsed.success) {
-        throw new BadRequestError(parsed.error.errors[0]?.message || 'Invalid version payload');
+        throw new BadRequestError(parsed.error.issues[0]?.message || 'Invalid version payload');
       }
 
       const version = await service.createTemplateVersion(orgId, authorId, templateId, parsed.data);
@@ -258,7 +258,7 @@ export function createTemplateRoutes(deps?: TemplateDeps) {
       const parsed = shareTemplateSchema.safeParse(body);
 
       if (!parsed.success) {
-        throw new BadRequestError(parsed.error.errors[0]?.message || 'Invalid share payload');
+        throw new BadRequestError(parsed.error.issues[0]?.message || 'Invalid share payload');
       }
 
       const share = await service.shareTemplate(orgId, authorId, templateId, parsed.data);
@@ -320,7 +320,7 @@ export function createTemplateRoutes(deps?: TemplateDeps) {
       const parsed = publishTemplateSchema.safeParse(body);
 
       if (!parsed.success) {
-        throw new BadRequestError(parsed.error.errors[0]?.message || 'Invalid publish payload');
+        throw new BadRequestError(parsed.error.issues[0]?.message || 'Invalid publish payload');
       }
 
       const updated = await service.publishTemplate(
@@ -351,7 +351,7 @@ export function createTemplateRoutes(deps?: TemplateDeps) {
 
       if (!parsed.success) {
         throw new BadRequestError(
-          parsed.error.errors[0]?.message || 'Invalid instantiation payload',
+          parsed.error.issues[0]?.message || 'Invalid instantiation payload',
         );
       }
 

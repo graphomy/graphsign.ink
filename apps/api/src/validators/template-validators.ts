@@ -46,9 +46,9 @@ export const createTemplateSchema = z.object({
     .max(MAX_HTML_CONTENT_LENGTH, 'HTML content exceeds maximum allowed size (512KB)')
     .transform(sanitizeHtml)
     .optional(),
-  fields: z.array(z.record(z.unknown())).optional(),
+  fields: z.array(z.record(z.string(), z.unknown())).optional(),
   tags: z.array(z.string()).optional(),
-  metadata: z.record(z.unknown()).optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
 });
 
 export const convertAgreementToTemplateSchema = z.object({
@@ -66,24 +66,24 @@ export const updateTemplateDraftSchema = z.object({
     .max(MAX_HTML_CONTENT_LENGTH, 'HTML content exceeds maximum allowed size (512KB)')
     .transform(sanitizeHtml)
     .optional(),
-  fields: z.array(z.record(z.unknown())).optional(),
+  fields: z.array(z.record(z.string(), z.unknown())).optional(),
   tags: z.array(z.string()).optional(),
-  metadata: z.record(z.unknown()).optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
 });
 
 export const createTemplateVersionSchema = z.object({
   changeSummary: z.string().max(512).optional(),
   htmlContent: z.string().max(MAX_HTML_CONTENT_LENGTH).transform(sanitizeHtml).optional(),
-  fields: z.array(z.record(z.unknown())).optional(),
+  fields: z.array(z.record(z.string(), z.unknown())).optional(),
 });
 
 export const shareTemplateSchema = z.object({
   targetType: z.enum(['user', 'team'], {
-    errorMap: () => ({ message: "Target type must be 'user' or 'team'" }),
+    message: "Target type must be 'user' or 'team'",
   }),
   targetId: z.string().uuid('Invalid target user or team ID'),
   accessLevel: z.enum(['USE', 'EDIT'], {
-    errorMap: () => ({ message: "Access level must be 'USE' or 'EDIT'" }),
+    message: "Access level must be 'USE' or 'EDIT'",
   }),
 });
 

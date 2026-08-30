@@ -101,7 +101,7 @@ export function formatDate(
 }
 
 /**
- * Formats a Date/string/number into DD-MON-YYYY HH:mm (e.g. "14-AUG-2026 18:30 GMT").
+ * Formats a Date/string/number into DD-MON-YYYY HH:mm (e.g. "14-AUG-2026 18:30" or "14-AUG-2026 18:30:15 EST").
  */
 export function formatDateTime(
   dateInput: string | number | Date | null | undefined,
@@ -116,8 +116,9 @@ export function formatDateTime(
   const dateStr = formatDate(date, options);
 
   try {
+    const effectiveTz = tz === 'GMT' ? 'UTC' : tz;
     const formatter = new Intl.DateTimeFormat('en-GB', {
-      timeZone: tz === 'GMT' ? 'UTC' : tz,
+      timeZone: effectiveTz,
       hour: '2-digit',
       minute: '2-digit',
       second: options?.includeSeconds ? '2-digit' : undefined,
@@ -125,12 +126,25 @@ export function formatDateTime(
     });
 
     const timeStr = formatter.format(date);
-    const tzLabel = options?.includeTimezone ? ` (${tz})` : '';
+    let tzLabel = '';
+    if (options?.includeTimezone) {
+      try {
+        const tzParts = new Intl.DateTimeFormat('en-US', {
+          timeZone: effectiveTz,
+          timeZoneName: 'short',
+        }).formatToParts(date);
+        const name = tzParts.find((p) => p.type === 'timeZoneName')?.value;
+        tzLabel = name ? ` ${name}` : ` (${tz})`;
+      } catch {
+        tzLabel = ` (${tz})`;
+      }
+    }
     return `${dateStr} ${timeStr}${tzLabel}`;
   } catch {
     const hours = String(date.getUTCHours()).padStart(2, '0');
     const minutes = String(date.getUTCMinutes()).padStart(2, '0');
-    return `${dateStr} ${hours}:${minutes}`;
+    const tzLabel = options?.includeTimezone ? ' UTC' : '';
+    return `${dateStr} ${hours}:${minutes}${tzLabel}`;
   }
 }
 

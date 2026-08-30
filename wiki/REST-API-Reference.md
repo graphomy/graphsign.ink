@@ -116,3 +116,47 @@ Content-Type: application/json
 - `DELETE /templates/:id` — Archive template.
 - `POST /templates/:id/publish` — Publish template for organization use.
 - `POST /templates/:id/clone` — Clone template.
+
+### 8. Search & Filter Presets (`/api/v1/search`)
+
+- `GET /search/agreements` — Search agreements by keywords, status, tags, and date ranges.
+- `GET /search/templates` — Search template library.
+- `GET /search` — Unified global search across agreements, templates, and recipients.
+- `GET /search/presets` — Retrieve saved search and filter presets.
+- `POST /search/presets` — Save a custom filter preset.
+- `DELETE /search/presets/:id` — Delete a saved filter preset.
+- `PATCH /search/presets/:id/default` — Set preset as default active view.
+
+### 9. Certificates & Trust Store (`/api/v1/certificates`)
+
+- `GET /certificates` — List organization signing certificates.
+- `GET /certificates/default` — Get or auto-provision default certificate.
+- `POST /certificates/generate` — Generate a self-signed X.509 certificate with custom subject credentials (CN, O, OU, L, ST, C, EMAIL).
+- `POST /certificates/upload` — Import Bring Your Own (BYO) certificate with optional intermediate chain.
+- `GET /certificates/:id` — Retrieve certificate details, subject DN, validity, and fingerprint.
+- `PUT /certificates/:id/default` — Set certificate as default organization signer.
+- `DELETE /certificates/:id` — Revoke signing certificate.
+- `GET /certificates/trust-store` — List managed TSA root and intermediate trust entries.
+- `POST /certificates/trust-store` — Add custom TSA trust certificate.
+
+### 10. Cryptographic Sealing & PAdES (`/api/v1/signing`)
+
+- `POST /signing/seal/:agreementId` — Cryptographically seal a completed agreement with PAdES B-T, RFC 3161 timestamp, and QR badge.
+- `POST /signing/batch` — Batch seal up to 100 agreements in a single atomic transaction.
+- `POST /signing/verify` — Authenticated verification of document seal or uploaded PDF.
+
+### 11. Public Verification Portal (`/api/v1/verify`)
+
+- `GET /verify/:token` — Public verification query by token (`GS-xxxxxxxx`), envelope UUID, or agreement ID without authentication.
+- `POST /verify/hash` — Public verification query by document SHA-256 hash.
+- `POST /verify/file` — Public verification query by uploaded PDF bytes.
+- `GET /verify/:token/certificate` — Download Certificate of Authenticity report.
+
+### 12. Cloud Signature Consortium CSC v2.2 (`/csc/v2`)
+
+- `POST /csc/v2/info` — Remote signing service capabilities, supported algorithms, and auth modes.
+- `POST /csc/v2/credentials/list` — List remote signing credentials for tenant.
+- `POST /csc/v2/credentials/info` — Certificate details, public key, and certificate chain.
+- `POST /csc/v2/credentials/authorize` — Issue short-lived Server Authorisation Data (`SAD`) tokens.
+- `POST /csc/v2/signatures/signHash` — Remote signature generation on pre-computed hashes.
+- `POST /csc/v2/signatures/timestamp` — Issue RFC 3161 timestamp tokens.

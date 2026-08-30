@@ -43,7 +43,7 @@ function RegisterContent() {
     });
     if (!parsed.success) {
       const fieldErrors: Record<string, string> = {};
-      for (const err of parsed.error.errors) {
+      for (const err of parsed.error.issues) {
         const field = err.path[0];
         if (field && typeof field === 'string' && !fieldErrors[field]) {
           fieldErrors[field] = err.message;

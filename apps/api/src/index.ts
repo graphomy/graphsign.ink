@@ -11,6 +11,11 @@ import { createSignRoutes } from './routes/sign.js';
 import { createTemplateRoutes } from './routes/templates.js';
 import { createAdminRoutes } from './routes/admin.js';
 import { createSearchRoutes } from './routes/search.js';
+import { createCertificateRoutes } from './routes/certificates.js';
+import { createSigningRoutes } from './routes/signing.js';
+import { createPublicVerifyRoutes } from './routes/verify.js';
+import { createCscRoutes } from './routes/csc.js';
+import { createTrustStoreRoutes } from './routes/trust-store.js';
 
 /** Cloudflare Worker environment bindings. */
 export type Env = {
@@ -23,6 +28,9 @@ export type Env = {
   API_URL: string;
   NODE_ENV: string;
   SUPERADMIN_ID: string;
+  TSA_PRIMARY_URL?: string;
+  TSA_FALLBACK_URL?: string;
+  TSA_FALLBACK2_URL?: string;
 };
 
 type Variables = {
@@ -104,6 +112,15 @@ app.route('/api/v1/sign', createSignRoutes());
 app.route('/api/v1/templates', createTemplateRoutes());
 app.route('/api/v1/admin', createAdminRoutes());
 app.route('/api/v1/search', createSearchRoutes());
+app.route('/api/v1/certificates', createCertificateRoutes());
+app.route('/api/v1/signing', createSigningRoutes());
+app.route('/api/v1/admin/trust-store', createTrustStoreRoutes());
+
+// Public verification routes (No authentication required)
+app.route('/verify', createPublicVerifyRoutes());
+
+// Cloud Signature Consortium (CSC v2.2) protocol routes
+app.route('/csc/v2', createCscRoutes());
 
 // Workers export — no serve() call needed
 export default app;

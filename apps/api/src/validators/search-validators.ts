@@ -5,7 +5,16 @@ export const searchAgreementsSchema = z.object({
   search: z.string().trim().optional(),
   status: z.string().trim().optional(),
   datePreset: z
-    .enum(['today', 'last_7_days', 'last_30_days', 'last_90_days', 'custom', 'all'])
+    .enum([
+      'today',
+      'week',
+      'last_7_days',
+      'month',
+      'last_30_days',
+      'last_90_days',
+      'custom',
+      'all',
+    ])
     .optional(),
   startDate: z
     .string()
@@ -95,13 +104,13 @@ export const createFilterPresetSchema = z.object({
     .min(1, 'Preset name is required')
     .max(100, 'Preset name cannot exceed 100 chars'),
   entityType: z.enum(['AGREEMENT', 'TEMPLATE']).default('AGREEMENT'),
-  filters: z.record(z.unknown()),
+  filters: z.record(z.string(), z.unknown()),
   isDefault: z.boolean().default(false).optional(),
 });
 
 export const updateFilterPresetSchema = z.object({
   name: z.string().trim().min(1).max(100).optional(),
-  filters: z.record(z.unknown()).optional(),
+  filters: z.record(z.string(), z.unknown()).optional(),
   isDefault: z.boolean().optional(),
 });
 
