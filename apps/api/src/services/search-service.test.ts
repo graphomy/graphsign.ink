@@ -208,7 +208,16 @@ describe('SearchService Unit Tests (INK-117 to INK-122)', () => {
       await service.searchAgreements(mockAdminCtx, { status: 'ACTIVE' });
       const callArgs = mockPrisma.agreement.findMany.mock.calls[0][0];
       expect(callArgs.where.status).toEqual({
-        notIn: ['DRAFT', 'IN_REVIEW', 'REJECTED', 'CANCELLED', 'COMPLETED', 'SEALED', 'SIGNED', 'VOIDED'],
+        notIn: [
+          'DRAFT',
+          'IN_REVIEW',
+          'REJECTED',
+          'CANCELLED',
+          'COMPLETED',
+          'SEALED',
+          'SIGNED',
+          'VOIDED',
+        ],
       });
     });
 

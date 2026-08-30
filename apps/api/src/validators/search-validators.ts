@@ -5,7 +5,16 @@ export const searchAgreementsSchema = z.object({
   search: z.string().trim().optional(),
   status: z.string().trim().optional(),
   datePreset: z
-    .enum(['today', 'week', 'last_7_days', 'month', 'last_30_days', 'last_90_days', 'custom', 'all'])
+    .enum([
+      'today',
+      'week',
+      'last_7_days',
+      'month',
+      'last_30_days',
+      'last_90_days',
+      'custom',
+      'all',
+    ])
     .optional(),
   startDate: z
     .string()
