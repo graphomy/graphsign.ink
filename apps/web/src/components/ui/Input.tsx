@@ -77,11 +77,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
             disabled={disabled}
             aria-invalid={!!errorMessage}
             aria-describedby={
-              errorMessage
-                ? `${inputId}-error`
-                : helperText
-                  ? `${inputId}-helper`
-                  : undefined
+              errorMessage ? `${inputId}-error` : helperText ? `${inputId}-helper` : undefined
             }
             onKeyUp={handleKeyUp}
             onKeyDown={handleKeyDown}
@@ -92,7 +88,8 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
               'disabled:bg-ink-50 disabled:text-ink-400 disabled:cursor-not-allowed',
               leftIcon && 'pl-9',
               showPasswordToggle && 'pr-10',
-              errorMessage && 'border-brand-500 bg-brand-50/40 focus:border-brand-600 focus:ring-brand-500/20',
+              errorMessage &&
+                'border-brand-500 bg-brand-50/40 focus:border-brand-600 focus:ring-brand-500/20',
               className,
             )}
             {...props}

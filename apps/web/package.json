@@ -8,7 +8,8 @@
     "start": "next start",
     "pages:build": "next-on-pages",
     "test": "vitest run",
-    "lint": "eslint"
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "clsx": "^2.1.1",

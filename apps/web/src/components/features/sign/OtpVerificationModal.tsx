@@ -214,13 +214,17 @@ export function OtpVerificationModal({
 
         <p className="text-[13px] text-ink-500 mt-2 max-w-[34ch] mx-auto leading-relaxed">
           We sent a 6-digit code to{' '}
-          <strong className="text-ink-900 font-semibold">{maskEmail(recipientEmail)}</strong>. Enter it
-          to seal your signature on{' '}
+          <strong className="text-ink-900 font-semibold">{maskEmail(recipientEmail)}</strong>. Enter
+          it to seal your signature on{' '}
           <strong className="text-ink-900 font-semibold">{agreementTitle}</strong>.
         </p>
 
         {/* 6-Digit Cells */}
-        <div className="mt-7 flex justify-center gap-2" role="group" aria-label="One-time verification code">
+        <div
+          className="mt-7 flex justify-center gap-2"
+          role="group"
+          aria-label="One-time verification code"
+        >
           {digits.map((digit, index) => {
             const hasError = !!error;
             return (

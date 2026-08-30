@@ -133,7 +133,9 @@ export default function SignDocumentPage({
   // Adopted Signature State
   const [adoptedSignature, setAdoptedSignature] = useState<AdoptedSignature | null>(null);
   const [activeSignatureFieldId, setActiveSignatureFieldId] = useState<string | null>(null);
-  const [activeSignatureType, setActiveSignatureType] = useState<'SIGNATURE' | 'INITIALS'>('SIGNATURE');
+  const [activeSignatureType, setActiveSignatureType] = useState<'SIGNATURE' | 'INITIALS'>(
+    'SIGNATURE',
+  );
 
   // Signer Form State
   const [fieldValues, setFieldValues] = useState<Record<string, string | boolean | number>>({});
@@ -161,7 +163,9 @@ export default function SignDocumentPage({
         const data = await res.json();
 
         if (!res.ok || !data.success) {
-          throw new Error(data.error?.message || data.message || 'Invalid or expired signing link.');
+          throw new Error(
+            data.error?.message || data.message || 'Invalid or expired signing link.',
+          );
         }
 
         setAgreement(data.data.agreement);
@@ -178,7 +182,7 @@ export default function SignDocumentPage({
 
           const hasToken = Boolean(
             typeof window !== 'undefined' &&
-              (localStorage.getItem('graphsign_session_token') || localStorage.getItem('token')),
+            (localStorage.getItem('graphsign_session_token') || localStorage.getItem('token')),
           );
           if (!hasToken) {
             setShowAuthGate(true);
@@ -458,7 +462,9 @@ export default function SignDocumentPage({
         });
         const data = await res.json();
         if (!res.ok || !data.success) {
-          throw new Error(data.error?.message || data.message || 'Failed to dispatch verification code.');
+          throw new Error(
+            data.error?.message || data.message || 'Failed to dispatch verification code.',
+          );
         }
         setShowOtpModal(true);
       } catch (err: unknown) {
@@ -549,7 +555,8 @@ export default function SignDocumentPage({
   }
 
   const envelopeId = agreement?.envelopeId || `env_sec_${rawToken.substring(0, 8)}`;
-  const certHash = agreement?.certHash || 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
+  const certHash =
+    agreement?.certHash || 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
 
   // --- LOADING VIEW ---
   if (loading) {
@@ -557,9 +564,7 @@ export default function SignDocumentPage({
       <div className="min-h-screen bg-ink-50 flex items-center justify-center p-4">
         <div className="text-center space-y-3">
           <div className="w-8 h-8 border-2 border-ink-300 border-t-brand-600 rounded-full animate-spin mx-auto" />
-          <p className="text-xs font-semibold text-ink-600">
-            Establishing secure signing session…
-          </p>
+          <p className="text-xs font-semibold text-ink-600">Establishing secure signing session…</p>
         </div>
       </div>
     );
@@ -629,12 +634,13 @@ export default function SignDocumentPage({
             <Badge tone="success" size="sm" className="mb-2">
               Executed &amp; Verified
             </Badge>
-            <h1 className="text-2xl font-bold text-ink-900 tracking-tight">
-              You&apos;re All Set!
-            </h1>
+            <h1 className="text-2xl font-bold text-ink-900 tracking-tight">You&apos;re All Set!</h1>
             <p className="text-[13px] text-ink-500 max-w-sm mx-auto leading-relaxed">
               Document executed successfully. A cryptographically sealed copy has been sent to{' '}
-              <strong className="text-ink-900 font-semibold">{orDash(currentRecipient?.email)}</strong>.
+              <strong className="text-ink-900 font-semibold">
+                {orDash(currentRecipient?.email)}
+              </strong>
+              .
             </p>
           </div>
 
@@ -642,7 +648,10 @@ export default function SignDocumentPage({
           <div className="bg-ink-50 border border-ink-200 rounded-lg p-4 text-left text-xs space-y-2.5">
             <div className="flex justify-between items-center text-ink-500">
               <span>Document</span>
-              <span className="font-semibold text-ink-900 truncate max-w-[240px]" title={agreement.title}>
+              <span
+                className="font-semibold text-ink-900 truncate max-w-[240px]"
+                title={agreement.title}
+              >
                 {orDash(agreement.title)}
               </span>
             </div>
@@ -670,13 +679,19 @@ export default function SignDocumentPage({
                   className="text-ink-400 hover:text-ink-700"
                   title="Copy Envelope ID"
                 >
-                  {copiedEnvelope ? <CheckCheck className="w-3.5 h-3.5 text-verified-600" /> : <Copy className="w-3.5 h-3.5" />}
+                  {copiedEnvelope ? (
+                    <CheckCheck className="w-3.5 h-3.5 text-verified-600" />
+                  ) : (
+                    <Copy className="w-3.5 h-3.5" />
+                  )}
                 </button>
               </div>
             </div>
             <div className="flex justify-between items-center text-ink-500">
               <span>Completed At</span>
-              <span className="text-ink-900 font-medium tabular-nums">{formatDateTime(new Date().toISOString())}</span>
+              <span className="text-ink-900 font-medium tabular-nums">
+                {formatDateTime(new Date().toISOString())}
+              </span>
             </div>
             <div className="flex justify-between items-center text-ink-500 pt-1 border-t border-ink-200">
               <span>SHA-256 Cert Hash</span>
@@ -692,7 +707,11 @@ export default function SignDocumentPage({
                   className="text-ink-400 hover:text-ink-700"
                   title="Copy full certificate SHA-256 hash"
                 >
-                  {copiedHash ? <CheckCheck className="w-3.5 h-3.5 text-verified-600" /> : <Copy className="w-3.5 h-3.5" />}
+                  {copiedHash ? (
+                    <CheckCheck className="w-3.5 h-3.5 text-verified-600" />
+                  ) : (
+                    <Copy className="w-3.5 h-3.5" />
+                  )}
                 </button>
               </div>
             </div>
@@ -736,7 +755,8 @@ export default function SignDocumentPage({
               <div className="flex-1 min-w-0">
                 <h4 className="text-xs font-bold text-ink-900">Track all your signed agreements</h4>
                 <p className="text-[11px] text-ink-600 mt-0.5">
-                  Create a free GraphSign account to store, audit, and organize documents executed across any device.
+                  Create a free GraphSign account to store, audit, and organize documents executed
+                  across any device.
                 </p>
                 <div className="pt-2">
                   <Link href="/register">
@@ -853,11 +873,7 @@ export default function SignDocumentPage({
           </div>
 
           {/* Decline Button */}
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setShowDeclineModal(true)}
-          >
+          <Button variant="ghost" size="sm" onClick={() => setShowDeclineModal(true)}>
             Decline
           </Button>
 
@@ -878,7 +894,8 @@ export default function SignDocumentPage({
       {/* Sequential Turn Warning Banner */}
       {!isTurn && (
         <div className="bg-amber-50 border-b border-amber-200 text-amber-900 text-xs font-semibold py-2 px-4 text-center shrink-0">
-          It is not your turn yet in sequential signing order. Preceding signers are currently completing their steps.
+          It is not your turn yet in sequential signing order. Preceding signers are currently
+          completing their steps.
         </div>
       )}
 
@@ -1299,12 +1316,13 @@ export default function SignDocumentPage({
               <Badge tone="brand" size="sm">
                 Signature Invitation
               </Badge>
-              <h2 className="text-xl font-bold text-ink-900 tracking-tight pt-1">
-                Sign Document
-              </h2>
+              <h2 className="text-xl font-bold text-ink-900 tracking-tight pt-1">Sign Document</h2>
               <p className="text-xs text-ink-500 leading-relaxed max-w-xs mx-auto">
                 {orLabel(agreement?.senderName, 'The sender')} requested your signature on{' '}
-                <strong className="text-ink-900 font-semibold">&quot;{agreement?.title}&quot;</strong>.
+                <strong className="text-ink-900 font-semibold">
+                  &quot;{agreement?.title}&quot;
+                </strong>
+                .
               </p>
             </div>
 
@@ -1312,7 +1330,9 @@ export default function SignDocumentPage({
             <div className="bg-ink-50 border border-ink-200 rounded-md p-3.5 text-left text-xs space-y-1.5">
               <div className="flex justify-between items-center text-ink-500">
                 <span>Document</span>
-                <span className="font-semibold text-ink-900 truncate max-w-[200px]">{agreement?.title}</span>
+                <span className="font-semibold text-ink-900 truncate max-w-[200px]">
+                  {agreement?.title}
+                </span>
               </div>
               <div className="flex justify-between items-center text-ink-500">
                 <span>Recipient</span>
@@ -1320,7 +1340,9 @@ export default function SignDocumentPage({
               </div>
               <div className="flex justify-between items-center text-ink-500">
                 <span>Envelope ID</span>
-                <span className="font-mono text-[11px] text-ink-900 font-semibold">{envelopeId}</span>
+                <span className="font-mono text-[11px] text-ink-900 font-semibold">
+                  {envelopeId}
+                </span>
               </div>
             </div>
 
@@ -1349,7 +1371,8 @@ export default function SignDocumentPage({
             </div>
 
             <p className="text-[11px] text-ink-400">
-              Guest signers verify a 6-digit OTP code sent to their email ({currentRecipient?.email}) upon signature confirmation.
+              Guest signers verify a 6-digit OTP code sent to their email ({currentRecipient?.email}
+              ) upon signature confirmation.
             </p>
           </div>
         </div>

@@ -16,10 +16,7 @@ export function Card({ className, elevation = 'e0', children, ...props }: CardPr
   };
 
   return (
-    <div
-      className={cn('bg-white rounded-lg', elevationStyles[elevation], className)}
-      {...props}
-    >
+    <div className={cn('bg-white rounded-lg', elevationStyles[elevation], className)} {...props}>
       {children}
     </div>
   );

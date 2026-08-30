@@ -254,7 +254,10 @@ function LoginContent() {
 
   if (showMfaPrompt) {
     return (
-      <div className="w-full max-w-[420px] bg-white border border-ink-200 rounded-lg p-8 shadow-[0_1px_2px_rgb(16_24_40/0.04),0_1px_3px_rgb(16_24_40/0.06)] space-y-6" data-testid="mfa-verification-step">
+      <div
+        className="w-full max-w-[420px] bg-white border border-ink-200 rounded-lg p-8 shadow-[0_1px_2px_rgb(16_24_40/0.04),0_1px_3px_rgb(16_24_40/0.06)] space-y-6"
+        data-testid="mfa-verification-step"
+      >
         <div className="text-center">
           <h2 className="text-xl font-bold text-ink-900">Two-Step Verification</h2>
           <p className="mt-1 text-sm text-ink-500">
@@ -312,15 +315,23 @@ function LoginContent() {
 
   if (showMfaSetupPrompt) {
     return (
-      <div className="w-full max-w-[420px] bg-white border border-ink-200 rounded-lg p-8 shadow-[0_1px_2px_rgb(16_24_40/0.04),0_1px_3px_rgb(16_24_40/0.06)] space-y-6" data-testid="mfa-forced-setup-step">
+      <div
+        className="w-full max-w-[420px] bg-white border border-ink-200 rounded-lg p-8 shadow-[0_1px_2px_rgb(16_24_40/0.04),0_1px_3px_rgb(16_24_40/0.06)] space-y-6"
+        data-testid="mfa-forced-setup-step"
+      >
         <div className="text-center">
           <h2 className="text-xl font-bold text-ink-900">MFA Setup Required</h2>
           <p className="mt-1 text-sm text-ink-500">
-            Your organisation requires Multi-Factor Authentication for your account before signing in.
+            Your organisation requires Multi-Factor Authentication for your account before signing
+            in.
           </p>
         </div>
 
-        <form onSubmit={handleForcedSetupSubmit} className="space-y-5" data-testid="mfa-forced-setup-form">
+        <form
+          onSubmit={handleForcedSetupSubmit}
+          className="space-y-5"
+          data-testid="mfa-forced-setup-form"
+        >
           {apiError && (
             <div
               className="rounded-md bg-brand-50 border border-brand-200 p-3 text-sm text-brand-800 flex items-center gap-2"

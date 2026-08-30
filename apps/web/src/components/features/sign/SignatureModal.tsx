@@ -2,7 +2,14 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/Button';
-import { PenLine, Type as TypeIcon, Upload as UploadIcon, X, RotateCcw, Trash2 } from 'lucide-react';
+import {
+  PenLine,
+  Type as TypeIcon,
+  Upload as UploadIcon,
+  X,
+  RotateCcw,
+  Trash2,
+} from 'lucide-react';
 
 export type SignatureType = 'DRAWN' | 'TYPED' | 'UPLOADED';
 
@@ -533,7 +540,10 @@ export function SignatureModal({
             </span>
             <div className="h-10 flex items-center bg-white border border-ink-200 rounded px-2.5 overflow-hidden">
               {activeTab === 'type' ? (
-                <span style={{ fontFamily: selectedFont.family }} className="text-xl text-ink-900 truncate">
+                <span
+                  style={{ fontFamily: selectedFont.family }}
+                  className="text-xl text-ink-900 truncate"
+                >
                   {typedName || defaultSignerName || 'Signature'}
                 </span>
               ) : activeTab === 'upload' && uploadedImage ? (
@@ -549,7 +559,10 @@ export function SignatureModal({
               Initials
             </span>
             <div className="h-10 flex items-center justify-center bg-white border border-ink-200 rounded px-2 overflow-hidden">
-              <span style={{ fontFamily: selectedFont.family }} className="text-lg text-ink-900 font-bold">
+              <span
+                style={{ fontFamily: selectedFont.family }}
+                className="text-lg text-ink-900 font-bold"
+              >
                 {currentInitials}
               </span>
             </div>
@@ -565,9 +578,12 @@ export function SignatureModal({
             onChange={(e) => setConsentAgreed(e.target.checked)}
             className="h-5 w-5 rounded border border-ink-300 text-brand-600 focus:ring-2 focus:ring-ink-950 mt-0.5 cursor-pointer"
           />
-          <label htmlFor="signature-adoption-consent" className="text-[13px] text-ink-700 select-none cursor-pointer leading-tight">
-            I agree that this signature and initials are the electronic representation of my signature
-            for all purposes when used on documents, including legally binding contracts.
+          <label
+            htmlFor="signature-adoption-consent"
+            className="text-[13px] text-ink-700 select-none cursor-pointer leading-tight"
+          >
+            I agree that this signature and initials are the electronic representation of my
+            signature for all purposes when used on documents, including legally binding contracts.
           </label>
         </div>
 

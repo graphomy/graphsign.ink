@@ -137,7 +137,11 @@ export function ProfileDropdown({ email, token, orgName }: ProfileDropdownProps)
   }
 
   return (
-    <div className="relative inline-block text-left" ref={dropdownRef} data-testid="profile-dropdown-container">
+    <div
+      className="relative inline-block text-left"
+      ref={dropdownRef}
+      data-testid="profile-dropdown-container"
+    >
       <button
         type="button"
         onClick={() => setIsOpen((prev) => !prev)}
@@ -190,10 +194,7 @@ export function ProfileDropdown({ email, token, orgName }: ProfileDropdownProps)
                 </span>
               )}
             </div>
-            <p
-              className="text-xs font-semibold text-ink-900 truncate mt-1"
-              title={displayEmail}
-            >
+            <p className="text-xs font-semibold text-ink-900 truncate mt-1" title={displayEmail}>
               {displayEmail}
             </p>
             {displayOrgName && (

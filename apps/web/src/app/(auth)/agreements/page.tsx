@@ -110,7 +110,9 @@ function getCurrentUserInfo(): { userId: string; userEmail: string } {
 }
 
 function AgreementManagementContent() {
-  const [activeTab, setActiveTab] = useState<'all' | 'drafts' | 'active' | 'signed' | 'archived'>('signed');
+  const [activeTab, setActiveTab] = useState<'all' | 'drafts' | 'active' | 'signed' | 'archived'>(
+    'signed',
+  );
   const [agreements, setAgreements] = useState<AgreementItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -249,7 +251,8 @@ function AgreementManagementContent() {
         if (statusParam) url += `&status=${encodeURIComponent(statusParam)}`;
         if (searchQuery) url += `&q=${encodeURIComponent(searchQuery)}`;
         if (selectedTag) url += `&tag=${encodeURIComponent(selectedTag)}`;
-        if (datePreset && datePreset !== 'all') url += `&datePreset=${encodeURIComponent(datePreset)}`;
+        if (datePreset && datePreset !== 'all')
+          url += `&datePreset=${encodeURIComponent(datePreset)}`;
         if (authorEmailFilter) url += `&authorEmail=${encodeURIComponent(authorEmailFilter)}`;
 
         const res = await fetch(url, {
@@ -269,7 +272,9 @@ function AgreementManagementContent() {
 
         if (!res.ok) {
           const errData = await res.json().catch(() => null);
-          throw new Error(errData?.error?.message || errData?.message || 'Failed to load agreements.');
+          throw new Error(
+            errData?.error?.message || errData?.message || 'Failed to load agreements.',
+          );
         }
 
         const data = await res.json();
@@ -281,7 +286,10 @@ function AgreementManagementContent() {
               page: data.pagination.page || currentPage,
               limit: data.pagination.limit || pageSize,
               total: data.pagination.total || items.length,
-              totalPages: data.pagination.totalPages || Math.ceil((data.pagination.total || items.length) / pageSize) || 1,
+              totalPages:
+                data.pagination.totalPages ||
+                Math.ceil((data.pagination.total || items.length) / pageSize) ||
+                1,
             });
           } else {
             setPagination({
@@ -314,7 +322,19 @@ function AgreementManagementContent() {
       ignore = true;
       controller.abort();
     };
-  }, [activeTab, searchQuery, sortBy, sortOrder, selectedTag, datePreset, authorEmailFilter, currentPage, pageSize, refreshTrigger, router]);
+  }, [
+    activeTab,
+    searchQuery,
+    sortBy,
+    sortOrder,
+    selectedTag,
+    datePreset,
+    authorEmailFilter,
+    currentPage,
+    pageSize,
+    refreshTrigger,
+    router,
+  ]);
 
   async function handleUploadSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -709,7 +729,10 @@ function AgreementManagementContent() {
         {actionMessage && (
           <div className="rounded-md bg-verified-50 border border-verified-200 p-3.5 text-xs font-medium text-verified-700 flex items-center justify-between shadow-xs">
             <span>{actionMessage}</span>
-            <button onClick={() => setActionMessage(null)} className="font-bold text-verified-700 hover:text-verified-800">
+            <button
+              onClick={() => setActionMessage(null)}
+              className="font-bold text-verified-700 hover:text-verified-800"
+            >
               <X className="w-4 h-4" />
             </button>
           </div>
@@ -717,7 +740,10 @@ function AgreementManagementContent() {
         {actionError && (
           <div className="rounded-md bg-brand-50 border border-brand-200 p-3.5 text-xs font-medium text-brand-700 flex items-center justify-between shadow-xs">
             <span>{actionError}</span>
-            <button onClick={() => setActionError(null)} className="font-bold text-brand-700 hover:text-brand-800">
+            <button
+              onClick={() => setActionError(null)}
+              className="font-bold text-brand-700 hover:text-brand-800"
+            >
               <X className="w-4 h-4" />
             </button>
           </div>
@@ -913,10 +939,12 @@ function AgreementManagementContent() {
                   {agreements.map((agreement) => {
                     const isDraft = agreement.status === 'DRAFT' || agreement.status === 'REJECTED';
                     const isInReview = agreement.status === 'IN_REVIEW';
-                    const isReviewer =
-                      Boolean((currentUser.userId && agreement.reviewerId === currentUser.userId) ||
+                    const isReviewer = Boolean(
+                      (currentUser.userId && agreement.reviewerId === currentUser.userId) ||
                       (currentUser.userEmail &&
-                        agreement.reviewer?.email?.toLowerCase() === currentUser.userEmail.toLowerCase()));
+                        agreement.reviewer?.email?.toLowerCase() ===
+                          currentUser.userEmail.toLowerCase()),
+                    );
 
                     return (
                       <tr
@@ -964,7 +992,8 @@ function AgreementManagementContent() {
 
                         {/* Recipients stacked avatar */}
                         <td className="py-2.5 px-3 whitespace-nowrap">
-                          {agreement.fields?.recipients && agreement.fields.recipients.length > 0 ? (
+                          {agreement.fields?.recipients &&
+                          agreement.fields.recipients.length > 0 ? (
                             <div className="flex items-center -space-x-1.5">
                               {agreement.fields.recipients.slice(0, 3).map((rec, rIdx) => (
                                 <div
@@ -1160,7 +1189,9 @@ function AgreementManagementContent() {
             className="fixed bg-white border border-ink-200 rounded-lg shadow-[0_4px_8px_-2px_rgb(16_24_40/0.06),0_12px_24px_-4px_rgb(16_24_40/0.08)] py-1 min-w-[180px] z-50 animate-in fade-in duration-100"
             style={{
               top: dropdownAnchor.isBottom ? undefined : `${dropdownAnchor.top}px`,
-              bottom: dropdownAnchor.isBottom ? `${window.innerHeight - dropdownAnchor.bottom}px` : undefined,
+              bottom: dropdownAnchor.isBottom
+                ? `${window.innerHeight - dropdownAnchor.bottom}px`
+                : undefined,
               right: `${dropdownAnchor.right}px`,
             }}
             onClick={(e) => e.stopPropagation()}
@@ -1251,343 +1282,378 @@ function AgreementManagementContent() {
           document.body,
         )}
 
-        {/* Upload Modal (PDF / DOCX / MD) */}
-        {showUploadModal && (
-          <div className="fixed inset-0 z-50 bg-ink-950/55 backdrop-blur-[2px] flex items-center justify-center p-4">
-            <div className="bg-white border border-ink-200 rounded-xl p-6 max-w-lg w-full shadow-[0_8px_16px_-4px_rgb(16_24_40/0.08),0_24px_48px_-12px_rgb(16_24_40/0.16)]">
-              <div className="flex items-center justify-between mb-2">
-                <h2 className="text-lg font-bold text-ink-900">Upload agreement</h2>
-                <button onClick={() => setShowUploadModal(false)} className="text-ink-400 hover:text-ink-700">
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-              <p className="text-xs text-ink-500 mb-4">
-                Upload a <strong>PDF or DOCX</strong> (becomes active contract at v1.0) or a{' '}
-                <strong>Markdown (.md)</strong> file (becomes draft at v0.1).
-              </p>
+      {/* Upload Modal (PDF / DOCX / MD) */}
+      {showUploadModal && (
+        <div className="fixed inset-0 z-50 bg-ink-950/55 backdrop-blur-[2px] flex items-center justify-center p-4">
+          <div className="bg-white border border-ink-200 rounded-xl p-6 max-w-lg w-full shadow-[0_8px_16px_-4px_rgb(16_24_40/0.08),0_24px_48px_-12px_rgb(16_24_40/0.16)]">
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="text-lg font-bold text-ink-900">Upload agreement</h2>
+              <button
+                onClick={() => setShowUploadModal(false)}
+                className="text-ink-400 hover:text-ink-700"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <p className="text-xs text-ink-500 mb-4">
+              Upload a <strong>PDF or DOCX</strong> (becomes active contract at v1.0) or a{' '}
+              <strong>Markdown (.md)</strong> file (becomes draft at v0.1).
+            </p>
 
-              <form onSubmit={handleUploadSubmit} className="space-y-4">
-                <div>
-                  <label className="block text-xs font-semibold text-ink-700 mb-1">
-                    Agreement Title
-                  </label>
+            <form onSubmit={handleUploadSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-ink-700 mb-1">
+                  Agreement Title
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Master Services Agreement 2026"
+                  value={uploadTitle}
+                  onChange={(e) => setUploadTitle(e.target.value)}
+                  className="w-full bg-white border border-ink-200 rounded-md px-3 py-2 text-xs text-ink-900 focus:border-ink-900 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-ink-700 mb-1">
+                  Select File (.PDF, .DOCX, .MD up to 15MB)
+                </label>
+                <input
+                  type="file"
+                  required
+                  accept=".pdf,.docx,.doc,.md,text/markdown,text/plain"
+                  onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
+                  className="w-full bg-ink-50 border border-ink-200 rounded-md p-2 text-xs text-ink-700"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-ink-700 mb-1">
+                  Assign Tags (Optional)
+                </label>
+                <div className="flex gap-2 mb-2">
                   <input
                     type="text"
-                    required
-                    placeholder="e.g. Master Services Agreement 2026"
-                    value={uploadTitle}
-                    onChange={(e) => setUploadTitle(e.target.value)}
-                    className="w-full bg-white border border-ink-200 rounded-md px-3 py-2 text-xs text-ink-900 focus:border-ink-900 focus:outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-ink-700 mb-1">
-                    Select File (.PDF, .DOCX, .MD up to 15MB)
-                  </label>
-                  <input
-                    type="file"
-                    required
-                    accept=".pdf,.docx,.doc,.md,text/markdown,text/plain"
-                    onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
-                    className="w-full bg-ink-50 border border-ink-200 rounded-md p-2 text-xs text-ink-700"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-ink-700 mb-1">
-                    Assign Tags (Optional)
-                  </label>
-                  <div className="flex gap-2 mb-2">
-                    <input
-                      type="text"
-                      placeholder="Add tag (e.g. legal, sales)"
-                      value={uploadTagInput}
-                      onChange={(e) => setUploadTagInput(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault();
-                          if (uploadTagInput.trim() && !uploadTags.includes(uploadTagInput.trim().toLowerCase())) {
-                            setUploadTags([...uploadTags, uploadTagInput.trim().toLowerCase()]);
-                            setUploadTagInput('');
-                          }
-                        }
-                      }}
-                      className="flex-1 bg-white border border-ink-200 rounded-md px-3 py-1.5 text-xs text-ink-900 focus:border-ink-900 focus:outline-none"
-                    />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        if (uploadTagInput.trim() && !uploadTags.includes(uploadTagInput.trim().toLowerCase())) {
+                    placeholder="Add tag (e.g. legal, sales)"
+                    value={uploadTagInput}
+                    onChange={(e) => setUploadTagInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        if (
+                          uploadTagInput.trim() &&
+                          !uploadTags.includes(uploadTagInput.trim().toLowerCase())
+                        ) {
                           setUploadTags([...uploadTags, uploadTagInput.trim().toLowerCase()]);
                           setUploadTagInput('');
                         }
-                      }}
-                    >
-                      Add Tag
-                    </Button>
-                  </div>
-                  {uploadTags.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5 p-2 bg-ink-50 border border-ink-200 rounded-md">
-                      {uploadTags.map((tag) => (
-                        <span
-                          key={tag}
-                          className="inline-flex items-center gap-1 bg-white border border-ink-200 text-ink-800 text-[11px] font-medium px-2 py-0.5 rounded-sm"
-                        >
-                          #{tag}
-                          <button
-                            type="button"
-                            onClick={() => setUploadTags(uploadTags.filter((t) => t !== tag))}
-                            className="text-ink-400 hover:text-brand-600 font-bold"
-                          >
-                            ×
-                          </button>
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                <div className="flex justify-end gap-2 pt-2 border-t border-ink-100">
-                  <Button type="button" variant="ghost" size="md" onClick={() => setShowUploadModal(false)}>
-                    Cancel
-                  </Button>
-                  <Button type="submit" variant="primary" size="md" isLoading={isUploading}>
-                    Upload Document
-                  </Button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
-
-        {/* Create from Scratch Modal */}
-        {showScratchModal && (
-          <div className="fixed inset-0 z-50 bg-ink-950/55 backdrop-blur-[2px] flex items-center justify-center p-4">
-            <div className="bg-white border border-ink-200 rounded-xl p-6 max-w-2xl w-full shadow-[0_8px_16px_-4px_rgb(16_24_40/0.08),0_24px_48px_-12px_rgb(16_24_40/0.16)] space-y-4">
-              <div className="flex items-center justify-between">
-                <h2 className="text-lg font-bold text-ink-900">Create agreement from scratch</h2>
-                <button onClick={() => setShowScratchModal(false)} className="text-ink-400 hover:text-ink-700">
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-
-              <form onSubmit={handleScratchSubmit} className="space-y-4">
-                <div>
-                  <label className="block text-xs font-semibold text-ink-700 mb-1">Title</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. Non-Disclosure Agreement"
-                    value={scratchTitle}
-                    onChange={(e) => setScratchTitle(e.target.value)}
-                    className="w-full bg-white border border-ink-200 rounded-md px-3 py-2 text-xs text-ink-900 focus:border-ink-900 focus:outline-none"
+                      }
+                    }}
+                    className="flex-1 bg-white border border-ink-200 rounded-md px-3 py-1.5 text-xs text-ink-900 focus:border-ink-900 focus:outline-none"
                   />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-ink-700 mb-1">Markdown Body</label>
-                  <textarea
-                    rows={8}
-                    required
-                    value={scratchMarkdown}
-                    onChange={(e) => setScratchMarkdown(e.target.value)}
-                    className="w-full bg-white border border-ink-200 rounded-md p-3 text-xs font-mono text-ink-900 focus:border-ink-900 focus:outline-none"
-                  />
-                </div>
-
-                <div className="flex justify-end gap-2 pt-2 border-t border-ink-100">
-                  <Button type="button" variant="ghost" size="md" onClick={() => setShowScratchModal(false)}>
-                    Cancel
-                  </Button>
-                  <Button type="submit" variant="primary" size="md" isLoading={isCreatingScratch}>
-                    Create Draft
-                  </Button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
-
-        {/* Other Feature Modals */}
-        {showChooseTemplateModal && (
-          <ChooseTemplateModal
-            onClose={() => setShowChooseTemplateModal(false)}
-            onSuccess={() => {
-              setShowChooseTemplateModal(false);
-              setRefreshTrigger((p) => p + 1);
-            }}
-          />
-        )}
-
-        {showPdfModal && selectedAgreement && (
-          <PdfViewerModal
-            agreement={selectedAgreement}
-            onClose={() => {
-              setShowPdfModal(false);
-              setSelectedAgreement(null);
-            }}
-            onOpenEditor={() => {
-              setShowPdfModal(false);
-              if (selectedAgreement) openDocumentEditor(selectedAgreement);
-            }}
-          />
-        )}
-
-        {showDocumentEditor && selectedAgreement && (
-          <DocumentEditorModal
-            agreement={selectedAgreement}
-            onClose={() => {
-              setShowDocumentEditor(false);
-              setSelectedAgreement(null);
-              setRefreshTrigger((p) => p + 1);
-            }}
-          />
-        )}
-
-        {showEditModal && selectedAgreement && (
-          <AgreementEditModal
-            agreementId={selectedAgreement.id}
-            initialTitle={selectedAgreement.title}
-            currentVersion={selectedAgreement.version || 'v1.0'}
-            currentStatus={selectedAgreement.status}
-            onSuccess={(msg) => {
-              setActionMessage(msg || 'Agreement updated successfully');
-              setShowEditModal(false);
-              setSelectedAgreement(null);
-              setRefreshTrigger((p) => p + 1);
-            }}
-            onClose={() => {
-              setShowEditModal(false);
-              setSelectedAgreement(null);
-              setRefreshTrigger((p) => p + 1);
-            }}
-          />
-        )}
-
-        {showHistoryModal && selectedAgreement && (
-          <AgreementHistoryModal
-            agreementId={selectedAgreement.id}
-            agreementTitle={selectedAgreement.title}
-            currentVersion={selectedAgreement.version || 'v1.0'}
-            onClose={() => {
-              setShowHistoryModal(false);
-              setSelectedAgreement(null);
-            }}
-          />
-        )}
-
-        {showSubmitReviewModal && selectedAgreement && (
-          <SubmitReviewModal
-            agreementId={selectedAgreement.id}
-            agreementTitle={selectedAgreement.title}
-            onSuccess={() => {
-              setRefreshTrigger((p) => p + 1);
-            }}
-            onClose={() => {
-              setShowSubmitReviewModal(false);
-              setSelectedAgreement(null);
-              setRefreshTrigger((p) => p + 1);
-            }}
-          />
-        )}
-
-        {showReviewDecisionModal && selectedAgreement && (
-          <ReviewDecisionModal
-            agreementId={selectedAgreement.id}
-            agreementTitle={selectedAgreement.title}
-            onSuccess={() => {
-              setRefreshTrigger((p) => p + 1);
-            }}
-            onClose={() => {
-              setShowReviewDecisionModal(false);
-              setSelectedAgreement(null);
-              setRefreshTrigger((p) => p + 1);
-            }}
-          />
-        )}
-
-        {showSendAgreementModal && selectedAgreement && (
-          <SendAgreementModal
-            agreementId={selectedAgreement.id}
-            agreementTitle={selectedAgreement.title}
-            onSuccess={() => {
-              setRefreshTrigger((p) => p + 1);
-            }}
-            onClose={() => {
-              setShowSendAgreementModal(false);
-              setSelectedAgreement(null);
-              setRefreshTrigger((p) => p + 1);
-            }}
-          />
-        )}
-
-        {showReminderModal && selectedAgreement && (
-          <SendReminderModal
-            isOpen={showReminderModal}
-            agreementId={selectedAgreement.id}
-            agreementTitle={selectedAgreement.title}
-            onClose={() => {
-              setShowReminderModal(false);
-              setSelectedAgreement(null);
-            }}
-          />
-        )}
-
-        {showMetadataModal && selectedAgreement && (
-          <div className="fixed inset-0 z-50 bg-ink-950/55 backdrop-blur-[2px] flex items-center justify-center p-4">
-            <div className="bg-white border border-ink-200 rounded-xl p-6 max-w-md w-full shadow-lg space-y-4">
-              <h2 className="text-base font-bold text-ink-900">Manage Document Tags</h2>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  placeholder="Enter tag name"
-                  value={tagInput}
-                  onChange={(e) => setTagInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      handleAddTag();
-                    }
-                  }}
-                  className="flex-1 bg-white border border-ink-200 rounded-md px-3 py-1.5 text-xs text-ink-900 focus:border-ink-900 focus:outline-none"
-                />
-                <Button type="button" variant="outline" size="sm" onClick={handleAddTag}>
-                  Add
-                </Button>
-              </div>
-
-              <div className="flex flex-wrap gap-1.5 p-3 bg-ink-50 border border-ink-200 rounded-md min-h-[60px]">
-                {tagsList.map((tag) => (
-                  <span
-                    key={tag}
-                    className="inline-flex items-center gap-1 bg-white border border-ink-200 text-ink-800 text-xs px-2 py-0.5 rounded-sm"
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      if (
+                        uploadTagInput.trim() &&
+                        !uploadTags.includes(uploadTagInput.trim().toLowerCase())
+                      ) {
+                        setUploadTags([...uploadTags, uploadTagInput.trim().toLowerCase()]);
+                        setUploadTagInput('');
+                      }
+                    }}
                   >
-                    #{tag}
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveTag(tag)}
-                      className="text-ink-400 hover:text-brand-600 font-bold"
-                    >
-                      ×
-                    </button>
-                  </span>
-                ))}
+                    Add Tag
+                  </Button>
+                </div>
+                {uploadTags.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 p-2 bg-ink-50 border border-ink-200 rounded-md">
+                    {uploadTags.map((tag) => (
+                      <span
+                        key={tag}
+                        className="inline-flex items-center gap-1 bg-white border border-ink-200 text-ink-800 text-[11px] font-medium px-2 py-0.5 rounded-sm"
+                      >
+                        #{tag}
+                        <button
+                          type="button"
+                          onClick={() => setUploadTags(uploadTags.filter((t) => t !== tag))}
+                          className="text-ink-400 hover:text-brand-600 font-bold"
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <div className="flex justify-end gap-2 pt-2 border-t border-ink-100">
-                <Button type="button" variant="ghost" size="md" onClick={() => setShowMetadataModal(false)}>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="md"
+                  onClick={() => setShowUploadModal(false)}
+                >
                   Cancel
                 </Button>
-                <Button type="button" variant="primary" size="md" isLoading={isSavingTags} onClick={handleSaveTags}>
-                  Save Tags
+                <Button type="submit" variant="primary" size="md" isLoading={isUploading}>
+                  Upload Document
                 </Button>
               </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Create from Scratch Modal */}
+      {showScratchModal && (
+        <div className="fixed inset-0 z-50 bg-ink-950/55 backdrop-blur-[2px] flex items-center justify-center p-4">
+          <div className="bg-white border border-ink-200 rounded-xl p-6 max-w-2xl w-full shadow-[0_8px_16px_-4px_rgb(16_24_40/0.08),0_24px_48px_-12px_rgb(16_24_40/0.16)] space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-bold text-ink-900">Create agreement from scratch</h2>
+              <button
+                onClick={() => setShowScratchModal(false)}
+                className="text-ink-400 hover:text-ink-700"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleScratchSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-ink-700 mb-1">Title</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Non-Disclosure Agreement"
+                  value={scratchTitle}
+                  onChange={(e) => setScratchTitle(e.target.value)}
+                  className="w-full bg-white border border-ink-200 rounded-md px-3 py-2 text-xs text-ink-900 focus:border-ink-900 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-ink-700 mb-1">
+                  Markdown Body
+                </label>
+                <textarea
+                  rows={8}
+                  required
+                  value={scratchMarkdown}
+                  onChange={(e) => setScratchMarkdown(e.target.value)}
+                  className="w-full bg-white border border-ink-200 rounded-md p-3 text-xs font-mono text-ink-900 focus:border-ink-900 focus:outline-none"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-ink-100">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="md"
+                  onClick={() => setShowScratchModal(false)}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" variant="primary" size="md" isLoading={isCreatingScratch}>
+                  Create Draft
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Other Feature Modals */}
+      {showChooseTemplateModal && (
+        <ChooseTemplateModal
+          onClose={() => setShowChooseTemplateModal(false)}
+          onSuccess={() => {
+            setShowChooseTemplateModal(false);
+            setRefreshTrigger((p) => p + 1);
+          }}
+        />
+      )}
+
+      {showPdfModal && selectedAgreement && (
+        <PdfViewerModal
+          agreement={selectedAgreement}
+          onClose={() => {
+            setShowPdfModal(false);
+            setSelectedAgreement(null);
+          }}
+          onOpenEditor={() => {
+            setShowPdfModal(false);
+            if (selectedAgreement) openDocumentEditor(selectedAgreement);
+          }}
+        />
+      )}
+
+      {showDocumentEditor && selectedAgreement && (
+        <DocumentEditorModal
+          agreement={selectedAgreement}
+          onClose={() => {
+            setShowDocumentEditor(false);
+            setSelectedAgreement(null);
+            setRefreshTrigger((p) => p + 1);
+          }}
+        />
+      )}
+
+      {showEditModal && selectedAgreement && (
+        <AgreementEditModal
+          agreementId={selectedAgreement.id}
+          initialTitle={selectedAgreement.title}
+          currentVersion={selectedAgreement.version || 'v1.0'}
+          currentStatus={selectedAgreement.status}
+          onSuccess={(msg) => {
+            setActionMessage(msg || 'Agreement updated successfully');
+            setShowEditModal(false);
+            setSelectedAgreement(null);
+            setRefreshTrigger((p) => p + 1);
+          }}
+          onClose={() => {
+            setShowEditModal(false);
+            setSelectedAgreement(null);
+            setRefreshTrigger((p) => p + 1);
+          }}
+        />
+      )}
+
+      {showHistoryModal && selectedAgreement && (
+        <AgreementHistoryModal
+          agreementId={selectedAgreement.id}
+          agreementTitle={selectedAgreement.title}
+          currentVersion={selectedAgreement.version || 'v1.0'}
+          onClose={() => {
+            setShowHistoryModal(false);
+            setSelectedAgreement(null);
+          }}
+        />
+      )}
+
+      {showSubmitReviewModal && selectedAgreement && (
+        <SubmitReviewModal
+          agreementId={selectedAgreement.id}
+          agreementTitle={selectedAgreement.title}
+          onSuccess={() => {
+            setRefreshTrigger((p) => p + 1);
+          }}
+          onClose={() => {
+            setShowSubmitReviewModal(false);
+            setSelectedAgreement(null);
+            setRefreshTrigger((p) => p + 1);
+          }}
+        />
+      )}
+
+      {showReviewDecisionModal && selectedAgreement && (
+        <ReviewDecisionModal
+          agreementId={selectedAgreement.id}
+          agreementTitle={selectedAgreement.title}
+          onSuccess={() => {
+            setRefreshTrigger((p) => p + 1);
+          }}
+          onClose={() => {
+            setShowReviewDecisionModal(false);
+            setSelectedAgreement(null);
+            setRefreshTrigger((p) => p + 1);
+          }}
+        />
+      )}
+
+      {showSendAgreementModal && selectedAgreement && (
+        <SendAgreementModal
+          agreementId={selectedAgreement.id}
+          agreementTitle={selectedAgreement.title}
+          onSuccess={() => {
+            setRefreshTrigger((p) => p + 1);
+          }}
+          onClose={() => {
+            setShowSendAgreementModal(false);
+            setSelectedAgreement(null);
+            setRefreshTrigger((p) => p + 1);
+          }}
+        />
+      )}
+
+      {showReminderModal && selectedAgreement && (
+        <SendReminderModal
+          isOpen={showReminderModal}
+          agreementId={selectedAgreement.id}
+          agreementTitle={selectedAgreement.title}
+          onClose={() => {
+            setShowReminderModal(false);
+            setSelectedAgreement(null);
+          }}
+        />
+      )}
+
+      {showMetadataModal && selectedAgreement && (
+        <div className="fixed inset-0 z-50 bg-ink-950/55 backdrop-blur-[2px] flex items-center justify-center p-4">
+          <div className="bg-white border border-ink-200 rounded-xl p-6 max-w-md w-full shadow-lg space-y-4">
+            <h2 className="text-base font-bold text-ink-900">Manage Document Tags</h2>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                placeholder="Enter tag name"
+                value={tagInput}
+                onChange={(e) => setTagInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleAddTag();
+                  }
+                }}
+                className="flex-1 bg-white border border-ink-200 rounded-md px-3 py-1.5 text-xs text-ink-900 focus:border-ink-900 focus:outline-none"
+              />
+              <Button type="button" variant="outline" size="sm" onClick={handleAddTag}>
+                Add
+              </Button>
+            </div>
+
+            <div className="flex flex-wrap gap-1.5 p-3 bg-ink-50 border border-ink-200 rounded-md min-h-[60px]">
+              {tagsList.map((tag) => (
+                <span
+                  key={tag}
+                  className="inline-flex items-center gap-1 bg-white border border-ink-200 text-ink-800 text-xs px-2 py-0.5 rounded-sm"
+                >
+                  #{tag}
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveTag(tag)}
+                    className="text-ink-400 hover:text-brand-600 font-bold"
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-ink-100">
+              <Button
+                type="button"
+                variant="ghost"
+                size="md"
+                onClick={() => setShowMetadataModal(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                variant="primary"
+                size="md"
+                isLoading={isSavingTags}
+                onClick={handleSaveTags}
+              >
+                Save Tags
+              </Button>
             </div>
           </div>
-        )}
+        </div>
+      )}
 
       <Footer />
     </div>
@@ -1597,7 +1663,13 @@ function AgreementManagementContent() {
 export default function AgreementManagementPage() {
   return (
     <SessionGuard>
-      <Suspense fallback={<div className="min-h-screen bg-ink-50 p-8 text-center text-xs text-ink-400">Loading agreements workspace...</div>}>
+      <Suspense
+        fallback={
+          <div className="min-h-screen bg-ink-50 p-8 text-center text-xs text-ink-400">
+            Loading agreements workspace...
+          </div>
+        }
+      >
         <AgreementManagementContent />
       </Suspense>
     </SessionGuard>

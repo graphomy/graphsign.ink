@@ -181,7 +181,12 @@ Upon completing execution, a cryptographically sealed PDF copy of the executed d
       <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[88dvh] flex flex-col shadow-[0_8px_16px_-4px_rgb(16_24_40/0.08),0_24px_48px_-12px_rgb(16_24_40/0.16)] border border-ink-200 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
         {/* Header */}
         <div className="p-7 border-b border-ink-200 shrink-0 relative bg-white">
-          <Badge tone="info" size="sm" leftIcon={<FileCheck className="w-3 h-3" />} className="mb-2">
+          <Badge
+            tone="info"
+            size="sm"
+            leftIcon={<FileCheck className="w-3 h-3" />}
+            className="mb-2"
+          >
             Compliance Disclosure
           </Badge>
           <h2 id="ersd-modal-title" className="text-xl font-bold text-ink-900 tracking-tight">
@@ -263,9 +268,9 @@ Upon completing execution, a cryptographically sealed PDF copy of the executed d
           >
             <p>
               Please read this Electronic Record and Signature Disclosure (&quot;Disclosure&quot;)
-              carefully. By checking the consent box below and clicking &quot;I consent — continue&quot;,
-              you consent to receive electronic records and use electronic signatures in lieu of paper
-              documents for this transaction.
+              carefully. By checking the consent box below and clicking &quot;I consent —
+              continue&quot;, you consent to receive electronic records and use electronic
+              signatures in lieu of paper documents for this transaction.
             </p>
 
             <h3 className="font-bold text-ink-900 text-base mt-5">
@@ -274,9 +279,9 @@ Upon completing execution, a cryptographically sealed PDF copy of the executed d
             <p>
               You agree that your electronic signature, whether drawn, typed, or uploaded, is the
               legal equivalent of your manual physical signature, carrying full legal validity and
-              enforceability under the U.S. Electronic Signatures in Global and National Commerce Act
-              (ESIGN Act, 15 U.S.C. § 7001 et seq.), the Uniform Electronic Transactions Act (UETA),
-              and Regulation (EU) No 910/2014 (eIDAS).
+              enforceability under the U.S. Electronic Signatures in Global and National Commerce
+              Act (ESIGN Act, 15 U.S.C. § 7001 et seq.), the Uniform Electronic Transactions Act
+              (UETA), and Regulation (EU) No 910/2014 (eIDAS).
             </p>
 
             <h3 className="font-bold text-ink-900 text-base mt-5">
@@ -288,12 +293,10 @@ Upon completing execution, a cryptographically sealed PDF copy of the executed d
               displaying Portable Document Format (PDF) files.
             </p>
 
-            <h3 className="font-bold text-ink-900 text-base mt-5">
-              3. Right to Withdraw Consent
-            </h3>
+            <h3 className="font-bold text-ink-900 text-base mt-5">3. Right to Withdraw Consent</h3>
             <p>
-              You have the right to withdraw your consent to execute this agreement electronically at
-              any time before finalizing your signature. If you decline or withdraw consent, the
+              You have the right to withdraw your consent to execute this agreement electronically
+              at any time before finalizing your signature. If you decline or withdraw consent, the
               document will be voided and the initiating party will be notified immediately.
             </p>
 
@@ -345,7 +348,9 @@ Upon completing execution, a cryptographically sealed PDF copy of the executed d
             className={`text-sm leading-relaxed select-none cursor-pointer ${
               !hasScrolledToBottom ? 'text-ink-400 cursor-not-allowed' : 'text-ink-700'
             }`}
-            title={!hasScrolledToBottom ? 'Scroll to the end of the disclosure to continue' : undefined}
+            title={
+              !hasScrolledToBottom ? 'Scroll to the end of the disclosure to continue' : undefined
+            }
           >
             I have read and agree to the{' '}
             <strong className="text-ink-900 font-semibold">
@@ -357,7 +362,9 @@ Upon completing execution, a cryptographically sealed PDF copy of the executed d
 
         {/* Aria live alert when unlocked */}
         <div className="sr-only" aria-live="polite">
-          {hasScrolledToBottom ? 'You have reached the end of the disclosure. Consent checkbox is now enabled.' : ''}
+          {hasScrolledToBottom
+            ? 'You have reached the end of the disclosure. Consent checkbox is now enabled.'
+            : ''}
         </div>
 
         {/* Footer */}
@@ -443,12 +450,7 @@ Upon completing execution, a cryptographically sealed PDF copy of the executed d
               >
                 Go back
               </Button>
-              <Button
-                type="button"
-                variant="destructive"
-                size="md"
-                onClick={handleConfirmDecline}
-              >
+              <Button type="button" variant="destructive" size="md" onClick={handleConfirmDecline}>
                 Decline agreement
               </Button>
             </div>
