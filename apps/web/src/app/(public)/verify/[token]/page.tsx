@@ -1,5 +1,7 @@
 'use client';
 
+export const runtime = 'edge';
+
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
@@ -7,13 +9,11 @@ import { getApiUrl } from '@/lib/api';
 import {
   ShieldCheck,
   FileCheck,
-  XCircle,
   Copy,
   Check,
   ChevronDown,
   ChevronUp,
   HelpCircle,
-  FileText,
   ArrowLeft,
 } from 'lucide-react';
 
