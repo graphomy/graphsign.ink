@@ -2,7 +2,7 @@
 
 export const runtime = 'edge';
 
-import React, { useState, useEffect, useMemo, useRef, use } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef, use } from 'react';
 import Link from 'next/link';
 import { getApiUrl } from '@/lib/api';
 import { orDash, orLabel, formatHash } from '@/lib/format';
@@ -84,10 +84,15 @@ interface AgreementDetails {
   signingOrder: string;
   currentStep: number;
   expiresAt?: string;
-  senderName: string;
-  organisationName: string;
+  senderName?: string;
+  author?: {
+    name?: string;
+    email?: string;
+  };
+  organisationName?: string;
   envelopeId?: string;
   certHash?: string;
+  verificationToken?: string;
 }
 
 export default function SignDocumentPage({
@@ -302,12 +307,43 @@ export default function SignDocumentPage({
     });
   }, [fields, fieldValues]);
 
+  // Helper to determine if a field belongs to the currently active signer
+  const isFieldAssignedToMe = useCallback(
+    (fieldRecipientId?: string) => {
+      if (!fieldRecipientId) return true;
+      if (!currentRecipient) return true;
+      if (fieldRecipientId === currentRecipient.id) return true;
+      if (fieldRecipientId === currentRecipient.email) return true;
+      if (currentRecipient.role && fieldRecipientId === currentRecipient.role) return true;
+      if (
+        currentRecipient.routingOrder &&
+        (fieldRecipientId === `signer-${currentRecipient.routingOrder}` ||
+          fieldRecipientId === `recip-${currentRecipient.routingOrder}`)
+      ) {
+        return true;
+      }
+      if (
+        (currentRecipient.routingOrder === 1 || !currentRecipient.routingOrder) &&
+        (fieldRecipientId === 'signer-1' ||
+          fieldRecipientId === 'recip-1' ||
+          fieldRecipientId === 'signer' ||
+          fieldRecipientId === 'r-1')
+      ) {
+        return true;
+      }
+      const totalRecipients = agreement?.fields?.recipients?.length || 0;
+      if (totalRecipients <= 1) return true;
+      return false;
+    },
+    [currentRecipient, agreement],
+  );
+
   // Assigned Fields for Current Recipient
   const assignedFields = useMemo(() => {
     return evaluatedFields.filter(
-      (f) => f.recipientId === currentRecipient?.id && f.computedVisible,
+      (f) => isFieldAssignedToMe(f.recipientId) && f.computedVisible,
     );
-  }, [evaluatedFields, currentRecipient?.id]);
+  }, [evaluatedFields, isFieldAssignedToMe]);
 
   const assignedRequiredFields = useMemo(() => {
     return assignedFields.filter((f) => f.computedRequired);
@@ -341,9 +377,9 @@ export default function SignDocumentPage({
     }
   }
 
-  // Handle Signature Field Click
+  // Handle Signature Field Click (Click-to-sign / Click-to-apply)
   function handleSignatureFieldClick(field: DocumentField) {
-    if (field.recipientId !== currentRecipient?.id) return;
+    if (!isFieldAssignedToMe(field.recipientId)) return;
 
     if (adoptedSignature) {
       setFieldValues((prev) => ({ ...prev, [field.id]: adoptedSignature.dataUrl }));
@@ -663,7 +699,9 @@ export default function SignDocumentPage({
             </div>
             <div className="flex justify-between items-center text-ink-500">
               <span>Sender</span>
-              <span className="font-semibold text-ink-900">{orDash(agreement.senderName)}</span>
+              <span className="font-semibold text-ink-900">
+                {orDash(agreement.senderName || agreement.author?.name || agreement.author?.email)}
+              </span>
             </div>
             <div className="flex justify-between items-center text-ink-500">
               <span>Envelope ID</span>
@@ -688,9 +726,15 @@ export default function SignDocumentPage({
               </div>
             </div>
             <div className="flex justify-between items-center text-ink-500">
+              <span>Verification Token</span>
+              <div className="flex items-center gap-1.5 font-mono text-ink-900 font-semibold tabular-nums">
+                <span>{`GS-${rawToken.substring(0, 8)}`}</span>
+              </div>
+            </div>
+            <div className="flex justify-between items-center text-ink-500">
               <span>Completed At</span>
               <span className="text-ink-900 font-medium tabular-nums">
-                {formatDateTime(new Date().toISOString())}
+                {formatDateTime(new Date().toISOString(), { includeSeconds: true, includeTimezone: true })}
               </span>
             </div>
             <div className="flex justify-between items-center text-ink-500 pt-1 border-t border-ink-200">
@@ -728,14 +772,15 @@ export default function SignDocumentPage({
             >
               Download executed PDF
             </Button>
-            <Button
-              variant="outline"
-              size="lg"
-              leftIcon={<ShieldCheck className="w-4 h-4" />}
-              onClick={() => alert(`Certificate SHA-256:\n${certHash}`)}
+            <a
+              href={`/verify/${envelopeId || rawToken}`}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg border border-ink-300 bg-white hover:bg-ink-50 text-ink-900 font-semibold text-xs transition-colors shadow-xs"
             >
-              View audit certificate
-            </Button>
+              <ShieldCheck className="w-4 h-4 text-emerald-600" />
+              Verify Authenticity (/verify)
+            </a>
             <Button
               variant="ghost"
               size="lg"
@@ -1075,7 +1120,7 @@ export default function SignDocumentPage({
               {evaluatedFields
                 .filter((f) => f.computedVisible)
                 .map((field) => {
-                  const isAssignedToMe = field.recipientId === currentRecipient?.id;
+                  const isAssignedToMe = isFieldAssignedToMe(field.recipientId);
                   const value = fieldValues[field.id];
                   const hasError = Boolean(formErrors[field.id]);
                   const isHighlighted = highlightedFieldId === field.id;

@@ -20,6 +20,7 @@ This guide provides step-by-step instructions for cloning, configuring, building
 - **[Visual Document Editor & Field Placement](Document-Editor-and-Fields.md)** — Multi-page canvas, drag & drop field palette, recipient assignment, validation, preview mode
 - **[Workflow Engine & Signer Portal](Workflow-Engine-and-Signer-Portal.md)** — Review workflows, sequential/parallel routing, tokenized signer portal, conditional logic engine
 - **[Template Management](Template-Management.md)** — Reusable contract templates, publishing governance, instantiation
+- **[Cryptographic Signing & Verification](Cryptographic-Signing-and-Verification.md)** — PAdES B-T/B-LTA document sealing, BYO/self-signed certificates, RFC 3161 timestamps, CSC v2.2, public verification portal
 
 ### 3. Developer & Integration References
 

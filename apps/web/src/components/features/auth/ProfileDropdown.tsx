@@ -3,7 +3,7 @@
 import React, { useState, useRef, useEffect, useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import { getApiUrl } from '@/lib/api';
-import { User, Shield, Building, LogOut, Sliders, ChevronDown } from 'lucide-react';
+import { User, Shield, Building, LogOut, Sliders, ChevronDown, Award } from 'lucide-react';
 
 interface ProfileDropdownProps {
   email?: string;
@@ -217,6 +217,16 @@ export function ProfileDropdown({ email, token, orgName }: ProfileDropdownProps)
             >
               <User className="h-4 w-4 text-ink-500 shrink-0" aria-hidden="true" />
               Profile
+            </Link>
+
+            <Link
+              href="/settings/certificates"
+              onClick={() => setIsOpen(false)}
+              className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-medium text-ink-700 hover:bg-ink-100 hover:text-ink-900 transition-colors"
+              data-testid="certificates-settings-link"
+            >
+              <Award className="h-4 w-4 text-ink-500 shrink-0" aria-hidden="true" />
+              Certificates & Trust
             </Link>
 
             <Link

@@ -14,6 +14,9 @@ export function Footer() {
           <span>© 2026 Graphomy Technologies LLP</span>
         </div>
         <div className="flex items-center gap-6 text-ink-500">
+          <Link href="/verify" className="hover:text-brand-600 font-semibold text-brand-600 transition-colors">
+            Verify Signature
+          </Link>
           <Link href="/terms" className="hover:text-ink-900 transition-colors">
             Terms
           </Link>

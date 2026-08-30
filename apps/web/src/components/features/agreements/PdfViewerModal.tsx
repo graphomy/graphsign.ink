@@ -415,21 +415,19 @@ export function PdfViewerModal({ agreement, onClose, onOpenEditor }: PdfViewerMo
               </div>
             ) : isPdf && embeddedPdfUrl ? (
               <div
-                style={{ transform: `scale(${zoomLevel / 100})`, transformOrigin: 'top center' }}
-                className="w-full max-w-4xl h-[85vh] bg-white rounded-md shadow-lg border border-ink-200 overflow-hidden transition-transform duration-150"
+                style={{
+                  width: zoomLevel === 100 ? '100%' : `${zoomLevel}%`,
+                  maxWidth: zoomLevel <= 100 ? '1000px' : 'none',
+                  height: 'calc(100vh - 140px)',
+                  minHeight: '600px',
+                }}
+                className="w-full bg-white rounded-md shadow-lg border border-ink-200 overflow-hidden"
               >
-                <object
-                  data={embeddedPdfUrl}
-                  type="application/pdf"
-                  className="w-full h-full border-0"
+                <iframe
+                  src={`${embeddedPdfUrl}#toolbar=1&navpanes=1&scrollbar=1`}
+                  className="w-full h-full border-0 bg-white"
                   title={agreement.title}
-                >
-                  <iframe
-                    src={embeddedPdfUrl}
-                    className="w-full h-full border-0 bg-white"
-                    title={agreement.title}
-                  />
-                </object>
+                />
               </div>
             ) : isMarkdown ? (
               <div

@@ -252,6 +252,12 @@ export function createSignRoutes(deps?: SignDeps) {
         'Content-Disposition',
         `attachment; filename="${file.fileName || 'signed-document.pdf'}"`,
       );
+      if ((file as any).verificationToken) {
+        c.header('X-Verification-Token', (file as any).verificationToken);
+      }
+      if ((file as any).documentHash) {
+        c.header('X-Document-SHA256', (file as any).documentHash);
+      }
       return c.body(buffer as any);
     }
 
@@ -261,6 +267,12 @@ export function createSignRoutes(deps?: SignDeps) {
         'Content-Disposition',
         `attachment; filename="${file.fileName.replace(/\.pdf$/, '.md')}"`,
       );
+      if ((file as any).verificationToken) {
+        c.header('X-Verification-Token', (file as any).verificationToken);
+      }
+      if ((file as any).documentHash) {
+        c.header('X-Document-SHA256', (file as any).documentHash);
+      }
       return c.text(file.markdownContent);
     }
 
@@ -271,6 +283,12 @@ export function createSignRoutes(deps?: SignDeps) {
       'Content-Disposition',
       `attachment; filename="${file.fileName || 'signed-document.pdf'}"`,
     );
+    if ((file as any).verificationToken) {
+      c.header('X-Verification-Token', (file as any).verificationToken);
+    }
+    if ((file as any).documentHash) {
+      c.header('X-Document-SHA256', (file as any).documentHash);
+    }
     return c.body(fallbackPdf);
   });
 

@@ -52,6 +52,19 @@ We build around five core principles:
 - Organization workspaces, team hierarchies, custom domain verification DNS records, and storage quotas.
 - Fine-grained Role-Based Access Control (`owner`, `admin`, `sender`, `viewer`).
 
+### 🔏 Cryptographic Signing & PAdES Verification (INK-18)
+
+- **PAdES Baseline B-T / B-LTA Sealing**: Cryptographically seals completed agreements with digital signatures and RFC 3161 timestamps.
+- **Certificate Custody (PKCS#11)**: Generates self-signed X.509 certificates with custom identity credentials (CN, O, OU, L, ST, C, EMAIL) or imports Bring Your Own (BYO) corporate commercial certificates with full intermediate chains.
+- **RFC 3161 Multi-TSA Failover**: Automated timestamping via DigiCert, Sectigo, and FreeTSA.
+- **Cloud Signature Consortium (CSC v2.2)**: Remote signature API at `/csc/v2/` for OAuth-based credential authorization and hash signing.
+- **Public 3-Tier Verification Portal (`/verify`)**: Zero-knowledge browser subtle crypto verification, QR badge scanning, and downloadable Certificates of Authenticity.
+
+### 🔍 Advanced Search & Saved Presets (INK-117 to INK-122)
+
+- Global unified search across documents, templates, and recipients.
+- Faceted multi-criteria filtering with custom saved filter presets.
+
 ### 🛡️ Immutable Audit Trail
 
 - Cryptographic SHA-256 hash-chained audit logging (`previous_hash` $\rightarrow$ `current_hash`).
@@ -80,6 +93,6 @@ We build around five core principles:
 - **[Agreement Management](Agreement-Management.md)** — File upload, scratch Markdown, lifecycle, and versioning
 - **[Visual Document Editor & Field Placement](Document-Editor-and-Fields.md)** — Field palette, drag & drop, validation, and preview mode
 - **[Workflow Engine & Signer Portal](Workflow-Engine-and-Signer-Portal.md)** — Review workflows, sequential/parallel routing, signer interface, and conditional logic
-- **[Template Management](Template-Management.md)** — Reusable contract templates and publishing governance
+- **[Cryptographic Signing & Verification](Cryptographic-Signing-and-Verification.md)** — PAdES B-T/B-LTA sealing, BYO certificates, RFC 3161 timestamps, CSC v2.2, and public verification portal
 - **[REST API Reference](REST-API-Reference.md)** — Complete endpoints, schemas, and developer integration guide
 - **[Security & Immutable Audit Trail](Security-and-Audit-Trail.md)** — Cryptographic hash chaining and compliance
