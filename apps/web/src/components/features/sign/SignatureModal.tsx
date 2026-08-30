@@ -41,7 +41,7 @@ export function SignatureModal({
   // Draw State
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [isDrawing, setIsDrawing] = useState(false);
-  const [inkColor, setInkColor] = useState<string>('#16181D');
+  const inkColor = '#16181D';
   const [strokes, setStrokes] = useState<ImageData[]>([]);
   const [hasDrawn, setHasDrawn] = useState(false);
 

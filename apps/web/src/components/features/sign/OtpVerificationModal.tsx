@@ -58,12 +58,13 @@ export function OtpVerificationModal({
   // Focus first input on open
   useEffect(() => {
     if (isOpen) {
-      setDigits(['', '', '', '', '', '']);
-      setError(null);
-      setIsSuccess(false);
-      setTimeout(() => {
+      const timer = setTimeout(() => {
+        setDigits(['', '', '', '', '', '']);
+        setError(null);
+        setIsSuccess(false);
         inputRefs.current[0]?.focus();
-      }, 100);
+      }, 0);
+      return () => clearTimeout(timer);
     }
   }, [isOpen]);
 

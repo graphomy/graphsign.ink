@@ -17,10 +17,7 @@ import { renderMarkdownToHtml } from '@/components/features/agreements/MarkdownE
 import {
   FileText,
   ShieldCheck,
-  CheckCircle2,
   AlertCircle,
-  Clock,
-  ArrowRight,
   Download,
   Printer,
   Copy,
@@ -28,11 +25,6 @@ import {
   CheckCheck,
   ZoomIn,
   ZoomOut,
-  ChevronDown,
-  Lock,
-  User,
-  ExternalLink,
-  RotateCcw,
   Sparkles,
 } from 'lucide-react';
 
@@ -114,7 +106,6 @@ export default function SignDocumentPage({
   const [error, setError] = useState<string | null>(null);
   const [agreement, setAgreement] = useState<AgreementDetails | null>(null);
   const [currentRecipient, setCurrentRecipient] = useState<RecipientInfo | null>(null);
-  const [allRecipients, setAllRecipients] = useState<RecipientInfo[]>([]);
   const [isTurn, setIsTurn] = useState<boolean>(true);
 
   // Authentication & Guest Gate
@@ -175,7 +166,6 @@ export default function SignDocumentPage({
 
         setAgreement(data.data.agreement);
         setCurrentRecipient(data.data.recipient);
-        setAllRecipients(data.data.allRecipients || []);
         setIsTurn(data.data.isTurn !== false);
 
         if (data.data.recipient.status === 'SIGNED' || data.data.agreement.status === 'COMPLETED') {

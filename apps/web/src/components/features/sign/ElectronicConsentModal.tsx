@@ -11,7 +11,6 @@ import {
   Download,
   ArrowRight,
   ChevronDown,
-  Check,
   Copy,
   CheckCheck,
 } from 'lucide-react';
@@ -33,7 +32,7 @@ export function ElectronicConsentModal({
   recipientName,
   senderName,
   organisationName,
-  envelopeId = 'env_sec_' + Math.random().toString(36).substring(2, 10),
+  envelopeId = 'env_sec_disclosure',
   onAcceptConsent,
   onDecline,
 }: ElectronicConsentModalProps) {

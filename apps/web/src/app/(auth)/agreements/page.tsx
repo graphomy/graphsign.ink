@@ -7,7 +7,6 @@ import { SessionGuard } from '@/components/features/auth/SessionGuard';
 import { HeaderNav } from '@/components/layout/HeaderNav';
 import { Footer } from '@/components/layout/Footer';
 import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/Input';
 import { StatusPill } from '@/components/ui/Badge';
 import { Card } from '@/components/ui/Card';
 import { Skeleton } from '@/components/ui/Skeleton';
@@ -23,12 +22,10 @@ import {
 import { SubmitReviewModal } from '@/components/features/agreements/SubmitReviewModal';
 import { ReviewDecisionModal } from '@/components/features/agreements/ReviewDecisionModal';
 import { SendAgreementModal } from '@/components/features/agreements/SendAgreementModal';
-import { CancelAgreementModal } from '@/components/features/agreements/CancelAgreementModal';
 import { ChooseTemplateModal } from '@/components/features/agreements/ChooseTemplateModal';
-import { NotificationHistoryModal } from '@/components/features/agreements/NotificationHistoryModal';
 import { SendReminderModal } from '@/components/features/agreements/SendReminderModal';
 import { getApiUrl } from '@/lib/api';
-import { formatDateTime, formatStatus } from '@/lib/date-utils';
+import { formatDateTime } from '@/lib/date-utils';
 import {
   Upload,
   PenLine,
@@ -48,13 +45,9 @@ import {
   Trash2,
   Send,
   Scale,
-  RotateCcw,
-  Bell,
   X,
   ChevronLeft,
   ChevronRight,
-  Printer,
-  ExternalLink,
 } from 'lucide-react';
 
 interface AgreementItem {
@@ -213,17 +206,20 @@ function AgreementManagementContent() {
   useEffect(() => {
     const action = searchParams?.get('action');
     const qParam = searchParams?.get('q') || searchParams?.get('search');
-    if (qParam && !initialQueryProcessedRef.current) {
-      initialQueryProcessedRef.current = true;
-      setSearchQuery(qParam);
-    }
-    if (action === 'upload') {
-      setShowUploadModal(true);
-    } else if (action === 'scratch') {
-      setShowScratchModal(true);
-    } else if (action === 'template') {
-      setShowChooseTemplateModal(true);
-    }
+    const timer = setTimeout(() => {
+      if (qParam && !initialQueryProcessedRef.current) {
+        initialQueryProcessedRef.current = true;
+        setSearchQuery(qParam);
+      }
+      if (action === 'upload') {
+        setShowUploadModal(true);
+      } else if (action === 'scratch') {
+        setShowScratchModal(true);
+      } else if (action === 'template') {
+        setShowChooseTemplateModal(true);
+      }
+    }, 0);
+    return () => clearTimeout(timer);
   }, [searchParams]);
 
   function handleTabChange(tab: 'all' | 'drafts' | 'active' | 'signed' | 'archived') {

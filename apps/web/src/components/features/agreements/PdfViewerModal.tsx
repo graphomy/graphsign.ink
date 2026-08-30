@@ -14,7 +14,6 @@ import {
   ChevronRight,
   ZoomIn,
   ZoomOut,
-  Maximize2,
   FilePenLine,
 } from 'lucide-react';
 
@@ -56,7 +55,7 @@ export function PdfViewerModal({ agreement, onClose, onOpenEditor }: PdfViewerMo
   const [fetchedBlobUrl, setFetchedBlobUrl] = useState<string | null>(null);
   const [isLoadingFile, setIsLoadingFile] = useState<boolean>(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
-  const [showThumbnails, setShowThumbnails] = useState<boolean>(true);
+  const showThumbnails = true;
   const printableAreaRef = useRef<HTMLDivElement>(null);
 
   const meta = (agreement.metadata as Record<string, unknown>) || {};
