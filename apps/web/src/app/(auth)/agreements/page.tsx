@@ -6,6 +6,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { SessionGuard } from '@/components/features/auth/SessionGuard';
 import { HeaderNav } from '@/components/layout/HeaderNav';
+import { WorkspaceNav } from '@/components/layout/WorkspaceNav';
 import { Footer } from '@/components/layout/Footer';
 import { Button } from '@/components/ui/Button';
 import { StatusPill } from '@/components/ui/Badge';
@@ -724,6 +725,11 @@ function AgreementManagementContent() {
               From template
             </Button>
           </div>
+        </div>
+
+        {/* Section Navigation */}
+        <div className="flex items-center justify-between">
+          <WorkspaceNav />
         </div>
 
         {/* Action / Error Alerts */}

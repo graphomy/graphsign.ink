@@ -76,27 +76,50 @@ export function AgreementHistoryModal({
   }, [agreementId]);
 
   function getActionBadgeColor(action: string) {
-    if (action.includes('ACTIVATED')) {
+    const act = action.toUpperCase();
+    if (
+      act.includes('ACTIVATED') ||
+      act.includes('APPROVED') ||
+      act.includes('SEALED') ||
+      act.includes('SIGNED')
+    ) {
       return 'bg-green-100 text-green-800 border-green-200';
     }
-    if (action.includes('CREATED') || action.includes('UPLOADED')) {
+    if (
+      act.includes('CREATED') ||
+      act.includes('UPLOADED') ||
+      act.includes('REVIEW') ||
+      act.includes('SENT')
+    ) {
       return 'bg-blue-100 text-blue-800 border-blue-200';
     }
-    if (action.includes('ARCHIVED')) {
+    if (act.includes('ARCHIVED') || act.includes('VOIDED') || act.includes('CANCELLED')) {
       return 'bg-neutral-200 text-neutral-800 border-neutral-300';
+    }
+    if (act.includes('REJECTED')) {
+      return 'bg-red-100 text-red-800 border-red-200';
     }
     return 'bg-amber-100 text-amber-800 border-amber-200';
   }
 
   function getActionIcon(action: string) {
-    if (action.includes('ACTIVATED')) return '🚀';
-    if (action.includes('CREATED')) return '✨';
-    if (action.includes('UPLOADED')) return '📄';
-    if (action.includes('DRAFT_UPDATED')) return '✏️';
-    if (action.includes('ARCHIVED')) return '📦';
-    if (action.includes('UNARCHIVED')) return '📂';
-    if (action.includes('CLONED')) return '📋';
-    if (action.includes('METADATA')) return '🏷️';
+    const act = action.toUpperCase();
+    if (act.includes('SEALED')) return '🛡️';
+    if (act.includes('APPROVED')) return '✅';
+    if (act.includes('REJECTED')) return '❌';
+    if (act.includes('SUBMITTED') || act.includes('REVIEW')) return '📋';
+    if (act.includes('SENT')) return '📤';
+    if (act.includes('REMINDER')) return '🔔';
+    if (act.includes('SIGNED') || act.includes('SIGNATURE')) return '✍️';
+    if (act.includes('ACTIVATED')) return '🚀';
+    if (act.includes('CREATED')) return '✨';
+    if (act.includes('UPLOADED')) return '📄';
+    if (act.includes('DRAFT_UPDATED')) return '✏️';
+    if (act.includes('ARCHIVED')) return '📦';
+    if (act.includes('UNARCHIVED')) return '📂';
+    if (act.includes('CLONED')) return '📋';
+    if (act.includes('METADATA')) return '🏷️';
+    if (act.includes('VOIDED')) return '🚫';
     return '🕒';
   }
 

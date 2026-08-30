@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { SessionGuard } from '@/components/features/auth/SessionGuard';
 import { HeaderNav } from '@/components/layout/HeaderNav';
 import { Footer } from '@/components/layout/Footer';
@@ -14,6 +15,9 @@ import {
   AlertCircle,
   RefreshCw,
   ExternalLink,
+  ChevronDown,
+  ChevronUp,
+  HelpCircle,
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -36,15 +40,22 @@ interface SigningCertificate {
 }
 
 function CertificatesContent() {
+  const searchParams = useSearchParams();
   const [certificates, setCertificates] = useState<SigningCertificate[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
 
+  const actionParam = searchParams?.get('action');
   // Modal States
-  const [showGenerateModal, setShowGenerateModal] = useState(false);
-  const [showUploadModal, setShowUploadModal] = useState(false);
+  const [showGenerateModal, setShowGenerateModal] = useState<boolean>(
+    actionParam === 'create' || actionParam === 'generate',
+  );
+  const [showUploadModal, setShowUploadModal] = useState<boolean>(actionParam === 'upload');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Accordion State
+  const [openAccordion, setOpenAccordion] = useState<string | null>('why-cert');
 
   // Form states
   const [genName, setGenName] = useState('');
@@ -442,6 +453,132 @@ function CertificatesContent() {
               ))}
             </div>
           )}
+
+          {/* Educational Accordion: Why do I need an X.509 Certificate? (Issue 3) */}
+          <div className="mt-10 bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-4">
+            <div className="flex items-center gap-2.5 pb-2 border-b border-slate-100">
+              <div className="w-8 h-8 rounded-lg bg-red-50 text-red-600 flex items-center justify-center font-bold">
+                <HelpCircle className="w-4 h-4" />
+              </div>
+              <div>
+                <h2 className="text-base font-bold text-slate-900">
+                  Why do I need an X.509 Certificate?
+                </h2>
+                <p className="text-xs text-slate-500">
+                  Essential information about digital trust, PAdES sealing, and legal compliance.
+                </p>
+              </div>
+            </div>
+
+            <div className="divide-y divide-slate-100 text-xs">
+              {/* Accordion Item 1 */}
+              <div className="py-3">
+                <button
+                  type="button"
+                  onClick={() => setOpenAccordion(openAccordion === 'why-cert' ? null : 'why-cert')}
+                  className="w-full flex items-center justify-between text-left font-bold text-slate-900 hover:text-red-700 py-1 transition-colors"
+                >
+                  <span className="text-sm">Why does GraphSign require an X.509 Certificate?</span>
+                  {openAccordion === 'why-cert' ? (
+                    <ChevronUp className="w-4 h-4 text-slate-400 shrink-0" />
+                  ) : (
+                    <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />
+                  )}
+                </button>
+                {openAccordion === 'why-cert' && (
+                  <div className="pt-2 text-slate-600 leading-relaxed space-y-2">
+                    <p>
+                      Unlike simple drawn image signatures which can be copied, an{' '}
+                      <strong>X.509 digital certificate</strong> provides cryptographic identity
+                      binding. When an agreement is signed, GraphSign applies a{' '}
+                      <strong>PAdES Baseline-T digital seal</strong> containing a cryptographic hash
+                      of the PDF content and signer credentials.
+                    </p>
+                    <p>
+                      If even a single character in the document is modified after execution, the
+                      cryptographic seal is permanently broken, ensuring complete{' '}
+                      <strong>tamper-evidence and non-repudiation</strong> under eIDAS (EU), ESIGN
+                      Act (US), and UETA standards.
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Accordion Item 2 */}
+              <div className="py-3">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setOpenAccordion(openAccordion === 'adobe-trust' ? null : 'adobe-trust')
+                  }
+                  className="w-full flex items-center justify-between text-left font-bold text-slate-900 hover:text-red-700 py-1 transition-colors"
+                >
+                  <span className="text-sm">
+                    How does it ensure the Green Checkmark in Adobe Acrobat Reader?
+                  </span>
+                  {openAccordion === 'adobe-trust' ? (
+                    <ChevronUp className="w-4 h-4 text-slate-400 shrink-0" />
+                  ) : (
+                    <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />
+                  )}
+                </button>
+                {openAccordion === 'adobe-trust' && (
+                  <div className="pt-2 text-slate-600 leading-relaxed space-y-2">
+                    <p>
+                      Adobe Acrobat Reader inspects the embedded digital signature dictionary,
+                      certificate chain, and RFC 3161 timestamp token.
+                    </p>
+                    <p>
+                      When you add your organisation&apos;s public root certificate to Adobe&apos;s
+                      Trust Store (or use an approved AATL/EUTL Certificate Authority), Adobe
+                      automatically validates the signature and displays the recognized{' '}
+                      <span className="text-emerald-700 font-bold">
+                        &quot;Signed and all signatures are valid&quot;
+                      </span>{' '}
+                      green checkmark banner.
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Accordion Item 3 */}
+              <div className="py-3">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setOpenAccordion(openAccordion === 'cert-types' ? null : 'cert-types')
+                  }
+                  className="w-full flex items-center justify-between text-left font-bold text-slate-900 hover:text-red-700 py-1 transition-colors"
+                >
+                  <span className="text-sm">
+                    What is the difference between Self-Signed and BYO Certificates?
+                  </span>
+                  {openAccordion === 'cert-types' ? (
+                    <ChevronUp className="w-4 h-4 text-slate-400 shrink-0" />
+                  ) : (
+                    <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />
+                  )}
+                </button>
+                {openAccordion === 'cert-types' && (
+                  <div className="pt-2 text-slate-600 leading-relaxed space-y-2">
+                    <ul className="list-disc pl-4 space-y-1.5">
+                      <li>
+                        <strong>Self-Signed Certificate:</strong> Generated directly within
+                        GraphSign with RSA-2048/4096 or ECDSA keys. Perfect for internal agreements,
+                        immediate onboarding, and complete cryptographic sealing.
+                      </li>
+                      <li>
+                        <strong>Bring Your Own (BYO) Certificate:</strong> Import an existing
+                        corporate X.509 certificate issued by a commercial Certificate Authority
+                        (e.g., DigiCert, Sectigo, GlobalSign) or internal enterprise PKI for strict
+                        regulatory compliance.
+                      </li>
+                    </ul>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
         </main>
       </div>
 
@@ -727,7 +864,13 @@ function CertificatesContent() {
 export default function CertificatesPage() {
   return (
     <SessionGuard>
-      <CertificatesContent />
+      <Suspense
+        fallback={
+          <div className="p-12 text-center text-xs text-slate-500">Loading certificates...</div>
+        }
+      >
+        <CertificatesContent />
+      </Suspense>
     </SessionGuard>
   );
 }

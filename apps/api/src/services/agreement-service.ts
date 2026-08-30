@@ -468,7 +468,7 @@ export class AgreementService {
     const auditLogs = await this.prisma.auditLog.findMany({
       where: {
         organisationId: orgId,
-        resourceType: 'Agreement',
+        resourceType: { in: ['Agreement', 'agreement'] },
         resourceId: agreementId,
       },
       orderBy: { createdAt: 'desc' },
@@ -507,6 +507,42 @@ export class AgreementService {
           break;
         case 'AGREEMENT_CLONED':
           summary = 'Cloned agreement';
+          break;
+        case 'AGREEMENT_SUBMITTED_FOR_REVIEW':
+        case 'SUBMITTED_FOR_REVIEW':
+          summary = `Submitted for review${meta.reviewerEmail ? ` to ${meta.reviewerEmail}` : ''}`;
+          break;
+        case 'AGREEMENT_REVIEW_APPROVED':
+        case 'REVIEW_APPROVED':
+          summary = `Review approved${meta.note ? `: "${meta.note}"` : ''}`;
+          break;
+        case 'AGREEMENT_REVIEW_REJECTED':
+        case 'REVIEW_REJECTED':
+          summary = `Review rejected${meta.note ? `: "${meta.note}"` : ''}`;
+          break;
+        case 'AGREEMENT_REVIEW_RETRACTED':
+        case 'REVIEW_RETRACTED':
+          summary = 'Review request retracted';
+          break;
+        case 'AGREEMENT_SENT_FOR_SIGNATURE':
+        case 'SENT_FOR_SIGNATURE':
+          summary = `Sent for signature${meta.recipientCount ? ` to ${meta.recipientCount} recipient(s)` : ''}`;
+          break;
+        case 'AGREEMENT_REMINDER_SENT':
+        case 'REMINDER_SENT':
+          summary = `Signature reminder sent${meta.recipientEmail ? ` to ${meta.recipientEmail}` : ''}`;
+          break;
+        case 'AGREEMENT_SEALED':
+        case 'SEALED':
+          summary = `Cryptographically sealed (${meta.padesLevel || 'PAdES-B-T'})`;
+          break;
+        case 'RECIPIENT_SIGNED':
+        case 'SIGNATURE_ADOPTED':
+          summary = `Signed by ${meta.signerEmail || meta.signerName || 'recipient'}`;
+          break;
+        case 'AGREEMENT_VOIDED':
+        case 'VOIDED':
+          summary = `Voided agreement${meta.reason ? `: ${meta.reason}` : ''}`;
           break;
         case 'AGREEMENT_METADATA_UPDATED':
           if (meta.addedTags?.length && meta.removedTags?.length) {

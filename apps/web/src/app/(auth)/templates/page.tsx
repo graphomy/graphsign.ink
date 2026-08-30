@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useEffect, useRef, Suspense } from 'react';
+import { createPortal } from 'react-dom';
 import { useSearchParams, useRouter } from 'next/navigation';
-import Link from 'next/link';
 import { SessionGuard } from '@/components/features/auth/SessionGuard';
 import { HeaderNav } from '@/components/layout/HeaderNav';
 import { WorkspaceNav } from '@/components/layout/WorkspaceNav';
@@ -35,6 +35,15 @@ interface TemplateItem {
   author?: { name?: string; email: string };
 }
 
+interface DropdownAnchor {
+  id: string;
+  template: TemplateItem;
+  top?: number;
+  bottom?: number;
+  right: number;
+  isBottom?: boolean;
+}
+
 function getToken(): string {
   if (typeof window === 'undefined') return '';
   return localStorage.getItem('graphsign_session_token') || localStorage.getItem('token') || '';
@@ -64,7 +73,7 @@ function TemplateManagementContent() {
   const [selectedHistoryTemplate, setSelectedHistoryTemplate] = useState<TemplateItem | null>(null);
 
   // 3-dots action menu dropdown tracking
-  const [activeDropdownId, setActiveDropdownId] = useState<string | null>(null);
+  const [dropdownAnchor, setDropdownAnchor] = useState<DropdownAnchor | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Form states for Create
@@ -102,7 +111,7 @@ function TemplateManagementContent() {
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setActiveDropdownId(null);
+        setDropdownAnchor(null);
       }
     }
     document.addEventListener('mousedown', handleClickOutside);
@@ -255,7 +264,7 @@ function TemplateManagementContent() {
     setEditMarkdown(template.htmlContent || '');
     setEditTags(template.tags || []);
     setEditTagInput('');
-    setActiveDropdownId(null);
+    setDropdownAnchor(null);
   }
 
   async function handleCreateSubmit(e: React.FormEvent) {
@@ -409,7 +418,7 @@ function TemplateManagementContent() {
   async function handleDeleteTemplate(id: string) {
     if (!window.confirm('Are you sure you want to delete this template?')) return;
     setActionError(null);
-    setActiveDropdownId(null);
+    setDropdownAnchor(null);
     try {
       const res = await fetch(`${getApiUrl()}/api/v1/templates/${id}`, {
         method: 'DELETE',
@@ -465,17 +474,9 @@ function TemplateManagementContent() {
       <HeaderNav />
 
       <main className="flex-1 py-8 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto w-full space-y-6">
-        {/* Top Breadcrumb & Action Header */}
+        {/* Top Action Header */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-neutral-200 pb-6">
           <div className="space-y-1">
-            <div className="flex items-center gap-2 mb-1">
-              <Link
-                href="/dashboard"
-                className="inline-flex items-center gap-1 text-xs font-bold text-[#ba0000] hover:underline bg-red-50 px-2.5 py-1 rounded border border-red-200"
-              >
-                ← Back to Dashboard
-              </Link>
-            </div>
             <h1 className="text-2xl font-bold tracking-tight text-neutral-900 flex items-center gap-2.5">
               <span>📐</span> Template Management
             </h1>
@@ -531,38 +532,36 @@ function TemplateManagementContent() {
         )}
 
         {/* Navigation Tabs Bar */}
-        <div className="bg-white border border-neutral-200/80 rounded-2xl p-2.5 flex items-center justify-between shadow-xs">
-          <div className="flex items-center gap-1 bg-neutral-100 p-1 rounded-xl">
-            <button
-              onClick={() => setActiveTab('org')}
-              className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                activeTab === 'org'
-                  ? 'bg-white text-neutral-900 shadow-xs border border-neutral-200/60'
-                  : 'text-neutral-600 hover:text-neutral-900'
-              }`}
-            >
-              Library
-            </button>
-            <button
-              onClick={() => setActiveTab('my')}
-              className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                activeTab === 'my'
-                  ? 'bg-white text-neutral-900 shadow-xs border border-neutral-200/60'
-                  : 'text-neutral-600 hover:text-neutral-900'
-              }`}
-            >
-              My Templates
-            </button>
-            <button
-              onClick={() => setActiveTab('shared')}
-              className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                activeTab === 'shared'
-                  ? 'bg-white text-neutral-900 shadow-xs border border-neutral-200/60'
-                  : 'text-neutral-600 hover:text-neutral-900'
-              }`}
-            >
-              Shared with Me
-            </button>
+        <div className="bg-white border border-neutral-200 rounded-2xl p-3 flex items-center justify-between shadow-xs">
+          <div className="inline-flex items-center p-1 rounded-full bg-neutral-100 gap-1">
+            {(
+              [
+                { key: 'org', label: 'Library' },
+                { key: 'my', label: 'My Templates' },
+                { key: 'shared', label: 'Shared with Me' },
+              ] as const
+            ).map((tab) => {
+              const isActive = activeTab === tab.key;
+              return (
+                <button
+                  key={tab.key}
+                  type="button"
+                  onClick={() => setActiveTab(tab.key)}
+                  className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-medium transition-all ${
+                    isActive
+                      ? 'bg-white text-neutral-900 shadow-[0_1px_2px_rgb(16_24_40/0.04),0_1px_3px_rgb(16_24_40/0.06)] font-semibold'
+                      : 'text-neutral-500 hover:text-neutral-900'
+                  }`}
+                >
+                  <span>{tab.label}</span>
+                  {isActive && templates.length > 0 && (
+                    <span className="h-4 min-w-4 px-1 rounded-full bg-neutral-200 text-neutral-600 text-[10px] flex items-center justify-center font-bold">
+                      {templates.length}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
           </div>
         </div>
 
@@ -630,7 +629,6 @@ function TemplateManagementContent() {
                 <tbody className="divide-y divide-neutral-100">
                   {templates.map((tpl) => {
                     const isPublished = tpl.isPublished;
-                    const isDropdownOpen = activeDropdownId === tpl.id;
 
                     return (
                       <tr key={tpl.id} className="hover:bg-neutral-50/60 transition-colors">
@@ -737,46 +735,25 @@ function TemplateManagementContent() {
                                 aria-label="More actions"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  setActiveDropdownId(isDropdownOpen ? null : tpl.id);
+                                  if (dropdownAnchor?.id === tpl.id) {
+                                    setDropdownAnchor(null);
+                                  } else {
+                                    const rect = e.currentTarget.getBoundingClientRect();
+                                    const isBottom = rect.bottom + 180 > window.innerHeight;
+                                    setDropdownAnchor({
+                                      id: tpl.id,
+                                      template: tpl,
+                                      top: rect.bottom + 4,
+                                      bottom: window.innerHeight - rect.top + 4,
+                                      right: window.innerWidth - rect.right,
+                                      isBottom,
+                                    });
+                                  }
                                 }}
                                 className="p-1.5 text-neutral-500 hover:text-neutral-900 hover:bg-neutral-100 rounded-lg text-sm font-bold transition-colors"
                               >
                                 •••
                               </button>
-
-                              {/* Dropdown Menu */}
-                              {isDropdownOpen && (
-                                <div
-                                  ref={dropdownRef}
-                                  className="absolute right-0 top-full mt-1 w-44 bg-white border border-neutral-200 rounded-xl shadow-xl z-30 py-1 text-left text-xs font-medium"
-                                >
-                                  <button
-                                    onClick={() => {
-                                      setActiveDropdownId(null);
-                                      setSelectedHistoryTemplate(tpl);
-                                    }}
-                                    className="w-full px-3.5 py-2 text-neutral-700 hover:bg-neutral-50 flex items-center gap-2 text-left"
-                                  >
-                                    <span>🕒</span> Version History
-                                  </button>
-                                  <button
-                                    onClick={() => {
-                                      setActiveDropdownId(null);
-                                      setSelectedShareTemplate(tpl);
-                                    }}
-                                    className="w-full px-3.5 py-2 text-neutral-700 hover:bg-neutral-50 flex items-center gap-2 text-left"
-                                  >
-                                    <span>👥</span> Share Template
-                                  </button>
-                                  <div className="border-t border-neutral-100 my-1" />
-                                  <button
-                                    onClick={() => handleDeleteTemplate(tpl.id)}
-                                    className="w-full px-3.5 py-2 text-red-600 hover:bg-red-50 flex items-center gap-2 text-left font-semibold"
-                                  >
-                                    <span>🗑️</span> Delete
-                                  </button>
-                                </div>
-                              )}
                             </div>
                           </div>
                         </td>
@@ -1156,6 +1133,59 @@ function TemplateManagementContent() {
             onClose={() => setSelectedHistoryTemplate(null)}
           />
         )}
+
+        {/* 3-dots Dropdown Menu Portal (Issue 5) */}
+        {dropdownAnchor &&
+          typeof document !== 'undefined' &&
+          createPortal(
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setDropdownAnchor(null)} />
+              <div
+                ref={dropdownRef}
+                style={{
+                  position: 'fixed',
+                  top: dropdownAnchor.isBottom ? undefined : dropdownAnchor.top,
+                  bottom: dropdownAnchor.isBottom ? dropdownAnchor.bottom : undefined,
+                  right: dropdownAnchor.right,
+                }}
+                className="w-48 bg-white border border-neutral-200 rounded-xl shadow-2xl z-50 py-1.5 text-left text-xs font-medium text-neutral-700 animate-in fade-in zoom-in-95 duration-100"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <button
+                  onClick={() => {
+                    const t = dropdownAnchor.template;
+                    setDropdownAnchor(null);
+                    setSelectedHistoryTemplate(t);
+                  }}
+                  className="w-full px-3.5 py-2 text-neutral-700 hover:bg-neutral-50 flex items-center gap-2 text-left"
+                >
+                  <span>🕒</span> Version History
+                </button>
+                <button
+                  onClick={() => {
+                    const t = dropdownAnchor.template;
+                    setDropdownAnchor(null);
+                    setSelectedShareTemplate(t);
+                  }}
+                  className="w-full px-3.5 py-2 text-neutral-700 hover:bg-neutral-50 flex items-center gap-2 text-left"
+                >
+                  <span>👥</span> Share Template
+                </button>
+                <div className="border-t border-neutral-100 my-1" />
+                <button
+                  onClick={() => {
+                    const id = dropdownAnchor.id;
+                    setDropdownAnchor(null);
+                    handleDeleteTemplate(id);
+                  }}
+                  className="w-full px-3.5 py-2 text-red-600 hover:bg-red-50 flex items-center gap-2 text-left font-semibold"
+                >
+                  <span>🗑️</span> Delete
+                </button>
+              </div>
+            </>,
+            document.body,
+          )}
       </main>
 
       <Footer />

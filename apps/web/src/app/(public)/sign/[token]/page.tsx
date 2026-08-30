@@ -25,6 +25,8 @@ import {
   CheckCheck,
   ZoomIn,
   ZoomOut,
+  ChevronLeft,
+  ChevronRight,
   Sparkles,
 } from 'lucide-react';
 
@@ -158,6 +160,16 @@ export default function SignDocumentPage({
   const [highlightedFieldId, setHighlightedFieldId] = useState<string | null>(null);
   const [copiedEnvelope, setCopiedEnvelope] = useState(false);
   const [copiedHash, setCopiedHash] = useState(false);
+
+  // Page Navigation State
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const totalPages = useMemo(() => {
+    if (!agreement?.fields?.fields || agreement.fields.fields.length === 0) return 1;
+    const maxPage = Math.max(
+      ...agreement.fields.fields.map((f: { pageNumber?: number }) => f.pageNumber || 1),
+    );
+    return Math.max(1, maxPage);
+  }, [agreement]);
 
   // Fetch signing session on mount
   useEffect(() => {
@@ -895,6 +907,31 @@ export default function SignDocumentPage({
 
         {/* Right: Studio Controls */}
         <div className="flex items-center gap-2">
+          {/* Page Navigation Controls */}
+          <div className="flex items-center gap-1 bg-ink-50 border border-ink-200 rounded-md p-0.5">
+            <button
+              type="button"
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              disabled={currentPage <= 1}
+              className="p-1 rounded text-ink-600 hover:text-ink-900 hover:bg-ink-100 disabled:opacity-40"
+              title="Previous Page"
+            >
+              <ChevronLeft className="w-3.5 h-3.5" />
+            </button>
+            <span className="px-2 text-xs font-medium text-ink-700 tabular-nums">
+              Page {currentPage} of {totalPages}
+            </span>
+            <button
+              type="button"
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              disabled={currentPage >= totalPages}
+              className="p-1 rounded text-ink-600 hover:text-ink-900 hover:bg-ink-100 disabled:opacity-40"
+              title="Next Page"
+            >
+              <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
           {/* Zoom controls */}
           <div className="hidden sm:flex items-center border border-ink-200 rounded-md p-0.5 bg-ink-50 text-xs font-medium text-ink-700">
             <button
@@ -915,6 +952,13 @@ export default function SignDocumentPage({
               title="Zoom In"
             >
               <ZoomIn className="w-3.5 h-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setZoomLevel(100)}
+              className="px-1.5 py-0.5 text-[11px] text-ink-500 hover:text-ink-900 border-l border-ink-200"
+            >
+              Fit
             </button>
           </div>
 
@@ -1099,7 +1143,7 @@ export default function SignDocumentPage({
               />
             ) : effectivePdfUrl ? (
               <iframe
-                src={`${effectivePdfUrl}#toolbar=0&navpanes=0&scrollbar=0`}
+                src={`${effectivePdfUrl}#page=${currentPage}&toolbar=0&navpanes=0&scrollbar=0`}
                 className="w-full h-full min-h-[1100px] border-none pointer-events-none flex-1 overflow-hidden"
                 title="Document PDF Preview"
               />

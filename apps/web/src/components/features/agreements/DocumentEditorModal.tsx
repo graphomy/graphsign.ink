@@ -110,7 +110,7 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
       {
         id: 'recipient-1',
         name: 'Signer 1',
-        email: 'signer1@example.com',
+        email: '',
         role: 'signer',
         color: DEFAULT_RECIPIENT_COLORS[0] ?? '#2563EB',
       },
@@ -130,6 +130,12 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
 
   const [selectedFieldId, setSelectedFieldId] = useState<string | null>(null);
   const [zoomLevel, setZoomLevel] = useState<number>(100);
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const totalPages = useMemo(() => {
+    if (!fields || fields.length === 0) return 1;
+    const maxPage = Math.max(...fields.map((f) => f.pageNumber || 1));
+    return Math.max(1, maxPage);
+  }, [fields]);
   const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -700,9 +706,35 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
 
         {/* Right: Zoom & Save Action Buttons */}
         <div className="flex items-center gap-2">
+          {/* Page Navigation Controls */}
+          <div className="flex items-center gap-1 bg-neutral-50 border border-neutral-200 px-1.5 py-1 rounded-lg text-xs">
+            <button
+              type="button"
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              disabled={currentPage <= 1}
+              className="text-neutral-600 hover:text-neutral-900 px-1 font-bold disabled:opacity-40"
+              title="Previous page"
+            >
+              ←
+            </button>
+            <span className="font-mono text-[11px] font-semibold text-neutral-700 min-w-[56px] text-center">
+              Page {currentPage}/{totalPages}
+            </span>
+            <button
+              type="button"
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              disabled={currentPage >= totalPages}
+              className="text-neutral-600 hover:text-neutral-900 px-1 font-bold disabled:opacity-40"
+              title="Next page"
+            >
+              →
+            </button>
+          </div>
+
           {/* Zoom controls */}
           <div className="hidden sm:flex items-center gap-1 bg-neutral-50 border border-neutral-200 px-2 py-1 rounded-lg text-xs">
             <button
+              type="button"
               onClick={() => setZoomLevel((z) => Math.max(50, z - 15))}
               className="text-neutral-600 hover:text-neutral-900 px-1 font-bold"
               title="Zoom out"
@@ -713,11 +745,19 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
               {zoomLevel}%
             </span>
             <button
+              type="button"
               onClick={() => setZoomLevel((z) => Math.min(175, z + 15))}
               className="text-neutral-600 hover:text-neutral-900 px-1 font-bold"
               title="Zoom in"
             >
               +
+            </button>
+            <button
+              type="button"
+              onClick={() => setZoomLevel(100)}
+              className="text-[10px] text-neutral-500 hover:text-neutral-900 pl-1 border-l border-neutral-300 font-medium"
+            >
+              Fit
             </button>
           </div>
 
@@ -842,9 +882,9 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
                   </div>
                   <div className="flex items-center justify-between text-[10px] text-neutral-400 px-1 font-normal">
                     <span className="capitalize">{activeRecipient.role}</span>
-                    <span className="truncate max-w-[120px]">
-                      {activeRecipient.email || 'Pending email'}
-                    </span>
+                    {activeRecipient.email ? (
+                      <span className="truncate max-w-[120px]">{activeRecipient.email}</span>
+                    ) : null}
                   </div>
                 </div>
               )}
@@ -1004,7 +1044,7 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
               />
             ) : effectivePdfUrl ? (
               <iframe
-                src={`${effectivePdfUrl}#toolbar=0&navpanes=0&scrollbar=0`}
+                src={`${effectivePdfUrl}#page=${currentPage}&toolbar=0&navpanes=0&scrollbar=0`}
                 className="w-full h-full min-h-[1100px] border-none pointer-events-none flex-1 overflow-hidden"
                 title="Document PDF Preview"
               />
