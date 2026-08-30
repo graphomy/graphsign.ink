@@ -3,7 +3,7 @@ import type { PrismaClient } from '@graphsign/db';
 import { createPrismaClient, getLegacyPrisma } from '@graphsign/db';
 import { VerificationService } from '../services/verification-service.js';
 import { verifyHashSchema } from '../validators/certificate-validators.js';
-import { ValidationError, BadRequestError } from '../utils/errors.js';
+import { BadRequestError } from '../utils/errors.js';
 import type { Env } from '../index.js';
 
 export interface VerifyDeps {
@@ -49,11 +49,14 @@ export function createPublicVerifyRoutes(deps?: VerifyDeps) {
     const parseResult = verifyHashSchema.safeParse(body);
 
     if (!parseResult.success) {
-      throw new ValidationError(
-        parseResult.error.errors.map((e) => e.message).join(', '),
+      return c.json(
+        {
+          valid: false,
+          error: 'Invalid payload: ' + parseResult.error.issues.map((e) => e.message).join(', '),
+        },
+        400,
       );
     }
-
     const report = await verificationService.verifyByHash(parseResult.data.hash);
     return c.json(report, 200);
   });

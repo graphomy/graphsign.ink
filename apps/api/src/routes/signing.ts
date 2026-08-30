@@ -9,10 +9,7 @@ import { PrismaAuditService } from '../services/audit-service.js';
 import type { AuditService } from '../services/audit-service.js';
 import { jwtAuth } from '../middleware/jwt-auth.js';
 import { requirePermission } from '../middleware/rbac-middleware.js';
-import {
-  sealAgreementSchema,
-  batchSealSchema,
-} from '../validators/certificate-validators.js';
+import { sealAgreementSchema, batchSealSchema } from '../validators/certificate-validators.js';
 import { ValidationError, BadRequestError } from '../utils/errors.js';
 import type { Env } from '../index.js';
 
@@ -45,11 +42,13 @@ export function createSigningRoutes(deps?: SigningDeps) {
 
     const audit = deps?.audit || new PrismaAuditService(prisma);
     const keyCustody = deps?.keyCustody || new KeyCustodyService();
-    const tsa = deps?.tsa || new TsaService({
-      primaryUrl: c.env?.TSA_PRIMARY_URL || process.env.TSA_PRIMARY_URL,
-      fallbackUrl: c.env?.TSA_FALLBACK_URL || process.env.TSA_FALLBACK_URL,
-      fallback2Url: c.env?.TSA_FALLBACK2_URL || process.env.TSA_FALLBACK2_URL,
-    });
+    const tsa =
+      deps?.tsa ||
+      new TsaService({
+        primaryUrl: c.env?.TSA_PRIMARY_URL || process.env.TSA_PRIMARY_URL,
+        fallbackUrl: c.env?.TSA_FALLBACK_URL || process.env.TSA_FALLBACK_URL,
+        fallback2Url: c.env?.TSA_FALLBACK2_URL || process.env.TSA_FALLBACK2_URL,
+      });
 
     const sealingService = new PadesSealingService(prisma, keyCustody, tsa, audit);
     const verificationService = new VerificationService(prisma);
@@ -68,9 +67,7 @@ export function createSigningRoutes(deps?: SigningDeps) {
     const parseResult = sealAgreementSchema.safeParse(body);
 
     if (!parseResult.success) {
-      throw new ValidationError(
-        parseResult.error.errors.map((e) => e.message).join(', '),
-      );
+      throw new ValidationError(parseResult.error.issues.map((e) => e.message).join(', '));
     }
 
     const ip = c.req.header('x-forwarded-for') || c.req.header('cf-connecting-ip');
@@ -99,9 +96,7 @@ export function createSigningRoutes(deps?: SigningDeps) {
     const parseResult = batchSealSchema.safeParse(body);
 
     if (!parseResult.success) {
-      throw new ValidationError(
-        parseResult.error.errors.map((e) => e.message).join(', '),
-      );
+      throw new ValidationError(parseResult.error.issues.map((e) => e.message).join(', '));
     }
 
     const ip = c.req.header('x-forwarded-for') || c.req.header('cf-connecting-ip');

@@ -103,7 +103,7 @@ export function createOrganisationRoutes(deps?: OrganisationDeps) {
 
     const parsed = acceptInvitationSchema.safeParse(body);
     if (!parsed.success) {
-      const firstError = parsed.error.errors[0];
+      const firstError = parsed.error.issues[0];
       throw new ValidationError(firstError?.message ?? 'Invalid input.', {
         field: firstError?.path.join('.') ?? 'unknown',
         issue: firstError?.message ?? 'validation_failed',
@@ -124,7 +124,7 @@ export function createOrganisationRoutes(deps?: OrganisationDeps) {
 
     const parsed = createOrganisationSchema.safeParse(body);
     if (!parsed.success) {
-      const firstError = parsed.error.errors[0];
+      const firstError = parsed.error.issues[0];
       throw new ValidationError(firstError?.message ?? 'Invalid input.', {
         field: firstError?.path.join('.') ?? 'unknown',
         issue: firstError?.message ?? 'validation_failed',
@@ -163,7 +163,7 @@ export function createOrganisationRoutes(deps?: OrganisationDeps) {
 
     const parsed = switchOrganisationSchema.safeParse(body);
     if (!parsed.success) {
-      const firstError = parsed.error.errors[0];
+      const firstError = parsed.error.issues[0];
       throw new ValidationError(firstError?.message ?? 'Invalid input.');
     }
 
@@ -228,7 +228,7 @@ export function createOrganisationRoutes(deps?: OrganisationDeps) {
     const body = await c.req.json().catch(() => ({}));
     const parsed = upgradeToTeamsSchema.safeParse(body);
     if (!parsed.success) {
-      const firstError = parsed.error.errors[0];
+      const firstError = parsed.error.issues[0];
       throw new ValidationError(firstError?.message ?? 'Invalid upgrade data.');
     }
 
@@ -277,7 +277,7 @@ export function createOrganisationRoutes(deps?: OrganisationDeps) {
 
       const parsed = updateOrganisationSettingsSchema.safeParse(body);
       if (!parsed.success) {
-        const firstError = parsed.error.errors[0];
+        const firstError = parsed.error.issues[0];
         throw new ValidationError(firstError?.message ?? 'Invalid input.');
       }
 
@@ -339,7 +339,7 @@ export function createOrganisationRoutes(deps?: OrganisationDeps) {
 
       const parsed = updateBrandingSchema.safeParse(body);
       if (!parsed.success) {
-        const firstError = parsed.error.errors[0];
+        const firstError = parsed.error.issues[0];
         throw new ValidationError(firstError?.message ?? 'Invalid input.');
       }
 
@@ -378,7 +378,7 @@ export function createOrganisationRoutes(deps?: OrganisationDeps) {
 
       const parsed = updateNotificationSettingsSchema.safeParse(body);
       if (!parsed.success) {
-        const firstError = parsed.error.errors[0];
+        const firstError = parsed.error.issues[0];
         throw new ValidationError(firstError?.message ?? 'Invalid input.');
       }
 
@@ -456,7 +456,7 @@ export function createOrganisationRoutes(deps?: OrganisationDeps) {
 
       const parsed = updateComplianceSettingsSchema.safeParse(body);
       if (!parsed.success) {
-        const firstError = parsed.error.errors[0];
+        const firstError = parsed.error.issues[0];
         throw new ValidationError(firstError?.message ?? 'Invalid input.');
       }
 
@@ -499,7 +499,7 @@ export function createOrganisationRoutes(deps?: OrganisationDeps) {
 
       const parsed = createTeamSchema.safeParse(body);
       if (!parsed.success) {
-        const firstError = parsed.error.errors[0];
+        const firstError = parsed.error.issues[0];
         throw new ValidationError(firstError?.message ?? 'Invalid input.');
       }
 
@@ -578,7 +578,7 @@ export function createOrganisationRoutes(deps?: OrganisationDeps) {
 
       const parsed = createCustomRoleSchema.safeParse(body);
       if (!parsed.success) {
-        const firstError = parsed.error.errors[0];
+        const firstError = parsed.error.issues[0];
         throw new ValidationError(firstError?.message ?? 'Invalid custom role data.');
       }
 
@@ -599,7 +599,7 @@ export function createOrganisationRoutes(deps?: OrganisationDeps) {
 
     const parsed = inviteMemberSchema.safeParse(body);
     if (!parsed.success) {
-      const firstError = parsed.error.errors[0];
+      const firstError = parsed.error.issues[0];
       throw new ValidationError(firstError?.message ?? 'Invalid input.');
     }
 
@@ -678,7 +678,7 @@ export function createOrganisationRoutes(deps?: OrganisationDeps) {
 
     const parsed = addDomainSchema.safeParse(body);
     if (!parsed.success) {
-      const firstError = parsed.error.errors[0];
+      const firstError = parsed.error.issues[0];
       throw new ValidationError(firstError?.message ?? 'Invalid domain name.');
     }
 

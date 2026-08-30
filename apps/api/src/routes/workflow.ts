@@ -80,7 +80,7 @@ export function createWorkflowRoutes(deps?: WorkflowDeps) {
     const parseResult = submitReviewSchema.safeParse(body);
 
     if (!parseResult.success) {
-      throw new BadRequestError(parseResult.error.errors.map((e) => e.message).join(', '));
+      throw new BadRequestError(parseResult.error.issues.map((e) => e.message).join(', '));
     }
 
     const userPayload = c.get('userPayload') as any;
@@ -138,7 +138,7 @@ export function createWorkflowRoutes(deps?: WorkflowDeps) {
     const parseResult = reviewDecisionSchema.safeParse({ ...body, decision: 'APPROVE' });
 
     if (!parseResult.success) {
-      throw new BadRequestError(parseResult.error.errors.map((e) => e.message).join(', '));
+      throw new BadRequestError(parseResult.error.issues.map((e) => e.message).join(', '));
     }
 
     const userPayload = c.get('userPayload') as any;
@@ -171,7 +171,7 @@ export function createWorkflowRoutes(deps?: WorkflowDeps) {
     const parseResult = reviewDecisionSchema.safeParse({ ...body, decision: 'REJECT' });
 
     if (!parseResult.success) {
-      throw new BadRequestError(parseResult.error.errors.map((e) => e.message).join(', '));
+      throw new BadRequestError(parseResult.error.issues.map((e) => e.message).join(', '));
     }
 
     const userPayload = c.get('userPayload') as any;
@@ -204,7 +204,7 @@ export function createWorkflowRoutes(deps?: WorkflowDeps) {
     const parseResult = sendAgreementSchema.safeParse(body);
 
     if (!parseResult.success) {
-      throw new BadRequestError(parseResult.error.errors.map((e) => e.message).join(', '));
+      throw new BadRequestError(parseResult.error.issues.map((e) => e.message).join(', '));
     }
 
     const userPayload = c.get('userPayload') as any;
@@ -237,7 +237,7 @@ export function createWorkflowRoutes(deps?: WorkflowDeps) {
     const parseResult = cancelAgreementSchema.safeParse(body);
 
     if (!parseResult.success) {
-      throw new BadRequestError(parseResult.error.errors.map((e) => e.message).join(', '));
+      throw new BadRequestError(parseResult.error.issues.map((e) => e.message).join(', '));
     }
 
     const userPayload = c.get('userPayload') as any;
@@ -270,7 +270,7 @@ export function createWorkflowRoutes(deps?: WorkflowDeps) {
     const parseResult = sendReminderSchema.safeParse(body);
 
     if (!parseResult.success) {
-      throw new BadRequestError(parseResult.error.errors.map((e) => e.message).join(', '));
+      throw new BadRequestError(parseResult.error.issues.map((e) => e.message).join(', '));
     }
 
     const userPayload = c.get('userPayload') as any;

@@ -89,14 +89,14 @@ The signer portal evaluates conditional rules in real time:
 
 ### Public Signer Endpoints
 
-| Method | Endpoint                         | Description                         | Auth Required |
-| :----- | :------------------------------- | :---------------------------------- | :------------ |
-| `GET`  | `/api/v1/sign/:token`            | Fetch signing session & fields      | Public Token  |
-| `POST` | `/api/v1/sign/:token/consent`    | Record electronic ERSD consent      | Public Token  |
-| `POST` | `/api/v1/sign/:token/view`       | Record view event beacon            | Public Token  |
-| `POST` | `/api/v1/sign/:token/otp/send`   | Send one-time passcode for guests   | Public Token  |
-| `POST` | `/api/v1/sign/:token/otp/verify` | Verify guest signer OTP code        | Public Token  |
-| `POST` | `/api/v1/sign/:token/complete`   | Submit signature & completed fields | Public Token  |
-| `POST` | `/api/v1/sign/:token/decline`    | Decline signature with reason       | Public Token  |
-| `GET`  | `/api/v1/sign/:token/file`       | Stream PDF or Markdown binary       | Public Token  |
-| `GET`  | `/api/v1/sign/:token/download`   | Download executed document with seal| Public Token  |
+| Method | Endpoint                         | Description                          | Auth Required |
+| :----- | :------------------------------- | :----------------------------------- | :------------ |
+| `GET`  | `/api/v1/sign/:token`            | Fetch signing session & fields       | Public Token  |
+| `POST` | `/api/v1/sign/:token/consent`    | Record electronic ERSD consent       | Public Token  |
+| `POST` | `/api/v1/sign/:token/view`       | Record view event beacon             | Public Token  |
+| `POST` | `/api/v1/sign/:token/otp/send`   | Send one-time passcode for guests    | Public Token  |
+| `POST` | `/api/v1/sign/:token/otp/verify` | Verify guest signer OTP code         | Public Token  |
+| `POST` | `/api/v1/sign/:token/complete`   | Submit signature & completed fields  | Public Token  |
+| `POST` | `/api/v1/sign/:token/decline`    | Decline signature with reason        | Public Token  |
+| `GET`  | `/api/v1/sign/:token/file`       | Stream PDF or Markdown binary        | Public Token  |
+| `GET`  | `/api/v1/sign/:token/download`   | Download executed document with seal | Public Token  |

@@ -89,9 +89,7 @@ export function createCertificateRoutes(deps?: CertificateDeps) {
     const parseResult = generateSelfSignedSchema.safeParse(body);
 
     if (!parseResult.success) {
-      throw new ValidationError(
-        parseResult.error.errors.map((e) => e.message).join(', '),
-      );
+      throw new ValidationError(parseResult.error.issues.map((e) => e.message).join(', '));
     }
 
     const ip = c.req.header('x-forwarded-for') || c.req.header('cf-connecting-ip');
@@ -118,9 +116,7 @@ export function createCertificateRoutes(deps?: CertificateDeps) {
     const parseResult = uploadByoCertificateSchema.safeParse(body);
 
     if (!parseResult.success) {
-      throw new ValidationError(
-        parseResult.error.errors.map((e) => e.message).join(', '),
-      );
+      throw new ValidationError(parseResult.error.issues.map((e) => e.message).join(', '));
     }
 
     const ip = c.req.header('x-forwarded-for') || c.req.header('cf-connecting-ip');
@@ -157,13 +153,7 @@ export function createCertificateRoutes(deps?: CertificateDeps) {
     const ip = c.req.header('x-forwarded-for') || c.req.header('cf-connecting-ip');
     const userAgent = c.req.header('user-agent');
 
-    const cert = await certService.setDefaultCertificate(
-      orgId,
-      userId,
-      certId,
-      ip,
-      userAgent,
-    );
+    const cert = await certService.setDefaultCertificate(orgId, userId, certId, ip, userAgent);
 
     return c.json(cert, 200);
   });
@@ -178,13 +168,7 @@ export function createCertificateRoutes(deps?: CertificateDeps) {
     const ip = c.req.header('x-forwarded-for') || c.req.header('cf-connecting-ip');
     const userAgent = c.req.header('user-agent');
 
-    const result = await certService.deleteCertificate(
-      orgId,
-      userId,
-      certId,
-      ip,
-      userAgent,
-    );
+    const result = await certService.deleteCertificate(orgId, userId, certId, ip, userAgent);
 
     return c.json(result, 200);
   });

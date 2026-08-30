@@ -40,9 +40,9 @@ describe('Signing Routes Integration Tests (FR-012.004, FR-012.005, INK-132)', (
         }),
       },
       documentSeal: {
-        create: vi.fn().mockImplementation(({ data }: any) =>
-          Promise.resolve({ id: 'seal-1', ...data }),
-        ),
+        create: vi
+          .fn()
+          .mockImplementation(({ data }: any) => Promise.resolve({ id: 'seal-1', ...data })),
         findUnique: vi.fn().mockResolvedValue({
           id: 'seal-1',
           verificationToken: 'GS-12345678',
@@ -101,7 +101,10 @@ describe('Signing Routes Integration Tests (FR-012.004, FR-012.005, INK-132)', (
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        agreementIds: ['a0000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000002'],
+        agreementIds: [
+          'a0000000-0000-4000-a000-000000000001',
+          'a0000000-0000-4000-a000-000000000002',
+        ],
       }),
     });
 

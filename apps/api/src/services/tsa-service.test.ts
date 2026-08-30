@@ -27,7 +27,9 @@ describe('TsaService (RFC 3161 Timestamping)', () => {
   });
 
   it('parses valid timestamp response structure', () => {
-    const dummyRes = new Uint8Array([0x30, 0x0a, 0x02, 0x01, 0x00, 0x04, 0x05, 0x01, 0x02, 0x03, 0x04, 0x05]);
+    const dummyRes = new Uint8Array([
+      0x30, 0x0a, 0x02, 0x01, 0x00, 0x04, 0x05, 0x01, 0x02, 0x03, 0x04, 0x05,
+    ]);
     const parsed = tsaService.parseTimeStampResp(dummyRes, 'http://test.tsa', 'TestTSA', 999);
 
     expect(parsed.provider).toBe('TestTSA');

@@ -51,10 +51,7 @@ export class VerificationService {
     if (!seal && this.prisma.documentSeal.findFirst) {
       seal = await this.prisma.documentSeal.findFirst({
         where: {
-          OR: [
-            { agreementId: cleanToken },
-            { id: cleanToken },
-          ],
+          OR: [{ agreementId: cleanToken }, { id: cleanToken }],
         },
         include: {
           agreement: {
@@ -105,7 +102,10 @@ export class VerificationService {
    * Method 2: Public verification by document SHA-256 hash.
    */
   async verifyByHash(hash: string): Promise<PublicVerificationReport> {
-    const cleanHash = hash.replace(/^sha256:/i, '').trim().toLowerCase();
+    const cleanHash = hash
+      .replace(/^sha256:/i, '')
+      .trim()
+      .toLowerCase();
 
     const seal = await this.prisma.documentSeal.findFirst({
       where: { documentHash: cleanHash },
@@ -133,19 +133,18 @@ export class VerificationService {
     const recipients = agreement.recipients || [];
     const activeSigners = recipients.filter(
       (r: any) =>
-        r.role?.toLowerCase() === 'signer' ||
-        r.role?.toLowerCase() === 'approver' ||
-        !r.role,
+        r.role?.toLowerCase() === 'signer' || r.role?.toLowerCase() === 'approver' || !r.role,
     );
     const totalCount =
       activeSigners.length > 0
         ? activeSigners.length
         : recipients.length > 0
-        ? recipients.length
-        : 0;
+          ? recipients.length
+          : 0;
     const signedCount =
       activeSigners.filter((r: any) => r.status === 'SIGNED').length ||
-      (recipients.filter((r: any) => r.status === 'SIGNED').length || 0);
+      recipients.filter((r: any) => r.status === 'SIGNED').length ||
+      0;
 
     const isCertRevoked = seal.certificate?.status === 'REVOKED';
     const status = isCertRevoked ? 'REVOKED' : seal.status === 'SUCCESS' ? 'VALID' : 'TAMPERED';
@@ -156,24 +155,37 @@ export class VerificationService {
       isValid: status === 'VALID',
       status,
       verificationToken: seal.verificationToken,
-      verificationUrl: meta.verificationUrl || `https://graphsign.ink/verify/${seal.verificationToken}`,
+      verificationUrl:
+        meta.verificationUrl || `https://graphsign.ink/verify/${seal.verificationToken}`,
       qrCodeDataUrl: meta.qrCodeDataUrl,
       documentTitle: agreement.title || 'Sealed Document',
       documentHash: seal.documentHash,
-      completedAt: agreement.completedAt ? (typeof agreement.completedAt === 'string' ? agreement.completedAt : agreement.completedAt.toISOString()) : null,
+      completedAt: agreement.completedAt
+        ? typeof agreement.completedAt === 'string'
+          ? agreement.completedAt
+          : agreement.completedAt.toISOString()
+        : null,
       totalSigners: totalCount,
       signedSigners: signedCount,
       sealDetails: {
         algorithm: seal.algorithm,
         padesLevel: seal.padesLevel,
         tsaUrl: seal.tsaUrl,
-        tsaTimestamp: seal.tsaTimestamp ? (typeof seal.tsaTimestamp === 'string' ? seal.tsaTimestamp : seal.tsaTimestamp.toISOString()) : null,
+        tsaTimestamp: seal.tsaTimestamp
+          ? typeof seal.tsaTimestamp === 'string'
+            ? seal.tsaTimestamp
+            : seal.tsaTimestamp.toISOString()
+          : null,
         tsaProvider: meta.tsaProvider || 'RFC 3161 TSA',
         certificateSubject: seal.certificate?.subjectDn || meta.subjectDn,
         certificateIssuer: seal.certificate?.issuerDn || meta.issuerDn,
       },
       organisationName: agreement.organisation?.name || 'graphsign.ink',
-      sealedAt: seal.createdAt ? (typeof seal.createdAt === 'string' ? seal.createdAt : seal.createdAt.toISOString()) : new Date().toISOString(),
+      sealedAt: seal.createdAt
+        ? typeof seal.createdAt === 'string'
+          ? seal.createdAt
+          : seal.createdAt.toISOString()
+        : new Date().toISOString(),
     };
   }
 

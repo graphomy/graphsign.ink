@@ -758,13 +758,16 @@ function AgreementManagementContent() {
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h4 className="text-sm font-bold text-white">Independent Document &amp; Seal Verification</h4>
+                <h4 className="text-sm font-bold text-white">
+                  Independent Document &amp; Seal Verification
+                </h4>
                 <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
                   Public Trust
                 </span>
               </div>
               <p className="text-xs text-slate-300 mt-0.5">
-                Verify any signed agreement by document token, envelope ID, or by uploading the sealed PDF.
+                Verify any signed agreement by document token, envelope ID, or by uploading the
+                sealed PDF.
               </p>
             </div>
           </div>

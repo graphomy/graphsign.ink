@@ -79,7 +79,7 @@ export function createAgreementRoutes(deps?: AgreementDeps) {
 
       const parsed = queryAgreementsSchema.safeParse(queryParams);
       if (!parsed.success) {
-        throw new BadRequestError(parsed.error.errors[0]?.message || 'Invalid query parameters');
+        throw new BadRequestError(parsed.error.issues[0]?.message || 'Invalid query parameters');
       }
 
       const result = await service.listAgreements(orgId, parsed.data, userId, userRole);
@@ -103,7 +103,7 @@ export function createAgreementRoutes(deps?: AgreementDeps) {
       const parsed = createUploadAgreementSchema.safeParse(body);
 
       if (!parsed.success) {
-        throw new BadRequestError(parsed.error.errors[0]?.message || 'Invalid upload payload');
+        throw new BadRequestError(parsed.error.issues[0]?.message || 'Invalid upload payload');
       }
 
       const agreement = await service.uploadAgreementFile(orgId, authorId, parsed.data);
@@ -128,7 +128,7 @@ export function createAgreementRoutes(deps?: AgreementDeps) {
 
       if (!parsed.success) {
         throw new BadRequestError(
-          parsed.error.errors[0]?.message || 'Invalid scratch creation payload',
+          parsed.error.issues[0]?.message || 'Invalid scratch creation payload',
         );
       }
 
@@ -175,7 +175,7 @@ export function createAgreementRoutes(deps?: AgreementDeps) {
 
       if (!parsed.success) {
         throw new BadRequestError(
-          parsed.error.errors[0]?.message || 'Invalid draft update payload',
+          parsed.error.issues[0]?.message || 'Invalid draft update payload',
         );
       }
 
@@ -202,7 +202,7 @@ export function createAgreementRoutes(deps?: AgreementDeps) {
       const parsed = activateAgreementSchema.safeParse(body);
 
       if (!parsed.success) {
-        throw new BadRequestError(parsed.error.errors[0]?.message || 'Invalid activation payload');
+        throw new BadRequestError(parsed.error.issues[0]?.message || 'Invalid activation payload');
       }
 
       const activated = await service.activateAgreement(
@@ -431,7 +431,7 @@ export function createAgreementRoutes(deps?: AgreementDeps) {
       const parsed = updateMetadataTagsSchema.safeParse(body);
 
       if (!parsed.success) {
-        throw new BadRequestError(parsed.error.errors[0]?.message || 'Invalid metadata payload');
+        throw new BadRequestError(parsed.error.issues[0]?.message || 'Invalid metadata payload');
       }
 
       const updated = await service.updateMetadataAndTags(
@@ -483,7 +483,7 @@ export function createAgreementRoutes(deps?: AgreementDeps) {
 
       if (!parsed.success) {
         throw new BadRequestError(
-          parsed.error.errors[0]?.message || 'Invalid document fields payload',
+          parsed.error.issues[0]?.message || 'Invalid document fields payload',
         );
       }
 

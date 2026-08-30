@@ -56,7 +56,7 @@ export function createUserRoutes(deps?: UserDeps) {
     const parsed = updateRoleSchema.safeParse(body);
 
     if (!parsed.success) {
-      throw new BadRequestError(parsed.error.errors[0]?.message || 'Invalid role update payload');
+      throw new BadRequestError(parsed.error.issues[0]?.message || 'Invalid role update payload');
     }
 
     const result = await rbacService.assignUserRole({

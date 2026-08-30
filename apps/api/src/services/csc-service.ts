@@ -55,7 +55,10 @@ export interface CscTimestampInput {
  * Standardizes remote signing protocols for self-operated keys and QTSP backends.
  */
 export class CscService {
-  private static readonly sadStore = new Map<string, { credentialId: string; organisationId: string; expiresAt: number }>();
+  private static readonly sadStore = new Map<
+    string,
+    { credentialId: string; organisationId: string; expiresAt: number }
+  >();
 
   constructor(
     private readonly prisma: PrismaClient,
@@ -83,8 +86,8 @@ export class CscService {
       ],
       algorithms: [
         '1.2.840.113549.1.1.11', // sha256WithRSAEncryption
-        '1.2.840.10045.4.3.2',    // ecdsa-with-SHA256
-        '1.2.840.10045.4.3.3',    // ecdsa-with-SHA384
+        '1.2.840.10045.4.3.2', // ecdsa-with-SHA256
+        '1.2.840.10045.4.3.3', // ecdsa-with-SHA384
       ],
     };
   }

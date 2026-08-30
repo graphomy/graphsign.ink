@@ -45,8 +45,14 @@ export class KeyCustodyService {
           ['sign', 'verify'],
         )) as CryptoKeyPair;
 
-        const publicKeySpki = (await crypto.subtle.exportKey('spki', keyPair.publicKey)) as ArrayBuffer;
-        const privateKeyPkcs8 = (await crypto.subtle.exportKey('pkcs8', keyPair.privateKey)) as ArrayBuffer;
+        const publicKeySpki = (await crypto.subtle.exportKey(
+          'spki',
+          keyPair.publicKey,
+        )) as ArrayBuffer;
+        const privateKeyPkcs8 = (await crypto.subtle.exportKey(
+          'pkcs8',
+          keyPair.privateKey,
+        )) as ArrayBuffer;
 
         const publicKeyPem = this.derToPem(publicKeySpki, 'PUBLIC KEY');
         const privateKeyPem = this.derToPem(privateKeyPkcs8, 'PRIVATE KEY');
@@ -70,8 +76,14 @@ export class KeyCustodyService {
           ['sign', 'verify'],
         )) as CryptoKeyPair;
 
-        const publicKeySpki = (await crypto.subtle.exportKey('spki', keyPair.publicKey)) as ArrayBuffer;
-        const privateKeyPkcs8 = (await crypto.subtle.exportKey('pkcs8', keyPair.privateKey)) as ArrayBuffer;
+        const publicKeySpki = (await crypto.subtle.exportKey(
+          'spki',
+          keyPair.publicKey,
+        )) as ArrayBuffer;
+        const privateKeyPkcs8 = (await crypto.subtle.exportKey(
+          'pkcs8',
+          keyPair.privateKey,
+        )) as ArrayBuffer;
 
         const publicKeyPem = this.derToPem(publicKeySpki, 'PUBLIC KEY');
         const privateKeyPem = this.derToPem(privateKeyPkcs8, 'PRIVATE KEY');
@@ -118,11 +130,7 @@ export class KeyCustodyService {
         );
 
         // Sign digest bytes directly
-        const signature = await crypto.subtle.sign(
-          'RSASSA-PKCS1-v1_5',
-          importedKey,
-          digestBytes,
-        );
+        const signature = await crypto.subtle.sign('RSASSA-PKCS1-v1_5', importedKey, digestBytes);
 
         return this.bytesToBase64(new Uint8Array(signature));
       } else if (algorithm.startsWith('ECDSA')) {

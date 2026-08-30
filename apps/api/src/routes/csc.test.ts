@@ -17,9 +17,7 @@ describe('CSC v2.2 Remote Signature API Routes Integration Tests', () => {
 
     mockPrisma = {
       signingCertificate: {
-        findMany: vi.fn().mockResolvedValue([
-          { id: 'cert-1', name: 'Cert 1', isDefault: true },
-        ]),
+        findMany: vi.fn().mockResolvedValue([{ id: 'cert-1', name: 'Cert 1', isDefault: true }]),
         findFirst: vi.fn().mockResolvedValue({
           id: 'cert-1',
           name: 'Cert 1',

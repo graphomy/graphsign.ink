@@ -18,7 +18,10 @@ export class TsaTrustService {
   /**
    * Probes a TSA and refreshes its root/intermediate certificate chain in the trust store.
    */
-  async refreshTrustChain(tsaUrl: string, providerName?: string): Promise<{ success: boolean; entriesUpdated: number }> {
+  async refreshTrustChain(
+    tsaUrl: string,
+    providerName?: string,
+  ): Promise<{ success: boolean; entriesUpdated: number }> {
     const dummyDigest = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
     const result = await this.tsaService.requestTimestamp(dummyDigest, tsaUrl);
 

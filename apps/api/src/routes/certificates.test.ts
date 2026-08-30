@@ -22,12 +22,12 @@ describe('Certificate Routes Integration Tests (FR-012.001 & FR-012.002)', () =>
       },
       signingCertificate: {
         count: vi.fn().mockResolvedValue(0),
-        create: vi.fn().mockImplementation(({ data }: any) =>
-          Promise.resolve({ id: 'cert-new', ...data }),
-        ),
-        findMany: vi.fn().mockResolvedValue([
-          { id: 'cert-1', name: 'Cert 1', isDefault: true, status: 'ACTIVE' },
-        ]),
+        create: vi
+          .fn()
+          .mockImplementation(({ data }: any) => Promise.resolve({ id: 'cert-new', ...data })),
+        findMany: vi
+          .fn()
+          .mockResolvedValue([{ id: 'cert-1', name: 'Cert 1', isDefault: true, status: 'ACTIVE' }]),
         findFirst: vi.fn().mockResolvedValue({
           id: 'cert-1',
           name: 'Cert 1',

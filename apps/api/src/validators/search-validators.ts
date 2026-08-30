@@ -95,13 +95,13 @@ export const createFilterPresetSchema = z.object({
     .min(1, 'Preset name is required')
     .max(100, 'Preset name cannot exceed 100 chars'),
   entityType: z.enum(['AGREEMENT', 'TEMPLATE']).default('AGREEMENT'),
-  filters: z.record(z.unknown()),
+  filters: z.record(z.string(), z.unknown()),
   isDefault: z.boolean().default(false).optional(),
 });
 
 export const updateFilterPresetSchema = z.object({
   name: z.string().trim().min(1).max(100).optional(),
-  filters: z.record(z.unknown()).optional(),
+  filters: z.record(z.string(), z.unknown()).optional(),
   isDefault: z.boolean().optional(),
 });
 

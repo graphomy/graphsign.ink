@@ -215,8 +215,7 @@ export function OtpVerificationModal({
         <p className="text-[13px] text-ink-500 mt-2 max-w-[34ch] mx-auto leading-relaxed">
           We sent a 6-digit code to{' '}
           <strong className="text-ink-900 font-semibold">{maskEmail(recipientEmail)}</strong>
-          {recipientName ? ` for ${recipientName}` : ''}. Enter
-          it to seal your signature on{' '}
+          {recipientName ? ` for ${recipientName}` : ''}. Enter it to seal your signature on{' '}
           <strong className="text-ink-900 font-semibold">{agreementTitle}</strong>.
         </p>
 

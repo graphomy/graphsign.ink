@@ -96,7 +96,7 @@ export function createAuthRoutes(deps?: AuthDeps) {
     const parsed = registerRequestSchema.safeParse(body);
 
     if (!parsed.success) {
-      const firstError = parsed.error.errors[0];
+      const firstError = parsed.error.issues[0];
       throw new ValidationError(firstError?.message ?? 'Invalid input.', {
         field: firstError?.path.join('.') ?? 'unknown',
         issue: firstError?.message ?? 'validation_failed',
@@ -137,7 +137,7 @@ export function createAuthRoutes(deps?: AuthDeps) {
     const parsed = loginRequestSchema.safeParse(body);
 
     if (!parsed.success) {
-      const firstError = parsed.error.errors[0];
+      const firstError = parsed.error.issues[0];
       throw new ValidationError(firstError?.message ?? 'Invalid input.', {
         field: firstError?.path.join('.') ?? 'unknown',
         issue: firstError?.message ?? 'validation_failed',
@@ -199,7 +199,7 @@ export function createAuthRoutes(deps?: AuthDeps) {
     const parsed = verifyEmailRequestSchema.safeParse(body);
 
     if (!parsed.success) {
-      const firstError = parsed.error.errors[0];
+      const firstError = parsed.error.issues[0];
       throw new ValidationError(firstError?.message ?? 'Invalid input.', {
         field: firstError?.path.join('.') ?? 'unknown',
         issue: firstError?.message ?? 'validation_failed',
@@ -236,7 +236,7 @@ export function createAuthRoutes(deps?: AuthDeps) {
     const parsed = resendVerificationRequestSchema.safeParse(body);
 
     if (!parsed.success) {
-      const firstError = parsed.error.errors[0];
+      const firstError = parsed.error.issues[0];
       throw new ValidationError(firstError?.message ?? 'Invalid input.', {
         field: firstError?.path.join('.') ?? 'unknown',
         issue: firstError?.message ?? 'validation_failed',
@@ -270,7 +270,7 @@ export function createAuthRoutes(deps?: AuthDeps) {
     const parsed = forgotPasswordRequestSchema.safeParse(body);
 
     if (!parsed.success) {
-      const firstError = parsed.error.errors[0];
+      const firstError = parsed.error.issues[0];
       throw new ValidationError(firstError?.message ?? 'Invalid input.', {
         field: firstError?.path.join('.') ?? 'unknown',
         issue: firstError?.message ?? 'validation_failed',
@@ -304,7 +304,7 @@ export function createAuthRoutes(deps?: AuthDeps) {
     const parsed = resetPasswordRequestSchema.safeParse(body);
 
     if (!parsed.success) {
-      const firstError = parsed.error.errors[0];
+      const firstError = parsed.error.issues[0];
       throw new ValidationError(firstError?.message ?? 'Invalid input.', {
         field: firstError?.path.join('.') ?? 'unknown',
         issue: firstError?.message ?? 'validation_failed',
@@ -440,7 +440,7 @@ export function createAuthRoutes(deps?: AuthDeps) {
     const parsed = updateSessionSettingsSchema.safeParse(body);
 
     if (!parsed.success) {
-      const firstError = parsed.error.errors[0];
+      const firstError = parsed.error.issues[0];
       throw new ValidationError(firstError?.message ?? 'Invalid input.', {
         field: firstError?.path.join('.') ?? 'unknown',
         issue: firstError?.message ?? 'validation_failed',
@@ -513,7 +513,7 @@ export function createAuthRoutes(deps?: AuthDeps) {
     const parsed = updateProfileRequestSchema.safeParse(body);
 
     if (!parsed.success) {
-      const firstError = parsed.error.errors[0];
+      const firstError = parsed.error.issues[0];
       throw new ValidationError(firstError?.message ?? 'Invalid input.', {
         field: firstError?.path.join('.') ?? 'unknown',
         issue: firstError?.message ?? 'validation_failed',
@@ -549,7 +549,7 @@ export function createAuthRoutes(deps?: AuthDeps) {
     const parsed = verifyEmailChangeRequestSchema.safeParse(body);
 
     if (!parsed.success) {
-      const firstError = parsed.error.errors[0];
+      const firstError = parsed.error.issues[0];
       throw new ValidationError(firstError?.message ?? 'Invalid input.', {
         field: firstError?.path.join('.') ?? 'unknown',
         issue: firstError?.message ?? 'validation_failed',
@@ -581,7 +581,7 @@ export function createAuthRoutes(deps?: AuthDeps) {
     const parsed = changePasswordRequestSchema.safeParse(body);
 
     if (!parsed.success) {
-      const firstError = parsed.error.errors[0];
+      const firstError = parsed.error.issues[0];
       throw new ValidationError(firstError?.message ?? 'Invalid input.', {
         field: firstError?.path.join('.') ?? 'unknown',
         issue: firstError?.message ?? 'validation_failed',
@@ -617,7 +617,7 @@ export function createAuthRoutes(deps?: AuthDeps) {
     const parsed = loginMfaRequestSchema.safeParse(body);
 
     if (!parsed.success) {
-      const firstError = parsed.error.errors[0];
+      const firstError = parsed.error.issues[0];
       throw new ValidationError(firstError?.message ?? 'Invalid input.', {
         field: firstError?.path.join('.') ?? 'unknown',
         issue: firstError?.message ?? 'validation_failed',
@@ -678,7 +678,7 @@ export function createAuthRoutes(deps?: AuthDeps) {
     const parsed = verifyMfaSetupRequestSchema.safeParse(body);
 
     if (!parsed.success) {
-      const firstError = parsed.error.errors[0];
+      const firstError = parsed.error.issues[0];
       throw new ValidationError(firstError?.message ?? 'Invalid input.', {
         field: firstError?.path.join('.') ?? 'unknown',
         issue: firstError?.message ?? 'validation_failed',
@@ -729,7 +729,7 @@ export function createAuthRoutes(deps?: AuthDeps) {
     const parsed = updateMfaEnforcementRequestSchema.safeParse(body);
 
     if (!parsed.success) {
-      const firstError = parsed.error.errors[0];
+      const firstError = parsed.error.issues[0];
       throw new ValidationError(firstError?.message ?? 'Invalid input.', {
         field: firstError?.path.join('.') ?? 'unknown',
         issue: firstError?.message ?? 'validation_failed',
@@ -762,7 +762,7 @@ export function createAuthRoutes(deps?: AuthDeps) {
 
     const parsed = deleteAccountRequestSchema.safeParse(body);
     if (!parsed.success) {
-      const firstError = parsed.error.errors[0];
+      const firstError = parsed.error.issues[0];
       throw new ValidationError(firstError?.message ?? 'Invalid password input.');
     }
 

@@ -107,7 +107,10 @@ export class PadesSealingService {
     const documentHash = await sha256(contentToHash);
 
     // Request RFC 3161 Timestamp
-    const tsaResult = await this.tsaService.requestTimestamp(documentHash, cert.tsaUrl || undefined);
+    const tsaResult = await this.tsaService.requestTimestamp(
+      documentHash,
+      cert.tsaUrl || undefined,
+    );
 
     // Perform cryptographic sign of document digest
     const dummyKeys = await this.keyCustodyService.generateKeyPair(cert.algorithm as any);
@@ -209,7 +212,12 @@ export class PadesSealingService {
       throw new BadRequestError('Batch sealing exceeds maximum limit of 100 documents per job.');
     }
 
-    const results: Array<{ agreementId: string; success: boolean; seal?: SealResult; error?: string }> = [];
+    const results: Array<{
+      agreementId: string;
+      success: boolean;
+      seal?: SealResult;
+      error?: string;
+    }> = [];
 
     for (const agreementId of agreementIds) {
       try {

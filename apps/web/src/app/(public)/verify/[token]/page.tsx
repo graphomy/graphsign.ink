@@ -4,7 +4,18 @@ import React, { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { getApiUrl } from '@/lib/api';
-import { ShieldCheck, FileCheck, XCircle, Copy, Check, ChevronDown, ChevronUp, HelpCircle, FileText, ArrowLeft } from 'lucide-react';
+import {
+  ShieldCheck,
+  FileCheck,
+  XCircle,
+  Copy,
+  Check,
+  ChevronDown,
+  ChevronUp,
+  HelpCircle,
+  FileText,
+  ArrowLeft,
+} from 'lucide-react';
 
 interface VerificationReport {
   isValid: boolean;
@@ -78,20 +89,37 @@ export default function TokenVerifyPage() {
   const faqs = [
     {
       id: 1,
-      question: 'How do I get the Green Checkmark (&quot;Signature is VALID&quot;) in Adobe Acrobat Reader?',
+      question:
+        'How do I get the Green Checkmark (&quot;Signature is VALID&quot;) in Adobe Acrobat Reader?',
       answer: (
         <div className="space-y-3 text-slate-600 text-sm">
           <p>
-            By default, Adobe Acrobat checks certificates against its commercial AATL list. For self-signed or enterprise private CA certificates, you can configure Adobe Acrobat to trust the issuing organization in 4 quick steps:
+            By default, Adobe Acrobat checks certificates against its commercial AATL list. For
+            self-signed or enterprise private CA certificates, you can configure Adobe Acrobat to
+            trust the issuing organization in 4 quick steps:
           </p>
           <ol className="list-decimal list-inside space-y-2 bg-slate-50 p-4 rounded-xl border border-slate-200 text-slate-700">
-            <li><strong>Open the PDF in Adobe Acrobat Reader</strong> and click on the <em>Signature Panel</em> (top bar or left pane).</li>
-            <li>Right-click the signature and choose <strong>Show Signature Properties</strong> $\rightarrow$ <strong>Show Signer&apos;s Certificate</strong>.</li>
-            <li>Navigate to the <strong>Trust</strong> tab and click <strong>Add to Trusted Certificates</strong>.</li>
-            <li>Check the box for <strong>&quot;Use this certificate as a trusted root&quot;</strong> and <strong>&quot;Certified documents&quot;</strong>, then click <strong>OK</strong>.</li>
+            <li>
+              <strong>Open the PDF in Adobe Acrobat Reader</strong> and click on the{' '}
+              <em>Signature Panel</em> (top bar or left pane).
+            </li>
+            <li>
+              Right-click the signature and choose <strong>Show Signature Properties</strong>{' '}
+              $\rightarrow$ <strong>Show Signer&apos;s Certificate</strong>.
+            </li>
+            <li>
+              Navigate to the <strong>Trust</strong> tab and click{' '}
+              <strong>Add to Trusted Certificates</strong>.
+            </li>
+            <li>
+              Check the box for <strong>&quot;Use this certificate as a trusted root&quot;</strong>{' '}
+              and <strong>&quot;Certified documents&quot;</strong>, then click <strong>OK</strong>.
+            </li>
           </ol>
           <p className="text-xs text-slate-500">
-            Once added, Adobe Acrobat will instantly display the green <strong>&quot;Signature is VALID, signed by...&quot;</strong> checkmark on all current and future documents sealed by this organization.
+            Once added, Adobe Acrobat will instantly display the green{' '}
+            <strong>&quot;Signature is VALID, signed by...&quot;</strong> checkmark on all current
+            and future documents sealed by this organization.
           </p>
         </div>
       ),
@@ -102,10 +130,14 @@ export default function TokenVerifyPage() {
       answer: (
         <div className="space-y-2 text-slate-600 text-sm">
           <p>
-            <strong>PAdES</strong> (PDF Advanced Electronic Signatures, ETSI EN 319 142) is the European and international standard for PDF digital signatures.
+            <strong>PAdES</strong> (PDF Advanced Electronic Signatures, ETSI EN 319 142) is the
+            European and international standard for PDF digital signatures.
           </p>
           <p>
-            When an agreement is completed, graphsign.ink applies a cryptographic signature over the entire document byte range and embeds an <strong>RFC 3161 Trusted Timestamp Token</strong>. This guarantees tamper-evidence: any subsequent modification to even a single byte will immediately invalidate the seal.
+            When an agreement is completed, graphsign.ink applies a cryptographic signature over the
+            entire document byte range and embeds an{' '}
+            <strong>RFC 3161 Trusted Timestamp Token</strong>. This guarantees tamper-evidence: any
+            subsequent modification to even a single byte will immediately invalidate the seal.
           </p>
         </div>
       ),
@@ -151,7 +183,9 @@ export default function TokenVerifyPage() {
         {loading && (
           <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center shadow-sm">
             <div className="animate-spin w-8 h-8 border-4 border-red-600 border-t-transparent rounded-full mx-auto mb-4" />
-            <p className="text-slate-600 text-sm font-medium">Checking cryptographic trust registry...</p>
+            <p className="text-slate-600 text-sm font-medium">
+              Checking cryptographic trust registry...
+            </p>
           </div>
         )}
 
@@ -193,7 +227,9 @@ export default function TokenVerifyPage() {
                 </div>
                 <div>
                   <h3 className="font-bold text-base text-slate-900">
-                    {report.isValid ? 'Cryptographically Sealed & Authentic' : 'Tamper Detected / Invalid Seal'}
+                    {report.isValid
+                      ? 'Cryptographically Sealed & Authentic'
+                      : 'Tamper Detected / Invalid Seal'}
                   </h3>
                   <p className="text-xs text-slate-600">
                     {report.isValid
@@ -210,21 +246,33 @@ export default function TokenVerifyPage() {
             {/* Document Metadata Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
-                <div className="text-[11px] text-slate-500 uppercase font-bold tracking-wider">Document Title</div>
-                <div className="text-base font-bold text-slate-900 mt-1">{report.documentTitle}</div>
+                <div className="text-[11px] text-slate-500 uppercase font-bold tracking-wider">
+                  Document Title
+                </div>
+                <div className="text-base font-bold text-slate-900 mt-1">
+                  {report.documentTitle}
+                </div>
               </div>
               <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
-                <div className="text-[11px] text-slate-500 uppercase font-bold tracking-wider">Issuing Organisation</div>
-                <div className="text-base font-bold text-slate-900 mt-1">{report.organisationName}</div>
+                <div className="text-[11px] text-slate-500 uppercase font-bold tracking-wider">
+                  Issuing Organisation
+                </div>
+                <div className="text-base font-bold text-slate-900 mt-1">
+                  {report.organisationName}
+                </div>
               </div>
               <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
-                <div className="text-[11px] text-slate-500 uppercase font-bold tracking-wider">Signatures Completed</div>
+                <div className="text-[11px] text-slate-500 uppercase font-bold tracking-wider">
+                  Signatures Completed
+                </div>
                 <div className="text-base font-bold text-slate-900 mt-1">
                   {report.signedSigners} of {report.totalSigners} signers completed
                 </div>
               </div>
               <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
-                <div className="text-[11px] text-slate-500 uppercase font-bold tracking-wider">PAdES Compliance Level</div>
+                <div className="text-[11px] text-slate-500 uppercase font-bold tracking-wider">
+                  PAdES Compliance Level
+                </div>
                 <div className="text-base font-bold text-emerald-700 mt-1 flex items-center gap-1.5">
                   <span className="w-2 h-2 rounded-full bg-emerald-600"></span>
                   PAdES {report.sealDetails.padesLevel.replace('_', '-')}
@@ -240,13 +288,17 @@ export default function TokenVerifyPage() {
               <div className="space-y-2 text-xs text-slate-700">
                 <div className="flex justify-between py-1.5 border-b border-slate-200">
                   <span className="text-slate-500">Algorithm:</span>
-                  <span className="font-mono font-semibold text-slate-900">{report.sealDetails.algorithm}</span>
+                  <span className="font-mono font-semibold text-slate-900">
+                    {report.sealDetails.algorithm}
+                  </span>
                 </div>
                 <div className="flex justify-between py-1.5 border-b border-slate-200">
                   <span className="text-slate-500">Timestamp Authority:</span>
                   <span className="font-semibold text-slate-900">
                     {report.sealDetails.tsaProvider || 'DigiCert RFC 3161 TSA'} (
-                    {report.sealDetails.tsaTimestamp ? new Date(report.sealDetails.tsaTimestamp).toUTCString() : 'Verified'}
+                    {report.sealDetails.tsaTimestamp
+                      ? new Date(report.sealDetails.tsaTimestamp).toUTCString()
+                      : 'Verified'}
                     )
                   </span>
                 </div>
@@ -298,7 +350,8 @@ export default function TokenVerifyPage() {
                     <span>📱</span> Cryptographic QR Verification Badge
                   </h5>
                   <p className="text-xs text-slate-500">
-                    Scan this QR code with any smartphone camera or QR reader to instantly open this authenticity certificate without an app.
+                    Scan this QR code with any smartphone camera or QR reader to instantly open this
+                    authenticity certificate without an app.
                   </p>
                 </div>
               </div>
@@ -306,7 +359,10 @@ export default function TokenVerifyPage() {
 
             {/* Actions */}
             <div className="pt-2 flex justify-between items-center">
-              <Link href="/verify" className="text-xs font-semibold text-slate-600 hover:text-slate-900 transition-colors flex items-center gap-1">
+              <Link
+                href="/verify"
+                className="text-xs font-semibold text-slate-600 hover:text-slate-900 transition-colors flex items-center gap-1"
+              >
                 <ArrowLeft className="w-3 h-3" /> Verify Another
               </Link>
               <a
@@ -364,7 +420,10 @@ export default function TokenVerifyPage() {
       {/* Footer */}
       <footer className="border-t border-slate-200 bg-white py-8 mt-12">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 text-center text-xs text-slate-500">
-          <p>© {new Date().getFullYear()} graphsign.ink — Open Source Electronic Signature Platform. All documents cryptographically verifiable.</p>
+          <p>
+            © {new Date().getFullYear()} graphsign.ink — Open Source Electronic Signature Platform.
+            All documents cryptographically verifiable.
+          </p>
         </div>
       </footer>
     </div>

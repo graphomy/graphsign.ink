@@ -58,7 +58,10 @@ export class TsaService {
 
     // If external TSAs are unreachable (e.g. offline unit test / isolated environment),
     // generate a self-contained RFC 3161 mock token for test parity.
-    return this.createLocalFallbackToken(digestBytes, endpoints[0]?.url || 'http://timestamp.digicert.com');
+    return this.createLocalFallbackToken(
+      digestBytes,
+      endpoints[0]?.url || 'http://timestamp.digicert.com',
+    );
   }
 
   /**
@@ -122,7 +125,9 @@ export class TsaService {
    */
   buildTimeStampReq(digestBytes: Uint8Array, nonce: number): Uint8Array {
     // SHA-256 OID: 2.16.840.1.101.3.4.2.1 -> DER: 06 09 60 86 48 01 65 03 04 02 01
-    const sha256Oid = new Uint8Array([0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x01]);
+    const sha256Oid = new Uint8Array([
+      0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x01,
+    ]);
     const nullParam = new Uint8Array([0x05, 0x00]);
     const algoId = this.wrapDer(0x30, new Uint8Array([...sha256Oid, ...nullParam]));
 
@@ -183,12 +188,7 @@ export class TsaService {
     } else if (len < 65536) {
       lenBytes = new Uint8Array([0x82, (len >> 8) & 0xff, len & 0xff]);
     } else {
-      lenBytes = new Uint8Array([
-        0x83,
-        (len >> 16) & 0xff,
-        (len >> 8) & 0xff,
-        len & 0xff,
-      ]);
+      lenBytes = new Uint8Array([0x83, (len >> 16) & 0xff, (len >> 8) & 0xff, len & 0xff]);
     }
 
     const result = new Uint8Array(1 + lenBytes.length + content.length);

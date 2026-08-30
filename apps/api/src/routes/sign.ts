@@ -82,7 +82,7 @@ export function createSignRoutes(deps?: SignDeps) {
     const parseResult = electronicConsentSchema.safeParse(body);
 
     if (!parseResult.success) {
-      throw new BadRequestError(parseResult.error.errors.map((e) => e.message).join(', '));
+      throw new BadRequestError(parseResult.error.issues.map((e) => e.message).join(', '));
     }
 
     const ip = c.req.header('x-forwarded-for') || c.req.header('cf-connecting-ip');
@@ -131,7 +131,7 @@ export function createSignRoutes(deps?: SignDeps) {
     const parseResult = verifyOtpSchema.safeParse(body);
 
     if (!parseResult.success) {
-      throw new BadRequestError(parseResult.error.errors.map((e) => e.message).join(', '));
+      throw new BadRequestError(parseResult.error.issues.map((e) => e.message).join(', '));
     }
 
     const ip = c.req.header('x-forwarded-for') || c.req.header('cf-connecting-ip');
@@ -152,7 +152,7 @@ export function createSignRoutes(deps?: SignDeps) {
     const parseResult = recipientSignSchema.safeParse(body);
 
     if (!parseResult.success) {
-      throw new BadRequestError(parseResult.error.errors.map((e) => e.message).join(', '));
+      throw new BadRequestError(parseResult.error.issues.map((e) => e.message).join(', '));
     }
 
     const ip = c.req.header('x-forwarded-for') || c.req.header('cf-connecting-ip');
@@ -179,7 +179,7 @@ export function createSignRoutes(deps?: SignDeps) {
     const parseResult = declineSignSchema.safeParse(body);
 
     if (!parseResult.success) {
-      throw new BadRequestError(parseResult.error.errors.map((e) => e.message).join(', '));
+      throw new BadRequestError(parseResult.error.issues.map((e) => e.message).join(', '));
     }
 
     const ip = c.req.header('x-forwarded-for') || c.req.header('cf-connecting-ip');
