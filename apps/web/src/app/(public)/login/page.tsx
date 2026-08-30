@@ -1,11 +1,14 @@
 'use client';
 
-import { useState, Suspense, type FormEvent } from 'react';
+import React, { useState, useRef, useEffect, Suspense, type FormEvent } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { loginFormSchema } from '@/lib/validators/auth';
 import { getApiUrl } from '@/lib/api';
 import { GuestGuard } from '@/components/features/auth/GuestGuard';
+import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Input';
+import { AlertCircle, ShieldCheck, Lock, FileClock, CheckCircle2 } from 'lucide-react';
 
 function LoginContent() {
   const searchParams = useSearchParams();
@@ -26,6 +29,43 @@ function LoginContent() {
   const [totpCode, setTotpCode] = useState('');
   const [setupSecret, setSetupSecret] = useState('');
   const [setupQrCode, setSetupQrCode] = useState('');
+
+  const emailInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    emailInputRef.current?.focus();
+  }, []);
+
+  function handleEmailBlur() {
+    if (!email) return;
+    const parsed = loginFormSchema.shape.email.safeParse(email);
+    if (!parsed.success) {
+      setErrors((prev) => ({ ...prev, email: parsed.error.errors[0]?.message || 'Invalid email' }));
+    } else {
+      setErrors((prev) => {
+        const next = { ...prev };
+        delete next.email;
+        return next;
+      });
+    }
+  }
+
+  function handlePasswordBlur() {
+    if (!password) return;
+    const parsed = loginFormSchema.shape.password.safeParse(password);
+    if (!parsed.success) {
+      setErrors((prev) => ({
+        ...prev,
+        password: parsed.error.errors[0]?.message || 'Password required',
+      }));
+    } else {
+      setErrors((prev) => {
+        const next = { ...prev };
+        delete next.password;
+        return next;
+      });
+    }
+  }
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -58,7 +98,7 @@ function LoginContent() {
       const data = await res.json().catch(() => null);
 
       if (!res.ok) {
-        setApiError(data?.error?.message ?? 'Invalid email or password.');
+        setApiError(data?.error?.message ?? 'Email or password is incorrect.');
         return;
       }
 
@@ -187,37 +227,26 @@ function LoginContent() {
   if (isSuccess) {
     return (
       <div
-        className="rounded-xl border border-neutral-200 bg-white p-8 shadow-sm"
+        className="w-full max-w-[420px] bg-white border border-ink-200 rounded-lg p-8 shadow-[0_1px_2px_rgb(16_24_40/0.04),0_1px_3px_rgb(16_24_40/0.06)] text-center space-y-4"
         role="alert"
         aria-live="polite"
         data-testid="login-success"
       >
-        <div className="text-center space-y-4">
-          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-green-100">
-            <svg
-              className="h-6 w-6 text-green-600"
-              fill="none"
-              viewBox="0 0 24 24"
-              strokeWidth={2}
-              stroke="currentColor"
-              aria-hidden="true"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-            </svg>
-          </div>
-          <h2 className="text-xl font-semibold text-neutral-900">Signed in successfully</h2>
-          <p className="text-neutral-600">
-            Welcome back, <strong className="text-neutral-900">{email}</strong>.
-          </p>
-          <div className="pt-2">
-            <Link
-              href={redirectTarget}
-              className="inline-block rounded-lg bg-[#ba0000] px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-[#a00000] transition-colors"
-              data-testid="go-to-dashboard-button"
-            >
-              Continue
-            </Link>
-          </div>
+        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-verified-50 text-verified-600">
+          <CheckCircle2 className="h-6 w-6" aria-hidden="true" />
+        </div>
+        <h2 className="text-xl font-bold text-ink-900">Signed in successfully</h2>
+        <p className="text-sm text-ink-600">
+          Welcome back, <strong className="text-ink-900">{email}</strong>.
+        </p>
+        <div className="pt-2">
+          <Link
+            href={redirectTarget}
+            className="inline-flex w-full items-center justify-center rounded-md bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-brand-700 transition-colors"
+            data-testid="go-to-dashboard-button"
+          >
+            Continue
+          </Link>
         </div>
       </div>
     );
@@ -225,34 +254,29 @@ function LoginContent() {
 
   if (showMfaPrompt) {
     return (
-      <div className="space-y-6" data-testid="mfa-verification-step">
-        <div>
-          <h2 className="text-center text-2xl font-semibold text-neutral-900">
-            Two-Step Verification
-          </h2>
-          <p className="mt-2 text-center text-sm text-neutral-600">
+      <div className="w-full max-w-[420px] bg-white border border-ink-200 rounded-lg p-8 shadow-[0_1px_2px_rgb(16_24_40/0.04),0_1px_3px_rgb(16_24_40/0.06)] space-y-6" data-testid="mfa-verification-step">
+        <div className="text-center">
+          <h2 className="text-xl font-bold text-ink-900">Two-Step Verification</h2>
+          <p className="mt-1 text-sm text-ink-500">
             Enter the 6-digit code from your authenticator app to complete sign in.
           </p>
         </div>
 
-        <form
-          onSubmit={handleMfaSubmit}
-          className="rounded-xl border border-neutral-200 bg-white p-8 shadow-sm space-y-6"
-          data-testid="mfa-login-form"
-        >
+        <form onSubmit={handleMfaSubmit} className="space-y-5" data-testid="mfa-login-form">
           {apiError && (
             <div
-              className="rounded-lg bg-red-50 border border-red-200 p-4 text-sm text-red-700"
+              className="rounded-md bg-brand-50 border border-brand-200 p-3 text-sm text-brand-800 flex items-center gap-2"
               role="alert"
             >
-              {apiError}
+              <AlertCircle className="w-4 h-4 shrink-0 text-brand-600" />
+              <span>{apiError}</span>
             </div>
           )}
 
           <div className="space-y-2">
             <label
               htmlFor="totpCode"
-              className="block text-xs font-semibold text-neutral-700 uppercase tracking-wider text-center"
+              className="block text-xs font-semibold text-ink-700 uppercase tracking-wider text-center"
             >
               6-Digit Authenticator Code
             </label>
@@ -264,20 +288,23 @@ function LoginContent() {
               required
               value={totpCode}
               onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, ''))}
-              className="block w-full text-center tracking-[0.5em] font-mono text-2xl rounded-lg border border-neutral-300 px-3.5 py-3 shadow-sm focus:border-[#ba0000] focus:ring-2 focus:ring-[#ba0000]/20"
+              className="block w-full text-center tracking-[0.5em] font-mono text-2xl rounded-md border border-ink-200 px-3.5 py-3 bg-white text-ink-900 shadow-sm focus:border-ink-900 focus:ring-2 focus:ring-ink-950/10 focus:outline-none"
               placeholder="123456"
               data-testid="mfa-code-input"
             />
           </div>
 
-          <button
+          <Button
             type="submit"
-            disabled={isLoading || totpCode.length !== 6}
-            className="w-full rounded-lg bg-[#ba0000] px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-[#a00000] disabled:opacity-50 transition-colors"
+            size="lg"
+            variant="primary"
+            className="w-full"
+            isLoading={isLoading}
+            disabled={totpCode.length !== 6}
             data-testid="mfa-submit-button"
           >
-            {isLoading ? 'Verifying...' : 'Verify & Sign In'}
-          </button>
+            Verify & Sign In
+          </Button>
         </form>
       </div>
     );
@@ -285,39 +312,33 @@ function LoginContent() {
 
   if (showMfaSetupPrompt) {
     return (
-      <div className="space-y-6" data-testid="mfa-forced-setup-step">
-        <div>
-          <h2 className="text-center text-2xl font-semibold text-neutral-900">
-            MFA Setup Required
-          </h2>
-          <p className="mt-2 text-center text-sm text-neutral-600">
-            Your organisation requires Multi-Factor Authentication for your account role before
-            signing in.
+      <div className="w-full max-w-[420px] bg-white border border-ink-200 rounded-lg p-8 shadow-[0_1px_2px_rgb(16_24_40/0.04),0_1px_3px_rgb(16_24_40/0.06)] space-y-6" data-testid="mfa-forced-setup-step">
+        <div className="text-center">
+          <h2 className="text-xl font-bold text-ink-900">MFA Setup Required</h2>
+          <p className="mt-1 text-sm text-ink-500">
+            Your organisation requires Multi-Factor Authentication for your account before signing in.
           </p>
         </div>
 
-        <form
-          onSubmit={handleForcedSetupSubmit}
-          className="rounded-xl border border-neutral-200 bg-white p-8 shadow-sm space-y-6"
-          data-testid="mfa-forced-setup-form"
-        >
+        <form onSubmit={handleForcedSetupSubmit} className="space-y-5" data-testid="mfa-forced-setup-form">
           {apiError && (
             <div
-              className="rounded-lg bg-red-50 border border-red-200 p-4 text-sm text-red-700"
+              className="rounded-md bg-brand-50 border border-brand-200 p-3 text-sm text-brand-800 flex items-center gap-2"
               role="alert"
               data-testid="mfa-setup-error"
             >
-              {apiError}
+              <AlertCircle className="w-4 h-4 shrink-0 text-brand-600" />
+              <span>{apiError}</span>
             </div>
           )}
 
-          <div className="space-y-4">
-            <h3 className="text-xs font-semibold text-neutral-700 uppercase tracking-wider">
+          <div className="space-y-3">
+            <h3 className="text-xs font-semibold text-ink-700 uppercase tracking-wider text-center">
               Step 1: Scan QR Code with Authenticator App
             </h3>
-            <div className="flex flex-col items-center gap-3">
+            <div className="flex flex-col items-center gap-2">
               {setupQrCode && (
-                <div className="bg-white p-2 border border-neutral-200 rounded-lg shadow-sm">
+                <div className="bg-white p-2 border border-ink-200 rounded-md shadow-sm">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={setupQrCode}
@@ -329,8 +350,8 @@ function LoginContent() {
               )}
               {setupSecret && (
                 <div className="text-center">
-                  <span className="text-xs text-neutral-500 block">Manual Key Entry:</span>
-                  <code className="font-mono text-xs font-bold bg-neutral-100 px-2 py-1 rounded text-neutral-800 tracking-wider">
+                  <span className="text-xs text-ink-500 block">Manual Key Entry:</span>
+                  <code className="font-mono text-xs font-bold bg-ink-100 px-2 py-1 rounded text-ink-800 tracking-wider">
                     {setupSecret}
                   </code>
                 </div>
@@ -338,10 +359,10 @@ function LoginContent() {
             </div>
           </div>
 
-          <div className="space-y-2 pt-2 border-t border-neutral-100">
+          <div className="space-y-2 pt-2 border-t border-ink-100">
             <label
               htmlFor="forcedTotpCode"
-              className="block text-xs font-semibold text-neutral-700 uppercase tracking-wider text-center"
+              className="block text-xs font-semibold text-ink-700 uppercase tracking-wider text-center"
             >
               Step 2: Enter Generated 6-Digit Code
             </label>
@@ -353,179 +374,157 @@ function LoginContent() {
               required
               value={totpCode}
               onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, ''))}
-              className="block w-full text-center tracking-[0.5em] font-mono text-2xl rounded-lg border border-neutral-300 px-3.5 py-3 shadow-sm focus:border-[#ba0000] focus:ring-2 focus:ring-[#ba0000]/20"
+              className="block w-full text-center tracking-[0.5em] font-mono text-2xl rounded-md border border-ink-200 px-3.5 py-3 bg-white text-ink-900 shadow-sm focus:border-ink-900 focus:ring-2 focus:ring-ink-950/10 focus:outline-none"
               placeholder="123456"
               data-testid="mfa-forced-code-input"
             />
           </div>
 
-          <button
+          <Button
             type="submit"
-            disabled={isLoading || totpCode.length !== 6}
-            className="w-full rounded-lg bg-[#ba0000] px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-[#a00000] disabled:opacity-50 transition-colors"
+            size="lg"
+            variant="primary"
+            className="w-full"
+            isLoading={isLoading}
+            disabled={totpCode.length !== 6}
             data-testid="mfa-forced-submit-button"
           >
-            {isLoading ? 'Verifying...' : 'Complete Setup & Sign In'}
-          </button>
+            Complete Setup & Sign In
+          </Button>
         </form>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-center text-2xl font-semibold text-neutral-900">Welcome back</h2>
-        <p className="mt-2 text-center text-sm text-neutral-600">
-          Sign in to your graphsign.ink account.
-        </p>
+    <div className="w-full flex flex-col items-center">
+      {/* Brand Lockup above card (24px gap) */}
+      <div className="mb-6 flex items-center gap-2.5">
+        <div className="h-10 w-10 rounded-xl bg-brand-600 text-white font-black text-xl flex items-center justify-center shadow-md shadow-brand-600/20">
+          g
+        </div>
+        <h2 className="text-xl font-bold tracking-tight text-ink-900">
+          graphsign<span className="text-brand-600">.ink</span>
+        </h2>
       </div>
 
-      <form
-        onSubmit={handleSubmit}
-        className="rounded-xl border border-neutral-200 bg-white p-8 shadow-sm space-y-5"
-        noValidate
-        data-testid="login-form"
-      >
-        {/* Session Timeout Warning Banner */}
-        {isTimeout && (
-          <div
-            className="rounded-lg bg-amber-50 border border-amber-200 p-4 text-sm text-amber-800"
-            role="alert"
-            data-testid="timeout-banner"
-          >
-            Your session expired due to inactivity. Please sign in again to continue.
-          </div>
-        )}
+      {/* Main Card */}
+      <div className="w-full max-w-[420px] bg-white border border-ink-200 sm:rounded-lg p-6 sm:p-8 shadow-[0_1px_2px_rgb(16_24_40/0.04),0_1px_3px_rgb(16_24_40/0.06)]">
+        <div className="text-center mb-7">
+          <h2 className="text-xl font-bold text-ink-900">Welcome back</h2>
+          <p className="mt-1 text-sm text-ink-500">Sign in to continue to your agreements.</p>
+        </div>
 
-        {/* API error */}
-        {apiError && (
-          <div
-            className="rounded-lg bg-red-50 border border-red-200 p-4 text-sm text-red-700"
-            role="alert"
-            aria-live="assertive"
-            data-testid="api-error"
-          >
-            {apiError}
-          </div>
-        )}
+        <form onSubmit={handleSubmit} className="space-y-5" noValidate data-testid="login-form">
+          {/* Session Timeout Warning Banner */}
+          {isTimeout && (
+            <div
+              className="rounded-md bg-amber-50 border border-amber-200 p-3 text-sm text-amber-800 flex items-center gap-2"
+              role="alert"
+              data-testid="timeout-banner"
+            >
+              <AlertCircle className="w-4 h-4 shrink-0 text-amber-700" />
+              <span>Your session expired due to inactivity. Please sign in again.</span>
+            </div>
+          )}
 
-        {/* Email */}
-        <div>
-          <label htmlFor="email" className="block text-sm font-medium text-neutral-700">
-            Email address
-          </label>
-          <input
+          {/* API Server Error */}
+          {apiError && (
+            <div
+              className="rounded-md bg-brand-50 border border-brand-200 p-3 text-sm text-brand-800 flex items-center gap-2"
+              role="alert"
+              aria-live="assertive"
+              data-testid="api-error"
+            >
+              <AlertCircle className="w-4 h-4 shrink-0 text-brand-600" />
+              <span>{apiError}</span>
+            </div>
+          )}
+
+          {/* Email field */}
+          <Input
+            ref={emailInputRef}
             id="email"
             name="email"
             type="email"
+            label="Email address"
             autoComplete="email"
+            inputMode="email"
             required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className={`mt-1.5 block w-full rounded-lg border px-3.5 py-2.5 text-sm shadow-sm
-              placeholder:text-neutral-400
-              focus:outline-none focus:ring-2 focus:ring-[#ba0000]/20 focus:border-[#ba0000]
-              ${errors.email ? 'border-red-500' : 'border-neutral-300'}`}
+            onBlur={handleEmailBlur}
+            errorMessage={errors.email}
             placeholder="you@company.com"
-            aria-invalid={!!errors.email}
-            aria-describedby={errors.email ? 'email-error' : undefined}
             data-testid="email-input"
           />
-          {errors.email && (
-            <p id="email-error" className="mt-1.5 text-sm text-red-600" role="alert">
-              {errors.email}
-            </p>
-          )}
-        </div>
 
-        {/* Password */}
-        <div>
-          <div className="flex items-center justify-between">
-            <label htmlFor="password" className="block text-sm font-medium text-neutral-700">
-              Password
-            </label>
-            <Link
-              href="/forgot-password"
-              className="text-xs font-medium text-[#ba0000] hover:text-[#a00000] transition-colors"
-              data-testid="forgot-password-link"
-            >
-              Forgot password?
-            </Link>
-          </div>
-          <input
+          {/* Password field with toggle & caps-lock */}
+          <Input
             id="password"
             name="password"
             type="password"
+            label="Password"
             autoComplete="current-password"
             required
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className={`mt-1.5 block w-full rounded-lg border px-3.5 py-2.5 text-sm shadow-sm
-              placeholder:text-neutral-400
-              focus:outline-none focus:ring-2 focus:ring-[#ba0000]/20 focus:border-[#ba0000]
-              ${errors.password ? 'border-red-500' : 'border-neutral-300'}`}
+            onBlur={handlePasswordBlur}
+            errorMessage={errors.password}
             placeholder="••••••••"
-            aria-invalid={!!errors.password}
-            aria-describedby={errors.password ? 'password-error' : undefined}
+            showPasswordToggle
+            detectCapsLock
+            rightSlot={
+              <Link
+                href="/forgot-password"
+                className="text-[13px] font-medium text-brand-700 hover:underline"
+                data-testid="forgot-password-link"
+              >
+                Forgot password?
+              </Link>
+            }
             data-testid="password-input"
           />
-          {errors.password && (
-            <p id="password-error" className="mt-1.5 text-sm text-red-600" role="alert">
-              {errors.password}
-            </p>
-          )}
-        </div>
 
-        {/* Submit */}
-        <button
-          type="submit"
-          disabled={isLoading}
-          className="w-full rounded-lg bg-[#ba0000] px-4 py-2.5 text-sm font-semibold text-white
-            shadow-sm hover:bg-[#a00000] focus:outline-none focus:ring-2 focus:ring-[#ba0000]
-            focus:ring-offset-2 disabled:opacity-60 disabled:cursor-not-allowed
-            transition-colors duration-150"
-          data-testid="login-button"
-        >
-          {isLoading ? (
-            <span className="flex items-center justify-center gap-2">
-              <svg
-                className="h-4 w-4 animate-spin"
-                viewBox="0 0 24 24"
-                fill="none"
-                aria-hidden="true"
-              >
-                <circle
-                  className="opacity-25"
-                  cx="12"
-                  cy="12"
-                  r="10"
-                  stroke="currentColor"
-                  strokeWidth="4"
-                />
-                <path
-                  className="opacity-75"
-                  fill="currentColor"
-                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                />
-              </svg>
-              Signing in...
-            </span>
-          ) : (
-            'Sign in'
-          )}
-        </button>
-      </form>
+          {/* Submit CTA */}
+          <Button
+            type="submit"
+            size="lg"
+            variant="primary"
+            className="w-full"
+            isLoading={isLoading}
+            data-testid="login-button"
+          >
+            {isLoading ? 'Signing in…' : 'Sign in'}
+          </Button>
+        </form>
+      </div>
 
-      <p className="text-center text-sm text-neutral-600">
-        Don&apos;t have an account?{' '}
-        <Link
-          href="/register"
-          className="font-medium text-[#ba0000] hover:text-[#a00000] transition-colors"
-        >
+      {/* New account link below card (24px gap) */}
+      <div className="mt-6 text-center text-sm text-ink-500">
+        New to graphsign.ink?{' '}
+        <Link href="/register" className="font-medium text-brand-700 hover:underline">
           Create an account
         </Link>
-      </p>
+      </div>
+
+      {/* Trust row below (32px gap) */}
+      <div className="mt-8 flex flex-wrap items-center justify-center gap-3 text-xs text-ink-400">
+        <div className="flex items-center gap-1.5">
+          <ShieldCheck className="w-3.5 h-3.5 text-ink-400" aria-hidden="true" />
+          <span>ESIGN &amp; eIDAS compliant</span>
+        </div>
+        <span className="h-1 w-1 rounded-full bg-ink-300" aria-hidden="true" />
+        <div className="flex items-center gap-1.5">
+          <Lock className="w-3.5 h-3.5 text-ink-400" aria-hidden="true" />
+          <span>AES-256 encryption</span>
+        </div>
+        <span className="h-1 w-1 rounded-full bg-ink-300" aria-hidden="true" />
+        <div className="flex items-center gap-1.5">
+          <FileClock className="w-3.5 h-3.5 text-ink-400" aria-hidden="true" />
+          <span>Immutable audit trail</span>
+        </div>
+      </div>
     </div>
   );
 }
@@ -533,13 +532,15 @@ function LoginContent() {
 export default function LoginPage() {
   return (
     <GuestGuard>
-      <Suspense
-        fallback={
-          <div className="text-center py-8 text-neutral-500 text-sm">Loading sign in page...</div>
-        }
-      >
-        <LoginContent />
-      </Suspense>
+      <div className="min-h-[100dvh] grid place-items-center bg-ink-50 px-4 py-8">
+        <Suspense
+          fallback={
+            <div className="text-center py-8 text-ink-400 text-sm">Loading sign in page...</div>
+          }
+        >
+          <LoginContent />
+        </Suspense>
+      </div>
     </GuestGuard>
   );
 }

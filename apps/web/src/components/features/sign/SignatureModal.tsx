@@ -1,6 +1,8 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
+import { Button } from '@/components/ui/Button';
+import { PenLine, Type as TypeIcon, Upload as UploadIcon, X, RotateCcw, Trash2 } from 'lucide-react';
 
 export type SignatureType = 'DRAWN' | 'TYPED' | 'UPLOADED';
 
@@ -9,6 +11,7 @@ export interface AdoptedSignature {
   dataUrl: string;
   fontFamily?: string;
   rawText?: string;
+  initialsDataUrl?: string;
 }
 
 export interface SignatureModalProps {
@@ -24,7 +27,6 @@ const HANDWRITING_FONTS = [
   { id: 'caveat', name: 'Caveat', family: "'Caveat', cursive" },
   { id: 'great-vibes', name: 'Great Vibes', family: "'Great Vibes', cursive" },
   { id: 'sacramento', name: 'Sacramento', family: "'Sacramento', cursive" },
-  { id: 'satisfy', name: 'Satisfy', family: "'Satisfy', cursive" },
 ];
 
 export function SignatureModal({
@@ -39,7 +41,7 @@ export function SignatureModal({
   // Draw State
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [isDrawing, setIsDrawing] = useState(false);
-  const [inkColor, setInkColor] = useState<string>('#1E3A8A'); // Navy blue default
+  const [inkColor, setInkColor] = useState<string>('#16181D');
   const [strokes, setStrokes] = useState<ImageData[]>([]);
   const [hasDrawn, setHasDrawn] = useState(false);
 
@@ -53,7 +55,10 @@ export function SignatureModal({
   const [removeWhiteBg, setRemoveWhiteBg] = useState(true);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Load Google Fonts dynamically for typed handwriting signatures
+  // Legal Consent Checkbox
+  const [consentAgreed, setConsentAgreed] = useState(true);
+
+  // Load Google Fonts
   useEffect(() => {
     const linkId = 'graphsign-handwriting-fonts';
     if (!document.getElementById(linkId)) {
@@ -61,12 +66,12 @@ export function SignatureModal({
       link.id = linkId;
       link.rel = 'stylesheet';
       link.href =
-        'https://fonts.googleapis.com/css2?family=Caveat:wght@600&family=Dancing+Script:wght@600&family=Great+Vibes&family=Pacifico&family=Sacramento&family=Satisfy&display=swap';
+        'https://fonts.googleapis.com/css2?family=Caveat:wght@600&family=Dancing+Script:wght@600&family=Great+Vibes&family=Sacramento&display=swap';
       document.head.appendChild(link);
     }
   }, []);
 
-  // Reset or initialize canvas when Draw tab is opened
+  // Initialize canvas
   useEffect(() => {
     if (isOpen && activeTab === 'draw') {
       const canvas = canvasRef.current;
@@ -82,7 +87,6 @@ export function SignatureModal({
 
   if (!isOpen) return null;
 
-  // --- DRAW HANDLERS (INK-100 & INK-106) ---
   function getCanvasCoords(
     e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>,
   ) {
@@ -118,16 +122,17 @@ export function SignatureModal({
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // Save current canvas state for undo
+    // Save previous snapshot for undo
     setStrokes((prev) => [...prev, ctx.getImageData(0, 0, canvas.width, canvas.height)]);
 
+    const coords = getCanvasCoords(e);
     setIsDrawing(true);
     setHasDrawn(true);
-    const { x, y } = getCanvasCoords(e);
+
     ctx.beginPath();
-    ctx.moveTo(x, y);
     ctx.strokeStyle = inkColor;
-    ctx.lineWidth = 3;
+    ctx.lineWidth = 2.5;
+    ctx.moveTo(coords.x, coords.y);
   }
 
   function draw(e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) {
@@ -138,8 +143,8 @@ export function SignatureModal({
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    const { x, y } = getCanvasCoords(e);
-    ctx.lineTo(x, y);
+    const coords = getCanvasCoords(e);
+    ctx.lineTo(coords.x, coords.y);
     ctx.stroke();
   }
 
@@ -152,6 +157,7 @@ export function SignatureModal({
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
+
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     setStrokes([]);
     setHasDrawn(false);
@@ -163,9 +169,9 @@ export function SignatureModal({
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    const previousState = strokes[strokes.length - 1];
-    if (previousState) {
-      ctx.putImageData(previousState, 0, 0);
+    const prevStroke = strokes[strokes.length - 1];
+    if (prevStroke) {
+      ctx.putImageData(prevStroke, 0, 0);
       setStrokes((prev) => prev.slice(0, -1));
       if (strokes.length === 1) {
         setHasDrawn(false);
@@ -173,232 +179,182 @@ export function SignatureModal({
     }
   }
 
-  // --- TYPE HANDLERS (INK-101) ---
-  function generateTypedDataUrl(text: string, font: (typeof HANDWRITING_FONTS)[0]): string {
-    const canvas = document.createElement('canvas');
-    canvas.width = 600;
-    canvas.height = 200;
-    const ctx = canvas.getContext ? canvas.getContext('2d') : null;
-    if (!ctx) {
-      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="200"><text x="50%" y="50%" font-family="${font.name}" font-size="48" fill="${inkColor}" text-anchor="middle" dominant-baseline="central">${text || 'Signature'}</text></svg>`;
-      return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
-    }
-
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.font = `64px ${font.family}`;
-    ctx.fillStyle = inkColor;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(text || 'Signature', canvas.width / 2, canvas.height / 2);
-
+  function generateTypedDataUrl(text: string, font: { name: string; family: string }) {
+    if (typeof window === 'undefined') return '';
     try {
-      return canvas.toDataURL('image/png');
-    } catch {
-      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="200"><text x="50%" y="50%" font-family="${font.name}" font-size="48" fill="${inkColor}" text-anchor="middle" dominant-baseline="central">${text || 'Signature'}</text></svg>`;
-      return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
-    }
+      const canvas = document.createElement('canvas');
+      canvas.width = 600;
+      canvas.height = 200;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.font = `48px ${font.family}, cursive`;
+        ctx.fillStyle = inkColor;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(text || 'Signature', 300, 100);
+        return canvas.toDataURL('image/png');
+      }
+    } catch {}
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="200"><text x="50%" y="50%" font-family="${font.name}" font-size="48" fill="${inkColor}" text-anchor="middle" dominant-baseline="central">${text || 'Signature'}</text></svg>`;
+    return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
   }
 
-  // --- UPLOAD HANDLERS (INK-102) ---
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    processImageFile(file);
-  }
 
-  function processImageFile(file: File) {
-    setUploadError(null);
+    if (file.size > 2 * 1024 * 1024) {
+      setUploadError('Image size must be under 2MB.');
+      return;
+    }
 
     if (!file.type.startsWith('image/')) {
       setUploadError('Please upload an image file (PNG, JPG, or SVG).');
       return;
     }
 
-    if (file.size > 5 * 1024 * 1024) {
-      setUploadError('Image size must be 5MB or less.');
-      return;
-    }
-
+    setUploadError(null);
     const reader = new FileReader();
     reader.onload = (event) => {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        canvas.width = 600;
-        canvas.height = 200;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return;
-
-        // Fit image inside canvas while preserving aspect ratio
-        const scale = Math.min(canvas.width / img.width, canvas.height / img.height, 1);
-        const w = img.width * scale;
-        const h = img.height * scale;
-        const x = (canvas.width - w) / 2;
-        const y = (canvas.height - h) / 2;
-
-        ctx.drawImage(img, x, y, w, h);
-
-        if (removeWhiteBg) {
-          // Process white pixels to transparent
-          const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-          const data = imgData.data;
-          for (let i = 0; i < data.length; i += 4) {
-            const r = data[i]!;
-            const g = data[i + 1]!;
-            const b = data[i + 2]!;
-            // Brightness threshold for paper background
-            if (r > 215 && g > 215 && b > 215) {
-              data[i + 3] = 0; // Transparent
-            }
-          }
-          ctx.putImageData(imgData, 0, 0);
-        }
-
-        setUploadedImage(canvas.toDataURL('image/png'));
-      };
-      img.src = event.target?.result as string;
+      setUploadedImage(event.target?.result as string);
     };
     reader.readAsDataURL(file);
   }
 
-  // --- SUBMISSION HANDLER ---
+  function deriveInitials(fullName: string): string {
+    if (!fullName) return 'S';
+    const parts = fullName.trim().split(/\s+/);
+    if (parts.length === 1) return parts[0]!.slice(0, 2).toUpperCase();
+    return (parts[0]![0]! + parts[parts.length - 1]![0]!).toUpperCase();
+  }
+
   function handleAdoptAndApply() {
+    if (!consentAgreed) return;
+
+    let finalDataUrl = '';
+    let finalType: SignatureType = 'DRAWN';
+    let fontFamily: string | undefined = undefined;
+    let rawText: string | undefined = undefined;
+    let initialsDataUrl: string | undefined = undefined;
+
+    const initialsText = deriveInitials(typedName || defaultSignerName || 'Signer');
+
     if (activeTab === 'draw') {
       const canvas = canvasRef.current;
       if (!canvas || !hasDrawn) return;
-      const dataUrl = canvas.toDataURL('image/png');
-      onSave({
-        type: 'DRAWN',
-        dataUrl,
-      });
+      finalDataUrl = canvas.toDataURL('image/png');
+      finalType = 'DRAWN';
+      initialsDataUrl = generateTypedDataUrl(initialsText, selectedFont);
     } else if (activeTab === 'type') {
-      const textToUse = typedName.trim() || defaultSignerName || 'Signed';
-      const dataUrl = generateTypedDataUrl(textToUse, selectedFont);
-      onSave({
-        type: 'TYPED',
-        dataUrl,
-        fontFamily: selectedFont.name,
-        rawText: textToUse,
-      });
+      const text = typedName.trim() || defaultSignerName || 'Signature';
+      finalDataUrl = generateTypedDataUrl(text, selectedFont);
+      finalType = 'TYPED';
+      fontFamily = selectedFont.name;
+      rawText = text;
+      initialsDataUrl = generateTypedDataUrl(initialsText, selectedFont);
     } else if (activeTab === 'upload') {
       if (!uploadedImage) return;
-      onSave({
-        type: 'UPLOADED',
-        dataUrl: uploadedImage,
-      });
+      finalDataUrl = uploadedImage;
+      finalType = 'UPLOADED';
+      initialsDataUrl = generateTypedDataUrl(initialsText, selectedFont);
     }
-    onClose();
+
+    if (finalDataUrl) {
+      onSave({
+        type: finalType,
+        dataUrl: finalDataUrl,
+        fontFamily,
+        rawText,
+        initialsDataUrl,
+      });
+      onClose();
+    }
   }
+
+  const currentInitials = deriveInitials(typedName || defaultSignerName || 'Signer');
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto"
+      className="fixed inset-0 z-50 bg-ink-950/55 backdrop-blur-[2px] flex items-center justify-center p-4 overflow-y-auto"
       data-testid="signature-modal-overlay"
       role="dialog"
       aria-modal="true"
     >
-      <div className="bg-white rounded-2xl max-w-lg w-full p-5 sm:p-6 shadow-2xl space-y-4 border border-neutral-200 animate-in fade-in zoom-in-95 duration-150">
+      <div className="bg-white rounded-2xl max-w-[560px] w-full p-6 sm:p-7 shadow-[0_8px_16px_-4px_rgb(16_24_40/0.08),0_24px_48px_-12px_rgb(16_24_40/0.16)] space-y-5 border border-ink-200 animate-in fade-in zoom-in-95 duration-150">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-neutral-100 pb-3">
+        <div className="flex items-center justify-between border-b border-ink-100 pb-3">
           <div>
-            <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wider">
+            <span className="text-[11px] font-bold text-brand-600 uppercase tracking-wider">
               {fieldType === 'INITIALS' ? 'Adopt Initials' : 'Adopt Signature'}
             </span>
-            <h3 className="text-base font-bold text-neutral-900">
+            <h3 className="text-lg font-bold text-ink-900">
               {fieldType === 'INITIALS'
-                ? 'Create Your Electronic Initials'
-                : 'Create Your Electronic Signature'}
+                ? 'Create your electronic initials'
+                : 'Create your electronic signature'}
             </h3>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="text-neutral-400 hover:text-neutral-600 p-1 rounded-lg hover:bg-neutral-100 transition-colors"
+            className="text-ink-400 hover:text-ink-700 p-1.5 rounded-md hover:bg-ink-100 transition-colors"
             data-testid="close-signature-modal"
+            aria-label="Close modal"
           >
-            ✕
+            <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Tab Navigation */}
-        <div className="flex border-b border-neutral-200 text-xs font-bold gap-1">
+        <div className="flex border-b border-ink-200 text-xs font-semibold gap-2">
           <button
             type="button"
             onClick={() => setActiveTab('draw')}
-            className={`py-2 px-3.5 border-b-2 transition-all flex items-center gap-1.5 ${
+            className={`py-2.5 px-4 border-b-2 transition-all flex items-center gap-1.5 ${
               activeTab === 'draw'
-                ? 'border-blue-600 text-blue-600'
-                : 'border-transparent text-neutral-500 hover:text-neutral-800'
+                ? 'border-brand-600 text-ink-900 font-bold'
+                : 'border-transparent text-ink-500 hover:text-ink-900'
             }`}
             data-testid="tab-draw-signature"
           >
-            <span>✏️</span> Draw
+            <PenLine className="w-3.5 h-3.5" />
+            <span>Draw</span>
           </button>
           <button
             type="button"
             onClick={() => setActiveTab('type')}
-            className={`py-2 px-3.5 border-b-2 transition-all flex items-center gap-1.5 ${
+            className={`py-2.5 px-4 border-b-2 transition-all flex items-center gap-1.5 ${
               activeTab === 'type'
-                ? 'border-blue-600 text-blue-600'
-                : 'border-transparent text-neutral-500 hover:text-neutral-800'
+                ? 'border-brand-600 text-ink-900 font-bold'
+                : 'border-transparent text-ink-500 hover:text-ink-900'
             }`}
             data-testid="tab-type-signature"
           >
-            <span>⌨️</span> Type
+            <TypeIcon className="w-3.5 h-3.5" />
+            <span>Type</span>
           </button>
           <button
             type="button"
             onClick={() => setActiveTab('upload')}
-            className={`py-2 px-3.5 border-b-2 transition-all flex items-center gap-1.5 ${
+            className={`py-2.5 px-4 border-b-2 transition-all flex items-center gap-1.5 ${
               activeTab === 'upload'
-                ? 'border-blue-600 text-blue-600'
-                : 'border-transparent text-neutral-500 hover:text-neutral-800'
+                ? 'border-brand-600 text-ink-900 font-bold'
+                : 'border-transparent text-ink-500 hover:text-ink-900'
             }`}
             data-testid="tab-upload-signature"
           >
-            <span>📁</span> Upload
+            <UploadIcon className="w-3.5 h-3.5" />
+            <span>Upload</span>
           </button>
         </div>
 
-        {/* Ink Color Selector */}
-        <div className="flex items-center justify-between text-xs py-0.5">
-          <span className="text-neutral-500 text-[11px] font-semibold">Ink Color:</span>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setInkColor('#1E3A8A')}
-              className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold border transition-all ${
-                inkColor === '#1E3A8A'
-                  ? 'border-blue-700 bg-blue-50 text-blue-900 ring-1 ring-blue-600'
-                  : 'border-neutral-200 text-neutral-600 hover:bg-neutral-50'
-              }`}
-            >
-              <span className="w-2.5 h-2.5 rounded-full bg-[#1E3A8A]" />
-              Classic Blue
-            </button>
-            <button
-              type="button"
-              onClick={() => setInkColor('#111827')}
-              className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold border transition-all ${
-                inkColor === '#111827'
-                  ? 'border-neutral-900 bg-neutral-100 text-neutral-900 ring-1 ring-neutral-900'
-                  : 'border-neutral-200 text-neutral-600 hover:bg-neutral-50'
-              }`}
-            >
-              <span className="w-2.5 h-2.5 rounded-full bg-[#111827]" />
-              Rich Black
-            </button>
-          </div>
-        </div>
-
-        {/* DRAW TAB CONTENT (INK-100, INK-106) */}
+        {/* DRAW TAB */}
         {activeTab === 'draw' && (
           <div className="space-y-2">
-            <div className="relative border border-neutral-300 rounded-xl overflow-hidden bg-neutral-50 shadow-inner">
+            <div className="relative border border-ink-200 rounded-md overflow-hidden bg-white shadow-inner">
               <canvas
                 ref={canvasRef}
-                width={500}
-                height={180}
+                width={480}
+                height={160}
                 onMouseDown={startDrawing}
                 onMouseMove={draw}
                 onMouseUp={stopDrawing}
@@ -406,48 +362,55 @@ export function SignatureModal({
                 onTouchStart={startDrawing}
                 onTouchMove={draw}
                 onTouchEnd={stopDrawing}
-                className="w-full h-44 bg-white cursor-crosshair touch-none"
+                className="w-full h-40 bg-white cursor-crosshair touch-none"
                 data-testid="signature-canvas"
               />
+              {/* Baseline indicator */}
+              <div className="absolute bottom-8 inset-x-6 border-b border-dashed border-ink-200 pointer-events-none" />
+
               {!hasDrawn && (
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none text-neutral-300 text-xs font-semibold">
-                  Draw your {fieldType.toLowerCase()} here with mouse or finger
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none text-ink-300 text-xs font-medium">
+                  Draw your {fieldType.toLowerCase()} here with mouse, touch, or stylus
                 </div>
               )}
             </div>
 
             <div className="flex justify-between items-center text-xs">
-              <div className="flex items-center gap-3">
-                <button
+              <div className="flex items-center gap-2">
+                <Button
                   type="button"
+                  variant="ghost"
+                  size="sm"
+                  leftIcon={<RotateCcw className="w-3.5 h-3.5" />}
                   onClick={undoLastStroke}
                   disabled={strokes.length === 0}
-                  className="text-neutral-600 hover:text-neutral-900 disabled:opacity-40 font-semibold"
                   data-testid="undo-signature-stroke"
                 >
-                  ↩ Undo
-                </button>
-                <button
+                  Undo
+                </Button>
+                <Button
                   type="button"
+                  variant="ghost"
+                  size="sm"
+                  leftIcon={<Trash2 className="w-3.5 h-3.5" />}
                   onClick={clearCanvas}
-                  className="text-red-600 hover:text-red-700 font-semibold"
                   data-testid="clear-signature-canvas"
                 >
                   Clear
-                </button>
+                </Button>
               </div>
-              <span className="text-[10px] text-neutral-400">Touch &amp; stylus supported</span>
+              <span className="text-[11px] text-ink-400">Pointer &amp; touch enabled</span>
             </div>
           </div>
         )}
 
-        {/* TYPE TAB CONTENT (INK-101) */}
+        {/* TYPE TAB */}
         {activeTab === 'type' && (
           <div className="space-y-3">
             <div>
               <label
                 htmlFor="typed-signature-input"
-                className="block text-xs font-semibold text-neutral-700 mb-1"
+                className="block text-xs font-semibold text-ink-700 mb-1"
               >
                 Signer Legal Name
               </label>
@@ -456,17 +419,17 @@ export function SignatureModal({
                 type="text"
                 value={typedName}
                 onChange={(e) => setTypedName(e.target.value)}
-                placeholder="Type your name..."
-                className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm focus:border-blue-600 focus:outline-none"
+                placeholder="Type your full legal name..."
+                className="w-full rounded-md border border-ink-200 px-3 py-2 text-sm bg-white text-ink-900 focus:border-ink-900 focus:outline-none"
                 data-testid="typed-signature-input"
               />
             </div>
 
-            <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
-              <span className="text-[11px] font-semibold text-neutral-500">
-                Choose Handwriting Style:
+            <div className="space-y-1.5">
+              <span className="text-[11px] font-semibold text-ink-500">
+                Select Signature Style:
               </span>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto">
                 {HANDWRITING_FONTS.map((font) => {
                   const isSelected = selectedFont.id === font.id;
                   return (
@@ -474,20 +437,20 @@ export function SignatureModal({
                       key={font.id}
                       type="button"
                       onClick={() => setSelectedFont(font)}
-                      className={`p-3 rounded-xl border text-left transition-all flex flex-col justify-between ${
+                      className={`h-[88px] p-3 rounded-lg border text-left transition-all flex flex-col justify-between ${
                         isSelected
-                          ? 'border-blue-600 bg-blue-50/50 ring-1 ring-blue-600'
-                          : 'border-neutral-200 bg-neutral-50/30 hover:border-neutral-300'
+                          ? 'border-brand-600 bg-brand-50/40 ring-1 ring-brand-600'
+                          : 'border-ink-200 bg-white hover:border-ink-300'
                       }`}
                       data-testid={`font-choice-${font.id}`}
                     >
                       <span
-                        style={{ fontFamily: font.family, color: inkColor }}
-                        className="text-xl sm:text-2xl truncate block leading-relaxed my-1"
+                        style={{ fontFamily: font.family }}
+                        className="text-xl sm:text-2xl truncate block text-ink-900 my-1"
                       >
                         {typedName || defaultSignerName || 'Your Signature'}
                       </span>
-                      <span className="text-[10px] text-neutral-400 font-sans">{font.name}</span>
+                      <span className="text-[10px] text-ink-400 font-sans">{font.name}</span>
                     </button>
                   );
                 })}
@@ -496,7 +459,7 @@ export function SignatureModal({
           </div>
         )}
 
-        {/* UPLOAD TAB CONTENT (INK-102) */}
+        {/* UPLOAD TAB */}
         {activeTab === 'upload' && (
           <div className="space-y-3">
             <input
@@ -511,24 +474,24 @@ export function SignatureModal({
             {!uploadedImage ? (
               <div
                 onClick={() => fileInputRef.current?.click()}
-                className="border-2 border-dashed border-neutral-300 hover:border-blue-500 rounded-xl p-8 text-center cursor-pointer bg-neutral-50/50 transition-colors space-y-2"
+                className="border-2 border-dashed border-ink-200 hover:border-ink-400 rounded-lg p-8 text-center cursor-pointer bg-ink-50 transition-colors space-y-2"
                 data-testid="signature-dropzone"
               >
-                <div className="w-10 h-10 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center text-xl mx-auto">
-                  📤
+                <div className="w-10 h-10 rounded-full bg-white text-ink-600 flex items-center justify-center mx-auto shadow-xs">
+                  <UploadIcon className="w-5 h-5" />
                 </div>
                 <div>
-                  <p className="text-xs font-bold text-neutral-800">
+                  <p className="text-xs font-bold text-ink-800">
                     Click or drag signature image here
                   </p>
-                  <p className="text-[11px] text-neutral-500 mt-0.5">
-                    PNG, JPG, or SVG up to 5MB (transparent or white background)
+                  <p className="text-[11px] text-ink-500 mt-0.5">
+                    PNG, JPG, or SVG under 2MB (transparent or white background)
                   </p>
                 </div>
               </div>
             ) : (
               <div className="space-y-2">
-                <div className="border border-neutral-300 rounded-xl p-4 bg-neutral-50/70 flex items-center justify-center min-h-[140px]">
+                <div className="border border-ink-200 rounded-lg p-4 bg-white flex items-center justify-center min-h-[140px]">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={uploadedImage}
@@ -538,19 +501,19 @@ export function SignatureModal({
                   />
                 </div>
                 <div className="flex items-center justify-between text-xs">
-                  <label className="flex items-center gap-1.5 text-neutral-700 cursor-pointer">
+                  <label className="flex items-center gap-1.5 text-ink-700 cursor-pointer">
                     <input
                       type="checkbox"
                       checked={removeWhiteBg}
                       onChange={(e) => setRemoveWhiteBg(e.target.checked)}
-                      className="rounded text-blue-600"
+                      className="rounded border-ink-300 text-brand-600"
                     />
                     <span className="text-[11px]">Remove white background</span>
                   </label>
                   <button
                     type="button"
                     onClick={() => setUploadedImage(null)}
-                    className="text-red-600 font-semibold hover:underline text-xs"
+                    className="text-brand-700 font-semibold hover:underline text-xs"
                   >
                     Replace Image
                   </button>
@@ -558,39 +521,82 @@ export function SignatureModal({
               </div>
             )}
 
-            {uploadError && <p className="text-xs text-red-600 font-medium">{uploadError}</p>}
+            {uploadError && <p className="text-xs text-brand-700 font-medium">{uploadError}</p>}
           </div>
         )}
 
-        {/* Legal Disclaimer */}
-        <p className="text-[10px] text-neutral-400 leading-tight pt-1">
-          By clicking &quot;Adopt &amp; Apply&quot;, you agree that this electronic representation
-          will be applied to the document and legally binds you as your signature.
-        </p>
+        {/* Preview Strip showing Signature and Initials */}
+        <div className="bg-ink-50 border border-ink-200 rounded-md p-3 flex items-center justify-between gap-4">
+          <div className="flex-1 min-w-0">
+            <span className="text-[10px] font-bold text-ink-400 uppercase tracking-wider block mb-1">
+              Full Signature
+            </span>
+            <div className="h-10 flex items-center bg-white border border-ink-200 rounded px-2.5 overflow-hidden">
+              {activeTab === 'type' ? (
+                <span style={{ fontFamily: selectedFont.family }} className="text-xl text-ink-900 truncate">
+                  {typedName || defaultSignerName || 'Signature'}
+                </span>
+              ) : activeTab === 'upload' && uploadedImage ? (
+                <img src={uploadedImage} alt="Signature preview" className="h-7 object-contain" />
+              ) : (
+                <span className="text-xs text-ink-400 italic">Drawn on canvas</span>
+              )}
+            </div>
+          </div>
+
+          <div className="w-24 shrink-0">
+            <span className="text-[10px] font-bold text-ink-400 uppercase tracking-wider block mb-1">
+              Initials
+            </span>
+            <div className="h-10 flex items-center justify-center bg-white border border-ink-200 rounded px-2 overflow-hidden">
+              <span style={{ fontFamily: selectedFont.family }} className="text-lg text-ink-900 font-bold">
+                {currentInitials}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Legal Consent Line with 20px Checkbox */}
+        <div className="flex items-start gap-2.5 pt-1">
+          <input
+            id="signature-adoption-consent"
+            type="checkbox"
+            checked={consentAgreed}
+            onChange={(e) => setConsentAgreed(e.target.checked)}
+            className="h-5 w-5 rounded border border-ink-300 text-brand-600 focus:ring-2 focus:ring-ink-950 mt-0.5 cursor-pointer"
+          />
+          <label htmlFor="signature-adoption-consent" className="text-[13px] text-ink-700 select-none cursor-pointer leading-tight">
+            I agree that this signature and initials are the electronic representation of my signature
+            for all purposes when used on documents, including legally binding contracts.
+          </label>
+        </div>
 
         {/* Modal Actions */}
-        <div className="flex justify-end gap-2.5 pt-2 border-t border-neutral-100">
-          <button
+        <div className="flex justify-end gap-2.5 pt-3 border-t border-ink-100">
+          <Button
             type="button"
+            variant="ghost"
+            size="md"
             onClick={onClose}
-            className="px-4 py-2 text-xs font-semibold text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100 rounded-lg transition-colors"
             data-testid="cancel-signature-button"
           >
             Cancel
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
-            onClick={handleAdoptAndApply}
+            variant="primary"
+            size="md"
             disabled={
+              !consentAgreed ||
               (activeTab === 'draw' && !hasDrawn) ||
-              (activeTab === 'type' && !typedName.trim()) ||
+              (activeTab === 'type' && !typedName.trim() && !defaultSignerName) ||
               (activeTab === 'upload' && !uploadedImage)
             }
-            className="px-5 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white text-xs font-bold rounded-lg shadow-sm transition-all"
+            onClick={handleAdoptAndApply}
             data-testid="adopt-signature-button"
           >
-            Adopt &amp; Apply ✓
-          </button>
+            Adopt and sign
+          </Button>
         </div>
       </div>
     </div>

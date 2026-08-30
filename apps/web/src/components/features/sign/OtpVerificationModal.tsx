@@ -2,6 +2,9 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { getApiUrl } from '@/lib/api';
+import { maskEmail } from '@/lib/format';
+import { Button } from '@/components/ui/Button';
+import { ShieldCheck, AlertCircle, Loader2 } from 'lucide-react';
 
 interface OtpVerificationModalProps {
   token: string;
@@ -25,24 +28,39 @@ export function OtpVerificationModal({
   const [digits, setDigits] = useState<string[]>(['', '', '', '', '', '']);
   const [error, setError] = useState<string | null>(null);
   const [isVerifying, setIsVerifying] = useState(false);
+  const [isSuccess, setIsSuccess] = useState(false);
   const [isResending, setIsResending] = useState(false);
-  const [resendCooldown, setResendCooldown] = useState(60);
-  const [infoMessage, setInfoMessage] = useState<string | null>(null);
+  const [resendCooldown, setResendCooldown] = useState(30);
+  const [attemptsRemaining, setAttemptsRemaining] = useState<number>(5);
+  const [isLockedOut, setIsLockedOut] = useState(false);
+  const [expirySeconds, setExpirySeconds] = useState(600); // 10 minutes
 
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
-  // Countdown timer for resend
+  // Expiry countdown timer
   useEffect(() => {
-    if (resendCooldown <= 0) return;
+    if (!isOpen || expirySeconds <= 0) return;
     const interval = setInterval(() => {
-      setResendCooldown((prev) => prev - 1);
+      setExpirySeconds((prev) => Math.max(0, prev - 1));
     }, 1000);
     return () => clearInterval(interval);
-  }, [resendCooldown]);
+  }, [isOpen, expirySeconds]);
+
+  // Resend cooldown timer
+  useEffect(() => {
+    if (!isOpen || resendCooldown <= 0) return;
+    const interval = setInterval(() => {
+      setResendCooldown((prev) => Math.max(0, prev - 1));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [isOpen, resendCooldown]);
 
   // Focus first input on open
   useEffect(() => {
     if (isOpen) {
+      setDigits(['', '', '', '', '', '']);
+      setError(null);
+      setIsSuccess(false);
       setTimeout(() => {
         inputRefs.current[0]?.focus();
       }, 100);
@@ -52,7 +70,10 @@ export function OtpVerificationModal({
   if (!isOpen) return null;
 
   function handleDigitChange(index: number, value: string) {
-    // Handle pasting multi-character string
+    if (isLockedOut || expirySeconds === 0) return;
+    setError(null);
+
+    // Multi-character paste
     if (value.length > 1) {
       const cleanDigits = value.replace(/\D/g, '').slice(0, 6).split('');
       const newDigits = [...digits];
@@ -62,6 +83,10 @@ export function OtpVerificationModal({
       setDigits(newDigits);
       const nextIndex = Math.min(cleanDigits.length, 5);
       inputRefs.current[nextIndex]?.focus();
+
+      if (cleanDigits.length === 6) {
+        submitOtp(cleanDigits.join(''));
+      }
       return;
     }
 
@@ -73,49 +98,37 @@ export function OtpVerificationModal({
     if (char && index < 5) {
       inputRefs.current[index + 1]?.focus();
     }
+
+    // Auto-submit on 6th digit
+    if (char && index === 5) {
+      const fullOtp = newDigits.join('');
+      if (fullOtp.length === 6) {
+        submitOtp(fullOtp);
+      }
+    }
   }
 
   function handleKeyDown(index: number, e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key === 'Backspace' && !digits[index] && index > 0) {
-      inputRefs.current[index - 1]?.focus();
-    }
-  }
-
-  async function handleResendCode() {
-    if (resendCooldown > 0 || isResending) return;
-    setIsResending(true);
-    setError(null);
-    setInfoMessage(null);
-
-    try {
-      const res = await fetch(`${getApiUrl()}/api/v1/sign/${token}/otp/send`, {
-        method: 'POST',
-      });
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        throw new Error(data.error?.message || data.message || 'Failed to resend code.');
+    if (e.key === 'Backspace') {
+      if (!digits[index] && index > 0) {
+        const newDigits = [...digits];
+        newDigits[index - 1] = '';
+        setDigits(newDigits);
+        inputRefs.current[index - 1]?.focus();
+      } else if (digits[index]) {
+        const newDigits = [...digits];
+        newDigits[index] = '';
+        setDigits(newDigits);
       }
-
-      setInfoMessage(`New verification code sent to ${recipientEmail}`);
-      setResendCooldown(60);
-      setDigits(['', '', '', '', '', '']);
-      inputRefs.current[0]?.focus();
-    } catch (err: unknown) {
-      setError((err as Error).message);
-    } finally {
-      setIsResending(false);
+    } else if (e.key === 'ArrowLeft' && index > 0) {
+      inputRefs.current[index - 1]?.focus();
+    } else if (e.key === 'ArrowRight' && index < 5) {
+      inputRefs.current[index + 1]?.focus();
     }
   }
 
-  async function handleVerify(e?: React.FormEvent) {
-    if (e) e.preventDefault();
-    const otpCode = digits.join('');
-
-    if (otpCode.length !== 6) {
-      setError('Please enter all 6 digits of your verification code.');
-      return;
-    }
-
+  async function submitOtp(otpCode: string) {
+    if (isVerifying || isLockedOut || expirySeconds === 0) return;
     setIsVerifying(true);
     setError(null);
 
@@ -128,12 +141,21 @@ export function OtpVerificationModal({
 
       const data = await res.json();
       if (!res.ok || !data.success) {
+        const nextAttempts = attemptsRemaining - 1;
+        setAttemptsRemaining(nextAttempts);
+        if (nextAttempts <= 0) {
+          setIsLockedOut(true);
+          throw new Error('Too many failed attempts. Identity verification locked for 15 minutes.');
+        }
         throw new Error(
-          data.error?.message || data.message || 'Invalid or expired verification code.',
+          `That code doesn't match. ${nextAttempts} attempt${nextAttempts === 1 ? '' : 's'} remaining.`,
         );
       }
 
-      await onVerified(otpCode);
+      setIsSuccess(true);
+      setTimeout(async () => {
+        await onVerified(otpCode);
+      }, 400);
     } catch (err: unknown) {
       setError((err as Error).message);
     } finally {
@@ -141,102 +163,163 @@ export function OtpVerificationModal({
     }
   }
 
+  async function handleResendCode() {
+    if (resendCooldown > 0 || isResending || isLockedOut) return;
+    setIsResending(true);
+    setError(null);
+
+    try {
+      const res = await fetch(`${getApiUrl()}/api/v1/sign/${token}/otp/send`, {
+        method: 'POST',
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error?.message || data.message || 'Failed to resend code.');
+      }
+      setResendCooldown(30);
+      setExpirySeconds(600);
+    } catch (err: unknown) {
+      setError((err as Error).message);
+    } finally {
+      setIsResending(false);
+    }
+  }
+
+  const formatTimer = (totalSeconds: number) => {
+    const mins = Math.floor(totalSeconds / 60);
+    const secs = totalSeconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const isExpired = expirySeconds === 0;
+
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-5 text-neutral-900 border border-neutral-200 animate-in fade-in zoom-in-95 duration-200">
-        {/* Header */}
-        <div className="text-center space-y-1">
-          <div className="w-12 h-12 bg-red-50 text-[#ba0000] rounded-full flex items-center justify-center mx-auto mb-3 text-xl font-bold border border-red-200">
-            🔐
-          </div>
-          <h2 className="text-lg font-bold text-neutral-900">Verify Your Identity</h2>
-          <p className="text-xs text-neutral-500 max-w-xs mx-auto">
-            A 6-digit verification code was sent to{' '}
-            <strong className="text-neutral-800">{recipientEmail}</strong>
-            {recipientName ? ` for ${recipientName}` : ''} to execute{' '}
-            <em>&quot;{agreementTitle}&quot;</em>.
-          </p>
+    <div
+      className="fixed inset-0 z-50 bg-ink-950/55 backdrop-blur-[2px] flex items-center justify-center p-4 overflow-y-auto"
+      data-testid="otp-modal-overlay"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="otp-modal-title"
+    >
+      <div className="bg-white rounded-2xl max-w-[440px] w-full p-7 text-center shadow-[0_8px_16px_-4px_rgb(16_24_40/0.08),0_24px_48px_-12px_rgb(16_24_40/0.16)] border border-ink-200 animate-in fade-in zoom-in-95 duration-150">
+        {/* Header Icon */}
+        <div className="mx-auto h-12 w-12 rounded-xl bg-brand-50 text-brand-600 flex items-center justify-center mb-4">
+          <ShieldCheck className="w-6 h-6" aria-hidden="true" />
         </div>
 
-        {/* Error / Info Messages */}
-        {error && (
-          <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl flex items-center justify-between">
-            <span>⚠️ {error}</span>
-            <button onClick={() => setError(null)} className="font-bold text-red-600">
-              ×
-            </button>
-          </div>
-        )}
-        {infoMessage && (
-          <div className="p-3 bg-green-50 border border-green-200 text-green-800 text-xs rounded-xl flex items-center justify-between">
-            <span>✓ {infoMessage}</span>
-            <button onClick={() => setInfoMessage(null)} className="font-bold text-green-600">
-              ×
-            </button>
-          </div>
-        )}
+        <h2 id="otp-modal-title" className="text-xl font-bold text-ink-900 tracking-tight">
+          Verify Your Identity
+        </h2>
 
-        {/* 6-Digit Code Input Grid */}
-        <form onSubmit={handleVerify} className="space-y-5">
-          <div className="flex justify-center gap-2 sm:gap-3">
-            {digits.map((digit, idx) => (
+        <p className="text-[13px] text-ink-500 mt-2 max-w-[34ch] mx-auto leading-relaxed">
+          We sent a 6-digit code to{' '}
+          <strong className="text-ink-900 font-semibold">{maskEmail(recipientEmail)}</strong>. Enter it
+          to seal your signature on{' '}
+          <strong className="text-ink-900 font-semibold">{agreementTitle}</strong>.
+        </p>
+
+        {/* 6-Digit Cells */}
+        <div className="mt-7 flex justify-center gap-2" role="group" aria-label="One-time verification code">
+          {digits.map((digit, index) => {
+            const hasError = !!error;
+            return (
               <input
-                key={idx}
+                key={index}
                 ref={(el) => {
-                  inputRefs.current[idx] = el;
+                  inputRefs.current[index] = el;
                 }}
                 type="text"
                 inputMode="numeric"
-                maxLength={6}
+                pattern="[0-9]*"
+                autoComplete="one-time-code"
+                maxLength={1}
+                disabled={isLockedOut || isExpired || isVerifying || isSuccess}
                 value={digit}
-                onChange={(e) => handleDigitChange(idx, e.target.value)}
-                onKeyDown={(e) => handleKeyDown(idx, e)}
-                className={`w-11 h-13 sm:w-12 sm:h-14 text-center text-xl sm:text-2xl font-bold font-mono rounded-xl border transition-all focus:outline-none ${
-                  digit
-                    ? 'border-[#ba0000] bg-red-50/30 text-neutral-900 ring-2 ring-[#ba0000]/20'
-                    : 'border-neutral-300 bg-neutral-50 hover:bg-white text-neutral-900 focus:border-[#ba0000] focus:ring-2 focus:ring-[#ba0000]/20'
-                }`}
+                onChange={(e) => handleDigitChange(index, e.target.value)}
+                onKeyDown={(e) => handleKeyDown(index, e)}
+                className={`w-[52px] h-[60px] text-center text-2xl font-bold font-mono rounded-md border transition-all tabular-nums ${
+                  isSuccess
+                    ? 'bg-verified-50 border-verified-500 text-verified-700'
+                    : hasError
+                      ? 'bg-brand-50 border-brand-500 text-brand-900 animate-shake'
+                      : digit
+                        ? 'bg-white border-ink-300 text-ink-900'
+                        : 'bg-white border-ink-200 text-ink-900 hover:border-ink-300'
+                } focus:border-ink-900 focus:ring-2 focus:ring-ink-950/10 focus:outline-none disabled:bg-ink-50 disabled:text-ink-400 disabled:cursor-not-allowed`}
+                data-testid={`otp-input-${index}`}
               />
-            ))}
+            );
+          })}
+        </div>
+
+        {/* Expiry / Status Caption */}
+        <div className="mt-3 text-xs tabular-nums">
+          {isExpired ? (
+            <span className="text-brand-700 font-semibold">Code expired</span>
+          ) : (
+            <span className={expirySeconds < 60 ? 'text-amber-700 font-medium' : 'text-ink-500'}>
+              Code expires in {formatTimer(expirySeconds)}
+            </span>
+          )}
+        </div>
+
+        {/* Error Alert Line */}
+        {error && (
+          <div
+            role="alert"
+            className="mt-4 flex items-center justify-center gap-1.5 text-[13px] text-brand-700 font-medium"
+          >
+            <AlertCircle className="w-4 h-4 shrink-0 text-brand-600" />
+            <span>{error}</span>
           </div>
+        )}
 
-          {/* Action Buttons */}
-          <div className="space-y-3">
-            <button
-              type="submit"
-              disabled={isVerifying || digits.join('').length !== 6}
-              className="w-full py-3 bg-[#ba0000] hover:bg-red-700 disabled:opacity-50 text-white text-xs sm:text-sm font-bold rounded-xl shadow-sm transition-all flex items-center justify-center gap-2"
-            >
-              {isVerifying ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  Verifying Code...
-                </>
-              ) : (
-                'Confirm & Seal Signature'
-              )}
-            </button>
+        {/* CTA Button */}
+        <div className="mt-6">
+          <Button
+            type="button"
+            variant="primary"
+            size="lg"
+            className="w-full"
+            isLoading={isVerifying}
+            disabled={digits.some((d) => !d) || isLockedOut || isExpired}
+            onClick={() => submitOtp(digits.join(''))}
+            data-testid="otp-verify-submit-button"
+          >
+            Confirm &amp; Seal Signature
+          </Button>
+        </div>
 
-            <div className="flex items-center justify-between text-xs text-neutral-500 pt-1">
-              <button
-                type="button"
-                onClick={onClose}
-                className="hover:text-neutral-800 font-semibold"
-              >
-                Cancel
-              </button>
+        {/* Footer: Cancel & Resend */}
+        <div className="mt-5 flex items-center justify-between text-xs">
+          <Button type="button" variant="ghost" size="sm" onClick={onClose}>
+            Cancel
+          </Button>
 
-              <button
-                type="button"
-                onClick={handleResendCode}
-                disabled={resendCooldown > 0 || isResending}
-                className="font-bold text-[#ba0000] hover:underline disabled:opacity-40 disabled:no-underline"
-              >
-                {resendCooldown > 0 ? `Resend code in ${resendCooldown}s` : 'Resend code'}
-              </button>
-            </div>
-          </div>
-        </form>
+          <Button
+            type="button"
+            variant={isExpired ? 'outline' : 'link'}
+            size="sm"
+            disabled={resendCooldown > 0 || isResending || isLockedOut}
+            onClick={handleResendCode}
+          >
+            {isResending ? (
+              <span className="flex items-center gap-1">
+                <Loader2 className="w-3 h-3 animate-spin" /> Sending…
+              </span>
+            ) : resendCooldown > 0 ? (
+              `Resend in ${resendCooldown}s`
+            ) : (
+              'Resend code'
+            )}
+          </Button>
+        </div>
+
+        {/* Trust Note Line */}
+        <div className="mt-5 pt-4 border-t border-ink-100 flex items-center justify-center gap-1.5 text-xs text-ink-400">
+          <ShieldCheck className="w-3.5 h-3.5 text-ink-400" aria-hidden="true" />
+          <span>Your IP address, timestamp and device are recorded in the audit trail.</span>
+        </div>
       </div>
     </div>
   );
