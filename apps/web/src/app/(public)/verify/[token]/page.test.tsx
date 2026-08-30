@@ -76,7 +76,9 @@ describe('TokenVerifyPage Component Tests', () => {
 
     await waitFor(() => {
       expect(screen.getByText(/Verification Record Not Found/i)).toBeDefined();
-      expect(screen.getByText(/No verification record found for token "GS-test-token-123"/i)).toBeDefined();
+      expect(
+        screen.getByText(/No verification record found for token "GS-test-token-123"/i),
+      ).toBeDefined();
     });
   });
 });
