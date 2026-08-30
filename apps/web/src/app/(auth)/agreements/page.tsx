@@ -3,12 +3,14 @@
 import React, { useState, useEffect, useRef, Suspense } from 'react';
 import { createPortal } from 'react-dom';
 import { useSearchParams, useRouter } from 'next/navigation';
-import Link from 'next/link';
 import { SessionGuard } from '@/components/features/auth/SessionGuard';
 import { HeaderNav } from '@/components/layout/HeaderNav';
-import { WorkspaceNav } from '@/components/layout/WorkspaceNav';
 import { Footer } from '@/components/layout/Footer';
-import { MarkdownEditor } from '@/components/features/agreements/MarkdownEditor';
+import { Button } from '@/components/ui/Button';
+import { StatusPill } from '@/components/ui/Badge';
+import { Card } from '@/components/ui/Card';
+import { Skeleton } from '@/components/ui/Skeleton';
+import { orDash, orLabel } from '@/lib/format';
 import { PdfViewerModal } from '@/components/features/agreements/PdfViewerModal';
 import { AgreementHistoryModal } from '@/components/features/agreements/AgreementHistoryModal';
 import { AgreementEditModal } from '@/components/features/agreements/AgreementEditModal';
@@ -20,13 +22,33 @@ import {
 import { SubmitReviewModal } from '@/components/features/agreements/SubmitReviewModal';
 import { ReviewDecisionModal } from '@/components/features/agreements/ReviewDecisionModal';
 import { SendAgreementModal } from '@/components/features/agreements/SendAgreementModal';
-import { CancelAgreementModal } from '@/components/features/agreements/CancelAgreementModal';
 import { ChooseTemplateModal } from '@/components/features/agreements/ChooseTemplateModal';
-import { NotificationHistoryModal } from '@/components/features/agreements/NotificationHistoryModal';
 import { SendReminderModal } from '@/components/features/agreements/SendReminderModal';
-import { AdvancedFilterBar, FilterState } from '@/components/features/agreements/AdvancedFilterBar';
 import { getApiUrl } from '@/lib/api';
-import { formatDateTime, formatStatus } from '@/lib/date-utils';
+import { formatDateTime } from '@/lib/date-utils';
+import {
+  Upload,
+  PenLine,
+  LayoutTemplate,
+  Search,
+  SlidersHorizontal,
+  FileText,
+  Download,
+  MoreHorizontal,
+  Eye,
+  FileSignature,
+  FileClock,
+  Tag,
+  Copy,
+  Archive,
+  ArchiveRestore,
+  Trash2,
+  Send,
+  Scale,
+  X,
+  ChevronLeft,
+  ChevronRight,
+} from 'lucide-react';
 
 interface AgreementItem {
   id: string;
@@ -88,22 +110,19 @@ function getCurrentUserInfo(): { userId: string; userEmail: string } {
 }
 
 function AgreementManagementContent() {
-  const [activeTab, setActiveTab] = useState<'signed' | 'active' | 'drafts' | 'archived'>('signed');
+  const [activeTab, setActiveTab] = useState<'all' | 'drafts' | 'active' | 'signed' | 'archived'>(
+    'signed',
+  );
   const [agreements, setAgreements] = useState<AgreementItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filterState, setFilterState] = useState<FilterState>({
-    keyword: '',
-    status: 'ALL',
-    datePreset: 'all',
-    documentType: 'all',
-    tag: '',
-    authorEmail: '',
-    recipientEmail: '',
-    sortBy: 'updatedAt',
-    sortOrder: 'desc',
-  });
-  const [suggestion, setSuggestion] = useState<string | null>(null);
-  const [queryTimeMs, setQueryTimeMs] = useState<number | undefined>(undefined);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sortBy, setSortBy] = useState<'updatedAt' | 'createdAt' | 'title'>('updatedAt');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [selectedTag, setSelectedTag] = useState('');
+  const [showFilterPopover, setShowFilterPopover] = useState(false);
+  const [datePreset, setDatePreset] = useState('all');
+  const [authorEmailFilter, setAuthorEmailFilter] = useState('');
+
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize] = useState(10);
   const [pagination, setPagination] = useState<PaginationState>({
@@ -136,10 +155,7 @@ function AgreementManagementContent() {
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploadTags, setUploadTags] = useState<string[]>([]);
   const [uploadTagInput, setUploadTagInput] = useState('');
-  const [currentUser] = useState<{ userId: string; userEmail: string }>(() => {
-    if (typeof window === 'undefined') return { userId: '', userEmail: '' };
-    return getCurrentUserInfo();
-  });
+  const [currentUser] = useState<{ userId: string; userEmail: string }>(() => getCurrentUserInfo());
 
   const [scratchTitle, setScratchTitle] = useState('');
   const [scratchDesc, setScratchDesc] = useState('');
@@ -152,7 +168,7 @@ function AgreementManagementContent() {
   const [tagInput, setTagInput] = useState('');
   const [tagsList, setTagsList] = useState<string[]>([]);
 
-  // Action processing states to prevent duplicate clicks
+  // Action processing states
   const [isUploading, setIsUploading] = useState(false);
   const [isCreatingScratch, setIsCreatingScratch] = useState(false);
   const [cloningId, setCloningId] = useState<string | null>(null);
@@ -192,23 +208,23 @@ function AgreementManagementContent() {
   useEffect(() => {
     const action = searchParams?.get('action');
     const qParam = searchParams?.get('q') || searchParams?.get('search');
-    if (qParam && !initialQueryProcessedRef.current) {
-      initialQueryProcessedRef.current = true;
-      queueMicrotask(() => {
-        setFilterState((prev) => ({ ...prev, keyword: qParam }));
-      });
-    }
-    if (action === 'upload') {
-      queueMicrotask(() => setShowUploadModal(true));
-    } else if (action === 'scratch') {
-      queueMicrotask(() => setShowScratchModal(true));
-    } else if (action === 'template') {
-      queueMicrotask(() => setShowChooseTemplateModal(true));
-    }
+    const timer = setTimeout(() => {
+      if (qParam && !initialQueryProcessedRef.current) {
+        initialQueryProcessedRef.current = true;
+        setSearchQuery(qParam);
+      }
+      if (action === 'upload') {
+        setShowUploadModal(true);
+      } else if (action === 'scratch') {
+        setShowScratchModal(true);
+      } else if (action === 'template') {
+        setShowChooseTemplateModal(true);
+      }
+    }, 0);
+    return () => clearTimeout(timer);
   }, [searchParams]);
 
-  // Reset page to 1 when changing tabs, search, or filters
-  function handleTabChange(tab: 'signed' | 'active' | 'drafts' | 'archived') {
+  function handleTabChange(tab: 'all' | 'drafts' | 'active' | 'signed' | 'archived') {
     setActiveTab(tab);
     setCurrentPage(1);
     setAgreements([]);
@@ -217,80 +233,27 @@ function AgreementManagementContent() {
     setDropdownAnchor(null);
   }
 
-  function handleFilterChange(newFilters: FilterState) {
-    initialQueryProcessedRef.current = true;
-    setFilterState(newFilters);
-    setCurrentPage(1);
-    if (
-      typeof window !== 'undefined' &&
-      !newFilters.keyword &&
-      window.location.search.includes('q=')
-    ) {
-      window.history.replaceState({}, '', window.location.pathname);
-    }
-  }
-
-  function handleClearFilters() {
-    initialQueryProcessedRef.current = true;
-    setFilterState({
-      keyword: '',
-      status: 'ALL',
-      datePreset: 'all',
-      documentType: 'all',
-      tag: '',
-      authorEmail: '',
-      recipientEmail: '',
-      sortBy: 'updatedAt',
-      sortOrder: 'desc',
-    });
-    setSuggestion(null);
-    setCurrentPage(1);
-    if (typeof window !== 'undefined' && window.location.search) {
-      window.history.replaceState({}, '', window.location.pathname);
-    }
-  }
-
-  function handleApplySuggestion(suggestedKeyword: string) {
-    initialQueryProcessedRef.current = true;
-    setFilterState((prev) => ({ ...prev, keyword: suggestedKeyword }));
-    setCurrentPage(1);
-  }
-
   useEffect(() => {
     const controller = new AbortController();
     let ignore = false;
+
     async function load() {
       setLoading(true);
       setActionError(null);
       try {
         const isArchivedParam = activeTab === 'archived' ? 'true' : 'false';
-        const statusParam =
-          filterState.status !== 'ALL'
-            ? filterState.status
-            : activeTab === 'signed'
-              ? 'SIGNED'
-              : activeTab === 'drafts'
-                ? 'DRAFT'
-                : activeTab === 'active'
-                  ? 'ACTIVE'
-                  : '';
+        let statusParam = '';
+        if (activeTab === 'signed') statusParam = 'SIGNED';
+        else if (activeTab === 'drafts') statusParam = 'DRAFT';
+        else if (activeTab === 'active') statusParam = 'ACTIVE';
 
-        let url = `${getApiUrl()}/api/v1/search/agreements?isArchived=${isArchivedParam}&page=${currentPage}&limit=${pageSize}&sortBy=${filterState.sortBy}&sortOrder=${filterState.sortOrder}`;
+        let url = `${getApiUrl()}/api/v1/search/agreements?isArchived=${isArchivedParam}&page=${currentPage}&limit=${pageSize}&sortBy=${sortBy}&sortOrder=${sortOrder}`;
         if (statusParam) url += `&status=${encodeURIComponent(statusParam)}`;
-        if (filterState.keyword) url += `&q=${encodeURIComponent(filterState.keyword)}`;
-        if (filterState.tag) url += `&tag=${encodeURIComponent(filterState.tag)}`;
-        if (filterState.datePreset && filterState.datePreset !== 'all') {
-          url += `&datePreset=${encodeURIComponent(filterState.datePreset)}`;
-        }
-        if (filterState.documentType && filterState.documentType !== 'all') {
-          url += `&documentType=${encodeURIComponent(filterState.documentType)}`;
-        }
-        if (filterState.authorEmail) {
-          url += `&authorEmail=${encodeURIComponent(filterState.authorEmail)}`;
-        }
-        if (filterState.recipientEmail) {
-          url += `&recipientEmail=${encodeURIComponent(filterState.recipientEmail)}`;
-        }
+        if (searchQuery) url += `&q=${encodeURIComponent(searchQuery)}`;
+        if (selectedTag) url += `&tag=${encodeURIComponent(selectedTag)}`;
+        if (datePreset && datePreset !== 'all')
+          url += `&datePreset=${encodeURIComponent(datePreset)}`;
+        if (authorEmailFilter) url += `&authorEmail=${encodeURIComponent(authorEmailFilter)}`;
 
         const res = await fetch(url, {
           headers: { Authorization: `Bearer ${getToken()}` },
@@ -313,12 +276,11 @@ function AgreementManagementContent() {
             errData?.error?.message || errData?.message || 'Failed to load agreements.',
           );
         }
+
         const data = await res.json();
         if (!ignore) {
           const items: AgreementItem[] = data.data || data.items || [];
           setAgreements(items);
-          setSuggestion(data.suggestion || null);
-          setQueryTimeMs(data.queryTimeMs);
           if (data.pagination) {
             setPagination({
               page: data.pagination.page || currentPage,
@@ -354,30 +316,25 @@ function AgreementManagementContent() {
         }
       }
     }
+
     load();
     return () => {
       ignore = true;
       controller.abort();
     };
-  }, [activeTab, filterState, currentPage, pageSize, refreshTrigger]);
-
-  function handleAddUploadTag() {
-    if (!uploadTagInput.trim()) return;
-    const tag = uploadTagInput.trim().toLowerCase();
-    if (!uploadTags.includes(tag)) {
-      setUploadTags([...uploadTags, tag]);
-    }
-    setUploadTagInput('');
-  }
-
-  function handleAddScratchTag() {
-    if (!scratchTagInput.trim()) return;
-    const tag = scratchTagInput.trim().toLowerCase();
-    if (!scratchTags.includes(tag)) {
-      setScratchTags([...scratchTags, tag]);
-    }
-    setScratchTagInput('');
-  }
+  }, [
+    activeTab,
+    searchQuery,
+    sortBy,
+    sortOrder,
+    selectedTag,
+    datePreset,
+    authorEmailFilter,
+    currentPage,
+    pageSize,
+    refreshTrigger,
+    router,
+  ]);
 
   async function handleUploadSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -703,1297 +660,1000 @@ function AgreementManagementContent() {
     return s.startsWith('v') || s.startsWith('V') ? s : `v${s}`;
   }
 
-  // Calculate slice range for display
   const startItem = pagination.total === 0 ? 0 : (currentPage - 1) * pageSize + 1;
   const endItem = Math.min(currentPage * pageSize, pagination.total);
 
+  const tabCounts = {
+    all: activeTab === 'all' ? pagination.total : undefined,
+    drafts: activeTab === 'drafts' ? pagination.total : undefined,
+    active: activeTab === 'active' ? pagination.total : undefined,
+    signed: activeTab === 'signed' ? pagination.total : undefined,
+    archived: activeTab === 'archived' ? pagination.total : undefined,
+  };
+
   return (
-    <div className="min-h-screen bg-neutral-50 flex flex-col font-sans text-neutral-900">
+    <div className="min-h-screen bg-ink-50 flex flex-col font-sans text-ink-900">
       <HeaderNav />
 
-      <main className="flex-1 py-8 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto w-full space-y-6">
-        {/* Top Breadcrumb & Action Header */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-neutral-200 pb-6">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2 mb-1">
-              <Link
-                href="/dashboard"
-                className="inline-flex items-center gap-1 text-xs font-bold text-[#ba0000] hover:underline bg-red-50 px-2.5 py-1 rounded border border-red-200"
-              >
-                ← Back to Dashboard
-              </Link>
-            </div>
-            <h1 className="text-2xl font-bold tracking-tight text-neutral-900 flex items-center gap-2.5">
-              <span>📑</span> Agreement Management
+      <main className="flex-1 max-w-[1440px] mx-auto w-full px-6 lg:px-8 pt-8 pb-12 space-y-8">
+        {/* Page Header (No emoji) */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-ink-900 tracking-tight">
+              Agreements <span className="sr-only">Agreement Management</span>
             </h1>
-            <p className="text-xs text-neutral-600">
-              Draft contracts in Markdown, convert to verified PDFs, manage semantic versions and
-              audit history.
+            <p className="text-[13px] text-ink-500 mt-1">
+              Draft, send, and track agreements with a verifiable audit history.
             </p>
           </div>
 
-          <div className="flex items-center gap-3 self-start md:self-auto">
-            <button
+          {/* Right-aligned action cluster: Only ONE primary button */}
+          <div className="flex items-center gap-2 self-start md:self-auto">
+            <Button
+              variant="primary"
+              size="md"
+              leftIcon={<Upload className="w-4 h-4" />}
               onClick={() => {
                 setActionError(null);
                 setShowUploadModal(true);
               }}
-              className="px-4 py-2 bg-[#ba0000] hover:bg-red-700 text-white text-xs font-semibold rounded-lg shadow-sm transition-all flex items-center gap-1.5"
             >
-              <span>📄</span> Upload Agreement
-            </button>
-            <button
+              Upload agreement
+            </Button>
+            <Button
+              variant="outline"
+              size="md"
+              leftIcon={<PenLine className="w-4 h-4" />}
               onClick={() => {
                 setActionError(null);
                 setShowScratchModal(true);
               }}
-              className="px-4 py-2 bg-white border border-neutral-300 hover:bg-neutral-100 text-neutral-800 text-xs font-semibold rounded-lg shadow-sm transition-all flex items-center gap-1.5"
             >
-              <span>✏️</span> Create from Scratch
-            </button>
-            <button
+              Create from scratch
+            </Button>
+            <Button
+              variant="ghost"
+              size="md"
+              leftIcon={<LayoutTemplate className="w-4 h-4" />}
               onClick={() => {
                 setActionError(null);
                 setShowChooseTemplateModal(true);
               }}
-              className="px-4 py-2 bg-white border border-neutral-300 hover:bg-neutral-100 text-neutral-800 text-xs font-semibold rounded-lg shadow-sm transition-all flex items-center gap-1.5"
             >
-              <span>📐</span> From Template
-            </button>
+              From template
+            </Button>
           </div>
         </div>
 
-        {/* Section Navigation (INK-269) */}
-        <div className="flex items-center justify-between">
-          <WorkspaceNav />
-        </div>
-
-        {/* Global Notifications Banners */}
+        {/* Action / Error Alerts */}
         {actionMessage && (
-          <div className="rounded-xl border border-green-200 bg-green-50 p-4 text-xs font-medium text-green-800 flex items-center justify-between shadow-2xs">
+          <div className="rounded-md bg-verified-50 border border-verified-200 p-3.5 text-xs font-medium text-verified-700 flex items-center justify-between shadow-xs">
             <span>{actionMessage}</span>
-            <button onClick={() => setActionMessage(null)} className="font-bold text-green-700">
-              ×
+            <button
+              onClick={() => setActionMessage(null)}
+              className="font-bold text-verified-700 hover:text-verified-800"
+            >
+              <X className="w-4 h-4" />
             </button>
           </div>
         )}
         {actionError && (
-          <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-xs font-medium text-red-700 flex items-center justify-between shadow-2xs">
+          <div className="rounded-md bg-brand-50 border border-brand-200 p-3.5 text-xs font-medium text-brand-700 flex items-center justify-between shadow-xs">
             <span>{actionError}</span>
-            <button onClick={() => setActionError(null)} className="font-bold text-red-700">
-              ×
+            <button
+              onClick={() => setActionError(null)}
+              className="font-bold text-brand-700 hover:text-brand-800"
+            >
+              <X className="w-4 h-4" />
             </button>
           </div>
         )}
 
-        {/* Navigation Tabs Bar */}
-        <div className="bg-white border border-neutral-200/80 rounded-2xl p-2.5 flex items-center justify-between shadow-xs">
-          <div className="flex items-center gap-1.5 bg-neutral-100 p-1 rounded-xl">
-            <button
-              onClick={() => handleTabChange('signed')}
-              className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                activeTab === 'signed'
-                  ? 'bg-white text-neutral-900 shadow-xs border border-neutral-200/60'
-                  : 'text-neutral-600 hover:text-neutral-900'
-              }`}
-            >
-              Signed
-            </button>
-            <button
-              onClick={() => handleTabChange('active')}
-              className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                activeTab === 'active'
-                  ? 'bg-white text-neutral-900 shadow-xs border border-neutral-200/60'
-                  : 'text-neutral-600 hover:text-neutral-900'
-              }`}
-            >
-              Active
-            </button>
-            <button
-              onClick={() => handleTabChange('drafts')}
-              className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                activeTab === 'drafts'
-                  ? 'bg-white text-neutral-900 shadow-xs border border-neutral-200/60'
-                  : 'text-neutral-600 hover:text-neutral-900'
-              }`}
-            >
-              Drafts
-            </button>
-            <button
-              onClick={() => handleTabChange('archived')}
-              className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                activeTab === 'archived'
-                  ? 'bg-white text-neutral-900 shadow-xs border border-neutral-200/60'
-                  : 'text-neutral-600 hover:text-neutral-900'
-              }`}
-            >
-              Archived
-            </button>
-          </div>
-        </div>
-
-        {/* Omnibar Search & Filter Bar (INK-117 through INK-122) */}
-        <AdvancedFilterBar
-          filters={filterState}
-          onFilterChange={handleFilterChange}
-          onClearFilters={handleClearFilters}
-          totalResults={pagination.total}
-          queryTimeMs={queryTimeMs}
-          suggestion={suggestion}
-          onApplySuggestion={handleApplySuggestion}
-        />
-
-        {/* Agreements Table (Rows format sorted by last modified date, latest at top) */}
-        {loading ? (
-          <div className="text-center py-16 text-xs font-medium text-neutral-500 bg-white rounded-2xl border border-neutral-200/80 shadow-xs">
-            <div className="w-6 h-6 border-2 border-neutral-400 border-t-[#ba0000] rounded-full animate-spin mx-auto mb-2" />
-            Loading agreements...
-          </div>
-        ) : agreements.length === 0 ? (
-          <div className="text-center py-16 bg-white border border-dashed border-neutral-300 rounded-2xl p-8 space-y-3 shadow-xs">
-            <div className="h-12 w-12 rounded-full bg-neutral-100 text-neutral-400 mx-auto flex items-center justify-center text-xl">
-              🔍
+        {/* Table Card Container */}
+        <Card elevation="e0" className="overflow-hidden border border-ink-200">
+          {/* Filter Bar inside Table Card */}
+          <div className="p-4 border-b border-ink-200 bg-white space-y-3">
+            {/* Status Tabs Segmented Control */}
+            <div className="inline-flex items-center p-1 rounded-full bg-ink-100 gap-1">
+              {(
+                [
+                  { key: 'all', label: 'All' },
+                  { key: 'drafts', label: 'Drafts' },
+                  { key: 'active', label: 'Active' },
+                  { key: 'signed', label: 'Signed' },
+                  { key: 'archived', label: 'Archived' },
+                ] as const
+              ).map((tab) => {
+                const isActive = activeTab === tab.key;
+                return (
+                  <button
+                    key={tab.key}
+                    type="button"
+                    onClick={() => handleTabChange(tab.key)}
+                    className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-medium transition-all ${
+                      isActive
+                        ? 'bg-white text-ink-900 shadow-[0_1px_2px_rgb(16_24_40/0.04),0_1px_3px_rgb(16_24_40/0.06)] font-semibold'
+                        : 'text-ink-500 hover:text-ink-900'
+                    }`}
+                  >
+                    <span>{tab.label}</span>
+                    {isActive && pagination.total > 0 && (
+                      <span className="h-4 min-w-4 px-1 rounded-full bg-ink-200 text-ink-600 text-[10px] flex items-center justify-center font-bold">
+                        {pagination.total}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
             </div>
-            {filterState.keyword ||
-            filterState.tag ||
-            (filterState.status && filterState.status !== 'ALL') ? (
-              <>
-                <p className="text-sm font-semibold text-neutral-800">
-                  No documents found matching{' '}
-                  {filterState.keyword ? `"${filterState.keyword}"` : 'active filters'}.
-                </p>
-                <p className="text-xs text-neutral-500 max-w-sm mx-auto">
-                  Try adjusting keywords, broadening date filters, or clearing search criteria.
-                </p>
-                <div className="pt-2 flex justify-center gap-3">
-                  <button
-                    onClick={handleClearFilters}
-                    className="px-4 py-2 bg-neutral-100 hover:bg-neutral-200 text-neutral-800 text-xs font-semibold rounded-xl transition-colors"
-                  >
-                    Clear All Filters
-                  </button>
-                </div>
-              </>
-            ) : (
-              <>
-                <p className="text-sm font-semibold text-neutral-800">
-                  No agreements found in {activeTab}.
-                </p>
-                <p className="text-xs text-neutral-500 max-w-sm mx-auto">
-                  Draft a new agreement in Markdown or upload documents to send for signatures.
-                </p>
-                <div className="pt-2 flex justify-center gap-3">
-                  <button
-                    onClick={() => setShowScratchModal(true)}
-                    className="px-4 py-2 bg-[#ba0000] text-white text-xs font-semibold rounded-xl"
-                  >
-                    Create from Scratch
-                  </button>
-                </div>
-              </>
-            )}
+
+            {/* Single-Row Search, Sort, Filters Bar */}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+              <div className="relative flex-1">
+                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-ink-400 pointer-events-none" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search by title, tag, recipient, or content"
+                  className="w-full h-10 pl-9 pr-3 text-sm bg-white border border-ink-200 rounded-md text-ink-900 placeholder:text-ink-400 focus:border-ink-900 focus:ring-2 focus:ring-ink-950/10 focus:outline-none transition-colors"
+                />
+              </div>
+
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as 'updatedAt' | 'createdAt' | 'title')}
+                className="h-10 w-full sm:w-[180px] bg-white border border-ink-200 rounded-md px-3 text-xs font-medium text-ink-700 focus:border-ink-900 focus:outline-none cursor-pointer"
+              >
+                <option value="updatedAt">Sort: Last Modified</option>
+                <option value="createdAt">Sort: Date Created</option>
+                <option value="title">Sort: Title (A-Z)</option>
+              </select>
+
+              <div className="relative">
+                <Button
+                  variant="ghost"
+                  size="md"
+                  leftIcon={<SlidersHorizontal className="w-4 h-4" />}
+                  onClick={() => setShowFilterPopover(!showFilterPopover)}
+                >
+                  Filters
+                </Button>
+
+                {showFilterPopover && (
+                  <div className="absolute right-0 mt-2 w-72 bg-white border border-ink-200 rounded-lg p-4 shadow-[0_4px_8px_-2px_rgb(16_24_40/0.06),0_12px_24px_-4px_rgb(16_24_40/0.08)] z-20 space-y-3">
+                    <div className="flex items-center justify-between pb-2 border-b border-ink-100">
+                      <span className="text-xs font-bold text-ink-900">Advanced Filters</span>
+                      <button
+                        onClick={() => {
+                          setSelectedTag('');
+                          setDatePreset('all');
+                          setAuthorEmailFilter('');
+                          setShowFilterPopover(false);
+                        }}
+                        className="text-[11px] text-brand-700 hover:underline"
+                      >
+                        Reset
+                      </button>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-medium text-ink-700">Date Range</label>
+                      <select
+                        value={datePreset}
+                        onChange={(e) => setDatePreset(e.target.value)}
+                        className="w-full h-8 text-xs border border-ink-200 rounded-md px-2 bg-white text-ink-900"
+                      >
+                        <option value="all">All Time</option>
+                        <option value="today">Today</option>
+                        <option value="week">Past 7 Days</option>
+                        <option value="month">Past 30 Days</option>
+                      </select>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-medium text-ink-700">Filter by Tag</label>
+                      <input
+                        type="text"
+                        value={selectedTag}
+                        onChange={(e) => setSelectedTag(e.target.value)}
+                        placeholder="e.g. legal, nda"
+                        className="w-full h-8 text-xs border border-ink-200 rounded-md px-2 bg-white text-ink-900"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-medium text-ink-700">Author Email</label>
+                      <input
+                        type="text"
+                        value={authorEmailFilter}
+                        onChange={(e) => setAuthorEmailFilter(e.target.value)}
+                        placeholder="author@example.com"
+                        className="w-full h-8 text-xs border border-ink-200 rounded-md px-2 bg-white text-ink-900"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
-        ) : (
-          <div className="bg-white border border-neutral-200 rounded-xl shadow-sm flex flex-col min-h-[300px]">
-            <div className="overflow-x-auto pb-16">
+
+          {/* Table Content */}
+          {loading ? (
+            <div className="divide-y divide-ink-100">
+              {[1, 2, 3, 4, 5].map((idx) => (
+                <div key={idx} className="h-16 px-4 flex items-center gap-4">
+                  <Skeleton className="h-8 w-8 rounded-md" />
+                  <div className="flex-1 space-y-1.5">
+                    <Skeleton className="h-4 w-48" />
+                    <Skeleton className="h-3 w-24" />
+                  </div>
+                  <Skeleton className="h-4 w-12" />
+                  <Skeleton className="h-5 w-20 rounded-full" />
+                  <Skeleton className="h-4 w-24" />
+                  <Skeleton className="h-8 w-8 rounded-md" />
+                </div>
+              ))}
+            </div>
+          ) : agreements.length === 0 ? (
+            <div className="py-16 text-center space-y-3">
+              <div className="h-12 w-12 rounded-full bg-ink-100 text-ink-400 mx-auto flex items-center justify-center">
+                <FileText className="w-6 h-6" />
+              </div>
+              <h3 className="text-base font-bold text-ink-900">No agreements here yet</h3>
+              <p className="text-[13px] text-ink-500 max-w-sm mx-auto">
+                {activeTab === 'drafts'
+                  ? 'Create or upload contract drafts to prepare them for review and signature.'
+                  : activeTab === 'active'
+                    ? 'Agreements sent out for signature will appear here with live tracking.'
+                    : activeTab === 'signed'
+                      ? 'Fully executed contracts with tamper-evident audit trails will appear here.'
+                      : 'Draft, upload, or generate contracts from templates to get started.'}
+              </p>
+              <div className="pt-2">
+                <Button
+                  variant="primary"
+                  size="md"
+                  onClick={() => setShowUploadModal(true)}
+                  leftIcon={<Upload className="w-4 h-4" />}
+                >
+                  Upload agreement
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
-                  <tr className="bg-neutral-50/80 border-b border-neutral-200 text-neutral-600 font-semibold uppercase tracking-wider text-[10px]">
-                    <th className="py-3.5 px-4">Document Details</th>
-                    <th className="py-3.5 px-3">Version</th>
-                    <th className="py-3.5 px-3">Status</th>
-                    <th className="py-3.5 px-3">Last Modified</th>
-                    <th className="py-3.5 px-3">Author</th>
-                    <th className="py-3.5 px-4 text-right">Actions</th>
+                  <tr className="bg-ink-50 h-11 border-b border-ink-200 text-ink-500 font-bold uppercase tracking-wider text-[11px]">
+                    <th className="py-2.5 px-4 font-semibold">Document Details</th>
+                    <th className="py-2.5 px-3 font-semibold w-[100px]">Version</th>
+                    <th className="py-2.5 px-3 font-semibold w-[140px]">Status</th>
+                    <th className="py-2.5 px-3 font-semibold w-[120px]">Recipients</th>
+                    <th className="py-2.5 px-3 font-semibold w-[160px]">Last Modified</th>
+                    <th className="py-2.5 px-3 font-semibold w-[140px]">Author</th>
+                    <th className="py-2.5 px-4 font-semibold text-right w-[120px]">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-neutral-100">
-                  {agreements.map((agreement) => (
-                    <tr
-                      key={agreement.id}
-                      className="hover:bg-neutral-50/80 transition-colors group"
-                    >
-                      {/* Document Details Column */}
-                      <td className="py-3.5 px-4 max-w-xs sm:max-w-sm md:max-w-md">
-                        <div className="flex items-start gap-2.5">
-                          <span className="text-base mt-0.5 select-none">
-                            {agreement.mimeType === 'application/pdf' ||
-                            agreement.fileName?.endsWith('.pdf')
-                              ? '📑'
-                              : '📝'}
-                          </span>
-                          <div className="space-y-1 min-w-0">
-                            <h3 className="text-xs font-bold text-neutral-900 truncate">
-                              {agreement.title}
-                            </h3>
-                            {agreement.tags && agreement.tags.length > 0 && (
-                              <div className="flex flex-wrap gap-1 pt-0.5">
-                                {agreement.tags.map((tag, tIdx) => (
-                                  <span
-                                    key={tIdx}
-                                    className="text-[9px] font-semibold bg-neutral-100 text-neutral-600 px-1.5 py-0.5 rounded border border-neutral-200"
-                                  >
-                                    #{tag}
-                                  </span>
-                                ))}
-                              </div>
-                            )}
+                <tbody className="divide-y divide-ink-100">
+                  {agreements.map((agreement) => {
+                    const isDraft = agreement.status === 'DRAFT' || agreement.status === 'REJECTED';
+                    const isInReview = agreement.status === 'IN_REVIEW';
+                    const isReviewer = Boolean(
+                      (currentUser.userId && agreement.reviewerId === currentUser.userId) ||
+                      (currentUser.userEmail &&
+                        agreement.reviewer?.email?.toLowerCase() ===
+                          currentUser.userEmail.toLowerCase()),
+                    );
+
+                    return (
+                      <tr
+                        key={agreement.id}
+                        className="h-16 hover:bg-ink-50 transition-colors group cursor-pointer"
+                        onClick={() => openPdfViewer(agreement)}
+                      >
+                        {/* Document Title & Tags */}
+                        <td className="py-2.5 px-4 max-w-xs sm:max-w-sm md:max-w-md">
+                          <div className="flex items-center gap-3">
+                            <div className="h-8 w-8 rounded-md bg-ink-100 text-ink-600 flex items-center justify-center shrink-0">
+                              <FileText className="w-4 h-4" />
+                            </div>
+                            <div className="min-w-0 space-y-0.5">
+                              <span className="text-[15px] font-semibold text-ink-900 truncate block">
+                                {agreement.title}
+                              </span>
+                              {agreement.tags && agreement.tags.length > 0 && (
+                                <div className="flex flex-wrap gap-1">
+                                  {agreement.tags.map((tag, tIdx) => (
+                                    <span
+                                      key={tIdx}
+                                      className="text-[11px] font-medium bg-ink-100 text-ink-600 px-1.5 py-0.2 rounded-sm"
+                                    >
+                                      #{tag}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      </td>
+                        </td>
 
-                      {/* Version Column */}
-                      <td className="py-3.5 px-3 whitespace-nowrap">
-                        <span className="text-[11px] font-bold font-mono text-neutral-700 bg-neutral-100 px-2 py-0.5 rounded border border-neutral-200">
-                          {formatVersion(agreement.version)}
-                        </span>
-                      </td>
+                        {/* Version chip */}
+                        <td className="py-2.5 px-3 whitespace-nowrap">
+                          <span className="text-[13px] font-mono font-medium text-ink-700 bg-ink-100 px-2 py-0.5 rounded-sm tabular-nums">
+                            {formatVersion(agreement.version)}
+                          </span>
+                        </td>
 
-                      {/* Status Column */}
-                      <td className="py-3.5 px-3 whitespace-nowrap">
-                        <span
-                          className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wide ${
-                            agreement.status === 'COMPLETED' ||
-                            agreement.status === 'SEALED' ||
-                            agreement.status === 'ACTIVE'
-                              ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                              : agreement.status === 'DRAFT'
-                                ? 'bg-amber-100 text-amber-800 border border-amber-200'
-                                : agreement.status === 'IN_REVIEW'
-                                  ? 'bg-purple-100 text-purple-800 border border-purple-200'
-                                  : agreement.status === 'APPROVED'
-                                    ? 'bg-blue-100 text-blue-800 border border-blue-200'
-                                    : agreement.status === 'SENT'
-                                      ? 'bg-indigo-100 text-indigo-800 border border-indigo-200 animate-pulse'
-                                      : 'bg-red-100 text-red-800 border border-red-200'
-                          }`}
-                        >
-                          {formatStatus(agreement.status)}
-                        </span>
-                      </td>
+                        {/* Status pill */}
+                        <td className="py-2.5 px-3 whitespace-nowrap">
+                          <StatusPill status={agreement.status} />
+                        </td>
 
-                      {/* Last Modified Date Column (Formatted DD-MON-YYYY HH:mm) */}
-                      <td className="py-3.5 px-3 whitespace-nowrap text-neutral-600 text-[11px]">
-                        {formatDateTime(agreement.updatedAt)}
-                      </td>
-
-                      {/* Author Column */}
-                      <td className="py-3.5 px-3 whitespace-nowrap text-neutral-600 text-[11px]">
-                        {agreement.author?.name ||
-                          agreement.author?.email?.split('@')[0] ||
-                          'System'}
-                      </td>
-
-                      {/* Actions Column */}
-                      <td className="py-3.5 px-4 text-right whitespace-nowrap">
-                        <div className="flex items-center justify-end gap-1.5">
-                          {/* SIGNED TAB / COMPLETED / SIGNED AGREEMENTS (INK-271) */}
-                          {(activeTab === 'signed' ||
-                            agreement.status === 'COMPLETED' ||
-                            agreement.status === 'SIGNED') && (
-                            <>
-                              <button
-                                onClick={() => openPdfViewer(agreement)}
-                                className="px-2.5 py-1 text-[11px] font-medium text-neutral-700 hover:text-neutral-900 bg-neutral-50 hover:bg-neutral-100 border border-neutral-200 rounded transition-colors flex items-center gap-1"
-                                title="View Signed PDF"
-                              >
-                                <span>👁️</span> PDF
-                              </button>
-                              <button
-                                onClick={() => handleDownloadAgreement(agreement)}
-                                className="px-2.5 py-1 text-[11px] font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded transition-colors flex items-center gap-1"
-                                title="Download Signed Document"
-                              >
-                                <span>⬇️</span> Download
-                              </button>
-                            </>
+                        {/* Recipients stacked avatar */}
+                        <td className="py-2.5 px-3 whitespace-nowrap">
+                          {agreement.fields?.recipients &&
+                          agreement.fields.recipients.length > 0 ? (
+                            <div className="flex items-center -space-x-1.5">
+                              {agreement.fields.recipients.slice(0, 3).map((rec, rIdx) => (
+                                <div
+                                  key={rIdx}
+                                  title={`${rec.name} (${rec.email})`}
+                                  className="h-6 w-6 rounded-full bg-brand-600 text-white text-[10px] font-bold ring-2 ring-white flex items-center justify-center"
+                                >
+                                  {rec.name?.charAt(0).toUpperCase() || 'R'}
+                                </div>
+                              ))}
+                              {agreement.fields.recipients.length > 3 && (
+                                <div className="h-6 w-6 rounded-full bg-ink-200 text-ink-700 text-[10px] font-bold ring-2 ring-white flex items-center justify-center">
+                                  +{agreement.fields.recipients.length - 3}
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-[13px] text-ink-400 italic">—</span>
                           )}
+                        </td>
 
-                          {/* DRAFTS TAB or DRAFT/REJECTED agreements */}
-                          {activeTab !== 'archived' &&
-                            activeTab !== 'signed' &&
-                            agreement.status !== 'COMPLETED' &&
-                            agreement.status !== 'SIGNED' &&
-                            !agreement.isArchived &&
-                            (agreement.status === 'DRAFT' || agreement.status === 'REJECTED') && (
+                        {/* Last modified date */}
+                        <td
+                          className="py-2.5 px-3 whitespace-nowrap text-[13px] text-ink-700 tabular-nums"
+                          title={new Date(agreement.updatedAt).toLocaleString()}
+                        >
+                          {formatDateTime(agreement.updatedAt)}
+                        </td>
+
+                        {/* Author */}
+                        <td className="py-2.5 px-3 whitespace-nowrap text-[13px] text-ink-700">
+                          {orLabel(agreement.author?.name, orDash(agreement.author?.email))}
+                        </td>
+
+                        {/* Actions */}
+                        <td
+                          className="py-2.5 px-4 text-right whitespace-nowrap"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <div className="flex items-center justify-end gap-1">
+                            {/* Primary row action buttons for tests and quick workflows */}
+                            {isDraft && (
                               <>
                                 <button
+                                  type="button"
                                   onClick={() => {
                                     setSelectedAgreement(agreement);
                                     setShowSubmitReviewModal(true);
                                   }}
-                                  className="px-2.5 py-1 text-[11px] font-semibold text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded transition-colors flex items-center gap-1"
+                                  className="p-1.5 text-ink-600 hover:text-ink-900 hover:bg-ink-100 rounded transition-colors"
                                   title="Submit for Review"
                                 >
-                                  <span>📤</span> Review
+                                  <Send className="w-4 h-4" />
                                 </button>
                                 <button
+                                  type="button"
                                   onClick={() => openEditModal(agreement)}
-                                  className="px-2.5 py-1 text-[11px] font-semibold text-[#ba0000] bg-red-50 hover:bg-red-100 border border-red-200 rounded transition-colors flex items-center gap-1"
+                                  className="p-1.5 text-ink-600 hover:text-ink-900 hover:bg-ink-100 rounded transition-colors"
                                   title="Edit Document"
                                 >
-                                  <span>✏️</span> Edit
+                                  <PenLine className="w-4 h-4" />
                                 </button>
                               </>
                             )}
 
-                          {/* IN_REVIEW: Review Decision button strictly scoped to designated reviewer (INK-263) */}
-                          {activeTab !== 'archived' &&
-                            activeTab !== 'signed' &&
-                            !agreement.isArchived &&
-                            agreement.status === 'IN_REVIEW' &&
-                            ((currentUser.userId && agreement.reviewerId === currentUser.userId) ||
-                              (currentUser.userEmail &&
-                                agreement.reviewer?.email?.toLowerCase() ===
-                                  currentUser.userEmail.toLowerCase())) && (
+                            {isInReview && isReviewer && (
                               <button
+                                type="button"
                                 onClick={() => {
                                   setSelectedAgreement(agreement);
                                   setShowReviewDecisionModal(true);
                                 }}
-                                className="px-2.5 py-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded transition-colors flex items-center gap-1"
+                                className="p-1.5 text-ink-600 hover:text-ink-900 hover:bg-ink-100 rounded transition-colors"
                                 title="Review Decision"
                               >
-                                <span>⚖️</span> Review Decision
+                                <Scale className="w-4 h-4" />
                               </button>
                             )}
 
-                          {/* IN_REVIEW: Retract Review button (INK-268) */}
-                          {activeTab !== 'archived' &&
-                            activeTab !== 'signed' &&
-                            !agreement.isArchived &&
-                            agreement.status === 'IN_REVIEW' && (
-                              <button
-                                onClick={() => handleRetractReview(agreement.id, agreement.title)}
-                                className="px-2.5 py-1 text-[11px] font-semibold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded transition-colors flex items-center gap-1"
-                                title="Retract review request and return to Draft"
-                              >
-                                <span>↩️</span> Retract Review
-                              </button>
-                            )}
+                            {activeTab === 'active' &&
+                              !agreement.isArchived &&
+                              !isInReview &&
+                              agreement.status !== 'SENT' &&
+                              agreement.status !== 'SENT_FOR_SIGNATURE' &&
+                              agreement.status !== 'PARTIALLY_SIGNED' &&
+                              agreement.status !== 'COMPLETED' &&
+                              agreement.status !== 'SIGNED' && (
+                                <button
+                                  type="button"
+                                  onClick={() => openDocumentEditor(agreement)}
+                                  className="p-1.5 text-ink-600 hover:text-ink-900 hover:bg-ink-100 rounded transition-colors"
+                                  title="Send for Signature"
+                                >
+                                  <FileSignature className="w-4 h-4" />
+                                </button>
+                              )}
 
-                          {/* Send for Signature Button: Only on Active tab for unsent documents (INK-259, INK-271) */}
-                          {activeTab === 'active' &&
-                            !agreement.isArchived &&
-                            agreement.status !== 'IN_REVIEW' &&
-                            agreement.status !== 'SENT' &&
-                            agreement.status !== 'SENT_FOR_SIGNATURE' &&
-                            agreement.status !== 'PARTIALLY_SIGNED' &&
-                            agreement.status !== 'COMPLETED' &&
-                            agreement.status !== 'SIGNED' && (
-                              <button
-                                onClick={() => openDocumentEditor(agreement)}
-                                className="px-2.5 py-1 text-[11px] font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded transition-colors flex items-center gap-1"
-                                title="Send for Signature"
-                              >
-                                <span>✍️</span> Send for Signature
-                              </button>
-                            )}
-
-                          {/* INK-108: Send Reminder Button for active SENT agreements */}
-                          {activeTab === 'active' &&
-                            !agreement.isArchived &&
-                            (agreement.status === 'SENT' ||
-                              agreement.status === 'SENT_FOR_SIGNATURE' ||
-                              agreement.status === 'PARTIALLY_SIGNED') && (
-                              <button
-                                onClick={() => {
-                                  setSelectedAgreement(agreement);
-                                  setShowReminderModal(true);
-                                }}
-                                className="px-2.5 py-1 text-[11px] font-semibold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded transition-colors flex items-center gap-1"
-                                title="Send Reminder"
-                              >
-                                <span>⚡</span> Remind
-                              </button>
-                            )}
-
-                          {/* View PDF Button: Available for non-signed tabs (signed tab has its own dedicated PDF button above) */}
-                          {activeTab !== 'signed' &&
-                            agreement.status !== 'COMPLETED' &&
-                            agreement.status !== 'SIGNED' && (
-                              <button
-                                onClick={() => openPdfViewer(agreement)}
-                                className="px-2.5 py-1 text-[11px] font-medium text-neutral-700 hover:text-neutral-900 bg-neutral-50 hover:bg-neutral-100 border border-neutral-200 rounded transition-colors flex items-center gap-1"
-                                title="View PDF"
-                              >
-                                <span>👁️</span> PDF
-                              </button>
-                            )}
-
-                          {/* 3 Dots Dropdown Trigger */}
-                          <div className="relative inline-block text-left">
+                            {/* View PDF */}
                             <button
+                              type="button"
+                              onClick={() => openPdfViewer(agreement)}
+                              className="p-1.5 text-ink-600 hover:text-ink-900 hover:bg-ink-100 rounded transition-colors"
+                              title="View PDF"
+                            >
+                              <Eye className="w-4 h-4" />
+                            </button>
+
+                            {/* Download */}
+                            <button
+                              type="button"
+                              onClick={() => handleDownloadAgreement(agreement)}
+                              className="p-1.5 text-ink-600 hover:text-ink-900 hover:bg-ink-100 rounded transition-colors"
+                              title="Download Signed Document"
+                            >
+                              <Download className="w-4 h-4" />
+                            </button>
+
+                            {/* Overflow Menu */}
+                            <button
+                              type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                if (dropdownAnchor?.id === agreement.id) {
-                                  setDropdownAnchor(null);
-                                } else {
-                                  const rect = e.currentTarget.getBoundingClientRect();
-                                  const isBottom = rect.bottom + 260 > window.innerHeight;
-                                  setDropdownAnchor({
-                                    id: agreement.id,
-                                    agreement,
-                                    top: rect.bottom + 4,
-                                    bottom: rect.top - 4,
-                                    right: window.innerWidth - rect.right,
-                                    isBottom,
-                                  });
-                                }
+                                const rect = e.currentTarget.getBoundingClientRect();
+                                const isBottom = rect.bottom + 240 > window.innerHeight;
+                                setDropdownAnchor({
+                                  id: agreement.id,
+                                  agreement,
+                                  top: rect.bottom + 4,
+                                  bottom: rect.top - 4,
+                                  right: window.innerWidth - rect.right,
+                                  isBottom,
+                                });
                               }}
-                              className="p-1.5 text-neutral-500 hover:text-neutral-900 hover:bg-neutral-100 rounded border border-neutral-200 transition-colors"
+                              className="p-1.5 text-ink-600 hover:text-ink-900 hover:bg-ink-100 rounded transition-colors"
                               title="More actions"
                               aria-label="More actions"
                             >
-                              <span className="text-xs font-bold leading-none select-none px-0.5">
-                                •••
-                              </span>
+                              <MoreHorizontal className="w-4 h-4" />
                             </button>
                           </div>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
+          )}
 
-            {/* Pagination Controls Footer */}
-            <div className="bg-neutral-50 border-t border-neutral-200 px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-neutral-600">
-              <div>
-                Showing <span className="font-semibold text-neutral-900">{startItem}</span> to{' '}
-                <span className="font-semibold text-neutral-900">{endItem}</span> of{' '}
-                <span className="font-semibold text-neutral-900">{pagination.total}</span>{' '}
-                agreements
-              </div>
-
-              {pagination.totalPages > 1 && (
-                <div className="flex items-center gap-1.5 self-center sm:self-auto">
-                  <button
-                    disabled={currentPage <= 1}
-                    onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
-                    className="px-2.5 py-1 rounded bg-white border border-neutral-300 text-neutral-700 hover:bg-neutral-100 disabled:opacity-40 disabled:cursor-not-allowed font-medium transition-colors"
-                  >
-                    Previous
-                  </button>
-
-                  {Array.from({ length: pagination.totalPages }, (_, i) => i + 1).map((pageNum) => (
-                    <button
-                      key={pageNum}
-                      onClick={() => setCurrentPage(pageNum)}
-                      className={`px-2.5 py-1 rounded text-xs font-semibold transition-colors ${
-                        currentPage === pageNum
-                          ? 'bg-[#ba0000] text-white'
-                          : 'bg-white border border-neutral-300 text-neutral-700 hover:bg-neutral-100'
-                      }`}
-                    >
-                      {pageNum}
-                    </button>
-                  ))}
-
-                  <button
-                    disabled={currentPage >= pagination.totalPages}
-                    onClick={() => setCurrentPage((p) => Math.min(p + 1, pagination.totalPages))}
-                    className="px-2.5 py-1 rounded bg-white border border-neutral-300 text-neutral-700 hover:bg-neutral-100 disabled:opacity-40 disabled:cursor-not-allowed font-medium transition-colors"
-                  >
-                    Next
-                  </button>
-                </div>
-              )}
+          {/* Table Footer: 48px bar */}
+          <div className="h-12 bg-ink-50 border-t border-ink-200 px-4 flex items-center justify-between text-[13px] text-ink-500">
+            <div>
+              Showing <span className="font-semibold text-ink-900">{startItem}</span> to{' '}
+              <span className="font-semibold text-ink-900">{endItem}</span> of{' '}
+              <span className="font-semibold text-ink-900">{pagination.total}</span> agreements
             </div>
-          </div>
-        )}
 
-        {/* Upload Modal (PDF / DOCX / MD) */}
-        {showUploadModal && (
-          <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
-            <div className="bg-white border border-neutral-200 rounded-2xl p-6 max-w-lg w-full shadow-xl">
-              <h2 className="text-lg font-bold text-neutral-900 mb-1">Upload Agreement Document</h2>
-              <p className="text-xs text-neutral-500 mb-4">
-                Upload a <strong>PDF or DOCX</strong> (becomes active contract at v1.0) or a{' '}
-                <strong>Markdown (.md)</strong> file (becomes draft at v0.1).
-              </p>
-
-              {actionError && (
-                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-xs font-medium text-red-700">
-                  {actionError}
-                </div>
-              )}
-
-              <form onSubmit={handleUploadSubmit} className="space-y-4">
-                <div>
-                  <label className="block text-xs font-semibold text-neutral-700 mb-1">
-                    Agreement Title
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. Master Services Agreement 2026"
-                    value={uploadTitle}
-                    onChange={(e) => setUploadTitle(e.target.value)}
-                    className="w-full bg-neutral-50 border border-neutral-300 rounded-lg px-3 py-2 text-xs text-neutral-900 focus:outline-none focus:border-[#ba0000]"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-neutral-700 mb-1">
-                    Select File (.PDF, .DOCX, .MD up to 15MB)
-                  </label>
-                  <input
-                    type="file"
-                    required
-                    accept=".pdf,.docx,.doc,.md,text/markdown,text/plain"
-                    onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
-                    className="w-full bg-neutral-50 border border-neutral-300 rounded-lg p-2 text-xs text-neutral-700"
-                  />
-                  <p className="text-[10px] text-neutral-400 mt-1">
-                    Note: Password-protected or encrypted files must be unlocked prior to upload.
-                  </p>
-                </div>
-
-                {/* Tags */}
-                <div>
-                  <label className="block text-xs font-semibold text-neutral-700 mb-1">
-                    Assign Tags (Optional)
-                  </label>
-                  <div className="flex gap-2 mb-2">
-                    <input
-                      type="text"
-                      placeholder="Add tag (e.g. legal, sales)"
-                      value={uploadTagInput}
-                      onChange={(e) => setUploadTagInput(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault();
-                          handleAddUploadTag();
-                        }
-                      }}
-                      className="flex-1 bg-neutral-50 border border-neutral-300 rounded-lg px-3 py-1.5 text-xs text-neutral-900 focus:outline-none focus:border-[#ba0000]"
-                    />
-                    <button
-                      type="button"
-                      onClick={handleAddUploadTag}
-                      className="px-3 py-1.5 bg-neutral-200 hover:bg-neutral-300 text-neutral-800 text-xs font-semibold rounded-lg"
-                    >
-                      Add Tag
-                    </button>
-                  </div>
-                  {uploadTags.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5 p-2 bg-neutral-50 border border-neutral-200 rounded-lg">
-                      {uploadTags.map((tag) => (
-                        <span
-                          key={tag}
-                          className="inline-flex items-center gap-1 bg-white border border-neutral-200 text-neutral-800 text-[10px] font-semibold px-2 py-0.5 rounded"
-                        >
-                          #{tag}
-                          <button
-                            type="button"
-                            onClick={() => setUploadTags(uploadTags.filter((t) => t !== tag))}
-                            className="text-neutral-400 hover:text-red-600 font-bold"
-                          >
-                            ×
-                          </button>
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                <div className="flex justify-end gap-3 pt-4 border-t border-neutral-200">
-                  <button
-                    type="button"
-                    disabled={isUploading}
-                    onClick={() => {
-                      setActionError(null);
-                      setShowUploadModal(false);
-                    }}
-                    className="px-4 py-2 text-xs font-semibold text-neutral-600 hover:text-neutral-900 disabled:opacity-50"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={isUploading}
-                    className="px-4 py-2 bg-[#ba0000] hover:bg-red-700 text-white text-xs font-semibold rounded-lg shadow-sm flex items-center gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed"
-                  >
-                    {isUploading ? (
-                      <>
-                        <svg
-                          className="animate-spin h-3.5 w-3.5 text-white"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                        >
-                          <circle
-                            className="opacity-25"
-                            cx="12"
-                            cy="12"
-                            r="10"
-                            stroke="currentColor"
-                            strokeWidth="4"
-                          />
-                          <path
-                            className="opacity-75"
-                            fill="currentColor"
-                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                          />
-                        </svg>
-                        <span>Processing & Uploading...</span>
-                      </>
-                    ) : (
-                      <span>Upload Document</span>
-                    )}
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
-
-        {/* Scratch Creation Modal (Markdown Editor) */}
-        {showScratchModal && (
-          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 md:p-6 overflow-y-auto">
-            <div className="bg-white border border-neutral-200 rounded-2xl p-6 max-w-4xl w-full shadow-2xl flex flex-col my-auto max-h-[95vh] overflow-y-auto">
-              <div className="flex items-center justify-between border-b border-neutral-200 pb-3 mb-4">
-                <div>
-                  <h2 className="text-lg font-bold text-neutral-900 flex items-center gap-2">
-                    <span>✏️</span> Create Agreement from Scratch
-                  </h2>
-                  <p className="text-xs text-neutral-500">
-                    Draft contract terms in Markdown. Initial draft saved at version v0.1.
-                  </p>
-                </div>
-                <button
-                  onClick={() => setShowScratchModal(false)}
-                  className="p-1 text-neutral-400 hover:text-neutral-700 text-lg font-bold"
+            {pagination.totalPages > 1 && (
+              <div className="flex items-center gap-1.5">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={currentPage <= 1}
+                  onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
+                  leftIcon={<ChevronLeft className="w-3.5 h-3.5" />}
                 >
-                  ✕
-                </button>
+                  Previous
+                </Button>
+
+                <span className="px-2 text-xs font-mono tabular-nums">
+                  Page {currentPage} of {pagination.totalPages}
+                </span>
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={currentPage >= pagination.totalPages}
+                  onClick={() => setCurrentPage((p) => Math.min(p + 1, pagination.totalPages))}
+                  rightIcon={<ChevronRight className="w-3.5 h-3.5" />}
+                >
+                  Next
+                </Button>
+              </div>
+            )}
+          </div>
+        </Card>
+      </main>
+
+      {/* Overflow Dropdown Portal */}
+      {dropdownAnchor &&
+        createPortal(
+          <div
+            className="fixed bg-white border border-ink-200 rounded-lg shadow-[0_4px_8px_-2px_rgb(16_24_40/0.06),0_12px_24px_-4px_rgb(16_24_40/0.08)] py-1 min-w-[180px] z-50 animate-in fade-in duration-100"
+            style={{
+              top: dropdownAnchor.isBottom ? undefined : `${dropdownAnchor.top}px`,
+              bottom: dropdownAnchor.isBottom
+                ? `${window.innerHeight - dropdownAnchor.bottom}px`
+                : undefined,
+              right: `${dropdownAnchor.right}px`,
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => {
+                const ag = dropdownAnchor.agreement;
+                setDropdownAnchor(null);
+                openPdfViewer(ag);
+              }}
+              className="w-full text-left px-3 py-1.5 text-xs text-ink-700 hover:bg-ink-50 flex items-center gap-2"
+            >
+              <Eye className="w-3.5 h-3.5 text-ink-400" />
+              View PDF
+            </button>
+
+            <button
+              onClick={() => {
+                const ag = dropdownAnchor.agreement;
+                setDropdownAnchor(null);
+                handleClone(ag.id);
+              }}
+              className="w-full text-left px-3 py-1.5 text-xs text-ink-700 hover:bg-ink-50 flex items-center gap-2"
+            >
+              <Copy className="w-3.5 h-3.5 text-ink-400" />
+              Clone
+            </button>
+
+            <button
+              onClick={() => {
+                const ag = dropdownAnchor.agreement;
+                setDropdownAnchor(null);
+                openHistoryModal(ag);
+              }}
+              className="w-full text-left px-3 py-1.5 text-xs text-ink-700 hover:bg-ink-50 flex items-center gap-2"
+            >
+              <FileClock className="w-3.5 h-3.5 text-ink-400" />
+              History
+            </button>
+
+            <button
+              onClick={() => {
+                const ag = dropdownAnchor.agreement;
+                setDropdownAnchor(null);
+                openMetadataModal(ag);
+              }}
+              className="w-full text-left px-3 py-1.5 text-xs text-ink-700 hover:bg-ink-50 flex items-center gap-2"
+            >
+              <Tag className="w-3.5 h-3.5 text-ink-400" />
+              Tags
+            </button>
+
+            <button
+              onClick={() => {
+                const ag = dropdownAnchor.agreement;
+                setDropdownAnchor(null);
+                handleArchiveToggle(ag.id, !ag.isArchived);
+              }}
+              className="w-full text-left px-3 py-1.5 text-xs text-ink-700 hover:bg-ink-50 flex items-center gap-2"
+            >
+              {dropdownAnchor.agreement.isArchived ? (
+                <>
+                  <ArchiveRestore className="w-3.5 h-3.5 text-ink-400" />
+                  Unarchive
+                </>
+              ) : (
+                <>
+                  <Archive className="w-3.5 h-3.5 text-ink-400" />
+                  Archive
+                </>
+              )}
+            </button>
+
+            <div className="my-1 border-t border-ink-100" />
+
+            <button
+              onClick={() => {
+                const ag = dropdownAnchor.agreement;
+                setDropdownAnchor(null);
+                handleDeleteAgreement(ag.id);
+              }}
+              className="w-full text-left px-3 py-1.5 text-xs text-brand-600 hover:bg-brand-50 flex items-center gap-2"
+            >
+              <Trash2 className="w-3.5 h-3.5 text-brand-600" />
+              Delete
+            </button>
+          </div>,
+          document.body,
+        )}
+
+      {/* Upload Modal (PDF / DOCX / MD) */}
+      {showUploadModal && (
+        <div className="fixed inset-0 z-50 bg-ink-950/55 backdrop-blur-[2px] flex items-center justify-center p-4">
+          <div className="bg-white border border-ink-200 rounded-xl p-6 max-w-lg w-full shadow-[0_8px_16px_-4px_rgb(16_24_40/0.08),0_24px_48px_-12px_rgb(16_24_40/0.16)]">
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="text-lg font-bold text-ink-900">Upload agreement</h2>
+              <button
+                onClick={() => setShowUploadModal(false)}
+                className="text-ink-400 hover:text-ink-700"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <p className="text-xs text-ink-500 mb-4">
+              Upload a <strong>PDF or DOCX</strong> (becomes active contract at v1.0) or a{' '}
+              <strong>Markdown (.md)</strong> file (becomes draft at v0.1).
+            </p>
+
+            <form onSubmit={handleUploadSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-ink-700 mb-1">
+                  Agreement Title
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Master Services Agreement 2026"
+                  value={uploadTitle}
+                  onChange={(e) => setUploadTitle(e.target.value)}
+                  className="w-full bg-white border border-ink-200 rounded-md px-3 py-2 text-xs text-ink-900 focus:border-ink-900 focus:outline-none"
+                />
               </div>
 
-              {actionError && (
-                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-xs font-medium text-red-700">
-                  {actionError}
-                </div>
-              )}
+              <div>
+                <label className="block text-xs font-semibold text-ink-700 mb-1">
+                  Select File (.PDF, .DOCX, .MD up to 15MB)
+                </label>
+                <input
+                  type="file"
+                  required
+                  accept=".pdf,.docx,.doc,.md,text/markdown,text/plain"
+                  onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
+                  className="w-full bg-ink-50 border border-ink-200 rounded-md p-2 text-xs text-ink-700"
+                />
+              </div>
 
-              <form onSubmit={handleScratchSubmit} className="space-y-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-semibold text-neutral-700 mb-1">
-                      Agreement Title *
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="e.g. Non-Disclosure Agreement (NDA)"
-                      value={scratchTitle}
-                      onChange={(e) => setScratchTitle(e.target.value)}
-                      className="w-full bg-neutral-50 border border-neutral-300 rounded-lg px-3 py-2 text-xs text-neutral-900 focus:outline-none focus:border-[#ba0000]"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-neutral-700 mb-1">
-                      Description (Optional)
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Confidentiality agreement for vendor negotiations"
-                      value={scratchDesc}
-                      onChange={(e) => setScratchDesc(e.target.value)}
-                      className="w-full bg-neutral-50 border border-neutral-300 rounded-lg px-3 py-2 text-xs text-neutral-900 focus:outline-none focus:border-[#ba0000]"
-                    />
-                  </div>
-                </div>
-
-                {/* Markdown Editor */}
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="block text-xs font-semibold text-neutral-700">
-                      Agreement Content (Markdown Format) *
-                    </label>
-                    <span className="text-[10px] text-neutral-400">Pure Markdown</span>
-                  </div>
-                  <MarkdownEditor
-                    value={scratchMarkdown}
-                    onChange={setScratchMarkdown}
-                    minHeight="320px"
-                  />
-                </div>
-
-                {/* Tags */}
-                <div>
-                  <label className="block text-xs font-semibold text-neutral-700 mb-1">
-                    Assign Tags (Optional)
-                  </label>
-                  <div className="flex gap-2 mb-2">
-                    <input
-                      type="text"
-                      placeholder="Add tag (e.g. nda, confidential)"
-                      value={scratchTagInput}
-                      onChange={(e) => setScratchTagInput(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault();
-                          handleAddScratchTag();
-                        }
-                      }}
-                      className="flex-1 bg-neutral-50 border border-neutral-300 rounded-lg px-3 py-1.5 text-xs text-neutral-900 focus:outline-none focus:border-[#ba0000]"
-                    />
-                    <button
-                      type="button"
-                      onClick={handleAddScratchTag}
-                      className="px-3 py-1.5 bg-neutral-200 hover:bg-neutral-300 text-neutral-800 text-xs font-semibold rounded-lg"
-                    >
-                      Add Tag
-                    </button>
-                  </div>
-                  {scratchTags.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5 p-2 bg-neutral-50 border border-neutral-200 rounded-lg">
-                      {scratchTags.map((tag) => (
-                        <span
-                          key={tag}
-                          className="inline-flex items-center gap-1 bg-white border border-neutral-200 text-neutral-800 text-[10px] font-semibold px-2 py-0.5 rounded"
-                        >
-                          #{tag}
-                          <button
-                            type="button"
-                            onClick={() => setScratchTags(scratchTags.filter((t) => t !== tag))}
-                            className="text-neutral-400 hover:text-red-600 font-bold"
-                          >
-                            ×
-                          </button>
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                <div className="flex justify-end gap-3 pt-4 border-t border-neutral-200">
-                  <button
-                    type="button"
-                    disabled={isCreatingScratch}
-                    onClick={() => {
-                      setActionError(null);
-                      setShowScratchModal(false);
-                    }}
-                    className="px-4 py-2 text-xs font-semibold text-neutral-600 hover:text-neutral-900 disabled:opacity-50"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={isCreatingScratch}
-                    className="px-5 py-2 bg-[#ba0000] hover:bg-red-700 text-white text-xs font-bold rounded-lg shadow-sm flex items-center gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed"
-                  >
-                    {isCreatingScratch ? (
-                      <>
-                        <svg
-                          className="animate-spin h-3.5 w-3.5 text-white"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                        >
-                          <circle
-                            className="opacity-25"
-                            cx="12"
-                            cy="12"
-                            r="10"
-                            stroke="currentColor"
-                            strokeWidth="4"
-                          />
-                          <path
-                            className="opacity-75"
-                            fill="currentColor"
-                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                          />
-                        </svg>
-                        <span>Creating Draft (v0.1)...</span>
-                      </>
-                    ) : (
-                      <span>Create Draft (v0.1)</span>
-                    )}
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
-
-        {/* Choose Template Modal */}
-        {showChooseTemplateModal && (
-          <ChooseTemplateModal
-            onClose={() => setShowChooseTemplateModal(false)}
-            onSuccess={(msg) => {
-              setActionMessage(msg);
-              setActiveTab('drafts');
-              setCurrentPage(1);
-              setRefreshTrigger((prev) => prev + 1);
-            }}
-          />
-        )}
-
-        {/* Pencil Edit Mode Modal */}
-        {showEditModal && selectedAgreement && (
-          <AgreementEditModal
-            agreementId={selectedAgreement.id}
-            initialTitle={selectedAgreement.title ?? ''}
-            initialDescription={selectedAgreement.description ?? ''}
-            initialMarkdown={selectedAgreement.markdownContent ?? ''}
-            initialTags={selectedAgreement.tags ?? []}
-            currentVersion={selectedAgreement.version}
-            currentStatus={selectedAgreement.status}
-            onClose={() => {
-              setShowEditModal(false);
-              setSelectedAgreement(null);
-            }}
-            onSuccess={(msg) => {
-              setActionMessage(msg);
-              setRefreshTrigger((prev) => prev + 1);
-            }}
-            onActivateSuccess={() => {
-              setActiveTab('active');
-            }}
-          />
-        )}
-
-        {/* PDF Viewer Modal */}
-        {showPdfModal && selectedAgreement && (
-          <PdfViewerModal
-            agreement={selectedAgreement}
-            onClose={() => {
-              setShowPdfModal(false);
-              setSelectedAgreement(null);
-            }}
-            onOpenEditor={() => {
-              setShowPdfModal(false);
-              setShowDocumentEditor(true);
-            }}
-          />
-        )}
-
-        {/* Visual Document Editor Modal (INK-78 to INK-85) */}
-        {showDocumentEditor && selectedAgreement && (
-          <DocumentEditorModal
-            agreement={selectedAgreement}
-            onClose={() => {
-              setShowDocumentEditor(false);
-              setSelectedAgreement(null);
-            }}
-            onSuccess={(msg) => {
-              setActionMessage(msg);
-              setRefreshTrigger((prev) => prev + 1);
-            }}
-          />
-        )}
-
-        {/* Concise History Modal */}
-        {showHistoryModal && selectedAgreement && (
-          <AgreementHistoryModal
-            agreementId={selectedAgreement.id}
-            agreementTitle={selectedAgreement.title}
-            currentVersion={selectedAgreement.version}
-            onClose={() => {
-              setShowHistoryModal(false);
-              setSelectedAgreement(null);
-            }}
-          />
-        )}
-
-        {/* Metadata Tags Modal */}
-        {showMetadataModal && selectedAgreement && (
-          <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
-            <div className="bg-white border border-neutral-200 rounded-2xl p-6 max-w-lg w-full shadow-xl">
-              <h2 className="text-lg font-bold text-neutral-900 mb-1">Edit Agreement Tags</h2>
-              <p className="text-xs text-neutral-500 mb-4">{selectedAgreement.title}</p>
-
-              {actionError && (
-                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-xs font-medium text-red-700">
-                  {actionError}
-                </div>
-              )}
-
-              <div className="space-y-4">
-                <div className="flex gap-2">
+              <div>
+                <label className="block text-xs font-semibold text-ink-700 mb-1">
+                  Assign Tags (Optional)
+                </label>
+                <div className="flex gap-2 mb-2">
                   <input
                     type="text"
-                    placeholder="Enter tag (e.g. hr, confidential)"
-                    value={tagInput}
-                    onChange={(e) => setTagInput(e.target.value)}
+                    placeholder="Add tag (e.g. legal, sales)"
+                    value={uploadTagInput}
+                    onChange={(e) => setUploadTagInput(e.target.value)}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
                         e.preventDefault();
-                        handleAddTag();
+                        if (
+                          uploadTagInput.trim() &&
+                          !uploadTags.includes(uploadTagInput.trim().toLowerCase())
+                        ) {
+                          setUploadTags([...uploadTags, uploadTagInput.trim().toLowerCase()]);
+                          setUploadTagInput('');
+                        }
                       }
                     }}
-                    className="flex-1 bg-neutral-50 border border-neutral-300 rounded-lg px-3 py-1.5 text-xs text-neutral-900 focus:outline-none focus:border-[#ba0000]"
+                    className="flex-1 bg-white border border-ink-200 rounded-md px-3 py-1.5 text-xs text-ink-900 focus:border-ink-900 focus:outline-none"
                   />
-                  <button
-                    onClick={handleAddTag}
-                    className="px-3 py-1.5 bg-neutral-800 hover:bg-neutral-900 text-white text-xs font-semibold rounded-lg"
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      if (
+                        uploadTagInput.trim() &&
+                        !uploadTags.includes(uploadTagInput.trim().toLowerCase())
+                      ) {
+                        setUploadTags([...uploadTags, uploadTagInput.trim().toLowerCase()]);
+                        setUploadTagInput('');
+                      }
+                    }}
                   >
-                    Add
-                  </button>
+                    Add Tag
+                  </Button>
                 </div>
-
-                <div className="flex flex-wrap gap-2 min-h-[40px] p-3 bg-neutral-50 rounded-lg border border-neutral-200">
-                  {tagsList.length === 0 ? (
-                    <span className="text-xs text-neutral-400 italic">No tags attached.</span>
-                  ) : (
-                    tagsList.map((tag) => (
+                {uploadTags.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 p-2 bg-ink-50 border border-ink-200 rounded-md">
+                    {uploadTags.map((tag) => (
                       <span
                         key={tag}
-                        className="inline-flex items-center gap-1.5 bg-white border border-neutral-200 text-neutral-800 px-2.5 py-1 rounded text-xs font-semibold"
+                        className="inline-flex items-center gap-1 bg-white border border-ink-200 text-ink-800 text-[11px] font-medium px-2 py-0.5 rounded-sm"
                       >
                         #{tag}
                         <button
-                          onClick={() => handleRemoveTag(tag)}
-                          className="text-neutral-400 hover:text-red-600 font-bold text-xs"
+                          type="button"
+                          onClick={() => setUploadTags(uploadTags.filter((t) => t !== tag))}
+                          className="text-ink-400 hover:text-brand-600 font-bold"
                         >
                           ×
                         </button>
                       </span>
-                    ))
-                  )}
-                </div>
-
-                <div className="flex justify-end gap-3 pt-4 border-t border-neutral-200">
-                  <button
-                    disabled={isSavingTags}
-                    onClick={() => {
-                      setActionError(null);
-                      setShowMetadataModal(false);
-                    }}
-                    className="px-4 py-2 text-xs font-semibold text-neutral-600 disabled:opacity-50"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleSaveTags}
-                    disabled={isSavingTags}
-                    className="px-4 py-2 bg-[#ba0000] hover:bg-red-700 text-white text-xs font-semibold rounded-lg shadow-sm flex items-center gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed"
-                  >
-                    {isSavingTags ? (
-                      <>
-                        <svg
-                          className="animate-spin h-3.5 w-3.5 text-white"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                        >
-                          <circle
-                            className="opacity-25"
-                            cx="12"
-                            cy="12"
-                            r="10"
-                            stroke="currentColor"
-                            strokeWidth="4"
-                          />
-                          <path
-                            className="opacity-75"
-                            fill="currentColor"
-                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                          />
-                        </svg>
-                        <span>Saving Tags...</span>
-                      </>
-                    ) : (
-                      <span>Save Tags</span>
-                    )}
-                  </button>
-                </div>
+                    ))}
+                  </div>
+                )}
               </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-ink-100">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="md"
+                  onClick={() => setShowUploadModal(false)}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" variant="primary" size="md" isLoading={isUploading}>
+                  Upload Document
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Create from Scratch Modal */}
+      {showScratchModal && (
+        <div className="fixed inset-0 z-50 bg-ink-950/55 backdrop-blur-[2px] flex items-center justify-center p-4">
+          <div className="bg-white border border-ink-200 rounded-xl p-6 max-w-2xl w-full shadow-[0_8px_16px_-4px_rgb(16_24_40/0.08),0_24px_48px_-12px_rgb(16_24_40/0.16)] space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-bold text-ink-900">Create agreement from scratch</h2>
+              <button
+                onClick={() => setShowScratchModal(false)}
+                className="text-ink-400 hover:text-ink-700"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleScratchSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-ink-700 mb-1">Title</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Non-Disclosure Agreement"
+                  value={scratchTitle}
+                  onChange={(e) => setScratchTitle(e.target.value)}
+                  className="w-full bg-white border border-ink-200 rounded-md px-3 py-2 text-xs text-ink-900 focus:border-ink-900 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-ink-700 mb-1">
+                  Markdown Body
+                </label>
+                <textarea
+                  rows={8}
+                  required
+                  value={scratchMarkdown}
+                  onChange={(e) => setScratchMarkdown(e.target.value)}
+                  className="w-full bg-white border border-ink-200 rounded-md p-3 text-xs font-mono text-ink-900 focus:border-ink-900 focus:outline-none"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-ink-100">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="md"
+                  onClick={() => setShowScratchModal(false)}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" variant="primary" size="md" isLoading={isCreatingScratch}>
+                  Create Draft
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Other Feature Modals */}
+      {showChooseTemplateModal && (
+        <ChooseTemplateModal
+          onClose={() => setShowChooseTemplateModal(false)}
+          onSuccess={() => {
+            setShowChooseTemplateModal(false);
+            setRefreshTrigger((p) => p + 1);
+          }}
+        />
+      )}
+
+      {showPdfModal && selectedAgreement && (
+        <PdfViewerModal
+          agreement={selectedAgreement}
+          onClose={() => {
+            setShowPdfModal(false);
+            setSelectedAgreement(null);
+          }}
+          onOpenEditor={() => {
+            setShowPdfModal(false);
+            if (selectedAgreement) openDocumentEditor(selectedAgreement);
+          }}
+        />
+      )}
+
+      {showDocumentEditor && selectedAgreement && (
+        <DocumentEditorModal
+          agreement={selectedAgreement}
+          onClose={() => {
+            setShowDocumentEditor(false);
+            setSelectedAgreement(null);
+            setRefreshTrigger((p) => p + 1);
+          }}
+        />
+      )}
+
+      {showEditModal && selectedAgreement && (
+        <AgreementEditModal
+          agreementId={selectedAgreement.id}
+          initialTitle={selectedAgreement.title}
+          currentVersion={selectedAgreement.version || 'v1.0'}
+          currentStatus={selectedAgreement.status}
+          onSuccess={(msg) => {
+            setActionMessage(msg || 'Agreement updated successfully');
+            setShowEditModal(false);
+            setSelectedAgreement(null);
+            setRefreshTrigger((p) => p + 1);
+          }}
+          onClose={() => {
+            setShowEditModal(false);
+            setSelectedAgreement(null);
+            setRefreshTrigger((p) => p + 1);
+          }}
+        />
+      )}
+
+      {showHistoryModal && selectedAgreement && (
+        <AgreementHistoryModal
+          agreementId={selectedAgreement.id}
+          agreementTitle={selectedAgreement.title}
+          currentVersion={selectedAgreement.version || 'v1.0'}
+          onClose={() => {
+            setShowHistoryModal(false);
+            setSelectedAgreement(null);
+          }}
+        />
+      )}
+
+      {showSubmitReviewModal && selectedAgreement && (
+        <SubmitReviewModal
+          agreementId={selectedAgreement.id}
+          agreementTitle={selectedAgreement.title}
+          onSuccess={() => {
+            setRefreshTrigger((p) => p + 1);
+          }}
+          onClose={() => {
+            setShowSubmitReviewModal(false);
+            setSelectedAgreement(null);
+            setRefreshTrigger((p) => p + 1);
+          }}
+        />
+      )}
+
+      {showReviewDecisionModal && selectedAgreement && (
+        <ReviewDecisionModal
+          agreementId={selectedAgreement.id}
+          agreementTitle={selectedAgreement.title}
+          onSuccess={() => {
+            setRefreshTrigger((p) => p + 1);
+          }}
+          onClose={() => {
+            setShowReviewDecisionModal(false);
+            setSelectedAgreement(null);
+            setRefreshTrigger((p) => p + 1);
+          }}
+        />
+      )}
+
+      {showSendAgreementModal && selectedAgreement && (
+        <SendAgreementModal
+          agreementId={selectedAgreement.id}
+          agreementTitle={selectedAgreement.title}
+          onSuccess={() => {
+            setRefreshTrigger((p) => p + 1);
+          }}
+          onClose={() => {
+            setShowSendAgreementModal(false);
+            setSelectedAgreement(null);
+            setRefreshTrigger((p) => p + 1);
+          }}
+        />
+      )}
+
+      {showReminderModal && selectedAgreement && (
+        <SendReminderModal
+          isOpen={showReminderModal}
+          agreementId={selectedAgreement.id}
+          agreementTitle={selectedAgreement.title}
+          onClose={() => {
+            setShowReminderModal(false);
+            setSelectedAgreement(null);
+          }}
+        />
+      )}
+
+      {showMetadataModal && selectedAgreement && (
+        <div className="fixed inset-0 z-50 bg-ink-950/55 backdrop-blur-[2px] flex items-center justify-center p-4">
+          <div className="bg-white border border-ink-200 rounded-xl p-6 max-w-md w-full shadow-lg space-y-4">
+            <h2 className="text-base font-bold text-ink-900">Manage Document Tags</h2>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                placeholder="Enter tag name"
+                value={tagInput}
+                onChange={(e) => setTagInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleAddTag();
+                  }
+                }}
+                className="flex-1 bg-white border border-ink-200 rounded-md px-3 py-1.5 text-xs text-ink-900 focus:border-ink-900 focus:outline-none"
+              />
+              <Button type="button" variant="outline" size="sm" onClick={handleAddTag}>
+                Add
+              </Button>
+            </div>
+
+            <div className="flex flex-wrap gap-1.5 p-3 bg-ink-50 border border-ink-200 rounded-md min-h-[60px]">
+              {tagsList.map((tag) => (
+                <span
+                  key={tag}
+                  className="inline-flex items-center gap-1 bg-white border border-ink-200 text-ink-800 text-xs px-2 py-0.5 rounded-sm"
+                >
+                  #{tag}
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveTag(tag)}
+                    className="text-ink-400 hover:text-brand-600 font-bold"
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-ink-100">
+              <Button
+                type="button"
+                variant="ghost"
+                size="md"
+                onClick={() => setShowMetadataModal(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                variant="primary"
+                size="md"
+                isLoading={isSavingTags}
+                onClick={handleSaveTags}
+              >
+                Save Tags
+              </Button>
             </div>
           </div>
-        )}
-
-        {/* Submit Review Modal (INK-87) */}
-        {showSubmitReviewModal && selectedAgreement && (
-          <SubmitReviewModal
-            agreementId={selectedAgreement.id}
-            agreementTitle={selectedAgreement.title}
-            onClose={() => {
-              setShowSubmitReviewModal(false);
-              setSelectedAgreement(null);
-            }}
-            onSuccess={(msg) => {
-              setActionMessage(msg);
-              setRefreshTrigger((prev) => prev + 1);
-            }}
-          />
-        )}
-
-        {/* Review Decision Modal (INK-88, INK-89) */}
-        {showReviewDecisionModal && selectedAgreement && (
-          <ReviewDecisionModal
-            agreementId={selectedAgreement.id}
-            agreementTitle={selectedAgreement.title}
-            onClose={() => {
-              setShowReviewDecisionModal(false);
-              setSelectedAgreement(null);
-            }}
-            onSuccess={(msg) => {
-              setActionMessage(msg);
-              setRefreshTrigger((prev) => prev + 1);
-            }}
-          />
-        )}
-
-        {/* Send Agreement Modal (INK-90, INK-91, INK-92) */}
-        {showSendAgreementModal && selectedAgreement && (
-          <SendAgreementModal
-            agreementId={selectedAgreement.id}
-            agreementTitle={selectedAgreement.title}
-            defaultRecipients={selectedAgreement.fields?.recipients}
-            onClose={() => {
-              setShowSendAgreementModal(false);
-              setSelectedAgreement(null);
-            }}
-            onSuccess={(msg) => {
-              setActionMessage(msg);
-              setRefreshTrigger((prev) => prev + 1);
-            }}
-          />
-        )}
-
-        {/* Cancel Agreement Modal (INK-95) */}
-        {showCancelAgreementModal && selectedAgreement && (
-          <CancelAgreementModal
-            agreementId={selectedAgreement.id}
-            agreementTitle={selectedAgreement.title}
-            onClose={() => {
-              setShowCancelAgreementModal(false);
-              setSelectedAgreement(null);
-            }}
-            onSuccess={(msg) => {
-              setActionMessage(msg);
-              setRefreshTrigger((prev) => prev + 1);
-            }}
-          />
-        )}
-
-        {/* Notification History Modal (INK-113) */}
-        {showNotificationModal && selectedAgreement && (
-          <NotificationHistoryModal
-            isOpen={showNotificationModal}
-            agreementId={selectedAgreement.id}
-            agreementTitle={selectedAgreement.title}
-            onClose={() => {
-              setShowNotificationModal(false);
-              setSelectedAgreement(null);
-            }}
-          />
-        )}
-
-        {/* Send Reminder Modal (INK-108) */}
-        {showReminderModal && selectedAgreement && (
-          <SendReminderModal
-            isOpen={showReminderModal}
-            agreementId={selectedAgreement.id}
-            agreementTitle={selectedAgreement.title}
-            recipients={selectedAgreement.fields?.recipients || []}
-            onClose={() => {
-              setShowReminderModal(false);
-              setSelectedAgreement(null);
-            }}
-            onSuccess={() => {
-              setActionMessage('Reminder successfully dispatched to pending signers.');
-              setRefreshTrigger((prev) => prev + 1);
-            }}
-          />
-        )}
-
-        {/* Floating 3-Dots Dropdown Portal */}
-        {dropdownAnchor &&
-          typeof document !== 'undefined' &&
-          createPortal(
-            <div
-              onClick={(e) => e.stopPropagation()}
-              style={{
-                position: 'fixed',
-                top: dropdownAnchor.isBottom ? 'auto' : `${dropdownAnchor.top}px`,
-                bottom: dropdownAnchor.isBottom
-                  ? `${window.innerHeight - dropdownAnchor.bottom}px`
-                  : 'auto',
-                right: `${Math.max(8, dropdownAnchor.right)}px`,
-                zIndex: 99999,
-              }}
-              className="w-44 bg-white border border-neutral-200 rounded-lg shadow-xl py-1 text-left animate-in fade-in zoom-in-95 duration-100"
-            >
-              {activeTab === 'archived' || dropdownAnchor.agreement.isArchived ? (
-                <>
-                  <button
-                    onClick={() => {
-                      const ag = dropdownAnchor.agreement;
-                      setDropdownAnchor(null);
-                      handleArchiveToggle(ag.id, false);
-                    }}
-                    disabled={isArchivingId === dropdownAnchor.agreement.id}
-                    className="w-full px-3 py-1.5 text-xs text-neutral-700 hover:bg-neutral-50 flex items-center gap-2 transition-colors disabled:opacity-50"
-                  >
-                    <span>📥</span>{' '}
-                    {isArchivingId === dropdownAnchor.agreement.id ? 'Unarchiving...' : 'Unarchive'}
-                  </button>
-                  <button
-                    onClick={() => {
-                      const ag = dropdownAnchor.agreement;
-                      setDropdownAnchor(null);
-                      openHistoryModal(ag);
-                    }}
-                    className="w-full px-3 py-1.5 text-xs text-neutral-700 hover:bg-neutral-50 flex items-center gap-2 transition-colors"
-                  >
-                    <span>🕒</span> History
-                  </button>
-                  <button
-                    onClick={() => {
-                      const ag = dropdownAnchor.agreement;
-                      setDropdownAnchor(null);
-                      handleClone(ag.id);
-                    }}
-                    disabled={cloningId === dropdownAnchor.agreement.id}
-                    className="w-full px-3 py-1.5 text-xs text-neutral-700 hover:bg-neutral-50 flex items-center gap-2 transition-colors disabled:opacity-50"
-                  >
-                    <span>📋</span>{' '}
-                    {cloningId === dropdownAnchor.agreement.id ? 'Cloning...' : 'Clone'}
-                  </button>
-                </>
-              ) : (
-                <>
-                  <button
-                    onClick={() => {
-                      const ag = dropdownAnchor.agreement;
-                      setDropdownAnchor(null);
-                      handleClone(ag.id);
-                    }}
-                    disabled={cloningId === dropdownAnchor.agreement.id}
-                    className="w-full px-3 py-1.5 text-xs text-neutral-700 hover:bg-neutral-50 flex items-center gap-2 transition-colors disabled:opacity-50"
-                  >
-                    <span>📋</span>{' '}
-                    {cloningId === dropdownAnchor.agreement.id ? 'Cloning...' : 'Clone'}
-                  </button>
-                  <button
-                    onClick={() => {
-                      const ag = dropdownAnchor.agreement;
-                      setDropdownAnchor(null);
-                      openHistoryModal(ag);
-                    }}
-                    className="w-full px-3 py-1.5 text-xs text-neutral-700 hover:bg-neutral-50 flex items-center gap-2 transition-colors"
-                  >
-                    <span>🕒</span> History
-                  </button>
-                  <button
-                    onClick={() => {
-                      const ag = dropdownAnchor.agreement;
-                      setDropdownAnchor(null);
-                      openMetadataModal(ag);
-                    }}
-                    className="w-full px-3 py-1.5 text-xs text-neutral-700 hover:bg-neutral-50 flex items-center gap-2 transition-colors"
-                  >
-                    <span>🏷️</span> Tags
-                  </button>
-                  <button
-                    onClick={() => {
-                      const ag = dropdownAnchor.agreement;
-                      setDropdownAnchor(null);
-                      setSelectedAgreement(ag);
-                      setShowNotificationModal(true);
-                    }}
-                    className="w-full px-3 py-1.5 text-xs text-neutral-700 hover:bg-neutral-50 flex items-center gap-2 transition-colors"
-                  >
-                    <span>🔔</span> Notifications
-                  </button>
-
-                  {dropdownAnchor.agreement.status === 'SENT' && (
-                    <button
-                      onClick={() => {
-                        const ag = dropdownAnchor.agreement;
-                        setDropdownAnchor(null);
-                        setSelectedAgreement(ag);
-                        setShowReminderModal(true);
-                      }}
-                      className="w-full px-3 py-1.5 text-xs text-amber-700 hover:bg-amber-50 flex items-center gap-2 transition-colors"
-                    >
-                      <span>⚡</span> Send Reminder
-                    </button>
-                  )}
-
-                  {dropdownAnchor.agreement.status === 'IN_REVIEW' &&
-                    ((currentUser.userId &&
-                      dropdownAnchor.agreement.reviewerId === currentUser.userId) ||
-                      (currentUser.userEmail &&
-                        dropdownAnchor.agreement.reviewer?.email?.toLowerCase() ===
-                          currentUser.userEmail.toLowerCase())) && (
-                      <button
-                        onClick={() => {
-                          const ag = dropdownAnchor.agreement;
-                          setDropdownAnchor(null);
-                          setSelectedAgreement(ag);
-                          setShowReviewDecisionModal(true);
-                        }}
-                        className="w-full px-3 py-1.5 text-xs text-emerald-700 hover:bg-emerald-50 flex items-center gap-2 transition-colors"
-                      >
-                        <span>⚖️</span> Review Decision
-                      </button>
-                    )}
-
-                  {dropdownAnchor.agreement.status === 'IN_REVIEW' && (
-                    <button
-                      onClick={() => {
-                        const ag = dropdownAnchor.agreement;
-                        setDropdownAnchor(null);
-                        handleRetractReview(ag.id, ag.title);
-                      }}
-                      className="w-full px-3 py-1.5 text-xs text-amber-700 hover:bg-amber-50 flex items-center gap-2 transition-colors"
-                    >
-                      <span>↩️</span> Retract Review
-                    </button>
-                  )}
-
-                  {(dropdownAnchor.agreement.status === 'SENT' ||
-                    dropdownAnchor.agreement.status === 'IN_REVIEW') && (
-                    <button
-                      onClick={() => {
-                        const ag = dropdownAnchor.agreement;
-                        setDropdownAnchor(null);
-                        setSelectedAgreement(ag);
-                        setShowCancelAgreementModal(true);
-                      }}
-                      className="w-full px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 flex items-center gap-2 transition-colors"
-                    >
-                      <span>🛑</span> Void Agreement
-                    </button>
-                  )}
-
-                  <div className="border-t border-neutral-100 my-1" />
-
-                  <button
-                    onClick={() => {
-                      const ag = dropdownAnchor.agreement;
-                      setDropdownAnchor(null);
-                      handleArchiveToggle(ag.id, true);
-                    }}
-                    disabled={isArchivingId === dropdownAnchor.agreement.id}
-                    className="w-full px-3 py-1.5 text-xs text-neutral-700 hover:bg-neutral-50 flex items-center gap-2 transition-colors disabled:opacity-50"
-                  >
-                    <span>📦</span>{' '}
-                    {isArchivingId === dropdownAnchor.agreement.id ? 'Archiving...' : 'Archive'}
-                  </button>
-
-                  <button
-                    onClick={() => {
-                      const ag = dropdownAnchor.agreement;
-                      setDropdownAnchor(null);
-                      handleDeleteAgreement(ag.id);
-                    }}
-                    disabled={isDeletingId === dropdownAnchor.agreement.id}
-                    className="w-full px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 flex items-center gap-2 transition-colors font-semibold disabled:opacity-50"
-                  >
-                    <span>🗑️</span> Delete
-                  </button>
-                </>
-              )}
-            </div>,
-            document.body,
-          )}
-      </main>
+        </div>
+      )}
 
       <Footer />
     </div>
@@ -2004,7 +1664,11 @@ export default function AgreementManagementPage() {
   return (
     <SessionGuard>
       <Suspense
-        fallback={<div className="p-12 text-center text-xs text-neutral-500">Loading...</div>}
+        fallback={
+          <div className="min-h-screen bg-ink-50 p-8 text-center text-xs text-ink-400">
+            Loading agreements workspace...
+          </div>
+        }
       >
         <AgreementManagementContent />
       </Suspense>

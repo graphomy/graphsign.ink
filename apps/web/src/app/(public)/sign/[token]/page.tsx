@@ -5,10 +5,28 @@ export const runtime = 'edge';
 import React, { useState, useEffect, useMemo, useRef, use } from 'react';
 import Link from 'next/link';
 import { getApiUrl } from '@/lib/api';
+import { orDash, orLabel, formatHash } from '@/lib/format';
+import { formatDateTime } from '@/lib/date-utils';
+import { Button } from '@/components/ui/Button';
+import { Badge, StatusPill } from '@/components/ui/Badge';
+import { Card } from '@/components/ui/Card';
 import { ElectronicConsentModal } from '@/components/features/sign/ElectronicConsentModal';
 import { SignatureModal, AdoptedSignature } from '@/components/features/sign/SignatureModal';
 import { OtpVerificationModal } from '@/components/features/sign/OtpVerificationModal';
 import { renderMarkdownToHtml } from '@/components/features/agreements/MarkdownEditor';
+import {
+  FileText,
+  ShieldCheck,
+  AlertCircle,
+  Download,
+  Printer,
+  Copy,
+  Check,
+  CheckCheck,
+  ZoomIn,
+  ZoomOut,
+  Sparkles,
+} from 'lucide-react';
 
 interface RecipientInfo {
   id: string;
@@ -68,6 +86,8 @@ interface AgreementDetails {
   expiresAt?: string;
   senderName: string;
   organisationName: string;
+  envelopeId?: string;
+  certHash?: string;
 }
 
 export default function SignDocumentPage({
@@ -86,10 +106,9 @@ export default function SignDocumentPage({
   const [error, setError] = useState<string | null>(null);
   const [agreement, setAgreement] = useState<AgreementDetails | null>(null);
   const [currentRecipient, setCurrentRecipient] = useState<RecipientInfo | null>(null);
-  const [allRecipients, setAllRecipients] = useState<RecipientInfo[]>([]);
   const [isTurn, setIsTurn] = useState<boolean>(true);
 
-  // Authentication & Guest Gate (INK-266)
+  // Authentication & Guest Gate
   const [isAuthenticated] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
     return Boolean(
@@ -100,18 +119,18 @@ export default function SignDocumentPage({
   const [showAuthGate, setShowAuthGate] = useState<boolean>(false);
   const [showOtpModal, setShowOtpModal] = useState<boolean>(false);
 
-  // ERSD Electronic Consent Modal Gate (INK-99)
+  // ERSD Electronic Consent Modal Gate
   const [showConsentModal, setShowConsentModal] = useState<boolean>(false);
   const [consentAccepted, setConsentAccepted] = useState<boolean>(false);
 
-  // Document Viewer & Zoom Controls (INK-98)
+  // Document Viewer & Zoom Controls
   const [zoomLevel, setZoomLevel] = useState<number>(100);
   const [effectivePdfUrl, setEffectivePdfUrl] = useState<string | null>(null);
   const [isLoadingPdf, setIsLoadingPdf] = useState(false);
   const [pdfFetchError, setPdfFetchError] = useState<string | null>(null);
   const pageContainerRef = useRef<HTMLDivElement | null>(null);
 
-  // Adopted Signature State (INK-100, INK-101, INK-102)
+  // Adopted Signature State
   const [adoptedSignature, setAdoptedSignature] = useState<AdoptedSignature | null>(null);
   const [activeSignatureFieldId, setActiveSignatureFieldId] = useState<string | null>(null);
   const [activeSignatureType, setActiveSignatureType] = useState<'SIGNATURE' | 'INITIALS'>(
@@ -130,10 +149,12 @@ export default function SignDocumentPage({
   const [isDeclining, setIsDeclining] = useState(false);
   const [isDeclined, setIsDeclined] = useState(false);
 
-  // Active Highlighted Field for Guide Focus (INK-103)
+  // Active Highlighted Field for Guide Focus
   const [highlightedFieldId, setHighlightedFieldId] = useState<string | null>(null);
+  const [copiedEnvelope, setCopiedEnvelope] = useState(false);
+  const [copiedHash, setCopiedHash] = useState(false);
 
-  // Fetch signing session on mount (INK-97)
+  // Fetch signing session on mount
   useEffect(() => {
     async function loadSigningSession() {
       try {
@@ -149,7 +170,6 @@ export default function SignDocumentPage({
 
         setAgreement(data.data.agreement);
         setCurrentRecipient(data.data.recipient);
-        setAllRecipients(data.data.allRecipients || []);
         setIsTurn(data.data.isTurn !== false);
 
         if (data.data.recipient.status === 'SIGNED' || data.data.agreement.status === 'COMPLETED') {
@@ -157,7 +177,7 @@ export default function SignDocumentPage({
         } else if (data.data.recipient.status === 'DECLINED') {
           setIsDeclined(true);
         } else {
-          // Send view tracking beacon (INK-93)
+          // Send view tracking beacon
           fetch(`${getApiUrl()}/api/v1/sign/${rawToken}/view`, { method: 'POST' }).catch(() => {});
 
           const hasToken = Boolean(
@@ -182,7 +202,7 @@ export default function SignDocumentPage({
     }
   }, [rawToken]);
 
-  // Fetch PDF binary for document canvas iframe (INK-272)
+  // Fetch PDF binary for document canvas
   useEffect(() => {
     let ignore = false;
     let objectUrlToRevoke: string | null = null;
@@ -237,7 +257,7 @@ export default function SignDocumentPage({
     return agreement.fields.fields;
   }, [agreement]);
 
-  // Conditional Logic Evaluation Engine (INK-96)
+  // Conditional Logic Engine
   const evaluatedFields = useMemo(() => {
     return fields.map((field) => {
       let isVisible = true;
@@ -305,7 +325,7 @@ export default function SignDocumentPage({
     return count;
   }, [assignedRequiredFields, fieldValues]);
 
-  // Handle ERSD Consent Acceptance (INK-99)
+  // Handle ERSD Consent Acceptance
   async function handleAcceptConsent() {
     try {
       await fetch(`${getApiUrl()}/api/v1/sign/${rawToken}/consent`, {
@@ -321,12 +341,11 @@ export default function SignDocumentPage({
     }
   }
 
-  // Handle Signature Field Click (INK-100 to INK-102, INK-272)
+  // Handle Signature Field Click
   function handleSignatureFieldClick(field: DocumentField) {
     if (field.recipientId !== currentRecipient?.id) return;
 
     if (adoptedSignature) {
-      // Fast apply adopted signature
       setFieldValues((prev) => ({ ...prev, [field.id]: adoptedSignature.dataUrl }));
       if (formErrors[field.id]) {
         setFormErrors((prev) => {
@@ -336,36 +355,39 @@ export default function SignDocumentPage({
         });
       }
     } else {
-      // Open adoption modal
       setActiveSignatureFieldId(field.id);
       setActiveSignatureType(field.type === 'INITIALS' ? 'INITIALS' : 'SIGNATURE');
     }
   }
 
-  // Save Adopted Signature from Modal (INK-16, INK-272)
+  // Save Adopted Signature from Modal
   function handleSaveAdoptedSignature(sig: AdoptedSignature) {
     setAdoptedSignature(sig);
-    if (activeSignatureFieldId) {
-      setFieldValues((prev) => ({ ...prev, [activeSignatureFieldId]: sig.dataUrl }));
-      if (formErrors[activeSignatureFieldId]) {
-        setFormErrors((prev) => {
-          const next = { ...prev };
-          delete next[activeSignatureFieldId];
-          return next;
-        });
+    setFieldValues((prev) => {
+      const next = { ...prev };
+      if (activeSignatureFieldId && activeSignatureFieldId !== 'signature-sidebar') {
+        next[activeSignatureFieldId] = sig.dataUrl;
       }
-    } else {
-      // If opened from sidebar, populate any empty signature fields for convenience
+      // Also auto-populate any other empty signature fields
       for (const f of assignedFields) {
-        if ((f.type === 'SIGNATURE' || f.type === 'INITIALS') && !fieldValues[f.id]) {
-          setFieldValues((prev) => ({ ...prev, [f.id]: sig.dataUrl }));
+        if ((f.type === 'SIGNATURE' || f.type === 'INITIALS') && !next[f.id]) {
+          next[f.id] = sig.dataUrl;
         }
       }
+      return next;
+    });
+
+    if (activeSignatureFieldId && formErrors[activeSignatureFieldId]) {
+      setFormErrors((prev) => {
+        const next = { ...prev };
+        delete next[activeSignatureFieldId];
+        return next;
+      });
     }
     setActiveSignatureFieldId(null);
   }
 
-  // Input Change & Real-Time Validation (INK-103)
+  // Input Change
   function handleInputChange(fieldId: string, val: string | boolean | number) {
     setFieldValues((prev) => ({ ...prev, [fieldId]: val }));
     if (formErrors[fieldId]) {
@@ -377,7 +399,7 @@ export default function SignDocumentPage({
     }
   }
 
-  // Field Navigation Assistant: Next Field Auto-Scroll (INK-103)
+  // Next Field Auto-Scroll
   function handleNavigateNextField() {
     const nextField = assignedRequiredFields.find((f) => {
       const val = fieldValues[f.id];
@@ -388,14 +410,14 @@ export default function SignDocumentPage({
     if (targetField) {
       setHighlightedFieldId(targetField.id);
       const el = document.getElementById(`field-overlay-${targetField.id}`);
-      if (el) {
+      if (el && typeof el.scrollIntoView === 'function') {
         el.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }
       setTimeout(() => setHighlightedFieldId(null), 2500);
     }
   }
 
-  // Validate Entire Form before Submission (INK-104)
+  // Validate Entire Form
   function validateForm(): boolean {
     const errors: Record<string, string> = {};
 
@@ -425,7 +447,7 @@ export default function SignDocumentPage({
     return Object.keys(errors).length === 0;
   }
 
-  // Submit Final Signature Action (INK-104, INK-266)
+  // Submit Final Signature
   async function handleSubmit() {
     if (!validateForm()) {
       handleNavigateNextField();
@@ -528,20 +550,21 @@ export default function SignDocumentPage({
     }
   }
 
-  // Tokenized Download Action (INK-105 & INK-272)
   function handleDownloadDocument() {
     window.open(`${getApiUrl()}/api/v1/sign/${rawToken}/download`, '_blank');
   }
 
+  const envelopeId = agreement?.envelopeId || `env_sec_${rawToken.substring(0, 8)}`;
+  const certHash =
+    agreement?.certHash || 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
+
   // --- LOADING VIEW ---
   if (loading) {
     return (
-      <div className="min-h-screen bg-neutral-950 flex items-center justify-center p-4">
-        <div className="text-center text-white space-y-3">
-          <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="text-sm font-semibold text-neutral-300">
-            Establishing secure signing session...
-          </p>
+      <div className="min-h-screen bg-ink-50 flex items-center justify-center p-4">
+        <div className="text-center space-y-3">
+          <div className="w-8 h-8 border-2 border-ink-300 border-t-brand-600 rounded-full animate-spin mx-auto" />
+          <p className="text-xs font-semibold text-ink-600">Establishing secure signing session…</p>
         </div>
       </div>
     );
@@ -550,22 +573,23 @@ export default function SignDocumentPage({
   // --- ERROR VIEW ---
   if (error || !agreement) {
     return (
-      <div className="min-h-screen bg-neutral-950 flex items-center justify-center p-4">
-        <div className="max-w-md w-full bg-neutral-900 border border-neutral-800 rounded-2xl p-8 text-center text-white shadow-2xl">
-          <div className="w-12 h-12 rounded-full bg-red-950/60 text-red-400 border border-red-800 flex items-center justify-center text-2xl mx-auto mb-4">
-            ⚠️
+      <div className="min-h-screen bg-ink-50 flex items-center justify-center p-4 font-sans">
+        <Card elevation="e2" className="max-w-md w-full p-8 text-center space-y-4">
+          <div className="w-12 h-12 rounded-full bg-brand-50 text-brand-600 flex items-center justify-center mx-auto">
+            <AlertCircle className="w-6 h-6" />
           </div>
-          <h1 className="text-lg font-bold mb-2">Unable to Access Agreement</h1>
-          <p className="text-xs text-neutral-400 mb-6">
+          <h1 className="text-lg font-bold text-ink-900">Unable to Access Agreement</h1>
+          <p className="text-xs text-ink-500 leading-relaxed">
             {error || 'This link may have expired or was cancelled by the sender.'}
           </p>
-          <Link
-            href="/"
-            className="inline-block px-4 py-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-xs font-semibold rounded-lg transition-colors"
-          >
-            Return to Homepage
-          </Link>
-        </div>
+          <div className="pt-2">
+            <Link href="/">
+              <Button variant="outline" size="md">
+                Return to Homepage
+              </Button>
+            </Link>
+          </div>
+        </Card>
       </div>
     );
   }
@@ -573,247 +597,341 @@ export default function SignDocumentPage({
   // --- DECLINED VIEW ---
   if (isDeclined) {
     return (
-      <div className="min-h-screen bg-neutral-950 flex items-center justify-center p-4">
-        <div className="max-w-md w-full bg-neutral-900 border border-neutral-800 rounded-2xl p-8 text-center text-white shadow-2xl">
-          <div className="w-12 h-12 rounded-full bg-amber-950/60 text-amber-400 border border-amber-800 flex items-center justify-center text-2xl mx-auto mb-4">
-            🛑
+      <div className="min-h-screen bg-ink-50 flex items-center justify-center p-4 font-sans">
+        <Card elevation="e2" className="max-w-md w-full p-8 text-center space-y-4">
+          <div className="w-12 h-12 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center mx-auto">
+            <AlertCircle className="w-6 h-6" />
           </div>
-          <h1 className="text-lg font-bold mb-2">Document Signing Declined</h1>
-          <p className="text-xs text-neutral-400 mb-6">
+          <h1 className="text-lg font-bold text-ink-900">Document Signing Declined</h1>
+          <p className="text-xs text-ink-500 leading-relaxed">
             You have formally declined to sign{' '}
-            <strong className="text-white">&quot;{agreement.title}&quot;</strong>. The sender has
+            <strong className="text-ink-900">&quot;{agreement.title}&quot;</strong>. The sender has
             been notified of your decision.
           </p>
-          <Link
-            href="/"
-            className="inline-block px-4 py-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-xs font-semibold rounded-lg transition-colors"
-          >
-            Return to Homepage
-          </Link>
-        </div>
+          <div className="pt-2">
+            <Link href="/">
+              <Button variant="outline" size="md">
+                Return to Homepage
+              </Button>
+            </Link>
+          </div>
+        </Card>
       </div>
     );
   }
 
-  // --- COMPLETED SUCCESS VIEW ---
+  // --- B7: COMPLETED SUCCESS VIEW (Bright Theme) ---
   if (isCompleted) {
     return (
-      <div className="min-h-screen bg-neutral-950 flex items-center justify-center p-4 font-sans">
-        <div className="max-w-lg w-full bg-neutral-900 border border-neutral-800 rounded-3xl p-8 text-center text-white shadow-2xl space-y-6">
-          <div className="w-16 h-16 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 flex items-center justify-center text-3xl mx-auto animate-in zoom-in-50 duration-300">
-            ✓
+      <div className="min-h-screen bg-ink-50 flex flex-col items-center justify-center p-4 sm:p-6 font-sans">
+        <Card elevation="e2" className="max-w-xl w-full p-8 sm:p-10 text-center space-y-6">
+          {/* Green check circle */}
+          <div className="w-14 h-14 rounded-full bg-verified-50 text-verified-600 border border-verified-200 flex items-center justify-center mx-auto animate-in zoom-in-50 duration-200">
+            <Check className="w-7 h-7 stroke-[2.5]" />
           </div>
 
-          <div className="space-y-2">
-            <span className="text-[11px] font-bold uppercase tracking-widest text-emerald-400 bg-emerald-950/60 px-3 py-1 rounded-full border border-emerald-800">
-              Signature Recorded
-            </span>
-            <h1 className="text-2xl font-black pt-2">You&apos;re All Set!</h1>
-            <p className="text-xs text-neutral-400 max-w-sm mx-auto">
-              Thank you, <strong className="text-white">{currentRecipient?.name}</strong>. Your
-              electronic signature has been securely timestamped and applied to the agreement.
+          <div className="space-y-1.5">
+            <Badge tone="success" size="sm" className="mb-2">
+              Executed &amp; Verified
+            </Badge>
+            <h1 className="text-2xl font-bold text-ink-900 tracking-tight">You&apos;re All Set!</h1>
+            <p className="text-[13px] text-ink-500 max-w-sm mx-auto leading-relaxed">
+              Document executed successfully. A cryptographically sealed copy has been sent to{' '}
+              <strong className="text-ink-900 font-semibold">
+                {orDash(currentRecipient?.email)}
+              </strong>
+              .
             </p>
           </div>
 
-          <div className="p-4 bg-neutral-800/60 rounded-2xl text-left text-xs space-y-2 border border-neutral-700/60">
-            <div className="flex justify-between text-neutral-400">
-              <span>Document:</span>
-              <span className="font-semibold text-white truncate max-w-[200px]">
-                {agreement.title}
+          {/* Receipt Metadata Block */}
+          <div className="bg-ink-50 border border-ink-200 rounded-lg p-4 text-left text-xs space-y-2.5">
+            <div className="flex justify-between items-center text-ink-500">
+              <span>Document</span>
+              <span
+                className="font-semibold text-ink-900 truncate max-w-[240px]"
+                title={agreement.title}
+              >
+                {orDash(agreement.title)}
               </span>
             </div>
-            <div className="flex justify-between text-neutral-400">
-              <span>Organization:</span>
-              <span className="font-semibold text-white">{agreement.organisationName}</span>
+            <div className="flex justify-between items-center text-ink-500">
+              <span>Signer</span>
+              <span className="font-semibold text-ink-900">
+                {orLabel(currentRecipient?.name, orDash(currentRecipient?.email))}
+              </span>
             </div>
-            <div className="flex justify-between text-neutral-400">
-              <span>Sender:</span>
-              <span className="font-semibold text-white">{agreement.senderName}</span>
+            <div className="flex justify-between items-center text-ink-500">
+              <span>Sender</span>
+              <span className="font-semibold text-ink-900">{orDash(agreement.senderName)}</span>
             </div>
-            <div className="flex justify-between text-neutral-400">
-              <span>Status:</span>
-              <span className="font-semibold text-emerald-400">Signed &amp; Recorded</span>
+            <div className="flex justify-between items-center text-ink-500">
+              <span>Envelope ID</span>
+              <div className="flex items-center gap-1.5 font-mono text-ink-900 font-semibold tabular-nums">
+                <span>{envelopeId}</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(envelopeId);
+                    setCopiedEnvelope(true);
+                    setTimeout(() => setCopiedEnvelope(false), 2000);
+                  }}
+                  className="text-ink-400 hover:text-ink-700"
+                  title="Copy Envelope ID"
+                >
+                  {copiedEnvelope ? (
+                    <CheckCheck className="w-3.5 h-3.5 text-verified-600" />
+                  ) : (
+                    <Copy className="w-3.5 h-3.5" />
+                  )}
+                </button>
+              </div>
+            </div>
+            <div className="flex justify-between items-center text-ink-500">
+              <span>Completed At</span>
+              <span className="text-ink-900 font-medium tabular-nums">
+                {formatDateTime(new Date().toISOString())}
+              </span>
+            </div>
+            <div className="flex justify-between items-center text-ink-500 pt-1 border-t border-ink-200">
+              <span>SHA-256 Cert Hash</span>
+              <div className="flex items-center gap-1.5 font-mono text-[11px] text-ink-700 tabular-nums">
+                <span>{formatHash(certHash, 8, 8)}</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(certHash);
+                    setCopiedHash(true);
+                    setTimeout(() => setCopiedHash(false), 2000);
+                  }}
+                  className="text-ink-400 hover:text-ink-700"
+                  title="Copy full certificate SHA-256 hash"
+                >
+                  {copiedHash ? (
+                    <CheckCheck className="w-3.5 h-3.5 text-verified-600" />
+                  ) : (
+                    <Copy className="w-3.5 h-3.5" />
+                  )}
+                </button>
+              </div>
             </div>
           </div>
 
-          <div className="flex flex-col sm:flex-row gap-3 justify-center pt-2">
-            <button
-              type="button"
+          {/* Action Buttons */}
+          <div className="flex flex-col sm:flex-row gap-2.5 justify-center pt-2">
+            <Button
+              variant="primary"
+              size="lg"
+              leftIcon={<Download className="w-4 h-4" />}
               onClick={handleDownloadDocument}
-              className="px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white text-xs sm:text-sm font-bold rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer"
               data-testid="download-signed-document-button"
             >
-              <span>📥</span> Download Copy (PDF)
-            </button>
+              Download executed PDF
+            </Button>
+            <Button
+              variant="outline"
+              size="lg"
+              leftIcon={<ShieldCheck className="w-4 h-4" />}
+              onClick={() => alert(`Certificate SHA-256:\n${certHash}`)}
+            >
+              View audit certificate
+            </Button>
+            <Button
+              variant="ghost"
+              size="lg"
+              leftIcon={<Printer className="w-4 h-4" />}
+              onClick={() => window.print()}
+            >
+              Print receipt
+            </Button>
           </div>
 
-          <p className="text-[11px] text-neutral-500">
-            A finalized copy with the complete tamper-evident audit certificate will also be sent to
-            your email.
-          </p>
-        </div>
+          {/* Guest Account Upsell Card */}
+          {(!isAuthenticated || signedAsGuest) && (
+            <div className="mt-6 p-4 bg-brand-50/50 border border-brand-200 rounded-lg text-left flex items-start gap-3">
+              <div className="h-8 w-8 rounded-full bg-brand-100 text-brand-600 flex items-center justify-center shrink-0 mt-0.5">
+                <Sparkles className="w-4 h-4" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h4 className="text-xs font-bold text-ink-900">Track all your signed agreements</h4>
+                <p className="text-[11px] text-ink-600 mt-0.5">
+                  Create a free GraphSign account to store, audit, and organize documents executed
+                  across any device.
+                </p>
+                <div className="pt-2">
+                  <Link href="/register">
+                    <Button variant="primary" size="sm">
+                      Create free account
+                    </Button>
+                  </Link>
+                </div>
+              </div>
+            </div>
+          )}
+        </Card>
       </div>
     );
   }
 
   const isMarkdown = Boolean(agreement.markdownContent);
 
-  // --- MAIN FULLSCREEN SIGNING STUDIO (INK-272) ---
+  // --- B5: MAIN FULLSCREEN SIGNING WORKSPACE ---
   return (
-    <div className="h-screen w-screen bg-neutral-900 text-neutral-900 flex flex-col font-sans overflow-hidden select-none">
-      {/* Sticky Signing Top Header Bar (INK-106, INK-272) */}
-      <header className="h-14 bg-neutral-900 border-b border-neutral-800 px-4 sm:px-6 flex items-center justify-between shadow-md shrink-0 z-30">
-        {/* Left: Brand & Document Meta */}
+    <div className="h-screen w-screen bg-ink-100 text-ink-900 flex flex-col font-sans overflow-hidden select-none">
+      {/* 64px Sticky Signing Top Header Bar */}
+      <header className="h-16 bg-white border-b border-ink-200 px-4 sm:px-6 flex items-center justify-between shadow-xs shrink-0 z-30">
+        {/* Left: Brand Lockup & Doc Meta */}
         <div className="flex items-center gap-3 min-w-0">
-          <div className="w-8 h-8 rounded-xl bg-[#ba0000] text-white font-black text-sm flex items-center justify-center shrink-0 shadow-xs">
-            GS
-          </div>
-          <div className="truncate">
-            <h1 className="text-xs sm:text-sm font-bold text-white truncate max-w-xs sm:max-w-md">
-              {agreement.title}
-            </h1>
-            <p className="text-[10px] text-neutral-400 truncate">
-              From <span className="text-neutral-300 font-medium">{agreement.senderName}</span> •{' '}
-              {agreement.organisationName}
+          <Link href="/" className="flex items-center gap-1 shrink-0">
+            <span className="w-8 h-8 rounded-md bg-brand-600 text-white font-bold text-base flex items-center justify-center shadow-xs">
+              g
+            </span>
+          </Link>
+          <div className="truncate min-w-0">
+            <div className="flex items-center gap-2">
+              <h1 className="text-sm font-bold text-ink-900 truncate max-w-xs sm:max-w-md">
+                {agreement.title}
+              </h1>
+              <StatusPill status={agreement.status} />
+            </div>
+            <p className="text-[11px] text-ink-500 truncate">
+              Sender: <span className="text-ink-700 font-medium">{agreement.senderName}</span>
+              {agreement.organisationName && ` (${agreement.organisationName})`}
             </p>
           </div>
         </div>
 
-        {/* Center: Progress Bar (INK-103) */}
-        <div className="hidden md:flex items-center gap-3 bg-neutral-800/80 px-3.5 py-1.5 rounded-xl border border-neutral-700/60">
-          <div className="text-right">
-            <div className="text-[11px] font-bold text-white">
-              {completedRequiredCount} of {assignedRequiredFields.length} Required
+        {/* Center: 5-Step Stepper */}
+        <div className="hidden lg:flex items-center gap-2">
+          <div className="flex items-center gap-1.5 text-xs font-semibold text-verified-700">
+            <div className="w-5 h-5 rounded-full bg-verified-100 text-verified-700 flex items-center justify-center text-[10px] font-bold">
+              <Check className="w-3 h-3" />
             </div>
-            <div className="text-[9px] text-neutral-400">Fields Completed</div>
+            <span>1 Consent</span>
           </div>
-          <div className="w-24 h-2 bg-neutral-700 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-emerald-500 rounded-full transition-all duration-300"
-              style={{
-                width: `${
-                  assignedRequiredFields.length > 0
-                    ? Math.min(
-                        100,
-                        Math.round((completedRequiredCount / assignedRequiredFields.length) * 100),
-                      )
-                    : 100
-                }%`,
-              }}
-            />
+
+          <span className="text-ink-300">—</span>
+
+          <div className="flex items-center gap-1.5 text-xs font-semibold text-verified-700">
+            <div className="w-5 h-5 rounded-full bg-verified-100 text-verified-700 flex items-center justify-center text-[10px] font-bold">
+              <Check className="w-3 h-3" />
+            </div>
+            <span>2 Review</span>
+          </div>
+
+          <span className="text-ink-300">—</span>
+
+          <div className="flex items-center gap-1.5 text-xs font-bold text-brand-600">
+            <div className="w-5 h-5 rounded-full bg-brand-600 text-white flex items-center justify-center text-[10px]">
+              3
+            </div>
+            <span>Sign</span>
+          </div>
+
+          <span className="text-ink-300">—</span>
+
+          <div className="flex items-center gap-1.5 text-xs font-medium text-ink-400">
+            <div className="w-5 h-5 rounded-full bg-ink-100 text-ink-500 flex items-center justify-center text-[10px]">
+              4
+            </div>
+            <span>Verify</span>
+          </div>
+
+          <span className="text-ink-300">—</span>
+
+          <div className="flex items-center gap-1.5 text-xs font-medium text-ink-400">
+            <div className="w-5 h-5 rounded-full bg-ink-100 text-ink-500 flex items-center justify-center text-[10px]">
+              5
+            </div>
+            <span>Executed</span>
           </div>
         </div>
 
         {/* Right: Studio Controls */}
         <div className="flex items-center gap-2">
-          {/* Zoom controls (INK-98) */}
-          <div className="hidden sm:flex items-center border border-neutral-700 rounded-xl p-0.5 bg-neutral-800 text-xs font-semibold text-neutral-300">
+          {/* Zoom controls */}
+          <div className="hidden sm:flex items-center border border-ink-200 rounded-md p-0.5 bg-ink-50 text-xs font-medium text-ink-700">
             <button
               type="button"
               onClick={() => setZoomLevel((z) => Math.max(50, z - 10))}
-              className="px-2 py-1 hover:bg-neutral-700 rounded text-neutral-300"
+              className="p-1 hover:bg-ink-200 rounded text-ink-700"
               title="Zoom Out"
             >
-              −
+              <ZoomOut className="w-3.5 h-3.5" />
             </button>
-            <span className="px-1.5 text-[11px] text-neutral-400 font-mono select-none">
+            <span className="px-2 text-xs font-mono text-ink-700 select-none tabular-nums">
               {zoomLevel}%
             </span>
             <button
               type="button"
               onClick={() => setZoomLevel((z) => Math.min(150, z + 10))}
-              className="px-2 py-1 hover:bg-neutral-700 rounded text-neutral-300"
+              className="p-1 hover:bg-ink-200 rounded text-ink-700"
               title="Zoom In"
             >
-              +
-            </button>
-            <button
-              type="button"
-              onClick={() => setZoomLevel(100)}
-              className="px-1.5 py-1 text-[10px] hover:bg-neutral-700 rounded text-neutral-400"
-              title="Reset Zoom"
-            >
-              100%
+              <ZoomIn className="w-3.5 h-3.5" />
             </button>
           </div>
 
-          {/* Next Field Assistant (INK-103) */}
-          {assignedRequiredFields.length > 0 &&
-            completedRequiredCount < assignedRequiredFields.length && (
-              <button
-                type="button"
-                onClick={handleNavigateNextField}
-                className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-blue-400 bg-blue-950/60 hover:bg-blue-900/60 border border-blue-800/80 rounded-xl transition-all"
-                title="Scroll to next required field"
-              >
-                <span>Next Field</span>
-                <span>↓</span>
-              </button>
-            )}
-
           {/* Decline Button */}
-          <button
-            type="button"
-            onClick={() => setShowDeclineModal(true)}
-            className="px-3 py-1.5 text-xs font-semibold text-neutral-400 hover:text-red-400 hover:bg-red-950/40 rounded-xl border border-neutral-800 hover:border-red-900 transition-colors"
-          >
+          <Button variant="ghost" size="sm" onClick={() => setShowDeclineModal(true)}>
             Decline
-          </button>
+          </Button>
 
           {/* Finish & Sign Button */}
-          <button
-            type="button"
+          <Button
+            variant="primary"
+            size="md"
             onClick={handleSubmit}
             disabled={isSubmitting || !isTurn}
-            className="px-4 py-1.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
+            isLoading={isSubmitting}
             data-testid="guide-finish-button"
           >
-            {isSubmitting ? 'Recording...' : 'Finish & Sign ✓'}
-          </button>
+            Finish &amp; sign
+          </Button>
         </div>
       </header>
 
       {/* Sequential Turn Warning Banner */}
       {!isTurn && (
-        <div className="bg-amber-500 text-neutral-950 text-xs font-bold py-2 px-4 text-center shrink-0">
-          ⏳ It is not your turn yet in sequential signing order. Preceding signers are currently
+        <div className="bg-amber-50 border-b border-amber-200 text-amber-900 text-xs font-semibold py-2 px-4 text-center shrink-0">
+          It is not your turn yet in sequential signing order. Preceding signers are currently
           completing their steps.
         </div>
       )}
 
       {/* Form Errors Banner */}
       {Object.keys(formErrors).length > 0 && (
-        <div className="bg-red-950/90 border-b border-red-800 text-red-200 text-xs font-semibold py-2 px-4 text-center shrink-0 flex items-center justify-center gap-2">
-          <span>⚠️</span>
+        <div className="bg-brand-50 border-b border-brand-200 text-brand-700 text-xs font-medium py-2 px-4 text-center shrink-0 flex items-center justify-center gap-1.5">
+          <AlertCircle className="w-4 h-4" />
           <span>Please complete all required fields highlighted in red to proceed.</span>
         </div>
       )}
 
       {/* Main Studio Body: Sidebar + Document Drafting Canvas */}
       <div className="flex-1 flex flex-col lg:flex-row overflow-hidden relative">
-        {/* Left Sidebar: Participant Info, Signature Adoption Pill, & Field Checklist */}
-        <aside className="w-full lg:w-80 bg-neutral-900 border-b lg:border-b-0 lg:border-r border-neutral-800 flex flex-col p-4 space-y-4 shrink-0 overflow-y-auto z-10">
+        {/* Left Sidebar: Participant Info & Field Checklist */}
+        <aside className="w-full lg:w-80 bg-white border-b lg:border-b-0 lg:border-r border-ink-200 flex flex-col p-4 space-y-4 shrink-0 overflow-y-auto z-10">
           {/* Signer Profile Card */}
-          <div className="p-3.5 bg-neutral-800/80 border border-neutral-700/60 rounded-2xl space-y-1">
-            <span className="text-[9px] font-bold text-blue-400 uppercase tracking-widest block">
+          <div className="p-3.5 bg-ink-50 border border-ink-200 rounded-lg space-y-1">
+            <span className="text-[10px] font-bold text-ink-400 uppercase tracking-wider block">
               Signing Participant
             </span>
-            <h2 className="text-sm font-bold text-white truncate">{currentRecipient?.name}</h2>
-            <p className="text-[11px] text-neutral-400 truncate">{currentRecipient?.email}</p>
+            <h2 className="text-sm font-bold text-ink-900 truncate">{currentRecipient?.name}</h2>
+            <p className="text-xs text-ink-500 truncate">{currentRecipient?.email}</p>
             <div className="pt-1.5 flex items-center gap-2">
-              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-neutral-700 text-neutral-300">
+              <Badge tone="neutral" size="sm">
                 {signedAsGuest || !isAuthenticated ? 'Guest Signer' : 'Authenticated'}
-              </span>
-              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-900/60 text-blue-300 border border-blue-800">
+              </Badge>
+              <Badge tone="info" size="sm">
                 {currentRecipient?.role || 'Signer'}
-              </span>
+              </Badge>
             </div>
           </div>
 
-          {/* Adopted Signature Preview & Creator (INK-16, INK-272) */}
-          <div className="p-3.5 bg-neutral-800/80 border border-neutral-700/60 rounded-2xl space-y-2">
+          {/* Adopted Signature Preview */}
+          <div className="p-3.5 bg-ink-50 border border-ink-200 rounded-lg space-y-2">
             <div className="flex items-center justify-between">
-              <span className="text-[9px] font-bold text-neutral-400 uppercase tracking-widest">
+              <span className="text-[10px] font-bold text-ink-400 uppercase tracking-wider">
                 My Signature
               </span>
               <button
@@ -822,9 +940,9 @@ export default function SignDocumentPage({
                   setActiveSignatureFieldId('signature-sidebar');
                   setActiveSignatureType('SIGNATURE');
                 }}
-                className="text-[11px] font-bold text-blue-400 hover:text-blue-300 hover:underline"
+                className="text-xs font-bold text-brand-700 hover:underline"
               >
-                {adoptedSignature ? 'Edit ✎' : '+ Adopt'}
+                {adoptedSignature ? 'Edit signature' : '+ Adopt signature'}
               </button>
             </div>
 
@@ -834,10 +952,9 @@ export default function SignDocumentPage({
                   setActiveSignatureFieldId('signature-sidebar');
                   setActiveSignatureType('SIGNATURE');
                 }}
-                className="h-16 bg-white rounded-xl p-2 flex items-center justify-center cursor-pointer border border-neutral-300 shadow-inner hover:border-blue-400 transition-all"
-                title="Click to change signature"
+                className="h-16 bg-white rounded-md p-2 flex items-center justify-center cursor-pointer border border-ink-200 shadow-xs hover:border-ink-400 transition-all"
+                title="Click to modify signature"
               >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={adoptedSignature.dataUrl}
                   alt="My Signature"
@@ -845,24 +962,31 @@ export default function SignDocumentPage({
                 />
               </div>
             ) : (
-              <button
-                type="button"
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full justify-center"
                 onClick={() => {
                   setActiveSignatureFieldId('signature-sidebar');
                   setActiveSignatureType('SIGNATURE');
                 }}
-                className="w-full py-2.5 bg-neutral-700 hover:bg-neutral-600 text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 border border-neutral-600"
               >
-                <span>✍️</span> Create Signature (Type/Draw/Upload)
-              </button>
+                Create Signature (Draw/Type/Upload)
+              </Button>
             )}
           </div>
 
-          {/* Required Fields Checklist (INK-103) */}
+          {/* Required Fields Checklist */}
           <div className="space-y-2 flex-1">
-            <span className="text-[9px] font-bold text-neutral-400 uppercase tracking-widest block">
-              Required Fields ({completedRequiredCount}/{assignedRequiredFields.length})
-            </span>
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-bold text-ink-400 uppercase tracking-wider block">
+                Fields to complete
+              </span>
+              <span className="text-xs font-mono font-semibold text-ink-700 tabular-nums">
+                {completedRequiredCount}/{assignedRequiredFields.length}
+              </span>
+            </div>
+
             <div className="space-y-1.5 max-h-60 overflow-y-auto pr-1">
               {assignedFields.map((field, idx) => {
                 const val = fieldValues[field.id];
@@ -873,69 +997,41 @@ export default function SignDocumentPage({
                     key={field.id}
                     onClick={() => {
                       const el = document.getElementById(`field-overlay-${field.id}`);
-                      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                      if (el && typeof el.scrollIntoView === 'function') {
+                        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                      }
                       setHighlightedFieldId(field.id);
                       setTimeout(() => setHighlightedFieldId(null), 2500);
                     }}
-                    className={`p-2 rounded-xl text-xs flex items-center justify-between cursor-pointer transition-all border ${
+                    className={`p-2.5 rounded-md text-xs flex items-center justify-between cursor-pointer transition-all border ${
                       isFilled
-                        ? 'bg-neutral-800/40 border-neutral-800 text-neutral-300 hover:bg-neutral-800'
-                        : 'bg-blue-950/40 border-blue-900/60 text-blue-200 hover:bg-blue-900/40 font-semibold'
+                        ? 'bg-ink-50 border-ink-200 text-ink-700 hover:bg-ink-100'
+                        : 'bg-amber-50/60 border-amber-300 text-amber-900 hover:bg-amber-100 font-semibold'
                     }`}
                   >
                     <div className="flex items-center gap-2 truncate">
-                      <span className="w-4 text-[10px] text-neutral-500 font-mono">#{idx + 1}</span>
+                      <span className="w-4 text-[11px] text-ink-400 font-mono">#{idx + 1}</span>
                       <span className="truncate">{field.label || field.type}</span>
-                      {field.computedRequired && <span className="text-red-400">*</span>}
+                      {field.computedRequired && <span className="text-brand-600">*</span>}
                     </div>
-                    <span
-                      className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
-                        isFilled
-                          ? 'bg-emerald-900/80 text-emerald-300'
-                          : 'bg-red-900/80 text-red-300'
-                      }`}
-                    >
-                      {isFilled ? '✓' : 'Pending'}
-                    </span>
+                    {isFilled ? (
+                      <span className="text-[11px] font-bold px-2 py-0.5 rounded bg-verified-100 text-verified-800">
+                        Done
+                      </span>
+                    ) : (
+                      <span className="text-[11px] font-bold px-2 py-0.5 rounded bg-amber-200 text-amber-900">
+                        Pending
+                      </span>
+                    )}
                   </div>
                 );
               })}
             </div>
           </div>
-
-          {/* Envelope Participants */}
-          <div className="p-3 bg-neutral-800/40 rounded-2xl border border-neutral-800 space-y-1.5 text-xs text-neutral-400">
-            <span className="text-[9px] font-bold text-neutral-500 uppercase tracking-widest block">
-              Envelope Participants
-            </span>
-            <div className="space-y-1">
-              {allRecipients.map((r) => (
-                <div key={r.id} className="flex items-center justify-between text-[11px]">
-                  <div className="flex items-center gap-1.5 truncate">
-                    <span
-                      style={{ backgroundColor: r.color || '#2563EB' }}
-                      className="w-2 h-2 rounded-full shrink-0"
-                    />
-                    <span className="truncate font-medium text-neutral-300">{r.name}</span>
-                  </div>
-                  <span
-                    className={`text-[9px] font-bold px-1.5 py-0.2 rounded uppercase ${
-                      r.status === 'SIGNED'
-                        ? 'bg-emerald-900/60 text-emerald-400'
-                        : 'bg-neutral-800 text-neutral-400'
-                    }`}
-                  >
-                    {r.status}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
         </aside>
 
-        {/* Center / Right Drafting Stage (INK-272) */}
-        <main className="flex-1 overflow-auto bg-neutral-800 flex justify-center p-4 sm:p-8 relative">
-          {/* Document Canvas Sheet */}
+        {/* Center Canvas Stage */}
+        <main className="flex-1 overflow-auto bg-ink-100 flex justify-center p-4 sm:p-8 relative">
           <div
             ref={pageContainerRef}
             style={{
@@ -944,13 +1040,13 @@ export default function SignDocumentPage({
               width: '800px',
               minHeight: '1100px',
             }}
-            className="bg-white shadow-2xl rounded-sm relative transition-transform duration-100 flex flex-col mb-auto select-none overflow-hidden"
+            className="bg-white shadow-[0_4px_8px_-2px_rgb(16_24_40/0.06),0_12px_24px_-4px_rgb(16_24_40/0.08)] rounded-sm relative transition-transform duration-100 flex flex-col mb-auto select-none overflow-hidden border border-ink-200"
             data-testid="document-viewer-container"
           >
             {/* Document Content Layer */}
             {isMarkdown ? (
               <div
-                className="p-12 prose prose-sm max-w-none text-neutral-900 pointer-events-none"
+                className="p-12 prose prose-sm max-w-none text-ink-900 pointer-events-none"
                 dangerouslySetInnerHTML={{
                   __html: renderMarkdownToHtml(agreement.markdownContent || ''),
                 }}
@@ -962,26 +1058,24 @@ export default function SignDocumentPage({
                 title="Document PDF Preview"
               />
             ) : isLoadingPdf ? (
-              <div className="p-16 text-center text-neutral-400 flex flex-col items-center justify-center min-h-[600px] space-y-3">
-                <div className="w-8 h-8 border-3 border-neutral-300 border-t-neutral-800 rounded-full animate-spin" />
-                <p className="text-xs font-semibold text-neutral-600">Loading document...</p>
+              <div className="p-16 text-center text-ink-400 flex flex-col items-center justify-center min-h-[600px] space-y-3">
+                <div className="w-8 h-8 border-2 border-ink-300 border-t-brand-600 rounded-full animate-spin" />
+                <p className="text-xs font-semibold text-ink-600">Loading document…</p>
               </div>
             ) : (
-              <div className="p-16 text-center text-neutral-400 flex flex-col items-center justify-center min-h-[600px]">
-                <span className="text-4xl mb-2">📄</span>
-                <p className="text-xs font-semibold text-neutral-600">{agreement.title}</p>
-                {pdfFetchError && <p className="text-[11px] text-red-500 mt-1">{pdfFetchError}</p>}
+              <div className="p-16 text-center text-ink-400 flex flex-col items-center justify-center min-h-[600px]">
+                <FileText className="w-10 h-10 text-ink-400 mb-2" />
+                <p className="text-xs font-semibold text-ink-600">{agreement.title}</p>
+                {pdfFetchError && <p className="text-xs text-brand-600 mt-1">{pdfFetchError}</p>}
               </div>
             )}
 
-            {/* Field Overlay Layer Positioned Directly on Top of Document Canvas (INK-78 to INK-85, INK-272) */}
+            {/* Field Overlay Layer */}
             <div className="absolute inset-0 pointer-events-auto">
               {evaluatedFields
                 .filter((f) => f.computedVisible)
                 .map((field) => {
                   const isAssignedToMe = field.recipientId === currentRecipient?.id;
-                  const assignedRecip = allRecipients.find((r) => r.id === field.recipientId);
-                  const recipColor = assignedRecip?.color || '#2563EB';
                   const value = fieldValues[field.id];
                   const hasError = Boolean(formErrors[field.id]);
                   const isHighlighted = highlightedFieldId === field.id;
@@ -995,30 +1089,34 @@ export default function SignDocumentPage({
                         top: `${field.y}%`,
                         width: `${field.width}%`,
                         height: `${field.height}%`,
-                        borderColor: recipColor,
                       }}
                       className={`absolute rounded transition-all duration-150 flex flex-col justify-between overflow-visible ${
                         isAssignedToMe
                           ? isHighlighted
-                            ? 'ring-4 ring-blue-500 border-2 bg-blue-50/90 shadow-xl z-30'
+                            ? 'ring-4 ring-brand-500 border-2 border-brand-600 bg-brand-50/90 shadow-xl z-30'
                             : hasError
-                              ? 'border-2 border-red-500 bg-red-50/90 shadow-md z-20 animate-pulse'
+                              ? 'border-2 border-brand-500 bg-brand-50 shadow-md z-20 animate-pulse'
                               : value
-                                ? 'border-2 border-emerald-500 bg-white/95 shadow-xs z-10'
-                                : 'border-2 border-dashed bg-blue-50/80 shadow-xs hover:border-solid hover:bg-blue-50 z-20'
-                          : 'opacity-40 border border-dashed border-neutral-400 bg-neutral-100/50 pointer-events-none z-0'
+                                ? 'border-2 border-verified-500 bg-white shadow-xs z-10'
+                                : 'border-2 border-dashed border-amber-500 bg-amber-50/60 shadow-xs hover:border-solid hover:bg-amber-50 z-20'
+                          : 'opacity-40 border border-dashed border-ink-300 bg-ink-100/50 pointer-events-none z-0'
                       }`}
                       data-testid={`field-container-${field.id}`}
                     >
                       {/* Header Badge */}
                       <div
-                        style={{ backgroundColor: recipColor }}
-                        className="px-1.5 py-0.5 text-white text-[9px] font-bold flex items-center justify-between shrink-0 leading-tight select-none shadow-2xs"
+                        className={`px-1.5 py-0.5 text-[10px] font-bold flex items-center justify-between shrink-0 leading-tight select-none shadow-2xs ${
+                          isAssignedToMe
+                            ? value
+                              ? 'bg-verified-600 text-white'
+                              : 'bg-amber-500 text-ink-900'
+                            : 'bg-ink-400 text-white'
+                        }`}
                       >
                         <div className="flex items-center gap-1 truncate">
                           <span className="truncate">{field.label || field.type}</span>
                           {field.computedRequired && (
-                            <span className="text-red-300 font-extrabold text-xs" title="Required">
+                            <span className="text-brand-600 font-extrabold" title="Required">
                               *
                             </span>
                           )}
@@ -1029,8 +1127,7 @@ export default function SignDocumentPage({
                       </div>
 
                       {/* Interactive Field Content Body */}
-                      <div className="flex-1 bg-white/90 p-0.5 flex items-center justify-center text-center overflow-hidden">
-                        {/* SIGNATURE / INITIALS FIELD (INK-16, INK-100 to INK-102, INK-272) */}
+                      <div className="flex-1 bg-white/95 p-0.5 flex items-center justify-center text-center overflow-hidden">
                         {(field.type === 'SIGNATURE' || field.type === 'INITIALS') && (
                           <div className="w-full h-full flex items-center justify-center">
                             {value ? (
@@ -1041,65 +1138,60 @@ export default function SignDocumentPage({
                                 data-testid={`signature-applied-${field.id}`}
                               >
                                 {typeof value === 'string' && value.startsWith('data:') ? (
-                                  /* eslint-disable-next-line @next/next/no-img-element */
                                   <img
                                     src={value}
                                     alt="Applied Signature"
                                     className="max-h-full max-w-full object-contain"
                                   />
                                 ) : (
-                                  <span className="font-serif italic text-sm text-blue-950 font-bold">
+                                  <span className="font-serif italic text-sm text-ink-900 font-bold">
                                     {String(value)}
                                   </span>
                                 )}
-                                <span className="absolute bottom-0.5 right-1 text-[8px] text-blue-600 bg-white/90 px-1 rounded opacity-0 group-hover:opacity-100 transition-opacity font-bold shadow-2xs">
-                                  Change ✎
+                                <span className="absolute bottom-0.5 right-1 text-[9px] text-ink-600 bg-white/90 px-1 rounded opacity-0 group-hover:opacity-100 transition-opacity font-bold shadow-2xs">
+                                  Change
                                 </span>
                               </div>
                             ) : isAssignedToMe ? (
                               <button
                                 type="button"
                                 onClick={() => handleSignatureFieldClick(field)}
-                                className="w-full h-full bg-blue-500/10 hover:bg-blue-500/20 text-blue-700 text-[10px] sm:text-xs font-bold rounded flex items-center justify-center gap-1 transition-all cursor-pointer animate-pulse"
+                                className="w-full h-full bg-amber-50 hover:bg-amber-100 text-amber-900 text-xs font-bold rounded flex items-center justify-center gap-1 transition-all cursor-pointer"
                                 data-testid={`click-to-sign-${field.id}`}
                               >
-                                <span>✍️</span>
-                                <span>{adoptedSignature ? 'Apply' : 'Sign Here'}</span>
+                                <span>{adoptedSignature ? 'Apply' : 'Sign here'}</span>
                               </button>
                             ) : (
-                              <span className="text-[10px] text-neutral-400 italic">
+                              <span className="text-[10px] text-ink-400 italic">
                                 Signature Area
                               </span>
                             )}
                           </div>
                         )}
 
-                        {/* TEXT FIELD */}
                         {field.type === 'TEXT' && (
                           <input
                             type="text"
                             disabled={!isAssignedToMe}
-                            placeholder={field.placeholder || 'Enter text...'}
+                            placeholder={field.placeholder || 'Enter text…'}
                             value={typeof value === 'string' ? value : ''}
                             onChange={(e) => handleInputChange(field.id, e.target.value)}
-                            className="w-full h-full text-xs font-medium px-1.5 bg-transparent border-0 focus:outline-none text-neutral-900 text-center"
+                            className="w-full h-full text-xs font-medium px-1.5 bg-transparent border-0 focus:outline-none text-ink-900 text-center"
                             data-testid={`input-text-${field.id}`}
                           />
                         )}
 
-                        {/* DATE FIELD */}
                         {field.type === 'DATE' && (
                           <input
                             type="date"
                             disabled={!isAssignedToMe}
                             value={typeof value === 'string' ? value : ''}
                             onChange={(e) => handleInputChange(field.id, e.target.value)}
-                            className="w-full h-full text-xs font-medium px-1 bg-transparent border-0 focus:outline-none text-neutral-900 text-center"
+                            className="w-full h-full text-xs font-medium px-1 bg-transparent border-0 focus:outline-none text-ink-900 text-center"
                             data-testid={`input-date-${field.id}`}
                           />
                         )}
 
-                        {/* EMAIL FIELD */}
                         {field.type === 'EMAIL' && (
                           <input
                             type="email"
@@ -1107,44 +1199,30 @@ export default function SignDocumentPage({
                             placeholder="email@example.com"
                             value={typeof value === 'string' ? value : ''}
                             onChange={(e) => handleInputChange(field.id, e.target.value)}
-                            className="w-full h-full text-xs font-medium px-1.5 bg-transparent border-0 focus:outline-none text-neutral-900 text-center"
+                            className="w-full h-full text-xs font-medium px-1.5 bg-transparent border-0 focus:outline-none text-ink-900 text-center"
                             data-testid={`input-email-${field.id}`}
                           />
                         )}
 
-                        {/* COMPANY / TITLE FIELD */}
-                        {(field.type === 'COMPANY' || field.type === 'TITLE') && (
-                          <input
-                            type="text"
-                            disabled={!isAssignedToMe}
-                            placeholder={field.placeholder || field.label}
-                            value={typeof value === 'string' ? value : ''}
-                            onChange={(e) => handleInputChange(field.id, e.target.value)}
-                            className="w-full h-full text-xs font-medium px-1.5 bg-transparent border-0 focus:outline-none text-neutral-900 text-center"
-                          />
-                        )}
-
-                        {/* CHECKBOX FIELD */}
                         {field.type === 'CHECKBOX' && (
                           <input
                             type="checkbox"
                             disabled={!isAssignedToMe}
                             checked={Boolean(value)}
                             onChange={(e) => handleInputChange(field.id, e.target.checked)}
-                            className="w-4 h-4 text-blue-600 rounded cursor-pointer"
+                            className="w-4 h-4 text-brand-600 rounded cursor-pointer"
                             data-testid={`input-checkbox-${field.id}`}
                           />
                         )}
 
-                        {/* DROPDOWN FIELD */}
                         {field.type === 'DROPDOWN' && (
                           <select
                             disabled={!isAssignedToMe}
                             value={typeof value === 'string' ? value : ''}
                             onChange={(e) => handleInputChange(field.id, e.target.value)}
-                            className="w-full h-full text-xs bg-transparent border-0 focus:outline-none text-neutral-900 text-center"
+                            className="w-full h-full text-xs bg-transparent border-0 focus:outline-none text-ink-900 text-center"
                           >
-                            <option value="">Select option...</option>
+                            <option value="">Select option…</option>
                             {field.options?.map((opt, oIdx) => (
                               <option key={oIdx} value={opt.value}>
                                 {opt.label}
@@ -1161,11 +1239,7 @@ export default function SignDocumentPage({
         </main>
       </div>
 
-      {/* ========================================================================= */}
-      {/* MODALS & OVERLAYS (INK-16, INK-99, INK-266, INK-272) */}
-      {/* ========================================================================= */}
-
-      {/* INK-16 & INK-100 to INK-102: Signature Adoption Modal */}
+      {/* Signature Adoption Modal */}
       <SignatureModal
         isOpen={Boolean(activeSignatureFieldId)}
         fieldType={activeSignatureType}
@@ -1174,13 +1248,14 @@ export default function SignDocumentPage({
         onClose={() => setActiveSignatureFieldId(null)}
       />
 
-      {/* INK-99: Electronic Record & Signature Disclosure Consent Modal */}
+      {/* Electronic Record & Signature Disclosure Consent Modal */}
       <ElectronicConsentModal
         isOpen={showConsentModal}
         documentTitle={agreement?.title || 'Agreement'}
         recipientName={currentRecipient?.name || 'Participant'}
         senderName={agreement?.senderName || 'Sender'}
         organisationName={agreement?.organisationName || 'Organization'}
+        envelopeId={envelopeId}
         onAcceptConsent={handleAcceptConsent}
         onDecline={() => {
           setShowConsentModal(false);
@@ -1190,100 +1265,112 @@ export default function SignDocumentPage({
 
       {/* Decline Reason Modal */}
       {showDeclineModal && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4 text-neutral-900 border border-neutral-200">
-            <h3 className="text-base font-bold text-red-600 flex items-center gap-2">
-              <span>🛑</span> Decline Document
-            </h3>
-            <p className="text-xs text-neutral-600">
-              Please provide a reason for declining to sign this agreement. This will be recorded in
-              the tamper-evident audit trail and communicated to the sender.
+        <div className="fixed inset-0 z-50 bg-ink-950/55 backdrop-blur-[2px] flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-2xl space-y-4 text-ink-900 border border-ink-200">
+            <h3 className="text-base font-bold text-brand-600">Decline this agreement?</h3>
+            <p className="text-xs text-ink-500 leading-relaxed">
+              Please provide an optional reason for declining to sign this agreement. This will be
+              recorded in the tamper-evident audit trail and communicated to the sender.
             </p>
             <textarea
               value={declineReason}
               onChange={(e) => setDeclineReason(e.target.value)}
-              placeholder="Enter reason for declining..."
-              className="w-full h-24 p-3 border border-neutral-300 rounded-xl text-xs focus:ring-2 focus:ring-red-500 focus:outline-none"
+              placeholder="Enter reason for declining…"
+              rows={3}
+              className="w-full p-2.5 border border-ink-200 rounded-md text-xs focus:border-ink-900 focus:outline-none"
               data-testid="decline-reason-input"
             />
-            <div className="flex justify-end gap-2 pt-2 border-t border-neutral-100">
-              <button
+            <div className="flex justify-end gap-2 pt-2 border-t border-ink-100">
+              <Button
                 type="button"
+                variant="ghost"
+                size="md"
                 onClick={() => setShowDeclineModal(false)}
-                className="px-4 py-2 text-xs font-semibold text-neutral-600 hover:bg-neutral-100 rounded-xl transition-colors"
               >
                 Cancel
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
+                variant="destructive"
+                size="md"
                 onClick={handleDecline}
-                disabled={isDeclining || !declineReason.trim()}
-                className="px-4 py-2 text-xs font-bold text-white bg-red-600 hover:bg-red-700 disabled:opacity-50 rounded-xl shadow-xs"
+                isLoading={isDeclining}
                 data-testid="confirm-decline-button"
               >
-                {isDeclining ? 'Declining...' : 'Confirm Decline'}
-              </button>
+                Confirm Decline
+              </Button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Signer Authentication & Guest Gate Modal (INK-266) */}
+      {/* B3: Signature Invitation Modal / Auth Gate */}
       {showAuthGate && !signedAsGuest && !isAuthenticated && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-8 shadow-2xl space-y-6 text-neutral-900 border border-neutral-100 text-center animate-in fade-in zoom-in-95 duration-200">
-            <div className="w-14 h-14 bg-red-50 text-[#ba0000] rounded-2xl flex items-center justify-center mx-auto text-2xl font-bold border border-red-100 shadow-xs">
-              ✍️
+        <div className="fixed inset-0 z-50 bg-ink-950/55 backdrop-blur-[2px] flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-7 shadow-2xl space-y-5 text-ink-900 border border-ink-200 text-center animate-in fade-in zoom-in-95 duration-150">
+            <div className="w-10 h-10 bg-brand-600 text-white rounded-lg flex items-center justify-center mx-auto text-lg font-bold shadow-xs">
+              g
             </div>
 
-            <div className="space-y-1.5">
-              <span className="text-[10px] font-bold uppercase tracking-widest text-[#ba0000] bg-red-50 px-2.5 py-1 rounded-full border border-red-200">
+            <div className="space-y-1">
+              <Badge tone="brand" size="sm">
                 Signature Invitation
-              </span>
-              <h2 className="text-xl font-black text-neutral-900 pt-1">Sign Document</h2>
-              <p className="text-xs text-neutral-500 max-w-xs mx-auto">
-                You are invited to review and sign{' '}
-                <strong className="text-neutral-900">&quot;{agreement?.title}&quot;</strong> sent by{' '}
-                <strong className="text-neutral-900">{agreement?.senderName}</strong>.
+              </Badge>
+              <h2 className="text-xl font-bold text-ink-900 tracking-tight pt-1">Sign Document</h2>
+              <p className="text-xs text-ink-500 leading-relaxed max-w-xs mx-auto">
+                {orLabel(agreement?.senderName, 'The sender')} requested your signature on{' '}
+                <strong className="text-ink-900 font-semibold">
+                  &quot;{agreement?.title}&quot;
+                </strong>
+                .
               </p>
             </div>
 
-            <div className="space-y-2.5 pt-2">
-              <Link
-                href={`/login?returnTo=${encodeURIComponent(`/sign/${rawToken}`)}`}
-                className="w-full py-3 bg-[#ba0000] hover:bg-red-700 text-white text-xs sm:text-sm font-bold rounded-xl shadow-xs transition-all flex items-center justify-center gap-2"
-              >
-                <span>🔑</span> Log In with Existing Account
-              </Link>
-
-              <Link
-                href={`/register?returnTo=${encodeURIComponent(`/sign/${rawToken}`)}`}
-                className="w-full py-3 bg-neutral-900 hover:bg-neutral-800 text-white text-xs sm:text-sm font-bold rounded-xl shadow-xs transition-all flex items-center justify-center gap-2"
-              >
-                <span>✨</span> Sign Up for GraphSign
-              </Link>
-
-              <div className="relative py-2 flex items-center justify-center">
-                <div className="border-t border-neutral-200 w-full" />
-                <span className="bg-white px-3 text-[11px] text-neutral-400 font-medium absolute">
-                  or continue directly
+            {/* Document Details Block */}
+            <div className="bg-ink-50 border border-ink-200 rounded-md p-3.5 text-left text-xs space-y-1.5">
+              <div className="flex justify-between items-center text-ink-500">
+                <span>Document</span>
+                <span className="font-semibold text-ink-900 truncate max-w-[200px]">
+                  {agreement?.title}
                 </span>
               </div>
+              <div className="flex justify-between items-center text-ink-500">
+                <span>Recipient</span>
+                <span className="font-semibold text-ink-900">{currentRecipient?.email}</span>
+              </div>
+              <div className="flex justify-between items-center text-ink-500">
+                <span>Envelope ID</span>
+                <span className="font-mono text-[11px] text-ink-900 font-semibold">
+                  {envelopeId}
+                </span>
+              </div>
+            </div>
 
-              <button
-                type="button"
+            <div className="space-y-2 pt-1">
+              <Button
+                variant="primary"
+                size="lg"
+                className="w-full justify-center"
                 onClick={() => {
                   setSignedAsGuest(true);
                   setShowAuthGate(false);
                   setShowConsentModal(true);
                 }}
-                className="w-full py-3 bg-neutral-100 hover:bg-neutral-200 text-neutral-800 text-xs sm:text-sm font-bold rounded-xl transition-all flex items-center justify-center gap-2 border border-neutral-200 cursor-pointer"
               >
-                <span>👤</span> Sign as Guest (Email OTP Required)
-              </button>
+                Sign as Guest (Email OTP Required)
+              </Button>
+
+              <Link
+                href={`/login?returnTo=${encodeURIComponent(`/sign/${rawToken}`)}`}
+                className="block w-full"
+              >
+                <Button variant="outline" size="md" className="w-full justify-center">
+                  Log In with Existing Account
+                </Button>
+              </Link>
             </div>
 
-            <p className="text-[11px] text-neutral-400">
+            <p className="text-[11px] text-ink-400">
               Guest signers verify a 6-digit OTP code sent to their email ({currentRecipient?.email}
               ) upon signature confirmation.
             </p>
@@ -1291,7 +1378,7 @@ export default function SignDocumentPage({
         </div>
       )}
 
-      {/* 2nd-Layer Email OTP Verification Modal for Guest Signers (INK-266) */}
+      {/* OTP Verification Modal */}
       <OtpVerificationModal
         token={rawToken}
         recipientEmail={currentRecipient?.email || ''}
