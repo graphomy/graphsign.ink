@@ -123,6 +123,7 @@ app.route('/api/v1/admin/trust-store', createTrustStoreRoutes());
 
 // Public verification routes (No authentication required)
 app.route('/verify', createPublicVerifyRoutes());
+app.route('/api/v1/verify', createPublicVerifyRoutes());
 
 // Cloud Signature Consortium (CSC v2.2) protocol routes
 app.route('/csc/v2', createCscRoutes());

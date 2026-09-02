@@ -36,6 +36,13 @@ const HANDWRITING_FONTS = [
   { id: 'sacramento', name: 'Sacramento', family: "'Sacramento', cursive" },
 ];
 
+function deriveInitials(fullName: string): string {
+  if (!fullName) return 'S';
+  const parts = fullName.trim().split(/\s+/);
+  if (parts.length === 1) return parts[0]!.slice(0, 2).toUpperCase();
+  return (parts[0]![0]! + parts[parts.length - 1]![0]!).toUpperCase();
+}
+
 export function SignatureModal({
   isOpen,
   fieldType = 'SIGNATURE',
@@ -54,6 +61,8 @@ export function SignatureModal({
 
   // Type State
   const [typedName, setTypedName] = useState(defaultSignerName || '');
+  const [typedInitials, setTypedInitials] = useState(() => deriveInitials(defaultSignerName || ''));
+  const [userChangedInitials, setUserChangedInitials] = useState(false);
   const [selectedFont, setSelectedFont] = useState(HANDWRITING_FONTS[0]!);
 
   // Upload State
@@ -228,13 +237,6 @@ export function SignatureModal({
     reader.readAsDataURL(file);
   }
 
-  function deriveInitials(fullName: string): string {
-    if (!fullName) return 'S';
-    const parts = fullName.trim().split(/\s+/);
-    if (parts.length === 1) return parts[0]!.slice(0, 2).toUpperCase();
-    return (parts[0]![0]! + parts[parts.length - 1]![0]!).toUpperCase();
-  }
-
   function handleAdoptAndApply() {
     if (!consentAgreed) return;
 
@@ -244,26 +246,47 @@ export function SignatureModal({
     let rawText: string | undefined = undefined;
     let initialsDataUrl: string | undefined = undefined;
 
-    const initialsText = deriveInitials(typedName || defaultSignerName || 'Signer');
+    const effectiveInitials = (
+      typedInitials.trim() ||
+      deriveInitials(typedName || defaultSignerName || 'Signer')
+    ).toUpperCase();
 
     if (activeTab === 'draw') {
       const canvas = canvasRef.current;
       if (!canvas || !hasDrawn) return;
-      finalDataUrl = canvas.toDataURL('image/png');
+      const drawnData = canvas.toDataURL('image/png');
       finalType = 'DRAWN';
-      initialsDataUrl = generateTypedDataUrl(initialsText, selectedFont);
+      if (fieldType === 'INITIALS') {
+        finalDataUrl = drawnData;
+        initialsDataUrl = drawnData;
+        rawText = effectiveInitials;
+      } else {
+        finalDataUrl = drawnData;
+        initialsDataUrl = generateTypedDataUrl(effectiveInitials, selectedFont);
+      }
     } else if (activeTab === 'type') {
       const text = typedName.trim() || defaultSignerName || 'Signature';
-      finalDataUrl = generateTypedDataUrl(text, selectedFont);
       finalType = 'TYPED';
       fontFamily = selectedFont.name;
-      rawText = text;
-      initialsDataUrl = generateTypedDataUrl(initialsText, selectedFont);
+      initialsDataUrl = generateTypedDataUrl(effectiveInitials, selectedFont);
+      if (fieldType === 'INITIALS') {
+        finalDataUrl = initialsDataUrl;
+        rawText = effectiveInitials;
+      } else {
+        finalDataUrl = generateTypedDataUrl(text, selectedFont);
+        rawText = text;
+      }
     } else if (activeTab === 'upload') {
       if (!uploadedImage) return;
-      finalDataUrl = uploadedImage;
       finalType = 'UPLOADED';
-      initialsDataUrl = generateTypedDataUrl(initialsText, selectedFont);
+      if (fieldType === 'INITIALS') {
+        finalDataUrl = uploadedImage;
+        initialsDataUrl = uploadedImage;
+        rawText = effectiveInitials;
+      } else {
+        finalDataUrl = uploadedImage;
+        initialsDataUrl = generateTypedDataUrl(effectiveInitials, selectedFont);
+      }
     }
 
     if (finalDataUrl) {
@@ -278,7 +301,10 @@ export function SignatureModal({
     }
   }
 
-  const currentInitials = deriveInitials(typedName || defaultSignerName || 'Signer');
+  const currentInitials = (
+    typedInitials.trim() ||
+    deriveInitials(typedName || defaultSignerName || 'Signer')
+  ).toUpperCase();
 
   return (
     <div
@@ -414,22 +440,52 @@ export function SignatureModal({
         {/* TYPE TAB */}
         {activeTab === 'type' && (
           <div className="space-y-3">
-            <div>
-              <label
-                htmlFor="typed-signature-input"
-                className="block text-xs font-semibold text-ink-700 mb-1"
-              >
-                Signer Legal Name
-              </label>
-              <input
-                id="typed-signature-input"
-                type="text"
-                value={typedName}
-                onChange={(e) => setTypedName(e.target.value)}
-                placeholder="Type your full legal name..."
-                className="w-full rounded-md border border-ink-200 px-3 py-2 text-sm bg-white text-ink-900 focus:border-ink-900 focus:outline-none"
-                data-testid="typed-signature-input"
-              />
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="sm:col-span-2">
+                <label
+                  htmlFor="typed-signature-input"
+                  className="block text-xs font-semibold text-ink-700 mb-1"
+                >
+                  Signer Legal Name
+                </label>
+                <input
+                  id="typed-signature-input"
+                  type="text"
+                  value={typedName}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setTypedName(val);
+                    if (!userChangedInitials) {
+                      setTypedInitials(deriveInitials(val));
+                    }
+                  }}
+                  placeholder="Type your full legal name..."
+                  className="w-full rounded-md border border-ink-200 px-3 py-2 text-sm bg-white text-ink-900 focus:border-ink-900 focus:outline-none"
+                  data-testid="typed-signature-input"
+                />
+              </div>
+
+              <div>
+                <label
+                  htmlFor="typed-initials-input"
+                  className="block text-xs font-semibold text-ink-700 mb-1"
+                >
+                  Initials
+                </label>
+                <input
+                  id="typed-initials-input"
+                  type="text"
+                  maxLength={5}
+                  value={typedInitials}
+                  onChange={(e) => {
+                    setUserChangedInitials(true);
+                    setTypedInitials(e.target.value.toUpperCase());
+                  }}
+                  placeholder="e.g. KP"
+                  className="w-full rounded-md border border-ink-200 px-3 py-2 text-sm font-bold uppercase tracking-wider bg-white text-ink-900 focus:border-ink-900 focus:outline-none text-center"
+                  data-testid="typed-initials-input"
+                />
+              </div>
             </div>
 
             <div className="space-y-1.5">
@@ -605,13 +661,13 @@ export function SignatureModal({
             disabled={
               !consentAgreed ||
               (activeTab === 'draw' && !hasDrawn) ||
-              (activeTab === 'type' && !typedName.trim() && !defaultSignerName) ||
+              (activeTab === 'type' && !typedName.trim() && !defaultSignerName && !typedInitials.trim()) ||
               (activeTab === 'upload' && !uploadedImage)
             }
             onClick={handleAdoptAndApply}
             data-testid="adopt-signature-button"
           >
-            Adopt and sign
+            {fieldType === 'INITIALS' ? 'Adopt initials' : 'Adopt and sign'}
           </Button>
         </div>
       </div>

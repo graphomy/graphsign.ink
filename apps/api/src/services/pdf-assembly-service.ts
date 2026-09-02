@@ -298,10 +298,18 @@ export class PdfAssemblyService {
         value = matchedRecip.signatureData.data;
       }
 
+      if (field.type === 'DATE' && !value && matchedRecip.signedAt) {
+        value = new Date(matchedRecip.signedAt).toISOString().split('T')[0];
+      }
+
       if (!value) continue;
 
       if (field.type === 'SIGNATURE' || field.type === 'INITIALS') {
-        if (typeof value === 'string' && value.startsWith('data:image/')) {
+        if (
+          typeof value === 'string' &&
+          value.startsWith('data:image/') &&
+          !value.includes('image/svg')
+        ) {
           try {
             const commaIndex = value.indexOf(',');
             const base64Data = commaIndex !== -1 ? value.substring(commaIndex + 1) : value;
@@ -323,8 +331,15 @@ export class PdfAssemblyService {
           }
         }
 
-        // Fallback: draw bold stylized signature text
-        page.drawText(String(value), {
+        // Fallback: draw bold stylized signature text (handling SVG and text gracefully)
+        let textToDraw = String(value);
+        if (textToDraw.includes('<svg') || textToDraw.startsWith('data:image/svg+xml')) {
+          const svgMatch = textToDraw.match(/<text[^>]*>(.*?)<\/text>/i);
+          textToDraw = svgMatch ? decodeURIComponent(svgMatch[1]!) : matchedRecip.name || 'Signed';
+        }
+        const cleanText = textToDraw.replace(/[^\x20-\x7E]/g, '') || matchedRecip.name || 'Signed';
+
+        page.drawText(cleanText, {
           x: boxX + 4,
           y: boxY + Math.max(4, boxH / 2 - 5),
           size: Math.min(13, boxH * 0.55),

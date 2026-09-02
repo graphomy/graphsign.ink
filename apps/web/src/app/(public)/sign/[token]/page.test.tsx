@@ -344,10 +344,15 @@ describe('SignDocumentPage Component Tests (FR-007 Workflow Engine)', () => {
           json: () => Promise.resolve({ success: true, verified: true }),
         });
       }
-      if (typeof url === 'string' && url.includes('/api/v1/sign/token-guest/complete')) {
+      if (
+        typeof url === 'string' &&
+        (url.includes('/api/v1/sign/token-guest/complete') ||
+          url.includes('/api/v1/sign/token-guest/submit'))
+      ) {
         return Promise.resolve({
           ok: true,
-          json: () => Promise.resolve({ success: true, data: { status: 'SIGNED' } }),
+          json: () =>
+            Promise.resolve({ success: true, data: { isCompleted: true, status: 'COMPLETED' } }),
         });
       }
       return Promise.resolve({

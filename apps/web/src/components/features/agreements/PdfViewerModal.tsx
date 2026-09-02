@@ -60,7 +60,10 @@ export function PdfViewerModal({ agreement, onClose, onOpenEditor }: PdfViewerMo
 
   const meta = (agreement.metadata as Record<string, unknown>) || {};
   const rawFileData =
-    (meta.fileData as string | undefined) || (meta.fileBase64 as string | undefined);
+    (meta.signedPdfBase64 as string | undefined) ||
+    (meta.sealedPdfBase64 as string | undefined) ||
+    (meta.fileData as string | undefined) ||
+    (meta.fileBase64 as string | undefined);
   const hasFileData = !!rawFileData;
 
   const isPdf =

@@ -118,6 +118,14 @@ export class SearchService {
             'VOIDED',
           ],
         };
+      } else if (query.status === 'WAITING_FOR_ME' || query.status === 'NEEDS_SIGNATURE') {
+        where.status = { in: ['SENT', 'PARTIALLY_SIGNED'] };
+        where.recipients = {
+          some: {
+            email: { equals: ctx.userEmail, mode: 'insensitive' },
+            status: { in: ['PENDING', 'INVITED'] },
+          },
+        };
       } else if (query.status === 'DRAFT') {
         where.status = { in: ['DRAFT', 'IN_REVIEW', 'REJECTED', 'CANCELLED'] };
       } else {

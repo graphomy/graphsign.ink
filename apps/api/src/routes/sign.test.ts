@@ -139,7 +139,7 @@ describe('Sign Route Integration Tests (Public Signer Endpoints)', () => {
     );
   });
 
-  it('GET /api/v1/sign/:token/download downloads markdown document (INK-105)', async () => {
+  it('GET /api/v1/sign/:token/download blocks download if not completed (INK-278)', async () => {
     mockWorkflowService.getSigningDocumentFile = vi.fn().mockResolvedValue({
       id: 'ag-1',
       title: 'Sales Agreement',
@@ -152,10 +152,27 @@ describe('Sign Route Integration Tests (Public Signer Endpoints)', () => {
       method: 'GET',
     });
 
+    expect(res.status).toBe(403);
+    const err = await res.json();
+    expect(err.error?.message).toContain('completed signing');
+  });
+
+  it('GET /api/v1/sign/:token/download downloads compiled PDF instead of raw markdown when completed (INK-278)', async () => {
+    mockWorkflowService.getSigningDocumentFile = vi.fn().mockResolvedValue({
+      id: 'ag-1',
+      title: 'Sales Agreement',
+      fileName: 'sales-agreement.pdf',
+      markdownContent: '# Sales Agreement\nTerms here...',
+      status: 'COMPLETED',
+    });
+
+    const res = await app.request('/api/v1/sign/token-123/download', {
+      method: 'GET',
+    });
+
     expect(res.status).toBe(200);
-    const text = await res.text();
-    expect(text).toContain('# Sales Agreement');
-    expect(res.headers.get('Content-Disposition')).toContain('sales-agreement.md');
+    expect(res.headers.get('Content-Type')).toBe('application/pdf');
+    expect(res.headers.get('Content-Disposition')).toContain('sales-agreement.pdf');
   });
 
   it('GET /api/v1/sign/:token/download streams PDF binary (INK-105)', async () => {

@@ -66,7 +66,8 @@ export interface MailerService {
     recipientName: string,
     agreementTitle: string,
     downloadUrl?: string,
-    meta?: EmailTrackingMetadata,
+    verificationUrlOrMeta?: string | EmailTrackingMetadata,
+    maybeMeta?: EmailTrackingMetadata,
   ): Promise<void>;
   sendAgreementDeclinedEmail(
     to: string,
@@ -479,8 +480,14 @@ export class ResendMailerService implements MailerService {
     recipientName: string,
     agreementTitle: string,
     downloadUrl?: string,
-    meta?: EmailTrackingMetadata,
+    verificationUrlOrMeta?: string | EmailTrackingMetadata,
+    maybeMeta?: EmailTrackingMetadata,
   ): Promise<void> {
+    const verificationUrl =
+      typeof verificationUrlOrMeta === 'string' ? verificationUrlOrMeta : undefined;
+    const meta =
+      typeof verificationUrlOrMeta === 'object' ? verificationUrlOrMeta : maybeMeta;
+
     await this.dispatch(
       to,
       `Completed: "${agreementTitle}" has been signed by all parties`,
@@ -491,11 +498,21 @@ export class ResendMailerService implements MailerService {
             Hello ${recipientName},<br/><br/>
             All parties have finished executing <strong>"${agreementTitle}"</strong>. A tamper-evident cryptographic copy is permanently sealed in the audit trail.
           </p>
-          ${
-            downloadUrl
-              ? `<a href="${downloadUrl}" style="display: inline-block; background: #059669; color: white; padding: 10px 20px; text-decoration: none; border-radius: 6px; font-size: 15px; margin: 16px 0; font-weight: bold;">Download Executed Copy</a>`
-              : ''
-          }
+          <div style="margin: 20px 0;">
+            ${
+              downloadUrl
+                ? `<a href="${downloadUrl}" style="display: inline-block; background: #059669; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-size: 15px; margin-right: 12px; font-weight: bold;">Download Executed PDF</a>`
+                : ''
+            }
+            ${
+              verificationUrl
+                ? `<a href="${verificationUrl}" style="display: inline-block; background: #f4f4f5; color: #18181b; border: 1px solid #d4d4d8; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-size: 15px; font-weight: bold;">Verify Signature Authenticity</a>`
+                : ''
+            }
+          </div>
+          <p style="color: #666; font-size: 12px; line-height: 1.4; margin-top: 20px;">
+            The sealed document complies with ETSI EN 319 142 PAdES Baseline-T standards and includes an RFC 3161 cryptographic timestamp.
+          </p>
         </div>
       `,
       { ...meta, recipientName, eventType: 'COMPLETED' },

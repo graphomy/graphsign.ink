@@ -12,7 +12,8 @@ import {
   electronicConsentSchema,
   verifyOtpSchema,
 } from '../validators/workflow-validators.js';
-import { BadRequestError } from '../utils/errors.js';
+import { BadRequestError, ForbiddenError } from '../utils/errors.js';
+import { PdfAssemblyService } from '../services/pdf-assembly-service.js';
 import { createRateLimiter } from '../middleware/rate-limiter.js';
 import type { Env } from '../index.js';
 
@@ -251,6 +252,34 @@ export function createSignRoutes(deps?: SignDeps) {
 
     const file = await service.getSigningDocumentFile(rawToken);
 
+    if (file.status !== 'COMPLETED') {
+      throw new ForbiddenError(
+        'Document can only be downloaded after all signers have completed signing.',
+      );
+    }
+
+    if (!file.fileData && file.markdownContent) {
+      try {
+        const pdfAssembly = new PdfAssemblyService();
+        const pdfBytes = await pdfAssembly.assembleCompletedDocument({
+          agreementTitle: file.title || 'Agreement',
+          envelopeId: `ENV-${(file.id || '').replace(/-/g, '').substring(0, 8).toUpperCase()}`,
+          markdownContent: file.markdownContent,
+          sealDetails: (file as any).verificationToken
+            ? {
+                verificationToken: (file as any).verificationToken,
+                verificationUrl: `https://graphsign.ink/verify/${(file as any).verificationToken}`,
+                documentHash: (file as any).documentHash || 'COMPLETED',
+              }
+            : undefined,
+        });
+        file.fileData = Buffer.from(pdfBytes).toString('base64');
+        file.mimeType = 'application/pdf';
+      } catch (err) {
+        console.warn('[SIGN] Failed to compile markdown on download:', err);
+      }
+    }
+
     if (file.fileData) {
       const base64Content = file.fileData.includes(',')
         ? file.fileData.split(',')[1]
@@ -270,35 +299,12 @@ export function createSignRoutes(deps?: SignDeps) {
       return c.body(buffer as any);
     }
 
-    if (file.markdownContent) {
-      c.header('Content-Type', 'text/markdown; charset=utf-8');
-      c.header(
-        'Content-Disposition',
-        `attachment; filename="${file.fileName.replace(/\.pdf$/, '.md')}"`,
-      );
-      if ((file as any).verificationToken) {
-        c.header('X-Verification-Token', (file as any).verificationToken);
-      }
-      if ((file as any).documentHash) {
-        c.header('X-Document-SHA256', (file as any).documentHash);
-      }
-      return c.text(file.markdownContent);
-    }
-
-    // Fallback standard PDF if raw binary was not stored
+    // Never return raw markdown on download of completed agreements
     const fallbackPdf = `%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n3 0 obj<</Type/Page/MediaBox[0 0 612 792]/Parent 2 0 R/Resources<<>>>>endobj\nxref\n0 4\n0000000000 65535 f\n0000000009 00000 n\n0000000052 00000 n\n0000000101 00000 n\ntrailer<</Size 4/Root 1 0 R>>\nstartxref\n178\n%%EOF`;
-    c.header('Content-Type', 'application/pdf');
-    c.header(
-      'Content-Disposition',
-      `attachment; filename="${file.fileName || 'signed-document.pdf'}"`,
-    );
-    if ((file as any).verificationToken) {
-      c.header('X-Verification-Token', (file as any).verificationToken);
-    }
-    if ((file as any).documentHash) {
-      c.header('X-Document-SHA256', (file as any).documentHash);
-    }
-    return c.body(fallbackPdf);
+    return c.body(fallbackPdf as any, 200, {
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="${(file.fileName || 'signed-document.pdf').replace(/\.md$/i, '.pdf')}"`,
+    });
   });
 
   return sign;

@@ -145,12 +145,12 @@ export class PadesSealingService {
       },
     });
 
-    // Compute document hash over compiled PDF container
-    const documentHash = await sha256(Buffer.from(assembledPdfBytes).toString('base64'));
+    // 1. Initial content digest for TSA timestamping & signature
+    const preSealDigest = await sha256(assembledPdfBytes);
 
     // Request RFC 3161 Timestamp
     const tsaResult = await this.tsaService.requestTimestamp(
-      documentHash,
+      preSealDigest,
       cert.tsaUrl || undefined,
     );
 
@@ -160,17 +160,20 @@ export class PadesSealingService {
       keyId: cert.pkcs11KeyId,
       privateKeyPem: dummyKeys.privateKeyPem,
       algorithm: cert.algorithm as any,
-      hashBase64: btoa(documentHash),
+      hashBase64: btoa(preSealDigest),
     });
 
     // Build PAdES sealed container representation
-    const sealedPdfBase64 = this.buildPadesContainer(
+    const { sealedPdfBase64, sealedPdfBytes } = this.buildPadesContainer(
       assembledPdfBytes,
       cert.certificatePem,
       signatureBase64,
       tsaResult.tokenBase64,
       verificationToken,
     );
+
+    // Compute document hash over final sealed PDF container bytes for client hash verification
+    const documentHash = await sha256(sealedPdfBytes);
 
     const sealId = generateId();
 
@@ -335,7 +338,7 @@ export class PadesSealingService {
     signatureBase64: string,
     tsaTokenBase64: string,
     verificationToken: string,
-  ): string {
+  ): { sealedPdfBase64: string; sealedPdfBytes: Uint8Array } {
     // Append standard PDF incremental update structure with signature dictionary
     const trailerMetadata = JSON.stringify({
       sigType: 'PAdES-B-T',
@@ -349,17 +352,23 @@ export class PadesSealingService {
     const sealComment = `\n%PAdES-B-T-SEAL:${verificationToken}\n%SIG:${signatureBase64.substring(0, 64)}\n%TSA:${tsaTokenBase64.substring(0, 64)}\n%META:${btoa(trailerMetadata)}\n%%EOF`;
     const sealBytes = Buffer.from(sealComment, 'utf-8');
 
+    let baseBytes: Buffer;
     if (typeof originalPdf === 'string') {
       const isBase64 = !originalPdf.startsWith('%PDF');
-      const baseBytes = isBase64
+      baseBytes = isBase64
         ? Buffer.from(
             originalPdf.includes(',') ? originalPdf.split(',')[1]! : originalPdf,
             'base64',
           )
         : Buffer.from(originalPdf, 'utf-8');
-      return Buffer.concat([baseBytes, sealBytes]).toString('base64');
+    } else {
+      baseBytes = Buffer.from(originalPdf);
     }
 
-    return Buffer.concat([Buffer.from(originalPdf), sealBytes]).toString('base64');
+    const finalBuffer = Buffer.concat([baseBytes, sealBytes]);
+    return {
+      sealedPdfBase64: finalBuffer.toString('base64'),
+      sealedPdfBytes: new Uint8Array(finalBuffer),
+    };
   }
 }
