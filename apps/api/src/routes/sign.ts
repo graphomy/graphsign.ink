@@ -28,6 +28,15 @@ export function createSignRoutes(deps?: SignDeps) {
 
   sign.use('/*', createRateLimiter(60, 60_000));
 
+  function getClientIp(c: any): string {
+    return (
+      c.req.header('cf-connecting-ip')?.trim() ||
+      c.req.header('x-real-ip')?.trim() ||
+      c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ||
+      'unknown'
+    );
+  }
+
   function getServices(c: any) {
     if (deps?.workflowService) return { service: deps.workflowService };
 
@@ -85,7 +94,7 @@ export function createSignRoutes(deps?: SignDeps) {
       throw new BadRequestError(parseResult.error.issues.map((e) => e.message).join(', '));
     }
 
-    const ip = c.req.header('x-forwarded-for') || c.req.header('cf-connecting-ip');
+    const ip = getClientIp(c);
     const userAgent = c.req.header('user-agent');
     const { service } = getServices(c);
 
@@ -99,7 +108,7 @@ export function createSignRoutes(deps?: SignDeps) {
    */
   sign.post('/:token/view', async (c) => {
     const rawToken = c.req.param('token');
-    const ip = c.req.header('x-forwarded-for') || c.req.header('cf-connecting-ip');
+    const ip = getClientIp(c);
     const userAgent = c.req.header('user-agent');
     const { service } = getServices(c);
 
@@ -113,7 +122,7 @@ export function createSignRoutes(deps?: SignDeps) {
    */
   sign.post('/:token/otp/send', async (c) => {
     const rawToken = c.req.param('token');
-    const ip = c.req.header('x-forwarded-for') || c.req.header('cf-connecting-ip');
+    const ip = getClientIp(c);
     const userAgent = c.req.header('user-agent');
     const { service } = getServices(c);
 
@@ -134,7 +143,7 @@ export function createSignRoutes(deps?: SignDeps) {
       throw new BadRequestError(parseResult.error.issues.map((e) => e.message).join(', '));
     }
 
-    const ip = c.req.header('x-forwarded-for') || c.req.header('cf-connecting-ip');
+    const ip = getClientIp(c);
     const userAgent = c.req.header('user-agent');
     const { service } = getServices(c);
 
@@ -155,7 +164,7 @@ export function createSignRoutes(deps?: SignDeps) {
       throw new BadRequestError(parseResult.error.issues.map((e) => e.message).join(', '));
     }
 
-    const ip = c.req.header('x-forwarded-for') || c.req.header('cf-connecting-ip');
+    const ip = getClientIp(c);
     const userAgent = c.req.header('user-agent');
     const { service } = getServices(c);
 
@@ -182,7 +191,7 @@ export function createSignRoutes(deps?: SignDeps) {
       throw new BadRequestError(parseResult.error.issues.map((e) => e.message).join(', '));
     }
 
-    const ip = c.req.header('x-forwarded-for') || c.req.header('cf-connecting-ip');
+    const ip = getClientIp(c);
     const userAgent = c.req.header('user-agent');
     const { service } = getServices(c);
 

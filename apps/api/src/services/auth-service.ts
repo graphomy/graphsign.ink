@@ -702,9 +702,10 @@ export class AuthService {
     const user = await this.findUserByEmail(email);
 
     if (!user) {
-      // Intentionally vague to prevent user enumeration
+      // Intentionally uniform message to prevent user enumeration (SEC-07)
       return {
-        message: 'If an account exists with this email, a password reset link has been sent.',
+        message:
+          'If an account exists with this email, a password reset link has been sent successfully. Please check your email.',
       };
     }
 
@@ -740,7 +741,8 @@ export class AuthService {
     });
 
     return {
-      message: 'Password reset link sent successfully. Please check your email.',
+      message:
+        'If an account exists with this email, a password reset link has been sent successfully. Please check your email.',
     };
   }
 

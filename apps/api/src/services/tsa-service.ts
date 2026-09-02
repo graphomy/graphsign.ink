@@ -33,6 +33,55 @@ export class TsaService {
   constructor(private readonly config: TsaConfig = {}) {}
 
   /**
+   * Validates custom TSA URL to prevent Server-Side Request Forgery (SSRF) (SEC-04).
+   * Restricts private, loopback, link-local, and cloud metadata IP ranges.
+   */
+  public static validateTsaUrl(urlStr: string): void {
+    let parsed: URL;
+    try {
+      parsed = new URL(urlStr);
+    } catch {
+      throw new BadRequestError('Invalid TSA URL format.');
+    }
+
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      throw new BadRequestError('TSA URL must use HTTP or HTTPS protocol.');
+    }
+
+    const hostname = parsed.hostname.toLowerCase();
+
+    // Block loopback and internal domain suffixes
+    if (
+      hostname === 'localhost' ||
+      hostname === '127.0.0.1' ||
+      hostname === '0.0.0.0' ||
+      hostname === '::1' ||
+      hostname.endsWith('.localhost') ||
+      hostname.endsWith('.local') ||
+      hostname.endsWith('.internal')
+    ) {
+      throw new BadRequestError('Custom TSA URL points to a restricted local address.');
+    }
+
+    // Block IPv4 private & link-local ranges: 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16
+    const ipv4Match = hostname.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+    if (ipv4Match) {
+      const a = Number(ipv4Match[1]);
+      const b = Number(ipv4Match[2]);
+      if (
+        a === 10 ||
+        a === 127 ||
+        (a === 172 && b >= 16 && b <= 31) ||
+        (a === 192 && b === 168) ||
+        (a === 169 && b === 254) ||
+        a === 0
+      ) {
+        throw new BadRequestError('Custom TSA URL points to a private or link-local IP address.');
+      }
+    }
+  }
+
+  /**
    * Requests an RFC 3161 timestamp token for a given document hash (hex or base64).
    * Automatically executes failover across configured TSAs.
    */
@@ -40,6 +89,10 @@ export class TsaService {
     digestHexOrBase64: string,
     overrideUrl?: string,
   ): Promise<TimestampResult> {
+    if (overrideUrl) {
+      TsaService.validateTsaUrl(overrideUrl);
+    }
+
     const digestBytes = this.normalizeDigest(digestHexOrBase64);
     const endpoints = overrideUrl
       ? [{ provider: 'Custom', url: overrideUrl }]

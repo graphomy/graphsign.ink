@@ -1,8 +1,8 @@
 import { z } from 'zod';
 
 export const searchAgreementsSchema = z.object({
-  q: z.string().trim().optional(),
-  search: z.string().trim().optional(),
+  q: z.string().trim().max(100).optional(),
+  search: z.string().trim().max(100).optional(),
   status: z.string().trim().optional(),
   datePreset: z
     .enum([
@@ -69,8 +69,8 @@ export const searchAgreementsSchema = z.object({
 });
 
 export const searchTemplatesSchema = z.object({
-  q: z.string().trim().optional(),
-  search: z.string().trim().optional(),
+  q: z.string().trim().max(100).optional(),
+  search: z.string().trim().max(100).optional(),
   category: z.string().trim().optional(),
   tag: z.string().trim().optional(),
   isPublished: z
@@ -91,8 +91,8 @@ export const searchTemplatesSchema = z.object({
 });
 
 export const globalSearchSchema = z.object({
-  q: z.string().trim().optional(),
-  search: z.string().trim().optional(),
+  q: z.string().trim().max(100).optional(),
+  search: z.string().trim().max(100).optional(),
   entityType: z.enum(['all', 'agreements', 'templates']).default('all').optional(),
   limit: z.coerce.number().int().positive().max(50).default(10).optional(),
 });
