@@ -54,7 +54,7 @@ export class WorkflowService {
 
   private static readonly otpStore = new Map<
     string,
-    { code: string; expiresAt: number; verified?: boolean }
+    { code: string; expiresAt: number; verified?: boolean; attempts?: number }
   >();
 
   /**
@@ -745,12 +745,16 @@ export class WorkflowService {
       );
     }
 
-    // Generate 6-digit code
-    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+    // Generate cryptographically secure 6-digit code (100000 - 999999)
+    const randomBytes = new Uint32Array(1);
+    crypto.getRandomValues(randomBytes);
+    const otpCode = (100000 + (randomBytes[0]! % 900000)).toString();
+
     WorkflowService.otpStore.set(tokenHash, {
       code: otpCode,
       expiresAt: Date.now() + 10 * 60 * 1000, // 10 minutes
       verified: false,
+      attempts: 0,
     });
 
     await this.mailerService.sendOtpVerificationEmail(
@@ -804,8 +808,20 @@ export class WorkflowService {
     }
 
     const entry = WorkflowService.otpStore.get(tokenHash);
-    if (!entry || Date.now() > entry.expiresAt || entry.code !== otpCode.trim()) {
+    if (!entry || Date.now() > entry.expiresAt) {
       throw new BadRequestError('Invalid or expired verification code.');
+    }
+
+    if ((entry.attempts || 0) >= 5) {
+      WorkflowService.otpStore.delete(tokenHash);
+      throw new BadRequestError(
+        'Too many failed verification attempts. Please request a new code.',
+      );
+    }
+
+    if (entry.code !== otpCode.trim()) {
+      entry.attempts = (entry.attempts || 0) + 1;
+      throw new BadRequestError('Invalid verification code.');
     }
 
     entry.verified = true;
@@ -958,16 +974,26 @@ export class WorkflowService {
       throw new ValidationError('You have already signed this document.');
     }
 
-    // Verify OTP if signed as guest
-    if (input.signedAsGuest) {
+    // Verify OTP if signed as guest or if OTP was initiated
+    if (input.signedAsGuest || WorkflowService.otpStore.has(tokenHash)) {
       const entry = WorkflowService.otpStore.get(tokenHash);
       if (input.otpCode) {
-        if (!entry || Date.now() > entry.expiresAt || entry.code !== input.otpCode.trim()) {
+        if (!entry || Date.now() > entry.expiresAt) {
           throw new BadRequestError('Invalid or expired verification code.');
+        }
+        if ((entry.attempts || 0) >= 5) {
+          WorkflowService.otpStore.delete(tokenHash);
+          throw new BadRequestError(
+            'Too many failed verification attempts. Please request a new code.',
+          );
+        }
+        if (entry.code !== input.otpCode.trim()) {
+          entry.attempts = (entry.attempts || 0) + 1;
+          throw new BadRequestError('Invalid verification code.');
         }
         entry.verified = true;
       }
-      if (entry && !entry.verified) {
+      if (!entry || !entry.verified) {
         throw new BadRequestError(
           'Email OTP verification is required before confirming signature.',
         );

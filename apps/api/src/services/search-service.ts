@@ -20,9 +20,12 @@ export interface UserContext {
 }
 
 /**
- * Simple Levenshtein distance helper for fuzzy query suggestions (INK-122)
+ * Simple Levenshtein distance helper for fuzzy query suggestions (INK-122).
+ * Inputs are bounded to maximum 64 characters to eliminate memory spikes / DoS (SEC-09).
  */
-function getLevenshteinDistance(a: string, b: string): number {
+function getLevenshteinDistance(rawA: string, rawB: string): number {
+  const a = rawA.slice(0, 64);
+  const b = rawB.slice(0, 64);
   const matrix: number[][] = [];
   for (let i = 0; i <= b.length; i++) matrix[i] = [i];
   for (let j = 0; j <= a.length; j++) matrix[0]![j] = j;

@@ -36,4 +36,38 @@ describe('TsaService (RFC 3161 Timestamping)', () => {
     expect(parsed.tsaUrl).toBe('http://test.tsa');
     expect(parsed.tokenBase64).toBeDefined();
   });
+
+  describe('SSRF Protection (SEC-04)', () => {
+    it('rejects loopback and local hostnames', () => {
+      expect(() => TsaService.validateTsaUrl('http://127.0.0.1/tsa')).toThrow(
+        /restricted local address/,
+      );
+      expect(() => TsaService.validateTsaUrl('http://localhost:8080/tsa')).toThrow(
+        /restricted local address/,
+      );
+      expect(() => TsaService.validateTsaUrl('https://service.internal/tsa')).toThrow(
+        /restricted local address/,
+      );
+    });
+
+    it('rejects private and cloud metadata IP addresses', () => {
+      expect(() => TsaService.validateTsaUrl('http://169.254.169.254/latest')).toThrow(
+        /private or link-local IP/,
+      );
+      expect(() => TsaService.validateTsaUrl('http://10.0.0.1/tsa')).toThrow(
+        /private or link-local IP/,
+      );
+      expect(() => TsaService.validateTsaUrl('http://192.168.1.1/tsa')).toThrow(
+        /private or link-local IP/,
+      );
+      expect(() => TsaService.validateTsaUrl('http://172.16.5.1/tsa')).toThrow(
+        /private or link-local IP/,
+      );
+    });
+
+    it('allows valid public HTTPS TSA endpoints', () => {
+      expect(() => TsaService.validateTsaUrl('https://timestamp.digicert.com')).not.toThrow();
+      expect(() => TsaService.validateTsaUrl('https://freetsa.org/tsr')).not.toThrow();
+    });
+  });
 });
