@@ -297,7 +297,10 @@ export function createAgreementRoutes(deps?: AgreementDeps) {
       if (fileData) {
         const base64Content = fileData.includes(',') ? fileData.split(',')[1] : fileData;
         const binaryBuffer = Buffer.from(base64Content || '', 'base64');
-        const pdfFileName = (agreement.fileName || `${agreement.title}.pdf`).replace(/\.md$/i, '.pdf');
+        const pdfFileName = (agreement.fileName || `${agreement.title}.pdf`).replace(
+          /\.md$/i,
+          '.pdf',
+        );
         return c.body(binaryBuffer, 200, {
           'Content-Type': 'application/pdf',
           'Content-Disposition': `inline; filename="${pdfFileName}"`,

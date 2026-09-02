@@ -122,10 +122,7 @@ export class PdfAssemblyService {
   /**
    * Renders Markdown / text content into structured A4 PDF pages with clean typography.
    */
-  private async renderMarkdownToPdf(
-    title: string,
-    markdown: string,
-  ): Promise<PDFDocument> {
+  private async renderMarkdownToPdf(title: string, markdown: string): Promise<PDFDocument> {
     const pdfDoc = await PDFDocument.create();
     const helvetica = await pdfDoc.embedFont(StandardFonts.Helvetica);
     const helveticaBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
@@ -274,17 +271,19 @@ export class PdfAssemblyService {
       const boxX = (field.x / 100) * pWidth;
       const boxW = Math.max(20, (field.width / 100) * pWidth);
       const boxH = Math.max(16, (field.height / 100) * pHeight);
-      const boxY = pHeight - ((field.y / 100) * pHeight) - boxH;
+      const boxY = pHeight - (field.y / 100) * pHeight - boxH;
 
       // Find matching recipient
-      const matchedRecip = recipients.find(
-        (r) =>
-          r.id === field.recipientId ||
-          r.email === field.recipientId ||
-          `recipient-${r.routingOrder}` === field.recipientId ||
-          `signer-${r.routingOrder}` === field.recipientId ||
-          (r.routingOrder === 1 && (field.recipientId === 'recipient-1' || field.recipientId === 'signer-1')),
-      ) || recipients[0];
+      const matchedRecip =
+        recipients.find(
+          (r) =>
+            r.id === field.recipientId ||
+            r.email === field.recipientId ||
+            `recipient-${r.routingOrder}` === field.recipientId ||
+            `signer-${r.routingOrder}` === field.recipientId ||
+            (r.routingOrder === 1 &&
+              (field.recipientId === 'recipient-1' || field.recipientId === 'signer-1')),
+        ) || recipients[0];
 
       if (!matchedRecip) continue;
 
@@ -413,7 +412,12 @@ export class PdfAssemblyService {
     y -= 56;
 
     // 3. Document Execution Metadata Grid
-    const token = sealDetails?.verificationToken || `GS-${envelopeId.replace(/[^a-z0-9]/gi, '').substring(0, 8).toLowerCase()}`;
+    const token =
+      sealDetails?.verificationToken ||
+      `GS-${envelopeId
+        .replace(/[^a-z0-9]/gi, '')
+        .substring(0, 8)
+        .toLowerCase()}`;
     const hash = sealDetails?.documentHash || 'pending';
     const ts = sealDetails?.tsaTimestamp
       ? new Date(sealDetails.tsaTimestamp).toISOString()
@@ -593,10 +597,25 @@ export class PdfAssemblyService {
     });
 
     const certRows = [
-      { label: 'Signer Authority', value: sealDetails?.signerName || 'GraphSign Tenant Signing Authority' },
-      { label: 'Subject DN', value: (sealDetails?.subjectDn || 'CN=GraphSign Document Signing Authority').substring(0, 60) },
-      { label: 'Cryptographic Suite', value: `${sealDetails?.algorithm || 'RSA-2048'} / SHA-256 / PAdES B-T` },
-      { label: 'TSA Authority', value: sealDetails?.tsaProvider || 'FreeTSA / DigiCert RFC 3161 Qualified Service' },
+      {
+        label: 'Signer Authority',
+        value: sealDetails?.signerName || 'GraphSign Tenant Signing Authority',
+      },
+      {
+        label: 'Subject DN',
+        value: (sealDetails?.subjectDn || 'CN=GraphSign Document Signing Authority').substring(
+          0,
+          60,
+        ),
+      },
+      {
+        label: 'Cryptographic Suite',
+        value: `${sealDetails?.algorithm || 'RSA-2048'} / SHA-256 / PAdES B-T`,
+      },
+      {
+        label: 'TSA Authority',
+        value: sealDetails?.tsaProvider || 'FreeTSA / DigiCert RFC 3161 Qualified Service',
+      },
     ];
 
     let certRowY = y - 13;

@@ -90,10 +90,7 @@ export class PadesSealingService {
         this.keyCustodyService,
         this.auditService,
       );
-      cert = await certService.getOrCreateDefaultCertificate(
-        organisationId,
-        userId || 'system',
-      );
+      cert = await certService.getOrCreateDefaultCertificate(organisationId, userId || 'system');
     }
 
     // Generate unique verification token (e.g., GS-7f3a9c2e)
@@ -124,8 +121,7 @@ export class PadesSealingService {
       (meta.fileBase64 as string | undefined) ||
       (meta.fileData as string | undefined) ||
       (typeof options.pdfData === 'string' ? options.pdfData : undefined);
-    const existingPdfBytes =
-      options.pdfData instanceof Uint8Array ? options.pdfData : undefined;
+    const existingPdfBytes = options.pdfData instanceof Uint8Array ? options.pdfData : undefined;
 
     const assembledPdfBytes = await pdfAssembly.assembleCompletedDocument({
       agreementTitle: agreement.title,
@@ -208,20 +204,20 @@ export class PadesSealingService {
     if (this.prisma.agreement?.update) {
       await this.prisma.agreement.update({
         where: { id: agreement.id },
-      data: {
-        mimeType: 'application/pdf',
-        metadata: {
-          ...meta,
-          signedPdfBase64: sealedPdfBase64,
-          sealedPdfBase64,
-          envelopeId,
-          verificationToken,
-          documentHash,
-          padesLevel: cert.padesLevel || 'B_T',
-          sealedAt: new Date().toISOString(),
+        data: {
+          mimeType: 'application/pdf',
+          metadata: {
+            ...meta,
+            signedPdfBase64: sealedPdfBase64,
+            sealedPdfBase64,
+            envelopeId,
+            verificationToken,
+            documentHash,
+            padesLevel: cert.padesLevel || 'B_T',
+            sealedAt: new Date().toISOString(),
+          },
         },
-      },
-    });
+      });
     }
 
     await this.auditService.log({
@@ -356,7 +352,10 @@ export class PadesSealingService {
     if (typeof originalPdf === 'string') {
       const isBase64 = !originalPdf.startsWith('%PDF');
       const baseBytes = isBase64
-        ? Buffer.from(originalPdf.includes(',') ? originalPdf.split(',')[1]! : originalPdf, 'base64')
+        ? Buffer.from(
+            originalPdf.includes(',') ? originalPdf.split(',')[1]! : originalPdf,
+            'base64',
+          )
         : Buffer.from(originalPdf, 'utf-8');
       return Buffer.concat([baseBytes, sealBytes]).toString('base64');
     }

@@ -18,9 +18,9 @@ describe('PadesSealingService Unit Tests', () => {
       },
       signingCertificate: {
         findFirst: vi.fn(),
-        create: vi.fn().mockImplementation(({ data }: any) =>
-          Promise.resolve({ id: 'cert-auto', ...data }),
-        ),
+        create: vi
+          .fn()
+          .mockImplementation(({ data }: any) => Promise.resolve({ id: 'cert-auto', ...data })),
       },
       documentSeal: {
         create: vi.fn(),

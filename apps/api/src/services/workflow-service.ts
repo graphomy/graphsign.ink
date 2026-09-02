@@ -912,7 +912,7 @@ export class WorkflowService {
       title: agreement.title,
       fileName:
         agreement.fileName || `${agreement.title.toLowerCase().replace(/[^a-z0-9]/g, '-')}.pdf`,
-      mimeType: fileData ? 'application/pdf' : (agreement.mimeType || 'application/pdf'),
+      mimeType: fileData ? 'application/pdf' : agreement.mimeType || 'application/pdf',
       fileUrl: agreement.fileUrl,
       fileData,
       markdownContent,
@@ -980,7 +980,8 @@ export class WorkflowService {
       if (!f.isRequired) return false;
       if (!f.recipientId) return true;
       if (f.recipientId === recipient.id) return true;
-      if (recipient.email && f.recipientId.toLowerCase() === recipient.email.toLowerCase()) return true;
+      if (recipient.email && f.recipientId.toLowerCase() === recipient.email.toLowerCase())
+        return true;
       const order = recipient.routingOrder || 1;
       if (
         f.recipientId === `recipient-${order}` ||
