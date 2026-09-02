@@ -14,9 +14,13 @@ describe('PadesSealingService Unit Tests', () => {
     mockPrisma = {
       agreement: {
         findFirst: vi.fn(),
+        update: vi.fn().mockResolvedValue({}),
       },
       signingCertificate: {
         findFirst: vi.fn(),
+        create: vi.fn().mockImplementation(({ data }: any) =>
+          Promise.resolve({ id: 'cert-auto', ...data }),
+        ),
       },
       documentSeal: {
         create: vi.fn(),
@@ -79,7 +83,9 @@ describe('PadesSealingService Unit Tests', () => {
     expect(result.qrCodeDataUrl).toContain('data:image/png;base64');
     expect(result.documentHash).toBeDefined();
     expect(result.padesLevel).toBe('B_T');
-    expect(result.sealedPdfBase64).toContain('%PAdES-SEAL:');
+    expect(result.sealedPdfBase64).toBeDefined();
+    const decodedContainer = Buffer.from(result.sealedPdfBase64, 'base64').toString('utf-8');
+    expect(decodedContainer).toContain('%PAdES-B-T-SEAL:');
     expect(mockAudit.log).toHaveBeenCalledWith(
       expect.objectContaining({
         action: 'DOCUMENT_SEALED',

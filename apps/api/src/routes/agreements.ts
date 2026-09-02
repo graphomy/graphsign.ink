@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import type { PrismaClient } from '@graphsign/db';
 import { createPrismaClient, getLegacyPrisma } from '@graphsign/db';
 import { AgreementService } from '../services/agreement-service.js';
+import { PdfAssemblyService } from '../services/pdf-assembly-service.js';
 import type { AuditService } from '../services/audit-service.js';
 import { PrismaAuditService } from '../services/audit-service.js';
 import { jwtAuth } from '../middleware/jwt-auth.js';
@@ -259,19 +260,51 @@ export function createAgreementRoutes(deps?: AgreementDeps) {
 
       const agreement = await service.getAgreementById(orgId, agreementId, authorId, userRole);
       const meta = (agreement.metadata as Record<string, unknown>) || {};
-      const fileData =
-        (meta.fileBase64 as string | undefined) || (meta.fileData as string | undefined);
+      let fileData =
+        (meta.signedPdfBase64 as string | undefined) ||
+        (meta.sealedPdfBase64 as string | undefined) ||
+        (meta.fileBase64 as string | undefined) ||
+        (meta.fileData as string | undefined);
+
+      if (!fileData && agreement.status === 'COMPLETED' && agreement.markdownContent) {
+        try {
+          const pdfAssembly = new PdfAssemblyService();
+          const envelopeId =
+            (meta.envelopeId as string) ||
+            (agreement as any).envelopeId ||
+            `ENV-${agreement.id.replace(/-/g, '').substring(0, 8).toUpperCase()}`;
+          const pdfBytes = await pdfAssembly.assembleCompletedDocument({
+            agreementTitle: agreement.title,
+            envelopeId,
+            markdownContent: agreement.markdownContent,
+            fields: (agreement.fields as any)?.fields || [],
+            recipients: ((agreement as any).recipients as any[]) || [],
+            sealDetails: meta.verificationToken
+              ? {
+                  verificationToken: meta.verificationToken as string,
+                  verificationUrl: `https://graphsign.ink/verify/${meta.verificationToken}`,
+                  documentHash: (meta.documentHash as string) || 'COMPLETED',
+                  tsaTimestamp: new Date(),
+                }
+              : undefined,
+          });
+          fileData = Buffer.from(pdfBytes).toString('base64');
+        } catch (err) {
+          console.warn('[AGREEMENTS] On-the-fly PDF assembly fallback failed:', err);
+        }
+      }
 
       if (fileData) {
         const base64Content = fileData.includes(',') ? fileData.split(',')[1] : fileData;
         const binaryBuffer = Buffer.from(base64Content || '', 'base64');
+        const pdfFileName = (agreement.fileName || `${agreement.title}.pdf`).replace(/\.md$/i, '.pdf');
         return c.body(binaryBuffer, 200, {
-          'Content-Type': agreement.mimeType || 'application/pdf',
-          'Content-Disposition': `inline; filename="${agreement.fileName || 'document.pdf'}"`,
+          'Content-Type': 'application/pdf',
+          'Content-Disposition': `inline; filename="${pdfFileName}"`,
         });
       }
 
-      if (agreement.markdownContent) {
+      if (agreement.markdownContent && agreement.status !== 'COMPLETED') {
         return c.text(agreement.markdownContent, 200, {
           'Content-Type': 'text/markdown; charset=utf-8',
           'Content-Disposition': `inline; filename="${agreement.fileName || 'agreement.md'}"`,

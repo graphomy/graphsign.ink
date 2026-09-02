@@ -12,6 +12,7 @@ import {
 import { AuditService } from './audit-service.js';
 import { MailerService } from './mailer-service.js';
 import { PadesSealingService } from './pades-sealing-service.js';
+import { PdfAssemblyService } from './pdf-assembly-service.js';
 import { KeyCustodyService } from './key-custody-service.js';
 import { TsaService } from './tsa-service.js';
 import {
@@ -419,6 +420,49 @@ export class WorkflowService {
       });
     }
 
+    // Synchronize agreement.fields with the newly created recipient records
+    let synchronizedFields = agreement.fields as any;
+    if (synchronizedFields && Array.isArray(synchronizedFields.fields)) {
+      const fieldList = [...synchronizedFields.fields];
+      const oldRecipients = Array.isArray(synchronizedFields.recipients)
+        ? synchronizedFields.recipients
+        : [];
+
+      for (let i = 0; i < input.recipients.length; i++) {
+        const inputRecip = input.recipients[i] as any;
+        const created = createdRecipients[i]!;
+        const oldRecipId = inputRecip.id || oldRecipients[i]?.id || `recipient-${i + 1}`;
+
+        for (const f of fieldList) {
+          if (
+            f.recipientId === oldRecipId ||
+            f.recipientId === `recipient-${i + 1}` ||
+            f.recipientId === `signer-${i + 1}` ||
+            f.recipientId === `recip-${i + 1}` ||
+            (i === 0 &&
+              (f.recipientId === 'signer' ||
+                f.recipientId === 'r-1' ||
+                f.recipientId === 'recipient-1')) ||
+            (inputRecip.email && f.recipientId?.toLowerCase() === inputRecip.email.toLowerCase())
+          ) {
+            f.recipientId = created.id;
+          }
+        }
+      }
+
+      synchronizedFields = {
+        ...synchronizedFields,
+        fields: fieldList,
+        recipients: createdRecipients.map((cr) => ({
+          id: cr.id,
+          name: cr.name,
+          email: cr.email,
+          role: cr.role,
+          routingOrder: cr.routingOrder,
+        })),
+      };
+    }
+
     // Update agreement status to SENT
     const updatedAgreement = await this.prisma.agreement.update({
       where: { id: agreementId },
@@ -427,6 +471,7 @@ export class WorkflowService {
         signingOrder,
         currentStep: 1,
         expiresAt,
+        ...(synchronizedFields ? { fields: synchronizedFields } : {}),
       },
     });
 
@@ -804,8 +849,9 @@ export class WorkflowService {
     }
 
     const meta = (agreement.metadata as Record<string, unknown>) || {};
-    const fileData =
+    let fileData =
       (meta.signedPdfBase64 as string | undefined) ||
+      (meta.sealedPdfBase64 as string | undefined) ||
       (meta.fileBase64 as string | undefined) ||
       (meta.fileData as string | undefined) ||
       (agreement as any).fileData;
@@ -817,8 +863,44 @@ export class WorkflowService {
         })
       : null;
 
+    if (!fileData && (agreement.status === 'COMPLETED' || seal) && agreement.markdownContent) {
+      try {
+        const pdfAssembly = new PdfAssemblyService();
+        const envelopeId =
+          (meta.envelopeId as string) ||
+          (agreement as any).envelopeId ||
+          `ENV-${agreement.id.replace(/-/g, '').substring(0, 8).toUpperCase()}`;
+        const pdfBytes = await pdfAssembly.assembleCompletedDocument({
+          agreementTitle: agreement.title,
+          envelopeId,
+          markdownContent: agreement.markdownContent,
+          fields: (agreement.fields as any)?.fields || [],
+          recipients: ((agreement as any).recipients as any[]) || [],
+          sealDetails: seal
+            ? {
+                verificationToken: seal.verificationToken,
+                verificationUrl: `https://graphsign.ink/verify/${seal.verificationToken}`,
+                documentHash: seal.documentHash,
+                tsaTimestamp: seal.tsaTimestamp,
+                tsaProvider: (seal.metadata as any)?.tsaProvider,
+                signerName: (seal.metadata as any)?.signerName,
+                subjectDn: (seal.metadata as any)?.subjectDn,
+                issuerDn: (seal.metadata as any)?.issuerDn,
+                algorithm: seal.algorithm,
+                padesLevel: seal.padesLevel,
+              }
+            : undefined,
+        });
+        fileData = Buffer.from(pdfBytes).toString('base64');
+      } catch (err) {
+        console.warn('[WORKFLOW] PDF assembly fallback in getSigningDocumentFile failed:', err);
+      }
+    }
+
     let markdownContent = agreement.markdownContent;
-    if (markdownContent && (agreement.status === 'COMPLETED' || seal)) {
+    if (fileData) {
+      markdownContent = null as any;
+    } else if (markdownContent && (agreement.status === 'COMPLETED' || seal)) {
       const token = seal?.verificationToken || `GS-${rawToken.substring(0, 8)}`;
       const hash = seal?.documentHash || 'pending';
       const ts = seal?.tsaTimestamp ? seal.tsaTimestamp.toISOString() : new Date().toISOString();
@@ -830,7 +912,7 @@ export class WorkflowService {
       title: agreement.title,
       fileName:
         agreement.fileName || `${agreement.title.toLowerCase().replace(/[^a-z0-9]/g, '-')}.pdf`,
-      mimeType: agreement.mimeType || 'application/pdf',
+      mimeType: fileData ? 'application/pdf' : (agreement.mimeType || 'application/pdf'),
       fileUrl: agreement.fileUrl,
       fileData,
       markdownContent,
@@ -894,9 +976,31 @@ export class WorkflowService {
 
     // Backend validation for assigned required fields (INK-104)
     const envelopeFields = (agreement.fields as any)?.fields || [];
-    const assignedRequiredFields = envelopeFields.filter(
-      (f: any) => f.recipientId === recipient.id && f.isRequired,
-    );
+    const assignedRequiredFields = envelopeFields.filter((f: any) => {
+      if (!f.isRequired) return false;
+      if (!f.recipientId) return true;
+      if (f.recipientId === recipient.id) return true;
+      if (recipient.email && f.recipientId.toLowerCase() === recipient.email.toLowerCase()) return true;
+      const order = recipient.routingOrder || 1;
+      if (
+        f.recipientId === `recipient-${order}` ||
+        f.recipientId === `signer-${order}` ||
+        f.recipientId === `recip-${order}`
+      ) {
+        return true;
+      }
+      if (
+        order === 1 &&
+        (f.recipientId === 'recipient-1' ||
+          f.recipientId === 'signer-1' ||
+          f.recipientId === 'recip-1' ||
+          f.recipientId === 'signer' ||
+          f.recipientId === 'r-1')
+      ) {
+        return true;
+      }
+      return false;
+    });
 
     const missingFields: string[] = [];
     for (const f of assignedRequiredFields) {

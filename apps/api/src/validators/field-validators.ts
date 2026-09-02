@@ -32,7 +32,7 @@ export const fieldOptionSchema = z.object({
 export const recipientSchema = z.object({
   id: z.string().min(1).max(100),
   name: z.string().min(1).max(100),
-  email: z.string().email(),
+  email: z.string().email().optional().or(z.literal('')).default(''),
   role: z.enum(['signer', 'approver', 'viewer']).default('signer'),
   color: z.string().regex(/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/, 'Invalid hex color code'),
 });

@@ -111,6 +111,7 @@ export function SendAgreementModal({
           signingOrder,
           expiresAt: parsedExpiresAt,
           recipients: recipients.map((r) => ({
+            id: r.id,
             name: r.name.trim(),
             email: r.email.trim(),
             role: r.role,

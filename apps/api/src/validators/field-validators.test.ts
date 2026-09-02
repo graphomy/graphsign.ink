@@ -104,5 +104,22 @@ describe('Field Validators Unit Tests (INK-78 to INK-85)', () => {
       const result = saveDocumentFieldsSchema.safeParse(payload);
       expect(result.success).toBe(true);
     });
+
+    it('allows draft recipients with empty or omitted email during field placement', () => {
+      const payload = {
+        recipients: [
+          {
+            id: 'recipient-1',
+            name: 'Signer 1',
+            email: '',
+            role: 'signer',
+            color: '#2563EB',
+          },
+        ],
+        fields: [],
+      };
+      const result = saveDocumentFieldsSchema.safeParse(payload);
+      expect(result.success).toBe(true);
+    });
   });
 });

@@ -617,7 +617,7 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
   }
 
   // Save Fields to API
-  async function handleSaveFields(exitOnSave: boolean = false) {
+  async function handleSaveFields(exitOnSave: boolean = false): Promise<boolean> {
     setIsSaving(true);
     setSaveMessage(null);
     setErrorMessage(null);
@@ -647,8 +647,10 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
       if (exitOnSave) {
         onClose();
       }
+      return true;
     } catch (err: unknown) {
       setErrorMessage((err as Error).message);
+      return false;
     } finally {
       setIsSaving(false);
     }
@@ -772,8 +774,10 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
 
           <button
             onClick={async () => {
-              await handleSaveFields(false);
-              setShowSendModal(true);
+              const saved = await handleSaveFields(false);
+              if (saved) {
+                setShowSendModal(true);
+              }
             }}
             disabled={isSaving}
             className="px-4 py-1.5 bg-[#ba0000] hover:bg-red-700 text-white text-xs font-bold rounded-lg shadow-sm transition-all disabled:opacity-50 flex items-center gap-1.5"

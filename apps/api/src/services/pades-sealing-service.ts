@@ -4,6 +4,8 @@ import { generateId, generateToken, sha256 } from '../utils/crypto.js';
 import { KeyCustodyService } from './key-custody-service.js';
 import { TsaService } from './tsa-service.js';
 import { AuditService } from './audit-service.js';
+import { CertificateService } from './certificate-service.js';
+import { PdfAssemblyService } from './pdf-assembly-service.js';
 import { BadRequestError, NotFoundError } from '../utils/errors.js';
 
 export interface SealAgreementOptions {
@@ -60,20 +62,20 @@ export class PadesSealingService {
 
     // Resolve signing certificate
     let cert = null;
-    if (options.certificateId) {
+    if (options.certificateId && this.prisma.signingCertificate?.findFirst) {
       cert = await this.prisma.signingCertificate.findFirst({
         where: { id: options.certificateId, organisationId, deletedAt: null, status: 'ACTIVE' },
       });
     }
 
-    if (!cert) {
+    if (!cert && this.prisma.signingCertificate?.findFirst) {
       // Find default active cert
       cert = await this.prisma.signingCertificate.findFirst({
         where: { organisationId, isDefault: true, deletedAt: null, status: 'ACTIVE' },
       });
     }
 
-    if (!cert) {
+    if (!cert && this.prisma.signingCertificate?.findFirst) {
       // Find any active cert
       cert = await this.prisma.signingCertificate.findFirst({
         where: { organisationId, deletedAt: null, status: 'ACTIVE' },
@@ -82,8 +84,15 @@ export class PadesSealingService {
     }
 
     if (!cert) {
-      throw new BadRequestError(
-        'No active signing certificate found for organisation. Generate or upload a certificate first.',
+      // Auto-provision default self-signed signing certificate for tenant
+      const certService = new CertificateService(
+        this.prisma,
+        this.keyCustodyService,
+        this.auditService,
+      );
+      cert = await certService.getOrCreateDefaultCertificate(
+        organisationId,
+        userId || 'system',
       );
     }
 
@@ -102,9 +111,46 @@ export class PadesSealingService {
       },
     });
 
-    // Compute document hash (SHA-256 of agreement payload)
-    const contentToHash = agreement.markdownContent || agreement.fileUrl || agreementId;
-    const documentHash = await sha256(contentToHash);
+    const meta = (agreement.metadata as Record<string, unknown>) || {};
+    const envelopeId =
+      (meta.envelopeId as string) ||
+      (agreement as any).envelopeId ||
+      `ENV-${agreement.id.replace(/-/g, '').substring(0, 8).toUpperCase()}`;
+
+    // Assemble the complete PDF with Envelope ID on every page, flattened fields, and Certificate page
+    const pdfAssembly = new PdfAssemblyService();
+    const existingPdfBase64 =
+      (meta.signedPdfBase64 as string | undefined) ||
+      (meta.fileBase64 as string | undefined) ||
+      (meta.fileData as string | undefined) ||
+      (typeof options.pdfData === 'string' ? options.pdfData : undefined);
+    const existingPdfBytes =
+      options.pdfData instanceof Uint8Array ? options.pdfData : undefined;
+
+    const assembledPdfBytes = await pdfAssembly.assembleCompletedDocument({
+      agreementTitle: agreement.title,
+      envelopeId,
+      markdownContent: agreement.markdownContent,
+      existingPdfBytes,
+      existingPdfBase64,
+      fields: (agreement.fields as any)?.fields || [],
+      recipients: (agreement.recipients as any[]) || [],
+      sealDetails: {
+        verificationToken,
+        verificationUrl,
+        documentHash: 'PENDING_SEAL',
+        tsaTimestamp: new Date(),
+        tsaProvider: cert.tsaUrl ? 'Custom TSA' : 'FreeTSA / DigiCert RFC 3161',
+        signerName: cert.name,
+        subjectDn: cert.subjectDn,
+        issuerDn: cert.issuerDn,
+        algorithm: cert.algorithm,
+        padesLevel: cert.padesLevel || 'B_T',
+      },
+    });
+
+    // Compute document hash over compiled PDF container
+    const documentHash = await sha256(Buffer.from(assembledPdfBytes).toString('base64'));
 
     // Request RFC 3161 Timestamp
     const tsaResult = await this.tsaService.requestTimestamp(
@@ -123,7 +169,7 @@ export class PadesSealingService {
 
     // Build PAdES sealed container representation
     const sealedPdfBase64 = this.buildPadesContainer(
-      options.pdfData || 'JVBERi0xLjQKJcTl8uXrCg==', // Fallback minimal PDF header if no binary
+      assembledPdfBytes,
       cert.certificatePem,
       signatureBase64,
       tsaResult.tokenBase64,
@@ -157,6 +203,26 @@ export class PadesSealingService {
         },
       },
     });
+
+    // Update agreement with sealed PDF container and metadata
+    if (this.prisma.agreement?.update) {
+      await this.prisma.agreement.update({
+        where: { id: agreement.id },
+      data: {
+        mimeType: 'application/pdf',
+        metadata: {
+          ...meta,
+          signedPdfBase64: sealedPdfBase64,
+          sealedPdfBase64,
+          envelopeId,
+          verificationToken,
+          documentHash,
+          padesLevel: cert.padesLevel || 'B_T',
+          sealedAt: new Date().toISOString(),
+        },
+      },
+    });
+    }
 
     await this.auditService.log({
       organisationId,
@@ -284,13 +350,17 @@ export class PadesSealingService {
       timestampToken: tsaTokenBase64.substring(0, 40) + '...',
     });
 
+    const sealComment = `\n%PAdES-B-T-SEAL:${verificationToken}\n%SIG:${signatureBase64.substring(0, 64)}\n%TSA:${tsaTokenBase64.substring(0, 64)}\n%META:${btoa(trailerMetadata)}\n%%EOF`;
+    const sealBytes = Buffer.from(sealComment, 'utf-8');
+
     if (typeof originalPdf === 'string') {
-      return `${originalPdf}%%EOF\n%PAdES-SEAL:${btoa(trailerMetadata)}`;
+      const isBase64 = !originalPdf.startsWith('%PDF');
+      const baseBytes = isBase64
+        ? Buffer.from(originalPdf.includes(',') ? originalPdf.split(',')[1]! : originalPdf, 'base64')
+        : Buffer.from(originalPdf, 'utf-8');
+      return Buffer.concat([baseBytes, sealBytes]).toString('base64');
     }
 
-    const binaryStr = Array.from(originalPdf)
-      .map((b) => String.fromCharCode(b))
-      .join('');
-    return `${btoa(binaryStr)}%%EOF\n%PAdES-SEAL:${btoa(trailerMetadata)}`;
+    return Buffer.concat([Buffer.from(originalPdf), sealBytes]).toString('base64');
   }
 }
