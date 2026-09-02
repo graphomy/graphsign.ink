@@ -324,27 +324,65 @@ export default function SignDocumentPage({
     (fieldRecipientId?: string) => {
       if (!fieldRecipientId) return true;
       if (!currentRecipient) return true;
+
+      // Direct ID or email match
       if (fieldRecipientId === currentRecipient.id) return true;
-      if (fieldRecipientId === currentRecipient.email) return true;
-      if (currentRecipient.role && fieldRecipientId === currentRecipient.role) return true;
       if (
-        currentRecipient.routingOrder &&
-        (fieldRecipientId === `signer-${currentRecipient.routingOrder}` ||
-          fieldRecipientId === `recip-${currentRecipient.routingOrder}`)
+        currentRecipient.email &&
+        fieldRecipientId.toLowerCase() === currentRecipient.email.toLowerCase()
       ) {
         return true;
       }
+      if (currentRecipient.role && fieldRecipientId === currentRecipient.role) return true;
+
+      // Routing order matches: recipient-N, signer-N, recip-N
+      const order = currentRecipient.routingOrder || 1;
       if (
-        (currentRecipient.routingOrder === 1 || !currentRecipient.routingOrder) &&
-        (fieldRecipientId === 'signer-1' ||
+        fieldRecipientId === `recipient-${order}` ||
+        fieldRecipientId === `signer-${order}` ||
+        fieldRecipientId === `recip-${order}`
+      ) {
+        return true;
+      }
+
+      // First signer fallbacks
+      if (order === 1) {
+        if (
+          fieldRecipientId === 'recipient-1' ||
+          fieldRecipientId === 'signer-1' ||
           fieldRecipientId === 'recip-1' ||
           fieldRecipientId === 'signer' ||
-          fieldRecipientId === 'r-1')
-      ) {
+          fieldRecipientId === 'r-1'
+        ) {
+          return true;
+        }
+      }
+
+      // Cross-reference with agreement.fields.recipients registry
+      const regRecipients = agreement?.fields?.recipients;
+      if (Array.isArray(regRecipients) && regRecipients.length > 0) {
+        const foundIndex = regRecipients.findIndex((r) => r.id === fieldRecipientId);
+        if (foundIndex !== -1) {
+          const matchedReg = regRecipients[foundIndex]!;
+          if (
+            matchedReg.email &&
+            currentRecipient.email &&
+            matchedReg.email.toLowerCase() === currentRecipient.email.toLowerCase()
+          ) {
+            return true;
+          }
+          if (foundIndex + 1 === order) {
+            return true;
+          }
+        }
+        if (regRecipients.length <= 1) {
+          return true;
+        }
+      } else {
+        // No recipient registry saved, default to active signer
         return true;
       }
-      const totalRecipients = agreement?.fields?.recipients?.length || 0;
-      if (totalRecipients <= 1) return true;
+
       return false;
     },
     [currentRecipient, agreement],

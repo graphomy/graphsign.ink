@@ -35,23 +35,42 @@ export class VerificationService {
    */
   async verifyByToken(token: string): Promise<PublicVerificationReport> {
     const cleanToken = token.trim();
-    let seal = await this.prisma.documentSeal.findUnique({
-      where: { verificationToken: cleanToken },
-      include: {
-        agreement: {
-          include: {
-            recipients: true,
-            organisation: { select: { name: true } },
+    let seal = null;
+
+    if (this.prisma.documentSeal.findUnique) {
+      seal = await this.prisma.documentSeal.findUnique({
+        where: { verificationToken: cleanToken },
+        include: {
+          agreement: {
+            include: {
+              recipients: true,
+              organisation: { select: { name: true } },
+            },
           },
+          certificate: true,
         },
-        certificate: true,
-      },
-    });
+      });
+    }
 
     if (!seal && this.prisma.documentSeal.findFirst) {
+      const tokenVariations = Array.from(
+        new Set([
+          cleanToken,
+          cleanToken.toUpperCase(),
+          cleanToken.toLowerCase(),
+          cleanToken.startsWith('GS-') ? cleanToken.substring(3) : `GS-${cleanToken}`,
+          cleanToken.startsWith('gs-') ? cleanToken.substring(3) : `GS-${cleanToken.toUpperCase()}`,
+          `GS-${cleanToken.toLowerCase()}`,
+        ]),
+      );
+
       seal = await this.prisma.documentSeal.findFirst({
         where: {
-          OR: [{ agreementId: cleanToken }, { id: cleanToken }],
+          OR: [
+            ...tokenVariations.map((t) => ({ verificationToken: t })),
+            { agreementId: cleanToken },
+            { id: cleanToken },
+          ],
         },
         include: {
           agreement: {

@@ -250,7 +250,7 @@ export function createSignRoutes(deps?: SignDeps) {
       c.header('Content-Type', file.mimeType || 'application/pdf');
       c.header(
         'Content-Disposition',
-        `attachment; filename="${file.fileName || 'signed-document.pdf'}"`,
+        `attachment; filename="${(file.fileName || 'signed-document.pdf').replace(/\.md$/i, '.pdf')}"`,
       );
       if ((file as any).verificationToken) {
         c.header('X-Verification-Token', (file as any).verificationToken);

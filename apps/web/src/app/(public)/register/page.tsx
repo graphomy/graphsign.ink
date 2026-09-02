@@ -118,16 +118,28 @@ function RegisterContent() {
 
   return (
     <div className="space-y-6">
+      {/* Brand Lockup */}
+      <div className="flex items-center justify-center gap-2.5">
+        <div className="h-10 w-10 rounded-xl bg-brand-600 text-white font-black text-xl flex items-center justify-center shadow-md shadow-brand-600/20">
+          g
+        </div>
+        <h2 className="text-xl font-bold tracking-tight text-ink-900">
+          graphsign<span className="text-brand-600">.ink</span>
+        </h2>
+      </div>
+
       <div>
-        <h2 className="text-center text-2xl font-semibold text-neutral-900">Create your account</h2>
-        <p className="mt-2 text-center text-sm text-neutral-600">
+        <h2 className="text-center text-2xl font-bold tracking-tight text-ink-900">
+          Create your account
+        </h2>
+        <p className="mt-1 text-center text-sm text-ink-500">
           Start managing your agreements securely.
         </p>
       </div>
 
       <form
         onSubmit={handleSubmit}
-        className="rounded-xl border border-neutral-200 bg-white p-8 shadow-sm space-y-5"
+        className="rounded-xl border border-ink-200 bg-white p-6 sm:p-8 shadow-[0_1px_2px_rgb(16_24_40/0.04),0_1px_3px_rgb(16_24_40/0.06)] space-y-5"
         noValidate
         data-testid="register-form"
       >
@@ -426,7 +438,11 @@ function RegisterContent() {
 export default function RegisterPage() {
   return (
     <GuestGuard>
-      <RegisterContent />
+      <div className="min-h-[100dvh] flex flex-col justify-center items-center bg-ink-50 px-4 py-8 sm:px-6">
+        <div className="w-full max-w-[480px]">
+          <RegisterContent />
+        </div>
+      </div>
     </GuestGuard>
   );
 }
