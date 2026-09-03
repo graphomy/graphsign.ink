@@ -108,7 +108,10 @@ In `apps/api/wrangler.toml` (or via Cloudflare Dashboard / GitHub deployment var
 ```toml
 [vars]
 EMAIL_FROM = "notification@mail.graphomy.com"
-WEB_URL = "https://dev-graphsign-web.pages.dev,https://graphsign.ink,http://localhost:3000"
+# Development:
+WEB_URL = "https://dev.graphsign.ink,https://dev-graphsign-web.pages.dev,http://localhost:3000"
+# Production:
+# WEB_URL = "https://graphsign.ink,https://www.graphsign.ink,https://graphsign-web.pages.dev,http://localhost:3000"
 API_URL = "https://dev-graphsign-api.<account>.workers.dev"
 NODE_ENV = "development" # or "production"
 JWT_ACCESS_TOKEN_EXPIRY = "15m"

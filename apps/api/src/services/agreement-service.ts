@@ -1,6 +1,11 @@
 import type { PrismaClient } from '@graphsign/db';
-import { generateId } from '../utils/crypto.js';
-import { NotFoundError, ForbiddenError, BadRequestError } from '../utils/errors.js';
+import { generateId, generateToken, hashToken } from '../utils/crypto.js';
+import {
+  NotFoundError,
+  ForbiddenError,
+  BadRequestError,
+  ValidationError,
+} from '../utils/errors.js';
 import type { AuditService } from './audit-service.js';
 import { incrementMinorVersion, bumpToMajorVersion } from '../utils/version-utils.js';
 import type {
@@ -913,6 +918,7 @@ export class AgreementService {
     query: QueryAgreementsInput,
     userId?: string,
     userRole?: string,
+    userEmail?: string,
   ) {
     const page = query.page || 1;
     const limit = query.limit || 20;
@@ -924,7 +930,7 @@ export class AgreementService {
       isArchived: query.isArchived ?? false,
     };
 
-    // Non-admin users are strictly scoped to their authored documents or documents assigned to them for review (INK-248, INK-263)
+    // Non-admin users are strictly scoped to their authored documents, review assignments, or signing requests (INK-248, INK-263, INK-278)
     if (
       userRole &&
       userRole !== 'org_admin' &&
@@ -933,7 +939,24 @@ export class AgreementService {
       userId &&
       userId !== 'unknown'
     ) {
-      where.OR = [{ authorId: userId }, { reviewerId: userId }];
+      where.OR = [
+        { authorId: userId },
+        { reviewerId: userId },
+        ...(userEmail
+          ? [
+              {
+                recipients: {
+                  some: {
+                    email: {
+                      equals: userEmail.trim(),
+                      mode: 'insensitive' as const,
+                    },
+                  },
+                },
+              },
+            ]
+          : []),
+      ];
     }
 
     if (query.status) {
@@ -997,6 +1020,16 @@ export class AgreementService {
           updatedAt: true,
           deletedAt: true,
           author: { select: { id: true, name: true, email: true } },
+          recipients: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              role: true,
+              status: true,
+              routingOrder: true,
+            },
+          },
         },
       }),
       this.prisma.agreement.count({ where }),
@@ -1113,6 +1146,75 @@ export class AgreementService {
       agreementId: updated.id,
       fields: data.fields,
       recipients: data.recipients,
+    };
+  }
+
+  /**
+   * INK-278: Generate in-app signing session for authenticated recipient
+   */
+  async createSignerSession(orgId: string, agreementId: string, userEmail: string) {
+    const agreement = await this.prisma.agreement.findFirst({
+      where: {
+        id: agreementId,
+        organisationId: orgId,
+        deletedAt: null,
+      },
+      include: {
+        recipients: true,
+      },
+    });
+
+    if (!agreement) {
+      throw new NotFoundError('Agreement not found.');
+    }
+
+    if (agreement.status !== 'SENT' && agreement.status !== 'PARTIALLY_SIGNED') {
+      throw new ValidationError('Document is not currently active for signing.');
+    }
+
+    const normalizedEmail = userEmail.trim().toLowerCase();
+    const recipient = agreement.recipients.find(
+      (r) => r.email.trim().toLowerCase() === normalizedEmail,
+    );
+
+    if (!recipient) {
+      throw new ForbiddenError('You are not designated as a participant on this document.');
+    }
+
+    if (recipient.status === 'SIGNED') {
+      throw new ValidationError('You have already completed signing this document.');
+    }
+
+    if (recipient.status === 'DECLINED') {
+      throw new ValidationError('You have previously declined to sign this document.');
+    }
+
+    // Check turn in sequential order
+    if (
+      agreement.signingOrder === 'SEQUENTIAL' &&
+      recipient.routingOrder !== agreement.currentStep
+    ) {
+      throw new ValidationError(
+        'It is not your turn yet in the sequential signing order. Preceding participants are currently signing.',
+      );
+    }
+
+    // Generate fresh single-use token and update recipient
+    const rawToken = generateToken();
+    const tokenHash = await hashToken(rawToken);
+
+    await this.prisma.agreementRecipient.update({
+      where: { id: recipient.id },
+      data: {
+        signingTokenHash: tokenHash,
+        tokenExpiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours
+        status: recipient.status === 'PENDING' ? 'INVITED' : recipient.status,
+      },
+    });
+
+    return {
+      token: rawToken,
+      signingUrl: `/sign/${rawToken}`,
     };
   }
 }

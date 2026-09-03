@@ -76,6 +76,16 @@ interface AgreementItem {
     fields?: DocumentField[];
     recipients?: Recipient[];
   };
+  recipients?: Array<{
+    id: string;
+    name: string;
+    email: string;
+    role: string;
+    status: string;
+    routingOrder: number;
+    viewedAt?: string | null;
+    signedAt?: string | null;
+  }>;
 }
 
 interface PaginationState {
@@ -112,9 +122,10 @@ function getCurrentUserInfo(): { userId: string; userEmail: string } {
 }
 
 function AgreementManagementContent() {
-  const [activeTab, setActiveTab] = useState<'all' | 'drafts' | 'active' | 'signed' | 'archived'>(
-    'signed',
-  );
+  const [activeTab, setActiveTab] = useState<
+    'all' | 'waiting_for_me' | 'drafts' | 'active' | 'signed' | 'archived'
+  >('signed');
+  const [isSigningId, setIsSigningId] = useState<string | null>(null);
   const [agreements, setAgreements] = useState<AgreementItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -226,7 +237,9 @@ function AgreementManagementContent() {
     return () => clearTimeout(timer);
   }, [searchParams]);
 
-  function handleTabChange(tab: 'all' | 'drafts' | 'active' | 'signed' | 'archived') {
+  function handleTabChange(
+    tab: 'all' | 'waiting_for_me' | 'drafts' | 'active' | 'signed' | 'archived',
+  ) {
     setActiveTab(tab);
     setCurrentPage(1);
     setAgreements([]);
@@ -248,6 +261,7 @@ function AgreementManagementContent() {
         if (activeTab === 'signed') statusParam = 'SIGNED';
         else if (activeTab === 'drafts') statusParam = 'DRAFT';
         else if (activeTab === 'active') statusParam = 'ACTIVE';
+        else if (activeTab === 'waiting_for_me') statusParam = 'WAITING_FOR_ME';
 
         let url = `${getApiUrl()}/api/v1/search/agreements?isArchived=${isArchivedParam}&page=${currentPage}&limit=${pageSize}&sortBy=${sortBy}&sortOrder=${sortOrder}`;
         if (statusParam) url += `&status=${encodeURIComponent(statusParam)}`;
@@ -559,6 +573,36 @@ function AgreementManagementContent() {
     }
   }
 
+  async function handleInitiateInAppSign(agreement: AgreementItem) {
+    setIsSigningId(agreement.id);
+    setActionError(null);
+    try {
+      const res = await fetch(`${getApiUrl()}/api/v1/agreements/${agreement.id}/sign-session`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${getToken()}`,
+        },
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(
+          data?.error?.message || data?.message || 'Failed to start signing session.',
+        );
+      }
+
+      const signingUrl = data.data?.signingUrl;
+      if (signingUrl) {
+        window.location.href = signingUrl;
+      }
+    } catch (err: unknown) {
+      setActionError((err as Error).message);
+    } finally {
+      setIsSigningId(null);
+    }
+  }
+
   async function handleDeleteAgreement(id: string) {
     if (
       !confirm(
@@ -794,6 +838,7 @@ function AgreementManagementContent() {
               {(
                 [
                   { key: 'all', label: 'All' },
+                  { key: 'waiting_for_me', label: 'Needs My Signature' },
                   { key: 'drafts', label: 'Drafts' },
                   { key: 'active', label: 'Active' },
                   { key: 'signed', label: 'Signed' },
@@ -981,6 +1026,17 @@ function AgreementManagementContent() {
                         agreement.reviewer?.email?.toLowerCase() ===
                           currentUser.userEmail.toLowerCase()),
                     );
+                    const isPendingSigner = Boolean(
+                      (agreement.status === 'SENT' || agreement.status === 'PARTIALLY_SIGNED') &&
+                      currentUser.userEmail &&
+                      agreement.recipients?.some(
+                        (r) =>
+                          r.email?.toLowerCase() === currentUser.userEmail.toLowerCase() &&
+                          (r.status === 'PENDING' || r.status === 'INVITED') &&
+                          r.role?.toLowerCase() !== 'cc' &&
+                          r.role?.toLowerCase() !== 'viewer',
+                      ),
+                    );
 
                     return (
                       <tr
@@ -1023,7 +1079,14 @@ function AgreementManagementContent() {
 
                         {/* Status pill */}
                         <td className="py-2.5 px-3 whitespace-nowrap">
-                          <StatusPill status={agreement.status} />
+                          <div className="flex items-center gap-1.5">
+                            <StatusPill status={agreement.status} />
+                            {isPendingSigner && (
+                              <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-700 border border-amber-500/20">
+                                Sign needed
+                              </span>
+                            )}
+                          </div>
                         </td>
 
                         {/* Recipients stacked avatar */}
@@ -1127,6 +1190,23 @@ function AgreementManagementContent() {
                                 </button>
                               )}
 
+                            {/* In-App Sign Action for Assigned Signer (INK-278) */}
+                            {isPendingSigner && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleInitiateInAppSign(agreement);
+                                }}
+                                disabled={isSigningId === agreement.id}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-white bg-brand-600 hover:bg-brand-700 active:bg-brand-800 rounded-md transition-colors shadow-xs shrink-0"
+                                title="Review & Sign this document now"
+                              >
+                                <PenLine className="w-3.5 h-3.5" />
+                                <span>{isSigningId === agreement.id ? 'Loading…' : 'Sign'}</span>
+                              </button>
+                            )}
+
                             {/* View PDF */}
                             <button
                               type="button"
@@ -1141,8 +1221,24 @@ function AgreementManagementContent() {
                             <button
                               type="button"
                               onClick={() => handleDownloadAgreement(agreement)}
-                              className="p-1.5 text-ink-600 hover:text-ink-900 hover:bg-ink-100 rounded transition-colors"
-                              title="Download Signed Document"
+                              disabled={
+                                agreement.status === 'SENT' ||
+                                agreement.status === 'PARTIALLY_SIGNED' ||
+                                agreement.status === 'IN_REVIEW'
+                              }
+                              className={`p-1.5 rounded transition-colors ${
+                                agreement.status === 'SENT' ||
+                                agreement.status === 'PARTIALLY_SIGNED' ||
+                                agreement.status === 'IN_REVIEW'
+                                  ? 'text-ink-300 cursor-not-allowed opacity-50'
+                                  : 'text-ink-600 hover:text-ink-900 hover:bg-ink-100'
+                              }`}
+                              title={
+                                agreement.status === 'SENT' ||
+                                agreement.status === 'PARTIALLY_SIGNED'
+                                  ? 'Document can only be downloaded once all parties have signed'
+                                  : 'Download Signed Document'
+                              }
                             >
                               <Download className="w-4 h-4" />
                             </button>

@@ -68,6 +68,7 @@ export function createAgreementRoutes(deps?: AgreementDeps) {
       const orgId = userPayload?.orgId || 'default-org-id';
       const userId = userPayload?.sub || 'unknown';
       const userRole = userPayload?.role || 'user';
+      const userEmail = userPayload?.email;
 
       const queryParams = {
         page: c.req.query('page'),
@@ -83,7 +84,7 @@ export function createAgreementRoutes(deps?: AgreementDeps) {
         throw new BadRequestError(parsed.error.issues[0]?.message || 'Invalid query parameters');
       }
 
-      const result = await service.listAgreements(orgId, parsed.data, userId, userRole);
+      const result = await service.listAgreements(orgId, parsed.data, userId, userRole, userEmail);
       return c.json(result, 200);
     },
   );
@@ -233,6 +234,28 @@ export function createAgreementRoutes(deps?: AgreementDeps) {
 
       const history = await service.getAgreementHistory(orgId, agreementId, userId, userRole);
       return c.json(history, 200);
+    },
+  );
+
+  // POST /api/v1/agreements/:id/sign-session (In-app authenticated signing session - INK-278)
+  agreements.post(
+    '/:id/sign-session',
+    jwtAuth(),
+    enforceTenantActiveStatus(),
+    requirePermission('documents:read'),
+    async (c) => {
+      const { service } = getServices(c);
+      const agreementId = c.req.param('id');
+      const userPayload = c.get('userPayload') as any;
+      const orgId = userPayload?.orgId || 'default-org-id';
+      const userEmail = userPayload?.email;
+
+      if (!userEmail) {
+        throw new BadRequestError('User email is required to initiate signing session.');
+      }
+
+      const session = await service.createSignerSession(orgId, agreementId, userEmail);
+      return c.json({ success: true, data: session }, 200);
     },
   );
 

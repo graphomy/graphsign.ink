@@ -52,6 +52,10 @@ export class VerificationService {
       });
     }
 
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+      cleanToken,
+    );
+
     if (!seal && this.prisma.documentSeal.findFirst) {
       const tokenVariations = Array.from(
         new Set([
@@ -68,8 +72,7 @@ export class VerificationService {
         where: {
           OR: [
             ...tokenVariations.map((t) => ({ verificationToken: t })),
-            { agreementId: cleanToken },
-            { id: cleanToken },
+            ...(isUuid ? [{ agreementId: cleanToken }, { id: cleanToken }] : []),
           ],
         },
         include: {
@@ -85,10 +88,17 @@ export class VerificationService {
       });
     }
 
-    // If seal not found directly, check if token is an agreement ID
+    // If seal not found directly, check if token is an envelopeId, agreement ID, or verificationToken
     if (!seal && this.prisma.agreement) {
-      const agreement = await this.prisma.agreement.findUnique({
-        where: { id: cleanToken },
+      const agreement = await this.prisma.agreement.findFirst({
+        where: {
+          deletedAt: null,
+          OR: [
+            ...(isUuid ? [{ id: cleanToken }] : []),
+            { metadata: { path: ['envelopeId'], equals: cleanToken } },
+            { metadata: { path: ['verificationToken'], equals: cleanToken } },
+          ],
+        },
         include: {
           recipients: true,
           organisation: { select: { name: true } },
@@ -126,8 +136,13 @@ export class VerificationService {
       .trim()
       .toLowerCase();
 
-    const seal = await this.prisma.documentSeal.findFirst({
-      where: { documentHash: cleanHash },
+    let seal = await this.prisma.documentSeal.findFirst({
+      where: {
+        OR: [
+          { documentHash: cleanHash },
+          { metadata: { path: ['preSealDigest'], equals: cleanHash } },
+        ],
+      },
       include: {
         agreement: {
           include: {

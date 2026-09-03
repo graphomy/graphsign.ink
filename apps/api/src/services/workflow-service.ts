@@ -618,6 +618,11 @@ export class WorkflowService {
         organisation: {
           name: agreement.organisation.name,
         },
+        envelopeId:
+          ((agreement.metadata as any)?.envelopeId as string) ||
+          `ENV-${agreement.id.replace(/-/g, '').substring(0, 8).toUpperCase()}`,
+        verificationToken: ((agreement.metadata as any)?.verificationToken as string) || undefined,
+        documentHash: ((agreement.metadata as any)?.documentHash as string) || undefined,
       },
       recipients: allRecipients,
       isTurn,
@@ -1083,6 +1088,7 @@ export class WorkflowService {
       (r: any) => r.role === 'signer' || r.role === 'approver',
     );
     const allFinished = activeSigners.every((r: any) => r.status === 'SIGNED');
+    let sealResult: any = null;
 
     if (allFinished) {
       // Mark workflow COMPLETED (INK-94, INK-109)
@@ -1096,7 +1102,7 @@ export class WorkflowService {
 
       // Automatically apply Cryptographic PAdES Seal & RFC 3161 Timestamp (INK-18)
       try {
-        await this.sealingService.sealAgreement({
+        sealResult = await this.sealingService.sealAgreement({
           agreementId: agreement.id,
           organisationId: agreement.organisationId,
           ipAddress: ip,
@@ -1123,11 +1129,19 @@ export class WorkflowService {
       });
 
       // Send completion confirmation emails to author and all participants (INK-109, INK-113)
+      const tokenForLink =
+        sealResult?.verificationToken ||
+        `GS-${agreement.id.replace(/-/g, '').substring(0, 8).toUpperCase()}`;
+      const webUrl = (this.mailerService as any).webUrl || 'https://graphsign.ink';
+      const downloadPdfUrl = `${webUrl}/api/v1/sign/${rawToken}/download`;
+      const verificationUrl = `${webUrl}/verify/${tokenForLink}`;
+
       await this.mailerService.sendAgreementCompletedEmail(
         agreement.author.email,
         agreement.author.name || 'Author',
         agreement.title,
-        undefined,
+        downloadPdfUrl,
+        verificationUrl,
         {
           organisationId: agreement.organisationId,
           agreementId: agreement.id,
@@ -1140,7 +1154,8 @@ export class WorkflowService {
           r.email,
           r.name,
           agreement.title,
-          undefined,
+          downloadPdfUrl,
+          verificationUrl,
           {
             organisationId: agreement.organisationId,
             agreementId: agreement.id,
@@ -1211,6 +1226,7 @@ export class WorkflowService {
       success: true,
       isCompleted: allFinished,
       currentStep: agreement.currentStep,
+      verificationToken: sealResult?.verificationToken,
     };
   }
 

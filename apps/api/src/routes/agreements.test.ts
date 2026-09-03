@@ -277,6 +277,7 @@ describe('Agreement Routes Integration Tests (Epic INK-8)', () => {
       expect.objectContaining({ page: 1, limit: 20 }),
       'user-123',
       'sender',
+      'sender@graphomy.com',
     );
   });
 

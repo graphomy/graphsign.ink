@@ -149,6 +149,7 @@ export default function SignDocumentPage({
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isCompleted, setIsCompleted] = useState(false);
+  const [isSubmittedPartial, setIsSubmittedPartial] = useState(false);
 
   // Decline State
   const [showDeclineModal, setShowDeclineModal] = useState(false);
@@ -189,8 +190,10 @@ export default function SignDocumentPage({
         setCurrentRecipient(data.data.recipient);
         setIsTurn(data.data.isTurn !== false);
 
-        if (data.data.recipient.status === 'SIGNED' || data.data.agreement.status === 'COMPLETED') {
+        if (data.data.agreement.status === 'COMPLETED') {
           setIsCompleted(true);
+        } else if (data.data.recipient.status === 'SIGNED') {
+          setIsSubmittedPartial(true);
         } else if (data.data.recipient.status === 'DECLINED') {
           setIsDeclined(true);
         } else {
@@ -430,7 +433,11 @@ export default function SignDocumentPage({
     if (!isFieldAssignedToMe(field.recipientId)) return;
 
     if (adoptedSignature) {
-      setFieldValues((prev) => ({ ...prev, [field.id]: adoptedSignature.dataUrl }));
+      const valToApply =
+        field.type === 'INITIALS'
+          ? adoptedSignature.initialsDataUrl || adoptedSignature.dataUrl
+          : adoptedSignature.dataUrl;
+      setFieldValues((prev) => ({ ...prev, [field.id]: valToApply }));
       if (formErrors[field.id]) {
         setFormErrors((prev) => {
           const next = { ...prev };
@@ -447,15 +454,25 @@ export default function SignDocumentPage({
   // Save Adopted Signature from Modal
   function handleSaveAdoptedSignature(sig: AdoptedSignature) {
     setAdoptedSignature(sig);
+    const todayStr = new Date().toISOString().split('T')[0]!;
     setFieldValues((prev) => {
       const next = { ...prev };
       if (activeSignatureFieldId && activeSignatureFieldId !== 'signature-sidebar') {
-        next[activeSignatureFieldId] = sig.dataUrl;
+        const activeField = fields.find((f) => f.id === activeSignatureFieldId);
+        if (activeField?.type === 'INITIALS') {
+          next[activeSignatureFieldId] = sig.initialsDataUrl || sig.dataUrl;
+        } else {
+          next[activeSignatureFieldId] = sig.dataUrl;
+        }
       }
-      // Also auto-populate any other empty signature fields
+      // Auto-populate any other empty signature, initials, or date fields assigned to me
       for (const f of assignedFields) {
-        if ((f.type === 'SIGNATURE' || f.type === 'INITIALS') && !next[f.id]) {
+        if (f.type === 'INITIALS' && !next[f.id]) {
+          next[f.id] = sig.initialsDataUrl || sig.dataUrl;
+        } else if (f.type === 'SIGNATURE' && !next[f.id]) {
           next[f.id] = sig.dataUrl;
+        } else if (f.type === 'DATE' && !next[f.id]) {
+          next[f.id] = todayStr;
         }
       }
       return next;
@@ -599,7 +616,11 @@ export default function SignDocumentPage({
         throw new Error(data.error?.message || data.message || 'Failed to submit signature.');
       }
 
-      setIsCompleted(true);
+      if (data.data?.isCompleted) {
+        setIsCompleted(true);
+      } else {
+        setIsSubmittedPartial(true);
+      }
       setShowOtpModal(false);
     } catch (err: unknown) {
       alert((err as Error).message);
@@ -692,6 +713,74 @@ export default function SignDocumentPage({
             <strong className="text-ink-900">&quot;{agreement.title}&quot;</strong>. The sender has
             been notified of your decision.
           </p>
+          <div className="pt-2">
+            <Link href="/">
+              <Button variant="outline" size="md">
+                Return to Homepage
+              </Button>
+            </Link>
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
+  // --- PARTIAL SIGNING CONFIRMATION VIEW (Awaiting Other Signers) ---
+  if (isSubmittedPartial) {
+    return (
+      <div className="min-h-screen bg-ink-50 flex flex-col items-center justify-center p-4 sm:p-6 font-sans">
+        <Card elevation="e2" className="max-w-xl w-full p-8 sm:p-10 text-center space-y-6">
+          <div className="w-14 h-14 rounded-full bg-brand-50 text-brand-600 border border-brand-200 flex items-center justify-center mx-auto animate-in zoom-in-50 duration-200">
+            <Check className="w-7 h-7 stroke-[2.5]" />
+          </div>
+
+          <div className="space-y-1.5">
+            <Badge tone="info" size="sm" className="mb-2">
+              Signature Recorded
+            </Badge>
+            <h1 className="text-2xl font-bold text-ink-900 tracking-tight">Signature Submitted!</h1>
+            <p className="text-[13px] text-ink-500 max-w-sm mx-auto leading-relaxed">
+              Thank you,{' '}
+              <strong className="text-ink-900 font-semibold">
+                {orLabel(currentRecipient?.name, orDash(currentRecipient?.email))}
+              </strong>
+              . Your signature has been recorded for{' '}
+              <strong className="text-ink-900">&quot;{agreement.title}&quot;</strong>.
+            </p>
+          </div>
+
+          <div className="bg-ink-50 border border-ink-200 rounded-lg p-4 text-left text-xs space-y-2.5">
+            <div className="flex justify-between items-center text-ink-500">
+              <span>Document</span>
+              <span
+                className="font-semibold text-ink-900 truncate max-w-[240px]"
+                title={agreement.title}
+              >
+                {orDash(agreement.title)}
+              </span>
+            </div>
+            <div className="flex justify-between items-center text-ink-500">
+              <span>Status</span>
+              <span className="font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                Awaiting Other Signatures
+              </span>
+            </div>
+            <div className="flex justify-between items-center text-ink-500">
+              <span>Envelope ID</span>
+              <span className="font-mono text-ink-900 font-semibold">{envelopeId}</span>
+            </div>
+          </div>
+
+          <div className="p-4 bg-amber-50/60 border border-amber-200 rounded-lg text-left text-xs text-amber-900 space-y-1">
+            <p className="font-semibold">What happens next?</p>
+            <p className="text-amber-800 leading-relaxed text-[11px]">
+              Once all participants have completed signing, graphsign.ink will seal the final
+              document with an ETSI PAdES B-T cryptographic signature. An email notification will be
+              delivered to <strong>{orDash(currentRecipient?.email)}</strong> with the download link
+              and public authenticity verification certificate.
+            </p>
+          </div>
+
           <div className="pt-2">
             <Link href="/">
               <Button variant="outline" size="md">
@@ -824,7 +913,7 @@ export default function SignDocumentPage({
               Download executed PDF
             </Button>
             <a
-              href={`/verify/${envelopeId || rawToken}`}
+              href={`/verify/${agreement?.verificationToken || envelopeId || rawToken}`}
               target="_blank"
               rel="noreferrer"
               className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg border border-ink-300 bg-white hover:bg-ink-50 text-ink-900 font-semibold text-xs transition-colors shadow-xs"
