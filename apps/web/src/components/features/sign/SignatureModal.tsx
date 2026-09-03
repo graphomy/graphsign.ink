@@ -247,8 +247,7 @@ export function SignatureModal({
     let initialsDataUrl: string | undefined = undefined;
 
     const effectiveInitials = (
-      typedInitials.trim() ||
-      deriveInitials(typedName || defaultSignerName || 'Signer')
+      typedInitials.trim() || deriveInitials(typedName || defaultSignerName || 'Signer')
     ).toUpperCase();
 
     if (activeTab === 'draw') {
@@ -302,8 +301,7 @@ export function SignatureModal({
   }
 
   const currentInitials = (
-    typedInitials.trim() ||
-    deriveInitials(typedName || defaultSignerName || 'Signer')
+    typedInitials.trim() || deriveInitials(typedName || defaultSignerName || 'Signer')
   ).toUpperCase();
 
   return (
@@ -661,7 +659,10 @@ export function SignatureModal({
             disabled={
               !consentAgreed ||
               (activeTab === 'draw' && !hasDrawn) ||
-              (activeTab === 'type' && !typedName.trim() && !defaultSignerName && !typedInitials.trim()) ||
+              (activeTab === 'type' &&
+                !typedName.trim() &&
+                !defaultSignerName &&
+                !typedInitials.trim()) ||
               (activeTab === 'upload' && !uploadedImage)
             }
             onClick={handleAdoptAndApply}

@@ -1234,7 +1234,8 @@ function AgreementManagementContent() {
                                   : 'text-ink-600 hover:text-ink-900 hover:bg-ink-100'
                               }`}
                               title={
-                                agreement.status === 'SENT' || agreement.status === 'PARTIALLY_SIGNED'
+                                agreement.status === 'SENT' ||
+                                agreement.status === 'PARTIALLY_SIGNED'
                                   ? 'Document can only be downloaded once all parties have signed'
                                   : 'Download Signed Document'
                               }

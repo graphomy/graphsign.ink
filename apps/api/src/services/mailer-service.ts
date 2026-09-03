@@ -485,8 +485,7 @@ export class ResendMailerService implements MailerService {
   ): Promise<void> {
     const verificationUrl =
       typeof verificationUrlOrMeta === 'string' ? verificationUrlOrMeta : undefined;
-    const meta =
-      typeof verificationUrlOrMeta === 'object' ? verificationUrlOrMeta : maybeMeta;
+    const meta = typeof verificationUrlOrMeta === 'object' ? verificationUrlOrMeta : maybeMeta;
 
     await this.dispatch(
       to,

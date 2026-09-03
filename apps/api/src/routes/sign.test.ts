@@ -153,7 +153,7 @@ describe('Sign Route Integration Tests (Public Signer Endpoints)', () => {
     });
 
     expect(res.status).toBe(403);
-    const err = await res.json();
+    const err = (await res.json()) as any;
     expect(err.error?.message).toContain('completed signing');
   });
 

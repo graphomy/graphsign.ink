@@ -20,7 +20,12 @@ export function getApiUrl(): string {
       return `http://${hostname}:8787`;
     }
     // Intelligent domain fallbacks for Cloudflare Pages preview & production environments
-    if (hostname && (hostname.includes('dev-graphsign-web') || hostname.includes('dev.'))) {
+    if (
+      hostname &&
+      (hostname === 'dev.graphsign.ink' ||
+        hostname.includes('dev-graphsign-web') ||
+        hostname.includes('dev.'))
+    ) {
       return 'https://dev-graphsign-api.kunal-f9f.workers.dev';
     }
     if (

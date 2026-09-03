@@ -740,14 +740,22 @@ export default function SignDocumentPage({
             </Badge>
             <h1 className="text-2xl font-bold text-ink-900 tracking-tight">Signature Submitted!</h1>
             <p className="text-[13px] text-ink-500 max-w-sm mx-auto leading-relaxed">
-              Thank you, <strong className="text-ink-900 font-semibold">{orLabel(currentRecipient?.name, orDash(currentRecipient?.email))}</strong>. Your signature has been recorded for <strong className="text-ink-900">&quot;{agreement.title}&quot;</strong>.
+              Thank you,{' '}
+              <strong className="text-ink-900 font-semibold">
+                {orLabel(currentRecipient?.name, orDash(currentRecipient?.email))}
+              </strong>
+              . Your signature has been recorded for{' '}
+              <strong className="text-ink-900">&quot;{agreement.title}&quot;</strong>.
             </p>
           </div>
 
           <div className="bg-ink-50 border border-ink-200 rounded-lg p-4 text-left text-xs space-y-2.5">
             <div className="flex justify-between items-center text-ink-500">
               <span>Document</span>
-              <span className="font-semibold text-ink-900 truncate max-w-[240px]" title={agreement.title}>
+              <span
+                className="font-semibold text-ink-900 truncate max-w-[240px]"
+                title={agreement.title}
+              >
                 {orDash(agreement.title)}
               </span>
             </div>
@@ -766,7 +774,10 @@ export default function SignDocumentPage({
           <div className="p-4 bg-amber-50/60 border border-amber-200 rounded-lg text-left text-xs text-amber-900 space-y-1">
             <p className="font-semibold">What happens next?</p>
             <p className="text-amber-800 leading-relaxed text-[11px]">
-              Once all participants have completed signing, graphsign.ink will seal the final document with an ETSI PAdES B-T cryptographic signature. An email notification will be delivered to <strong>{orDash(currentRecipient?.email)}</strong> with the download link and public authenticity verification certificate.
+              Once all participants have completed signing, graphsign.ink will seal the final
+              document with an ETSI PAdES B-T cryptographic signature. An email notification will be
+              delivered to <strong>{orDash(currentRecipient?.email)}</strong> with the download link
+              and public authenticity verification certificate.
             </p>
           </div>
 

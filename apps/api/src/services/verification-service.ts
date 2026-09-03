@@ -52,8 +52,9 @@ export class VerificationService {
       });
     }
 
-    const isUuid =
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cleanToken);
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+      cleanToken,
+    );
 
     if (!seal && this.prisma.documentSeal.findFirst) {
       const tokenVariations = Array.from(

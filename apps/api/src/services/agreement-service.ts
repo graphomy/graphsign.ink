@@ -1,6 +1,11 @@
 import type { PrismaClient } from '@graphsign/db';
 import { generateId, generateToken, hashToken } from '../utils/crypto.js';
-import { NotFoundError, ForbiddenError, BadRequestError, ValidationError } from '../utils/errors.js';
+import {
+  NotFoundError,
+  ForbiddenError,
+  BadRequestError,
+  ValidationError,
+} from '../utils/errors.js';
 import type { AuditService } from './audit-service.js';
 import { incrementMinorVersion, bumpToMajorVersion } from '../utils/version-utils.js';
 import type {
