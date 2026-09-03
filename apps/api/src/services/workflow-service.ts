@@ -873,7 +873,9 @@ export class WorkflowService {
     if (recipient) {
       agreement = recipient.agreement;
     } else {
-      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cleanId);
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        cleanId,
+      );
 
       // 2. Try verification token in documentSeal
       if (this.prisma.documentSeal?.findFirst) {
@@ -937,8 +939,7 @@ export class WorkflowService {
 
     const meta = (agreement.metadata as Record<string, unknown>) || {};
     let fileData =
-      (meta.signedPdfBase64 as string | undefined) ||
-      (meta.sealedPdfBase64 as string | undefined);
+      (meta.signedPdfBase64 as string | undefined) || (meta.sealedPdfBase64 as string | undefined);
 
     const seal = this.prisma.documentSeal?.findFirst
       ? await this.prisma.documentSeal.findFirst({
@@ -999,18 +1000,20 @@ export class WorkflowService {
 
         // Persist generated signed PDF container to agreement metadata
         if (this.prisma.agreement?.update) {
-          await this.prisma.agreement.update({
-            where: { id: agreement.id },
-            data: {
-              mimeType: 'application/pdf',
-              metadata: {
-                ...meta,
-                signedPdfBase64: fileData,
-                sealedPdfBase64: fileData,
-                envelopeId,
+          await this.prisma.agreement
+            .update({
+              where: { id: agreement.id },
+              data: {
+                mimeType: 'application/pdf',
+                metadata: {
+                  ...meta,
+                  signedPdfBase64: fileData,
+                  sealedPdfBase64: fileData,
+                  envelopeId,
+                },
               },
-            },
-          }).catch(() => {});
+            })
+            .catch(() => {});
         }
       } catch (err) {
         console.warn('[WORKFLOW] PDF assembly fallback in getSigningDocumentFile failed:', err);

@@ -112,7 +112,10 @@ export class VerificationService {
 
       // Try envelope ID prefix match: ENV-XXXXXXXX -> agreement.id starts with XXXXXXXX
       if (!agreement && cleanToken.toUpperCase().startsWith('ENV-')) {
-        const envHex = cleanToken.substring(4).toLowerCase().replace(/[^a-f0-9]/g, '');
+        const envHex = cleanToken
+          .substring(4)
+          .toLowerCase()
+          .replace(/[^a-f0-9]/g, '');
         if (envHex.length >= 6) {
           const candidateAgreements = await this.prisma.agreement.findMany({
             where: { deletedAt: null },
@@ -127,11 +130,13 @@ export class VerificationService {
             },
             take: 20,
           });
-          agreement = candidateAgreements.find(
-            (ag) =>
-              ag.id.replace(/-/g, '').toLowerCase().startsWith(envHex) ||
-              ((ag.metadata as any)?.envelopeId as string)?.toUpperCase() === cleanToken.toUpperCase(),
-          ) || null;
+          agreement =
+            candidateAgreements.find(
+              (ag) =>
+                ag.id.replace(/-/g, '').toLowerCase().startsWith(envHex) ||
+                ((ag.metadata as any)?.envelopeId as string)?.toUpperCase() ===
+                  cleanToken.toUpperCase(),
+            ) || null;
         }
       }
 

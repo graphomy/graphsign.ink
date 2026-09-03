@@ -19,8 +19,5 @@ export async function GET(
   const token = resolvedParams?.token || '';
   const apiUrl = getApiUrl();
 
-  return NextResponse.redirect(
-    `${apiUrl}/api/v1/sign/${encodeURIComponent(token)}/download`,
-    307,
-  );
+  return NextResponse.redirect(`${apiUrl}/api/v1/sign/${encodeURIComponent(token)}/download`, 307);
 }

@@ -91,8 +91,7 @@ export class PadesSealingService {
         this.auditService,
       );
       const isUuid =
-        userId &&
-        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId);
+        userId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId);
       const effectiveUserId = isUuid ? userId : agreement.authorId;
       cert = await certService.getOrCreateDefaultCertificate(organisationId, effectiveUserId);
     }

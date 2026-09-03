@@ -885,7 +885,9 @@ export default function SignDocumentPage({
             <div className="flex justify-between items-center text-ink-500">
               <span>Verification Token</span>
               <div className="flex items-center gap-1.5 font-mono text-ink-900 font-semibold tabular-nums">
-                <span>{completedVerificationToken || agreement?.verificationToken || envelopeId}</span>
+                <span>
+                  {completedVerificationToken || agreement?.verificationToken || envelopeId}
+                </span>
               </div>
             </div>
             <div className="flex justify-between items-center text-ink-500">
