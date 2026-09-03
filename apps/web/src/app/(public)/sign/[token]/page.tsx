@@ -149,7 +149,6 @@ export default function SignDocumentPage({
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isCompleted, setIsCompleted] = useState(false);
-  const [isSubmittedPartial, setIsSubmittedPartial] = useState(false);
   const [completedVerificationToken, setCompletedVerificationToken] = useState<string | null>(null);
   const [completedDocumentHash, setCompletedDocumentHash] = useState<string | null>(null);
 
@@ -478,9 +477,13 @@ export default function SignDocumentPage({
           }
         }
       }
-      // Auto-populate any other empty date fields assigned to me
+      // Auto-populate any other empty signature, initials, or date fields assigned to me
       for (const f of assignedFields) {
-        if (f.type === 'DATE' && !next[f.id]) {
+        if (f.type === 'INITIALS' && !next[f.id]) {
+          next[f.id] = sig.initialsDataUrl || sig.dataUrl;
+        } else if (f.type === 'SIGNATURE' && !next[f.id]) {
+          next[f.id] = sig.dataUrl;
+        } else if (f.type === 'DATE' && !next[f.id]) {
           next[f.id] = todayStr;
         }
       }
@@ -929,7 +932,11 @@ export default function SignDocumentPage({
               Download executed PDF
             </Button>
             <a
+<<<<<<< HEAD
               href={`/verify/${completedVerificationToken || agreement?.verificationToken || envelopeId}`}
+=======
+              href={`/verify/${agreement?.verificationToken || envelopeId || rawToken}`}
+>>>>>>> origin/develop
               target="_blank"
               rel="noreferrer"
               className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg border border-ink-300 bg-white hover:bg-ink-50 text-ink-900 font-semibold text-xs transition-colors shadow-xs"
