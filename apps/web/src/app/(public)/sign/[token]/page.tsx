@@ -149,6 +149,7 @@ export default function SignDocumentPage({
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isCompleted, setIsCompleted] = useState(false);
+  const [isSubmittedPartial, setIsSubmittedPartial] = useState(false);
   const [completedVerificationToken, setCompletedVerificationToken] = useState<string | null>(null);
   const [completedDocumentHash, setCompletedDocumentHash] = useState<string | null>(null);
 
@@ -932,11 +933,7 @@ export default function SignDocumentPage({
               Download executed PDF
             </Button>
             <a
-<<<<<<< HEAD
               href={`/verify/${completedVerificationToken || agreement?.verificationToken || envelopeId}`}
-=======
-              href={`/verify/${agreement?.verificationToken || envelopeId || rawToken}`}
->>>>>>> origin/develop
               target="_blank"
               rel="noreferrer"
               className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg border border-ink-300 bg-white hover:bg-ink-50 text-ink-900 font-semibold text-xs transition-colors shadow-xs"
