@@ -50,7 +50,9 @@ export function SignatureModal({
   onSave,
   onClose,
 }: SignatureModalProps) {
-  const [activeTab, setActiveTab] = useState<'draw' | 'type' | 'upload'>('draw');
+  const [activeTab, setActiveTab] = useState<'draw' | 'type' | 'upload'>(() =>
+    fieldType === 'INITIALS' ? 'type' : 'draw',
+  );
 
   // Draw State
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -262,6 +264,7 @@ export function SignatureModal({
       } else {
         finalDataUrl = drawnData;
         initialsDataUrl = generateTypedDataUrl(effectiveInitials, selectedFont);
+        rawText = typedName.trim() || defaultSignerName || 'Signed';
       }
     } else if (activeTab === 'type') {
       const text = typedName.trim() || defaultSignerName || 'Signature';
@@ -431,6 +434,54 @@ export function SignatureModal({
                 </Button>
               </div>
               <span className="text-[11px] text-ink-400">Pointer &amp; touch enabled</span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t border-ink-100">
+              <div className="sm:col-span-2">
+                <label
+                  htmlFor="draw-signature-name-input"
+                  className="block text-xs font-semibold text-ink-700 mb-1"
+                >
+                  Signer Legal Name
+                </label>
+                <input
+                  id="draw-signature-name-input"
+                  type="text"
+                  value={typedName}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setTypedName(val);
+                    if (!userChangedInitials) {
+                      setTypedInitials(deriveInitials(val));
+                    }
+                  }}
+                  placeholder="Type your full legal name..."
+                  className="w-full rounded-md border border-ink-200 px-3 py-1.5 text-xs bg-white text-ink-900 focus:border-ink-900 focus:outline-none"
+                  data-testid="draw-signature-name-input"
+                />
+              </div>
+
+              <div>
+                <label
+                  htmlFor="draw-initials-input"
+                  className="block text-xs font-semibold text-ink-700 mb-1"
+                >
+                  Initials
+                </label>
+                <input
+                  id="draw-initials-input"
+                  type="text"
+                  maxLength={5}
+                  value={typedInitials}
+                  onChange={(e) => {
+                    setUserChangedInitials(true);
+                    setTypedInitials(e.target.value.toUpperCase());
+                  }}
+                  placeholder="e.g. KP"
+                  className="w-full rounded-md border border-ink-200 px-3 py-1.5 text-xs font-bold uppercase tracking-wider bg-white text-ink-900 focus:border-ink-900 focus:outline-none text-center"
+                  data-testid="draw-initials-input"
+                />
+              </div>
             </div>
           </div>
         )}

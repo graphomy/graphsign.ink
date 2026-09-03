@@ -90,7 +90,10 @@ export class PadesSealingService {
         this.keyCustodyService,
         this.auditService,
       );
-      cert = await certService.getOrCreateDefaultCertificate(organisationId, userId || 'system');
+      const isUuid =
+        userId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId);
+      const effectiveUserId = isUuid ? userId : agreement.authorId;
+      cert = await certService.getOrCreateDefaultCertificate(organisationId, effectiveUserId);
     }
 
     // Generate unique verification token (e.g., GS-7f3a9c2e)
@@ -178,30 +181,35 @@ export class PadesSealingService {
     const sealId = generateId();
 
     // Persist DocumentSeal record
-    const seal = await this.prisma.documentSeal.create({
-      data: {
-        id: sealId,
-        organisationId,
-        agreementId,
-        certificateId: cert.id,
-        algorithm: cert.algorithm,
-        padesLevel: cert.padesLevel || 'B_T',
-        tsaUrl: tsaResult.tsaUrl,
-        tsaTimestamp: tsaResult.timestamp,
-        documentHash,
-        sealedFileUrl: agreement.fileUrl || null,
-        verificationToken,
-        status: 'SUCCESS',
-        metadata: {
-          signerName: cert.name,
-          subjectDn: cert.subjectDn,
-          issuerDn: cert.issuerDn,
-          tsaProvider: tsaResult.provider,
-          qrCodeGenerated: true,
-          verificationUrl,
-        },
+    const sealData = {
+      id: sealId,
+      organisationId,
+      agreementId,
+      certificateId: cert.id,
+      algorithm: cert.algorithm,
+      padesLevel: cert.padesLevel || 'B_T',
+      tsaUrl: tsaResult.tsaUrl,
+      tsaTimestamp: tsaResult.timestamp,
+      documentHash,
+      sealedFileUrl: agreement.fileUrl || null,
+      verificationToken,
+      status: 'SUCCESS' as const,
+      metadata: {
+        signerName: cert.name,
+        subjectDn: cert.subjectDn,
+        issuerDn: cert.issuerDn,
+        tsaProvider: tsaResult.provider,
+        qrCodeGenerated: true,
+        verificationUrl,
       },
-    });
+    };
+
+    let seal = sealData as any;
+    if ((this.prisma as any).documentSeal?.create) {
+      seal = await this.prisma.documentSeal.create({
+        data: sealData,
+      });
+    }
 
     // Update agreement with sealed PDF container and metadata
     if (this.prisma.agreement?.update) {

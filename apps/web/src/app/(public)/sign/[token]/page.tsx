@@ -150,6 +150,8 @@ export default function SignDocumentPage({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isCompleted, setIsCompleted] = useState(false);
   const [isSubmittedPartial, setIsSubmittedPartial] = useState(false);
+  const [completedVerificationToken, setCompletedVerificationToken] = useState<string | null>(null);
+  const [completedDocumentHash, setCompletedDocumentHash] = useState<string | null>(null);
 
   // Decline State
   const [showDeclineModal, setShowDeclineModal] = useState(false);
@@ -429,10 +431,15 @@ export default function SignDocumentPage({
   }
 
   // Handle Signature Field Click (Click-to-sign / Click-to-apply)
-  function handleSignatureFieldClick(field: DocumentField) {
+  function handleSignatureFieldClick(field: DocumentField, forceModal = false) {
     if (!isFieldAssignedToMe(field.recipientId)) return;
 
-    if (adoptedSignature) {
+    const currentValue = fieldValues[field.id];
+    // If the field already has a value, or explicit forceModal, or no adopted signature yet: open modal
+    if (forceModal || currentValue || !adoptedSignature) {
+      setActiveSignatureFieldId(field.id);
+      setActiveSignatureType(field.type === 'INITIALS' ? 'INITIALS' : 'SIGNATURE');
+    } else {
       const valToApply =
         field.type === 'INITIALS'
           ? adoptedSignature.initialsDataUrl || adoptedSignature.dataUrl
@@ -445,9 +452,6 @@ export default function SignDocumentPage({
           return next;
         });
       }
-    } else {
-      setActiveSignatureFieldId(field.id);
-      setActiveSignatureType(field.type === 'INITIALS' ? 'INITIALS' : 'SIGNATURE');
     }
   }
 
@@ -463,6 +467,15 @@ export default function SignDocumentPage({
           next[activeSignatureFieldId] = sig.initialsDataUrl || sig.dataUrl;
         } else {
           next[activeSignatureFieldId] = sig.dataUrl;
+        }
+      } else {
+        // Updated globally or from sidebar: sync across all assigned signature/initials fields
+        for (const f of assignedFields) {
+          if (f.type === 'INITIALS') {
+            next[f.id] = sig.initialsDataUrl || sig.dataUrl;
+          } else if (f.type === 'SIGNATURE') {
+            next[f.id] = sig.dataUrl;
+          }
         }
       }
       // Auto-populate any other empty signature, initials, or date fields assigned to me
@@ -617,6 +630,12 @@ export default function SignDocumentPage({
       }
 
       if (data.data?.isCompleted) {
+        if (data.data.verificationToken) {
+          setCompletedVerificationToken(data.data.verificationToken);
+        }
+        if (data.data.documentHash) {
+          setCompletedDocumentHash(data.data.documentHash);
+        }
         setIsCompleted(true);
       } else {
         setIsSubmittedPartial(true);
@@ -656,7 +675,8 @@ export default function SignDocumentPage({
   }
 
   function handleDownloadDocument() {
-    window.open(`${getApiUrl()}/api/v1/sign/${rawToken}/download`, '_blank');
+    const tokenToUse = completedVerificationToken || agreement?.verificationToken || rawToken;
+    window.open(`${getApiUrl()}/api/v1/sign/${encodeURIComponent(tokenToUse)}/download`, '_blank');
   }
 
   const envelopeId = agreement?.envelopeId || `env_sec_${rawToken.substring(0, 8)}`;
@@ -865,7 +885,9 @@ export default function SignDocumentPage({
             <div className="flex justify-between items-center text-ink-500">
               <span>Verification Token</span>
               <div className="flex items-center gap-1.5 font-mono text-ink-900 font-semibold tabular-nums">
-                <span>{`GS-${rawToken.substring(0, 8)}`}</span>
+                <span>
+                  {completedVerificationToken || agreement?.verificationToken || envelopeId}
+                </span>
               </div>
             </div>
             <div className="flex justify-between items-center text-ink-500">
@@ -880,11 +902,11 @@ export default function SignDocumentPage({
             <div className="flex justify-between items-center text-ink-500 pt-1 border-t border-ink-200">
               <span>SHA-256 Cert Hash</span>
               <div className="flex items-center gap-1.5 font-mono text-[11px] text-ink-700 tabular-nums">
-                <span>{formatHash(certHash, 8, 8)}</span>
+                <span>{formatHash(completedDocumentHash || certHash, 8, 8)}</span>
                 <button
                   type="button"
                   onClick={() => {
-                    navigator.clipboard.writeText(certHash);
+                    navigator.clipboard.writeText(completedDocumentHash || certHash);
                     setCopiedHash(true);
                     setTimeout(() => setCopiedHash(false), 2000);
                   }}
@@ -913,7 +935,7 @@ export default function SignDocumentPage({
               Download executed PDF
             </Button>
             <a
-              href={`/verify/${agreement?.verificationToken || envelopeId || rawToken}`}
+              href={`/verify/${completedVerificationToken || agreement?.verificationToken || envelopeId}`}
               target="_blank"
               rel="noreferrer"
               className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg border border-ink-300 bg-white hover:bg-ink-50 text-ink-900 font-semibold text-xs transition-colors shadow-xs"
@@ -1458,6 +1480,7 @@ export default function SignDocumentPage({
 
       {/* Signature Adoption Modal */}
       <SignatureModal
+        key={`sig-modal-${activeSignatureFieldId || 'closed'}-${currentRecipient?.name || ''}`}
         isOpen={Boolean(activeSignatureFieldId)}
         fieldType={activeSignatureType}
         defaultSignerName={currentRecipient?.name || ''}
