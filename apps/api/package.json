@@ -16,7 +16,7 @@
   "dependencies": {
     "@graphsign/db": "workspace:*",
     "hono": "^4.13.3",
-    "jose": "^6.2.8",
+    "jose": "^6.2.10",
     "qrcode": "^1.5.4",
     "resend": "^6.20.0",
     "scrypt-js": "^3.0.1",
