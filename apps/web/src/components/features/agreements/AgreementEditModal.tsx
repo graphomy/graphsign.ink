@@ -1,10 +1,14 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useEditorDialog } from './useEditorDialog';
 import { MarkdownEditor } from './MarkdownEditor';
+import { ExternalLink, LoaderCircle, PenLine, X } from 'lucide-react';
 import { getApiUrl } from '@/lib/api';
 
 interface AgreementEditModalProps {
+  mode?: 'create' | 'edit';
+  fullPage?: boolean;
   agreementId: string;
   initialTitle: string;
   initialDescription?: string;
@@ -23,6 +27,8 @@ function getToken(): string {
 }
 
 export function AgreementEditModal({
+  mode = 'edit',
+  fullPage = false,
   agreementId,
   initialTitle,
   initialDescription = '',
@@ -34,6 +40,7 @@ export function AgreementEditModal({
   onSuccess,
   onActivateSuccess,
 }: AgreementEditModalProps) {
+  const [version, setVersion] = useState(currentVersion);
   const [title, setTitle] = useState(initialTitle || '');
   const [description, setDescription] = useState(initialDescription || '');
   const [markdown, setMarkdown] = useState(initialMarkdown || '');
@@ -43,10 +50,11 @@ export function AgreementEditModal({
   const [saving, setSaving] = useState(false);
   const [activating, setActivating] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [autosaveStatus, setAutosaveStatus] = useState<string>('');
   const [isLoadingDetails, setIsLoadingDetails] = useState<boolean>(
     !initialMarkdown && !!agreementId,
   );
+
+  const dialogRef = useEditorDialog(fullPage, onClose, saving || activating);
 
   // Fetch full agreement details if markdownContent was omitted in list query
   useEffect(() => {
@@ -57,6 +65,7 @@ export function AgreementEditModal({
           const res = await fetch(`${getApiUrl()}/api/v1/agreements/${agreementId}`, {
             headers: { Authorization: `Bearer ${getToken()}` },
           });
+          if (!res.ok) throw new Error('Unable to load agreement content.');
           if (res.ok) {
             const data = await res.json();
             if (isMounted) {
@@ -67,6 +76,8 @@ export function AgreementEditModal({
             }
           }
         } catch (e) {
+          if (isMounted)
+            setError('Unable to load agreement content. Close the editor and try again.');
           console.error('Failed to load full agreement details:', e);
         } finally {
           if (isMounted) {
@@ -81,18 +92,6 @@ export function AgreementEditModal({
     }
   }, [agreementId, initialMarkdown]);
 
-  // Autosave Draft interval (every 30 seconds)
-  useEffect(() => {
-    if (currentStatus !== 'DRAFT') return;
-    const interval = setInterval(() => {
-      setAutosaveStatus('Autosaving draft...');
-      setTimeout(() => {
-        setAutosaveStatus('Draft autosaved');
-      }, 1000);
-    }, 30000);
-    return () => clearInterval(interval);
-  }, [currentStatus]);
-
   function handleAddTag() {
     if (!tagInput || !tagInput.trim()) return;
     const clean = tagInput.trim().toLowerCase();
@@ -106,7 +105,7 @@ export function AgreementEditModal({
     setTags(tags.filter((t) => t !== tagToRemove));
   }
 
-  async function handleSaveDraft(e?: React.FormEvent) {
+  async function handleSaveDraft(e?: React.FormEvent, openInNewTab = false) {
     if (e) e.preventDefault();
     const cleanTitle = (title || '').trim();
     if (!cleanTitle || cleanTitle.length < 2) {
@@ -123,23 +122,38 @@ export function AgreementEditModal({
       return;
     }
 
+    if (!markdown.trim()) {
+      setError('Agreement terms are required.');
+      return;
+    }
+    const editorTab = openInNewTab ? window.open('about:blank', '_blank') : null;
+    if (openInNewTab && !editorTab) {
+      setError('Your browser blocked the new tab. Allow pop-ups for this site and try again.');
+      return;
+    }
+    if (editorTab) editorTab.opener = null;
     setSaving(true);
     setError(null);
 
     try {
-      const res = await fetch(`${getApiUrl()}/api/v1/agreements/${agreementId}/draft`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${getToken()}`,
+      const res = await fetch(
+        mode === 'create'
+          ? `${getApiUrl()}/api/v1/agreements/scratch`
+          : `${getApiUrl()}/api/v1/agreements/${agreementId}/draft`,
+        {
+          method: mode === 'create' ? 'POST' : 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${getToken()}`,
+          },
+          body: JSON.stringify({
+            title: cleanTitle,
+            description: cleanDesc || undefined,
+            markdownContent: markdown || '',
+            tags: tags || [],
+          }),
         },
-        body: JSON.stringify({
-          title: cleanTitle,
-          description: cleanDesc || undefined,
-          markdownContent: markdown || '',
-          tags: tags || [],
-        }),
-      });
+      );
 
       if (!res.ok) {
         const data = await res.json().catch(() => null);
@@ -147,9 +161,17 @@ export function AgreementEditModal({
       }
 
       const updated = await res.json();
-      onSuccess(`Agreement draft saved successfully (updated to v${updated.version}).`);
-      onClose();
+      setVersion(updated.version);
+      onSuccess(
+        mode === 'create'
+          ? `Agreement draft created successfully (v${updated.version}).`
+          : `Agreement draft saved successfully (updated to v${updated.version}).`,
+      );
+      if (editorTab)
+        editorTab.location.replace('/agreements/edit?id=' + encodeURIComponent(agreementId));
+      if (!fullPage) onClose();
     } catch (err: unknown) {
+      editorTab?.close();
       setError((err as Error).message);
     } finally {
       setSaving(false);
@@ -180,7 +202,7 @@ export function AgreementEditModal({
 
     try {
       // First save current edits if any
-      await fetch(`${getApiUrl()}/api/v1/agreements/${agreementId}/draft`, {
+      const saved = await fetch(`${getApiUrl()}/api/v1/agreements/${agreementId}/draft`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -193,6 +215,8 @@ export function AgreementEditModal({
           tags: tags || [],
         }),
       });
+
+      if (!saved.ok) throw new Error('Failed to save agreement. Your agreement was not activated.');
 
       // Now activate to major version
       const res = await fetch(`${getApiUrl()}/api/v1/agreements/${agreementId}/activate`, {
@@ -222,38 +246,65 @@ export function AgreementEditModal({
     }
   }
 
-  const versionDisplay = String(currentVersion).startsWith('v')
-    ? currentVersion
-    : `v${currentVersion}`;
+  const versionDisplay = String(version).startsWith('v') ? version : `v${version}`;
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 md:p-6 overflow-y-auto">
-      <div className="bg-white border border-neutral-200 rounded-2xl p-6 max-w-5xl w-full shadow-2xl flex flex-col my-auto max-h-[95vh] overflow-y-auto">
+    <div
+      ref={dialogRef}
+      role={fullPage ? undefined : 'dialog'}
+      aria-modal={fullPage ? undefined : true}
+      aria-labelledby="agreement-editor-title"
+      className={
+        fullPage
+          ? 'min-h-screen bg-ink-50 p-4 md:p-8'
+          : 'fixed inset-0 z-50 bg-ink-950/55 flex items-center justify-center p-2 sm:p-4 md:p-6'
+      }
+    >
+      <div
+        className={
+          fullPage
+            ? 'bg-white border border-neutral-200 rounded-2xl p-4 md:p-6 w-full flex flex-col min-h-[calc(100vh-4rem)]'
+            : 'bg-white border border-neutral-200 rounded-2xl p-4 md:p-6 max-w-5xl w-full shadow-2xl flex flex-col my-auto max-h-[95vh] overflow-y-auto'
+        }
+      >
         {/* Modal Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-neutral-200 pb-4 mb-4">
           <div className="space-y-0.5">
-            <div className="flex items-center gap-2">
-              <span className="text-xl">✏️</span>
-              <h2 className="text-lg font-bold text-neutral-900">Edit Agreement Document</h2>
+            <div className="flex flex-wrap items-center gap-2">
+              <PenLine className="h-5 w-5 shrink-0" aria-hidden="true" />
+              <h2 id="agreement-editor-title" className="text-lg font-bold text-neutral-900">
+                {mode === 'create' ? 'Create agreement from scratch' : 'Edit Agreement Document'}
+              </h2>
               <span className="text-[11px] font-bold px-2 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200">
                 {currentStatus} {versionDisplay}
               </span>
             </div>
             <p className="text-xs text-neutral-500">
-              Edit document terms in Markdown. Changes bump minor version on save.
+              {mode === 'create'
+                ? 'Write and preview your agreement, then save it as a draft.'
+                : 'Edit document terms in Markdown. Save your changes before leaving.'}
             </p>
           </div>
 
           <div className="flex items-center gap-2 self-end sm:self-auto">
-            {autosaveStatus && (
-              <span className="text-xs text-neutral-400 italic mr-2">{autosaveStatus}</span>
+            {mode === 'edit' && !fullPage && (
+              <button
+                type="button"
+                onClick={() => handleSaveDraft(undefined, true)}
+                disabled={saving || activating || isLoadingDetails}
+                className="inline-flex items-center gap-2 rounded-lg border border-neutral-300 px-3 py-2 text-xs font-semibold text-neutral-700 hover:bg-neutral-50 focus-visible:outline-2 disabled:opacity-50"
+              >
+                <ExternalLink className="h-4 w-4" aria-hidden="true" /> Save & open in new tab
+              </button>
             )}
             <button
               type="button"
               onClick={onClose}
+              disabled={saving || activating || isLoadingDetails}
+              aria-label={fullPage ? 'Back to agreements' : 'Close editor'}
               className="p-1 text-neutral-400 hover:text-neutral-700 text-lg font-bold"
             >
-              ✕
+              <X className="h-5 w-5" aria-hidden="true" />
             </button>
           </div>
         </div>
@@ -267,7 +318,10 @@ export function AgreementEditModal({
         )}
 
         {error && (
-          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-xs font-medium text-red-700 flex items-center justify-between">
+          <div
+            role="alert"
+            className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-xs font-medium text-red-700 flex items-center justify-between"
+          >
             <span>{error}</span>
             <button onClick={() => setError(null)} className="font-bold text-red-700">
               ×
@@ -276,11 +330,17 @@ export function AgreementEditModal({
         )}
 
         {/* Document Form */}
-        <div className="space-y-4 flex-1">
+        <fieldset
+          disabled={saving || activating || isLoadingDetails}
+          className="space-y-4 flex-1 min-w-0"
+        >
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <div className="flex items-center justify-between mb-1">
-                <label className="block text-xs font-semibold text-neutral-700">
+                <label
+                  htmlFor="agreement-title"
+                  className="block text-xs font-semibold text-neutral-700"
+                >
                   Agreement Title *
                 </label>
                 <span className="text-[10px] text-neutral-400">{title.length}/50</span>
@@ -288,6 +348,7 @@ export function AgreementEditModal({
               <input
                 type="text"
                 required
+                id="agreement-title"
                 maxLength={50}
                 value={title}
                 onChange={(e) => setTitle(e.target.value.slice(0, 50))}
@@ -298,13 +359,17 @@ export function AgreementEditModal({
 
             <div>
               <div className="flex items-center justify-between mb-1">
-                <label className="block text-xs font-semibold text-neutral-700">
+                <label
+                  htmlFor="agreement-description"
+                  className="block text-xs font-semibold text-neutral-700"
+                >
                   Description / Reference (Optional)
                 </label>
                 <span className="text-[10px] text-neutral-400">{description.length}/260</span>
               </div>
               <input
                 type="text"
+                id="agreement-description"
                 maxLength={260}
                 value={description}
                 onChange={(e) => setDescription(e.target.value.slice(0, 260))}
@@ -374,42 +439,24 @@ export function AgreementEditModal({
               value={markdown}
               onChange={setMarkdown}
               placeholder="# Agreement Title&#10;&#10;## 1. Terms and Conditions&#10;Enter contract clauses..."
-              minHeight="340px"
+              minHeight={fullPage ? '60vh' : '340px'}
             />
           </div>
-        </div>
+        </fieldset>
 
         {/* Modal Action Footer */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-5 mt-4 border-t border-neutral-200">
           <div>
-            {currentStatus === 'DRAFT' && (
+            {mode === 'edit' && currentStatus === 'DRAFT' && (
               <button
                 type="button"
                 onClick={handleMoveToActive}
-                disabled={activating || saving}
+                disabled={activating || saving || isLoadingDetails}
                 className="w-full sm:w-auto px-4 py-2 bg-green-700 hover:bg-green-800 text-white text-xs font-bold rounded-lg shadow-sm transition-all flex items-center justify-center gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 {activating ? (
                   <>
-                    <svg
-                      className="animate-spin h-3.5 w-3.5 text-white"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                    >
-                      <circle
-                        className="opacity-25"
-                        cx="12"
-                        cy="12"
-                        r="10"
-                        stroke="currentColor"
-                        strokeWidth="4"
-                      />
-                      <path
-                        className="opacity-75"
-                        fill="currentColor"
-                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                      />
-                    </svg>
+                    <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" />
                     <span>Activating Document...</span>
                   </>
                 ) : (
@@ -425,44 +472,24 @@ export function AgreementEditModal({
             <button
               type="button"
               onClick={onClose}
-              disabled={saving || activating}
+              disabled={saving || activating || isLoadingDetails}
               className="px-4 py-2 text-xs font-semibold text-neutral-600 hover:text-neutral-900 transition-colors disabled:opacity-50"
             >
               Cancel
             </button>
             <button
               type="button"
-              onClick={handleSaveDraft}
-              disabled={saving || activating}
+              onClick={() => handleSaveDraft()}
+              disabled={saving || activating || isLoadingDetails}
               className="px-5 py-2 bg-[#ba0000] hover:bg-red-700 text-white text-xs font-bold rounded-lg shadow-sm transition-all flex items-center justify-center gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed"
             >
               {saving ? (
                 <>
-                  <svg
-                    className="animate-spin h-3.5 w-3.5 text-white"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                  >
-                    <circle
-                      className="opacity-25"
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      strokeWidth="4"
-                    />
-                    <path
-                      className="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                    />
-                  </svg>
+                  <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" />
                   <span>Saving Draft...</span>
                 </>
               ) : (
-                <>
-                  <span>💾</span> Save Draft (Minor Bump)
-                </>
+                <>{mode === 'create' ? 'Create Draft' : 'Save Draft (Minor Bump)'}</>
               )}
             </button>
           </div>

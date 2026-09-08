@@ -69,6 +69,21 @@ describe('DashboardPage Unit Tests (INK-257)', () => {
     );
   });
 
+  it('links Pending Signature and Pending Review to their agreement tabs and omits other top buttons', async () => {
+    render(<DashboardPage />);
+    expect(await screen.findByRole('link', { name: 'Pending Signature' })).toHaveAttribute(
+      'href',
+      '/agreements?tab=waiting_for_me',
+    );
+    expect(screen.getByRole('link', { name: 'Pending Review' })).toHaveAttribute(
+      'href',
+      '/agreements?tab=review_required',
+    );
+    expect(screen.queryByRole('link', { name: /Upload Template/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /Upload Agreement/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /Create from Scratch/ })).not.toBeInTheDocument();
+  });
+
   it('renders dashboard greeting, workspace agreements, and Requiring My Review widget', async () => {
     render(<DashboardPage />);
 

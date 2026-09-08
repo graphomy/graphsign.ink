@@ -175,24 +175,18 @@ function DashboardContent() {
             </p>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <Link
-              href="/agreements?action=upload"
-              className="px-4 py-2.5 bg-[#ba0000] hover:bg-red-700 text-white text-xs font-semibold rounded-lg shadow-sm transition-all flex items-center gap-1.5"
-            >
-              <span>📄</span> Upload Agreement
-            </Link>
-            <Link
-              href="/agreements?action=scratch"
+              href="/agreements?tab=review_required"
               className="px-4 py-2.5 bg-white border border-neutral-300 hover:bg-neutral-100 text-neutral-800 text-xs font-semibold rounded-lg shadow-sm transition-all flex items-center gap-1.5"
             >
-              <span>✏️</span> Create from Scratch
+              Pending Review
             </Link>
             <Link
-              href="/templates?action=create"
+              href="/agreements?tab=waiting_for_me"
               className="px-4 py-2.5 bg-neutral-900 hover:bg-neutral-800 text-white text-xs font-semibold rounded-lg shadow-sm transition-all flex items-center gap-1.5"
             >
-              <span>📐</span> Upload Template
+              Pending Signature
             </Link>
           </div>
         </div>
