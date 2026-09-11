@@ -308,7 +308,13 @@ describe('SignDocumentPage Component Tests (FR-007 Workflow Engine)', () => {
     });
     fireEvent.click(screen.getByTestId('adopt-signature-button'));
 
-    // 4. Submit signing action (wait for finish button to appear when 100% complete)
+    // Wait for modal to close and signature to be applied
+    await waitFor(() => {
+      expect(screen.queryByTestId('signature-modal-overlay')).toBeNull();
+      expect(screen.queryByTestId('click-to-sign-f-sig')).toBeNull();
+    });
+
+    // 4. Submit signing action
     const finishBtn = await screen.findByTestId('guide-finish-button');
     fireEvent.click(finishBtn);
 
@@ -454,6 +460,12 @@ describe('SignDocumentPage Component Tests (FR-007 Workflow Engine)', () => {
       target: { value: 'Guest Signer' },
     });
     fireEvent.click(screen.getByTestId('adopt-signature-button'));
+
+    // Wait for modal to close and signature to be applied
+    await waitFor(() => {
+      expect(screen.queryByTestId('signature-modal-overlay')).toBeNull();
+      expect(screen.queryByTestId('click-to-sign-f-sig-1')).toBeNull();
+    });
 
     // 5. Click finish - triggers OTP dispatch & opens OTP modal
     const finishBtn = await screen.findByTestId('guide-finish-button');
