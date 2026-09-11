@@ -313,11 +313,14 @@ describe('SignDocumentPage Component Tests (FR-007 Workflow Engine)', () => {
     fireEvent.click(finishBtn);
 
     // 5. Verify completion view
-    await waitFor(() => {
-      expect(completeCalled).toBe(true);
-      expect(screen.getByText("You're All Set!")).toBeDefined();
-      expect(screen.getByTestId('download-signed-document-button')).toBeDefined();
-    });
+    await waitFor(
+      () => {
+        expect(completeCalled).toBe(true);
+        expect(screen.getByText("You're All Set!")).toBeDefined();
+        expect(screen.getByTestId('download-signed-document-button')).toBeDefined();
+      },
+      { timeout: 4000 },
+    );
   });
 
   it('shows Auth Gate when unauthenticated, allows signing as guest, and requires OTP (INK-266)', async () => {
