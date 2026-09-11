@@ -121,10 +121,29 @@ function getCurrentUserInfo(): { userId: string; userEmail: string } {
   return { userId, userEmail };
 }
 
+type AgreementTab = 'all' | 'waiting_for_me' | 'review_required' | 'active' | 'signed' | 'archived';
+
+function resolveAgreementTab(tab: string | null): AgreementTab | null {
+  const normalized = tab === 'drafts' ? 'active' : tab;
+  if (
+    normalized === 'all' ||
+    normalized === 'waiting_for_me' ||
+    normalized === 'review_required' ||
+    normalized === 'active' ||
+    normalized === 'signed' ||
+    normalized === 'archived'
+  ) {
+    return normalized;
+  }
+  return null;
+}
+
 function AgreementManagementContent() {
-  const [activeTab, setActiveTab] = useState<
-    'all' | 'waiting_for_me' | 'drafts' | 'active' | 'signed' | 'archived'
-  >('signed');
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const [activeTab, setActiveTab] = useState<AgreementTab>(() => {
+    return resolveAgreementTab(searchParams?.get('tab')) ?? 'signed';
+  });
   const [isSigningId, setIsSigningId] = useState<string | null>(null);
   const [agreements, setAgreements] = useState<AgreementItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -170,20 +189,11 @@ function AgreementManagementContent() {
   const [uploadTagInput, setUploadTagInput] = useState('');
   const [currentUser] = useState<{ userId: string; userEmail: string }>(() => getCurrentUserInfo());
 
-  const [scratchTitle, setScratchTitle] = useState('');
-  const [scratchDesc, setScratchDesc] = useState('');
-  const [scratchMarkdown, setScratchMarkdown] = useState(
-    '# Standard Agreement\n\n## 1. Scope and Terms\nEnter contract clauses, obligations, and deliverables in pure Markdown.\n\n## 2. Term & Termination\nThis agreement is effective upon mutual execution.\n',
-  );
-  const [scratchTags, setScratchTags] = useState<string[]>([]);
-  const [scratchTagInput, setScratchTagInput] = useState('');
-
   const [tagInput, setTagInput] = useState('');
   const [tagsList, setTagsList] = useState<string[]>([]);
 
   // Action processing states
   const [isUploading, setIsUploading] = useState(false);
-  const [isCreatingScratch, setIsCreatingScratch] = useState(false);
   const [cloningId, setCloningId] = useState<string | null>(null);
   const [isArchivingId, setIsArchivingId] = useState<string | null>(null);
   const [isDeletingId, setIsDeletingId] = useState<string | null>(null);
@@ -191,8 +201,6 @@ function AgreementManagementContent() {
 
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
-  const searchParams = useSearchParams();
-  const router = useRouter();
   const [dropdownAnchor, setDropdownAnchor] = useState<{
     id: string;
     agreement: AgreementItem;
@@ -237,9 +245,22 @@ function AgreementManagementContent() {
     return () => clearTimeout(timer);
   }, [searchParams]);
 
-  function handleTabChange(
-    tab: 'all' | 'waiting_for_me' | 'drafts' | 'active' | 'signed' | 'archived',
-  ) {
+  const requestedTab = searchParams?.get('tab');
+  const [prevRequestedTab, setPrevRequestedTab] = useState(requestedTab);
+  if (requestedTab !== prevRequestedTab) {
+    setPrevRequestedTab(requestedTab);
+    const tab = resolveAgreementTab(requestedTab);
+    if (tab) {
+      setActiveTab(tab);
+      setCurrentPage(1);
+    }
+  }
+
+  function handleTabChange(tab: AgreementTab) {
+    const params = new URLSearchParams(searchParams ? searchParams.toString() : '');
+    params.set('tab', tab);
+    params.delete('action');
+    router.replace(`/agreements?${params.toString()}`, { scroll: false });
     setActiveTab(tab);
     setCurrentPage(1);
     setAgreements([]);
@@ -259,8 +280,8 @@ function AgreementManagementContent() {
         const isArchivedParam = activeTab === 'archived' ? 'true' : 'false';
         let statusParam = '';
         if (activeTab === 'signed') statusParam = 'SIGNED';
-        else if (activeTab === 'drafts') statusParam = 'DRAFT';
-        else if (activeTab === 'active') statusParam = 'ACTIVE';
+        else if (activeTab === 'active') statusParam = 'ACTIVE_AND_DRAFT';
+        else if (activeTab === 'review_required') statusParam = 'REVIEW_REQUIRED';
         else if (activeTab === 'waiting_for_me') statusParam = 'WAITING_FOR_ME';
 
         let url = `${getApiUrl()}/api/v1/search/agreements?isArchived=${isArchivedParam}&page=${currentPage}&limit=${pageSize}&sortBy=${sortBy}&sortOrder=${sortOrder}`;
@@ -409,7 +430,7 @@ function AgreementManagementContent() {
       await res.json();
       if (isMd) {
         setActionMessage('Markdown agreement uploaded successfully as Draft (v0.1).');
-        setActiveTab('drafts');
+        setActiveTab('active');
       } else {
         setActionMessage('Agreement uploaded and converted to active PDF (v1.0).');
         setActiveTab('active');
@@ -428,53 +449,6 @@ function AgreementManagementContent() {
     }
   }
 
-  async function handleScratchSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (isCreatingScratch) return;
-    setActionError(null);
-    setActionMessage(null);
-
-    if (!scratchTitle || scratchTitle.trim().length < 2) {
-      setActionError('Agreement title must be at least 2 characters long.');
-      return;
-    }
-
-    setIsCreatingScratch(true);
-    try {
-      const res = await fetch(`${getApiUrl()}/api/v1/agreements/scratch`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${getToken()}`,
-        },
-        body: JSON.stringify({
-          title: scratchTitle.trim(),
-          description: scratchDesc.trim() || undefined,
-          markdownContent: scratchMarkdown,
-          tags: scratchTags,
-        }),
-      });
-
-      if (!res.ok) {
-        const data = await res.json().catch(() => null);
-        throw new Error(data?.error?.message || data?.message || 'Failed to create agreement.');
-      }
-
-      setActionMessage('Agreement draft created from scratch successfully (v0.1).');
-      setShowScratchModal(false);
-      setScratchTitle('');
-      setScratchDesc('');
-      setScratchTags([]);
-      setActiveTab('drafts');
-      setCurrentPage(1);
-      setRefreshTrigger((prev) => prev + 1);
-    } catch (err: unknown) {
-      setActionError((err as Error).message);
-    } finally {
-      setIsCreatingScratch(false);
-    }
-  }
-
   async function handleClone(id: string) {
     if (cloningId) return;
     setActionError(null);
@@ -487,7 +461,7 @@ function AgreementManagementContent() {
 
       if (!res.ok) throw new Error('Failed to clone agreement.');
       setActionMessage('Agreement cloned successfully into a new draft (v0.1).');
-      setActiveTab('drafts');
+      setActiveTab('active');
       setCurrentPage(1);
       setRefreshTrigger((prev) => prev + 1);
     } catch (err: unknown) {
@@ -709,14 +683,6 @@ function AgreementManagementContent() {
   const startItem = pagination.total === 0 ? 0 : (currentPage - 1) * pageSize + 1;
   const endItem = Math.min(currentPage * pageSize, pagination.total);
 
-  const tabCounts = {
-    all: activeTab === 'all' ? pagination.total : undefined,
-    drafts: activeTab === 'drafts' ? pagination.total : undefined,
-    active: activeTab === 'active' ? pagination.total : undefined,
-    signed: activeTab === 'signed' ? pagination.total : undefined,
-    archived: activeTab === 'archived' ? pagination.total : undefined,
-  };
-
   return (
     <div className="min-h-screen bg-ink-50 flex flex-col font-sans text-ink-900">
       <HeaderNav />
@@ -834,14 +800,14 @@ function AgreementManagementContent() {
           {/* Filter Bar inside Table Card */}
           <div className="p-4 border-b border-ink-200 bg-white space-y-3">
             {/* Status Tabs Segmented Control */}
-            <div className="inline-flex items-center p-1 rounded-full bg-ink-100 gap-1">
+            <div className="inline-flex flex-wrap items-center p-1 rounded-2xl bg-ink-100 gap-1">
               {(
                 [
                   { key: 'all', label: 'All' },
-                  { key: 'waiting_for_me', label: 'Needs My Signature' },
-                  { key: 'drafts', label: 'Drafts' },
-                  { key: 'active', label: 'Active' },
-                  { key: 'signed', label: 'Signed' },
+                  { key: 'waiting_for_me', label: 'Pending Signature' },
+                  { key: 'review_required', label: 'Review Required' },
+                  { key: 'active', label: 'Active Agreements' },
+                  { key: 'signed', label: 'Signature Completed' },
                   { key: 'archived', label: 'Archived' },
                 ] as const
               ).map((tab) => {
@@ -851,6 +817,7 @@ function AgreementManagementContent() {
                     key={tab.key}
                     type="button"
                     onClick={() => handleTabChange(tab.key)}
+                    aria-pressed={isActive}
                     className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-medium transition-all ${
                       isActive
                         ? 'bg-white text-ink-900 shadow-[0_1px_2px_rgb(16_24_40/0.04),0_1px_3px_rgb(16_24_40/0.06)] font-semibold'
@@ -983,24 +950,30 @@ function AgreementManagementContent() {
               </div>
               <h3 className="text-base font-bold text-ink-900">No agreements here yet</h3>
               <p className="text-[13px] text-ink-500 max-w-sm mx-auto">
-                {activeTab === 'drafts'
-                  ? 'Create or upload contract drafts to prepare them for review and signature.'
-                  : activeTab === 'active'
-                    ? 'Agreements sent out for signature will appear here with live tracking.'
-                    : activeTab === 'signed'
-                      ? 'Fully executed contracts with tamper-evident audit trails will appear here.'
-                      : 'Draft, upload, or generate contracts from templates to get started.'}
+                {activeTab === 'archived'
+                  ? 'Archived agreements will appear here.'
+                  : activeTab === 'review_required'
+                    ? 'Agreements assigned to you for review will appear here.'
+                    : activeTab === 'waiting_for_me'
+                      ? 'Agreements awaiting your signature will appear here.'
+                      : activeTab === 'active'
+                        ? 'Create or upload an agreement to prepare it for review and signature.'
+                        : activeTab === 'signed'
+                          ? 'Completed agreements will appear here.'
+                          : 'Draft, upload, or generate contracts from templates to get started.'}
               </p>
-              <div className="pt-2">
-                <Button
-                  variant="primary"
-                  size="md"
-                  onClick={() => setShowUploadModal(true)}
-                  leftIcon={<Upload className="w-4 h-4" />}
-                >
-                  Upload agreement
-                </Button>
-              </div>
+              {activeTab !== 'archived' && (
+                <div className="pt-2">
+                  <Button
+                    variant="primary"
+                    size="md"
+                    onClick={() => setShowUploadModal(true)}
+                    leftIcon={<Upload className="w-4 h-4" />}
+                  >
+                    Upload agreement
+                  </Button>
+                </div>
+              )}
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -1175,6 +1148,8 @@ function AgreementManagementContent() {
                             {activeTab === 'active' &&
                               !agreement.isArchived &&
                               !isInReview &&
+                              !isDraft &&
+                              agreement.status !== 'CANCELLED' &&
                               agreement.status !== 'SENT' &&
                               agreement.status !== 'SENT_FOR_SIGNATURE' &&
                               agreement.status !== 'PARTIALLY_SIGNED' &&
@@ -1542,60 +1517,19 @@ function AgreementManagementContent() {
 
       {/* Create from Scratch Modal */}
       {showScratchModal && (
-        <div className="fixed inset-0 z-50 bg-ink-950/55 backdrop-blur-[2px] flex items-center justify-center p-4">
-          <div className="bg-white border border-ink-200 rounded-xl p-6 max-w-2xl w-full shadow-[0_8px_16px_-4px_rgb(16_24_40/0.08),0_24px_48px_-12px_rgb(16_24_40/0.16)] space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-bold text-ink-900">Create agreement from scratch</h2>
-              <button
-                onClick={() => setShowScratchModal(false)}
-                className="text-ink-400 hover:text-ink-700"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleScratchSubmit} className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-ink-700 mb-1">Title</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Non-Disclosure Agreement"
-                  value={scratchTitle}
-                  onChange={(e) => setScratchTitle(e.target.value)}
-                  className="w-full bg-white border border-ink-200 rounded-md px-3 py-2 text-xs text-ink-900 focus:border-ink-900 focus:outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-ink-700 mb-1">
-                  Markdown Body
-                </label>
-                <textarea
-                  rows={8}
-                  required
-                  value={scratchMarkdown}
-                  onChange={(e) => setScratchMarkdown(e.target.value)}
-                  className="w-full bg-white border border-ink-200 rounded-md p-3 text-xs font-mono text-ink-900 focus:border-ink-900 focus:outline-none"
-                />
-              </div>
-
-              <div className="flex justify-end gap-2 pt-2 border-t border-ink-100">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="md"
-                  onClick={() => setShowScratchModal(false)}
-                >
-                  Cancel
-                </Button>
-                <Button type="submit" variant="primary" size="md" isLoading={isCreatingScratch}>
-                  Create Draft
-                </Button>
-              </div>
-            </form>
-          </div>
-        </div>
+        <AgreementEditModal
+          mode="create"
+          agreementId=""
+          initialTitle=""
+          currentVersion="v0.1"
+          currentStatus="DRAFT"
+          onSuccess={(msg) => {
+            setActionMessage(msg || 'Draft created successfully');
+            setShowScratchModal(false);
+            setRefreshTrigger((p) => p + 1);
+          }}
+          onClose={() => setShowScratchModal(false)}
+        />
       )}
 
       {/* Other Feature Modals */}

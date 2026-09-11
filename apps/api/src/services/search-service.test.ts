@@ -204,6 +204,39 @@ describe('SearchService Unit Tests (INK-117 to INK-122)', () => {
   });
 
   describe('INK-118: Metadata Filters', () => {
+    it('combines the active and draft groups before counting and pagination', async () => {
+      await service.searchAgreements(mockMemberCtx, {
+        status: 'ACTIVE_AND_DRAFT',
+        page: 2,
+        limit: 10,
+      });
+      const args = mockPrisma.agreement.findMany.mock.calls[0][0];
+      expect(args.where).toMatchObject({
+        organisationId: 'org-1',
+        isArchived: false,
+        status: { notIn: ['COMPLETED', 'SEALED', 'SIGNED', 'VOIDED'] },
+      });
+      expect(args.skip).toBe(10);
+      expect(args.take).toBe(10);
+      expect(mockPrisma.agreement.count).toHaveBeenCalledWith({ where: args.where });
+    });
+
+    it.each([mockMemberCtx, mockAdminCtx])(
+      'limits required reviews to the current reviewer even for $role',
+      async (ctx) => {
+        await service.searchAgreements(ctx, { status: 'REVIEW_REQUIRED', q: 'contract' });
+        const args = mockPrisma.agreement.findMany.mock.calls[0][0];
+        expect(args.where).toMatchObject({
+          organisationId: 'org-1',
+          deletedAt: null,
+          isArchived: false,
+          status: 'IN_REVIEW',
+          reviewerId: ctx.userId,
+        });
+        expect(mockPrisma.agreement.count).toHaveBeenCalledWith({ where: args.where });
+      },
+    );
+
     it('applies status filter for active agreements', async () => {
       await service.searchAgreements(mockAdminCtx, { status: 'ACTIVE' });
       const callArgs = mockPrisma.agreement.findMany.mock.calls[0][0];

@@ -105,6 +105,11 @@ export class SearchService {
     if (query.status && query.status !== 'ALL') {
       if (query.status === 'SIGNED' || query.status === 'COMPLETED' || query.status === 'SEALED') {
         where.status = { in: ['COMPLETED', 'SEALED', 'SIGNED'] };
+      } else if (query.status === 'REVIEW_REQUIRED') {
+        where.status = 'IN_REVIEW';
+        where.reviewerId = ctx.userId;
+      } else if (query.status === 'ACTIVE_AND_DRAFT') {
+        where.status = { notIn: ['COMPLETED', 'SEALED', 'SIGNED', 'VOIDED'] };
       } else if (query.status === 'ACTIVE') {
         where.status = {
           notIn: [
