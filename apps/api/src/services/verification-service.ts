@@ -1,10 +1,21 @@
 import type { PrismaClient } from '@graphsign/db';
 import { sha256 } from '../utils/crypto.js';
-import { NotFoundError } from '../utils/errors.js';
+import { NotFoundError, BadRequestError } from '../utils/errors.js';
+import { DocumentSignatureExtractor } from '../utils/document-signature-extractor.js';
+import { CrlOcspService } from './crl-ocsp-service.js';
+import type { KeyCustodyService } from './key-custody-service.js';
+import type { AuditService } from './audit-service.js';
+
+export interface SignerInfo {
+  name?: string;
+  email?: string;
+  timestamp?: string;
+}
 
 export interface PublicVerificationReport {
   isValid: boolean;
-  status: 'VALID' | 'TAMPERED' | 'NOT_FOUND' | 'REVOKED';
+  status: 'VALID' | 'TAMPERED' | 'NOT_FOUND' | 'REVOKED' | 'EXPIRED' | 'UNSIGNED' | 'UNSUPPORTED';
+  message?: string;
   verificationToken: string;
   verificationUrl?: string;
   qrCodeDataUrl?: string;
@@ -13,6 +24,7 @@ export interface PublicVerificationReport {
   completedAt: string | null;
   totalSigners: number;
   signedSigners: number;
+  signerDetails?: SignerInfo | null;
   sealDetails: {
     algorithm: string;
     padesLevel: string;
@@ -21,23 +33,57 @@ export interface PublicVerificationReport {
     tsaProvider?: string;
     certificateSubject?: string;
     certificateIssuer?: string;
+    certificateStatus?: string;
   };
   organisationName: string;
   sealedAt: string;
 }
 
+export interface VerifyContext {
+  ipAddress?: string;
+  userAgent?: string;
+}
+
+function toBuffer(fileData: string | Uint8Array): Buffer {
+  if (typeof fileData === 'string') {
+    if (fileData.startsWith('data:')) {
+      return Buffer.from(fileData.split(',')[1] || '', 'base64');
+    }
+    if (
+      !fileData.includes('<') &&
+      !fileData.includes('%PDF') &&
+      !fileData.includes('\n') &&
+      /^[A-Za-z0-9+/=]+$/.test(fileData.trim()) &&
+      fileData.trim().length % 4 === 0
+    ) {
+      return Buffer.from(fileData.trim(), 'base64');
+    }
+    return Buffer.from(fileData, 'utf-8');
+  }
+  return Buffer.from(fileData);
+}
+
 export class VerificationService {
-  constructor(private readonly prisma: PrismaClient) {}
+  private readonly crlOcspService: CrlOcspService;
+
+  constructor(
+    private readonly prisma: PrismaClient,
+    private readonly keyCustodyService?: KeyCustodyService,
+    crlOcspService?: CrlOcspService,
+    private readonly auditService?: AuditService,
+  ) {
+    this.crlOcspService = crlOcspService || new CrlOcspService(this.prisma);
+  }
 
   /**
    * Method 1: Public verification by token, agreement ID, or envelope ID.
    * Safe for public consumption — never exposes private document body.
    */
-  async verifyByToken(token: string): Promise<PublicVerificationReport> {
+  async verifyByToken(token: string, context?: VerifyContext): Promise<PublicVerificationReport> {
     const cleanToken = token.trim();
     let seal = null;
 
-    if (this.prisma.documentSeal.findUnique) {
+    if (this.prisma.documentSeal?.findUnique) {
       seal = await this.prisma.documentSeal.findUnique({
         where: { verificationToken: cleanToken },
         include: {
@@ -52,11 +98,9 @@ export class VerificationService {
       });
     }
 
-    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-      cleanToken,
-    );
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cleanToken);
 
-    if (!seal && this.prisma.documentSeal.findFirst) {
+    if (!seal && this.prisma.documentSeal?.findFirst) {
       const tokenVariations = Array.from(
         new Set([
           cleanToken,
@@ -88,8 +132,8 @@ export class VerificationService {
       });
     }
 
-    // If seal not found directly, check if token is an envelopeId, agreement ID, signing token, or verificationToken
-    if (!seal && this.prisma.agreement) {
+    // Check if token is an envelopeId, agreement ID, or verificationToken in agreement metadata
+    if (!seal && this.prisma.agreement?.findFirst) {
       let agreement = await this.prisma.agreement.findFirst({
         where: {
           deletedAt: null,
@@ -110,7 +154,7 @@ export class VerificationService {
         },
       });
 
-      // Try envelope ID prefix match: ENV-XXXXXXXX -> agreement.id starts with XXXXXXXX
+      // Try envelope ID prefix match: ENV-XXXXXXXX
       if (!agreement && cleanToken.toUpperCase().startsWith('ENV-')) {
         const envHex = cleanToken
           .substring(4)
@@ -134,38 +178,8 @@ export class VerificationService {
             candidateAgreements.find(
               (ag) =>
                 ag.id.replace(/-/g, '').toLowerCase().startsWith(envHex) ||
-                ((ag.metadata as any)?.envelopeId as string)?.toUpperCase() ===
-                  cleanToken.toUpperCase(),
+                ((ag.metadata as any)?.envelopeId as string)?.toUpperCase() === cleanToken.toUpperCase(),
             ) || null;
-        }
-      }
-
-      // Try lookup by recipient signing token hash
-      if (!agreement && this.prisma.agreementRecipient?.findUnique) {
-        try {
-          const { hashToken } = await import('../utils/crypto.js');
-          const tHash = await hashToken(cleanToken);
-          const recip = await this.prisma.agreementRecipient.findUnique({
-            where: { signingTokenHash: tHash },
-            include: {
-              agreement: {
-                include: {
-                  recipients: true,
-                  organisation: { select: { name: true } },
-                  documentSeals: {
-                    include: { certificate: true },
-                    orderBy: { createdAt: 'desc' },
-                    take: 1,
-                  },
-                },
-              },
-            },
-          });
-          if (recip?.agreement) {
-            agreement = recip.agreement as any;
-          }
-        } catch {
-          // Ignore hash lookup errors
         }
       }
 
@@ -175,24 +189,31 @@ export class VerificationService {
             ...agreement.documentSeals[0],
             agreement,
           } as any;
-        } else if (agreement.status === 'COMPLETED') {
-          const meta = (agreement.metadata as any) || {};
-          seal = {
-            id: `seal-${agreement.id.substring(0, 8)}`,
-            agreementId: agreement.id,
-            agreement,
-            verificationToken: (meta.verificationToken as string) || cleanToken,
-            documentHash: (meta.documentHash as string) || 'COMPLETED',
-            algorithm: 'RSA-2048',
-            padesLevel: 'B_T',
-            status: 'SUCCESS',
-            createdAt: agreement.completedAt || new Date(),
-            metadata: {
-              verificationUrl: `https://graphsign.ink/verify/${cleanToken}`,
-              signerName: 'GraphSign Tenant Signing Authority',
-              tsaProvider: 'FreeTSA / DigiCert RFC 3161 TSA',
+        } else {
+          // Critical correctness fix: Agreement completed but NOT sealed in documentSeals.
+          // Do NOT synthesize a fake valid seal! Return explicit unsigned status.
+          const unsealedReport: PublicVerificationReport = {
+            isValid: false,
+            status: 'UNSIGNED',
+            message: 'Error: No cryptographic seal found for this document.',
+            verificationToken: cleanToken,
+            documentTitle: agreement.title || 'Agreement',
+            documentHash: '',
+            completedAt: agreement.completedAt ? new Date(agreement.completedAt).toISOString() : null,
+            totalSigners: (agreement.recipients || []).length,
+            signedSigners: (agreement.recipients || []).filter((r: any) => r.status === 'SIGNED').length,
+            sealDetails: {
+              algorithm: 'NONE',
+              padesLevel: 'NONE',
+              tsaUrl: null,
+              tsaTimestamp: null,
             },
+            organisationName: agreement.organisation?.name || 'graphsign.ink',
+            sealedAt: new Date().toISOString(),
           };
+
+          await this.logAuditAttempt(agreement.organisationId, agreement.id, unsealedReport, context);
+          return unsealedReport;
         }
       }
     }
@@ -203,73 +224,336 @@ export class VerificationService {
       );
     }
 
-    return this.buildReport(seal);
+    const report = await this.buildReport(seal);
+    await this.logAuditAttempt(seal.organisationId, seal.id, report, context);
+    return report;
   }
 
   /**
    * Method 2: Public verification by document SHA-256 hash.
    */
-  async verifyByHash(hash: string): Promise<PublicVerificationReport> {
+  async verifyByHash(hash: string, context?: VerifyContext): Promise<PublicVerificationReport> {
     const cleanHash = hash
       .replace(/^sha256:/i, '')
       .trim()
       .toLowerCase();
 
-    let seal = await this.prisma.documentSeal.findFirst({
-      where: {
-        OR: [
-          { documentHash: cleanHash },
-          { metadata: { path: ['preSealDigest'], equals: cleanHash } },
-        ],
-      },
-      include: {
-        agreement: {
-          include: {
-            recipients: true,
-            organisation: { select: { name: true } },
-          },
+    let seal = null;
+    if (this.prisma.documentSeal?.findFirst) {
+      seal = await this.prisma.documentSeal.findFirst({
+        where: {
+          OR: [
+            { documentHash: cleanHash },
+            { documentHash: cleanHash.toUpperCase() },
+            { documentHash: `sha256:${cleanHash}` },
+          ],
         },
-        certificate: true,
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+        include: {
+          agreement: {
+            include: {
+              recipients: true,
+              organisation: { select: { name: true } },
+            },
+          },
+          certificate: true,
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+    }
 
     if (!seal) {
       throw new NotFoundError('No sealed document found with the provided hash.');
     }
 
-    return this.buildReport(seal);
+    const report = await this.buildReport(seal);
+    await this.logAuditAttempt(seal.organisationId, seal.id, report, context);
+    return report;
   }
 
-  private buildReport(seal: any): PublicVerificationReport {
+  /**
+   * Method 3: Uploaded file verification (INK-135).
+   * Computes file SHA-256 hash, extracts embedded signature, and verifies cryptographic integrity.
+   * FIX: Never trusts embedded token string without verifying actual file byte hash!
+   */
+  async verifyUploadedFile(
+    fileContent: string | Uint8Array,
+    options?: { expectedToken?: string; context?: VerifyContext },
+  ): Promise<PublicVerificationReport> {
+    const rawBytes = toBuffer(fileContent);
+
+    const computedFileHash = await sha256(new Uint8Array(rawBytes));
+    const extracted = await DocumentSignatureExtractor.extract(rawBytes);
+
+    const tokenCandidate = options?.expectedToken || extracted.verificationToken;
+
+    if (tokenCandidate && this.prisma.documentSeal?.findUnique) {
+      let seal = await this.prisma.documentSeal.findUnique({
+        where: { verificationToken: tokenCandidate },
+        include: {
+          agreement: {
+            include: {
+              recipients: true,
+              organisation: { select: { name: true } },
+            },
+          },
+          certificate: true,
+        },
+      });
+
+      if (!seal && this.prisma.documentSeal?.findFirst) {
+        seal = await this.prisma.documentSeal.findFirst({
+          where: { verificationToken: tokenCandidate },
+          include: {
+            agreement: {
+              include: {
+                recipients: true,
+                organisation: { select: { name: true } },
+              },
+            },
+            certificate: true,
+          },
+        });
+      }
+
+      if (seal) {
+        const matchesOverallHash = computedFileHash.toLowerCase() === seal.documentHash.toLowerCase();
+        const preSealDigest = (seal.metadata as any)?.preSealDigest as string | undefined;
+        const matchesPreSealDigest = preSealDigest && extracted.signedContentDigest === preSealDigest;
+
+        // Critical correctness check: If the file hash doesn't match the seal, it's altered!
+        if (!matchesOverallHash && !matchesPreSealDigest) {
+          const tamperedReport: PublicVerificationReport = {
+            isValid: false,
+            status: 'TAMPERED',
+            message: 'Invalid: Document has been altered or signature is corrupted.',
+            verificationToken: seal.verificationToken,
+            documentTitle: seal.agreement?.title || 'Sealed Document',
+            documentHash: computedFileHash,
+            completedAt: seal.agreement?.completedAt ? new Date(seal.agreement.completedAt).toISOString() : null,
+            totalSigners: seal.agreement?.recipients?.length || 0,
+            signedSigners: (seal.agreement?.recipients || []).filter((r: any) => r.status === 'SIGNED').length,
+            signerDetails: extracted.signerDetails,
+            sealDetails: {
+              algorithm: seal.algorithm,
+              padesLevel: seal.padesLevel,
+              tsaUrl: seal.tsaUrl,
+              tsaTimestamp: seal.tsaTimestamp ? new Date(seal.tsaTimestamp).toISOString() : null,
+              certificateSubject: seal.certificate?.subjectDn,
+              certificateIssuer: seal.certificate?.issuerDn,
+            },
+            organisationName: seal.agreement?.organisation?.name || 'graphsign.ink',
+            sealedAt: seal.createdAt ? new Date(seal.createdAt).toISOString() : new Date().toISOString(),
+          };
+
+          await this.logAuditAttempt(seal.organisationId, seal.id, tamperedReport, options?.context);
+          return tamperedReport;
+        }
+
+        // Hashes match — proceed with report generation and cryptographic checks
+        const report = await this.buildReport(seal);
+        await this.logAuditAttempt(seal.organisationId, seal.id, report, options?.context);
+        return report;
+      }
+    }
+
+    // Try finding by exact file hash in database
+    try {
+      return await this.verifyByHash(computedFileHash, options?.context);
+    } catch {
+      // Not found in database — check if standalone signed document
+    }
+
+    if (!extracted.hasSignature) {
+      return {
+        isValid: false,
+        status: 'UNSIGNED',
+        message: 'Error: No signature found in the document.',
+        verificationToken: 'N/A',
+        documentTitle: 'Uploaded Document',
+        documentHash: computedFileHash,
+        completedAt: null,
+        totalSigners: 0,
+        signedSigners: 0,
+        sealDetails: {
+          algorithm: 'NONE',
+          padesLevel: 'NONE',
+          tsaUrl: null,
+          tsaTimestamp: null,
+        },
+        organisationName: 'Unknown',
+        sealedAt: new Date().toISOString(),
+      };
+    }
+
+    // Standalone signed document without DB record — verify offline
+    return this.verifyOffline(rawBytes);
+  }
+
+  /**
+   * Method 4: Offline verification without database or external connectivity (INK-137).
+   */
+  async verifyOffline(
+    fileContent: string | Uint8Array,
+    suppliedCertPem?: string,
+  ): Promise<PublicVerificationReport> {
+    const rawBytes = toBuffer(fileContent);
+
+    const computedHash = await sha256(new Uint8Array(rawBytes));
+    const extracted = await DocumentSignatureExtractor.extract(rawBytes);
+
+    if (!extracted.hasSignature) {
+      return {
+        isValid: false,
+        status: 'UNSIGNED',
+        message: 'Error: No signature found in the document.',
+        verificationToken: 'OFFLINE',
+        documentTitle: 'Offline Document',
+        documentHash: computedHash,
+        completedAt: null,
+        totalSigners: 0,
+        signedSigners: 0,
+        sealDetails: {
+          algorithm: 'NONE',
+          padesLevel: 'NONE',
+          tsaUrl: null,
+          tsaTimestamp: null,
+        },
+        organisationName: 'Offline Verifier',
+        sealedAt: new Date().toISOString(),
+      };
+    }
+
+    const effectiveCertPem = suppliedCertPem || extracted.certificatePem;
+    if (!effectiveCertPem && !extracted.publicKeyPem) {
+      throw new BadRequestError('Error: Public key required for offline verification.');
+    }
+
+    // Validate certificate expiration dates offline
+    const certValidation = await this.crlOcspService.validateCertificate({
+      certificatePem: effectiveCertPem || undefined,
+    });
+
+    if (!certValidation.isValid) {
+      return {
+        isValid: false,
+        status: certValidation.status as any,
+        message: certValidation.warning || certValidation.reason,
+        verificationToken: extracted.verificationToken || 'OFFLINE',
+        documentTitle: 'Offline Document',
+        documentHash: computedHash,
+        completedAt: extracted.signerDetails?.timestamp || null,
+        totalSigners: 1,
+        signedSigners: 1,
+        signerDetails: extracted.signerDetails,
+        sealDetails: {
+          algorithm: extracted.algorithm || 'RSA_2048',
+          padesLevel: 'B_T',
+          tsaUrl: null,
+          tsaTimestamp: extracted.timestampToken ? new Date().toISOString() : null,
+          certificateStatus: certValidation.status,
+        },
+        organisationName: 'Offline Verifier',
+        sealedAt: new Date().toISOString(),
+      };
+    }
+
+    // Cryptographically verify signature if KeyCustodyService is provided
+    let isSigValid = true;
+    if (this.keyCustodyService && extracted.signatureBase64 && extracted.signedContentDigest && effectiveCertPem) {
+      try {
+        isSigValid = await this.keyCustodyService.verifySignature(
+          effectiveCertPem,
+          (extracted.algorithm as any) || 'RSA_2048',
+          btoa(extracted.signedContentDigest),
+          extracted.signatureBase64,
+        );
+      } catch {
+        isSigValid = false;
+      }
+    }
+
+    const status = isSigValid ? 'VALID' : 'TAMPERED';
+
+    return {
+      isValid: isSigValid,
+      status,
+      message: isSigValid ? undefined : 'Invalid: Document has been altered or signature is corrupted.',
+      verificationToken: extracted.verificationToken || 'OFFLINE',
+      documentTitle: 'Offline Document',
+      documentHash: computedHash,
+      completedAt: extracted.signerDetails?.timestamp || null,
+      totalSigners: 1,
+      signedSigners: isSigValid ? 1 : 0,
+      signerDetails: extracted.signerDetails,
+      sealDetails: {
+        algorithm: extracted.algorithm || 'RSA_2048',
+        padesLevel: 'B_T',
+        tsaUrl: null,
+        tsaTimestamp: extracted.timestampToken ? new Date().toISOString() : null,
+        certificateStatus: certValidation.status,
+      },
+      organisationName: 'Offline Verifier',
+      sealedAt: new Date().toISOString(),
+    };
+  }
+
+  private async buildReport(seal: any): Promise<PublicVerificationReport> {
     const agreement = seal.agreement || {};
     const recipients = agreement.recipients || [];
     const activeSigners = recipients.filter(
-      (r: any) =>
-        r.role?.toLowerCase() === 'signer' || r.role?.toLowerCase() === 'approver' || !r.role,
+      (r: any) => r.role?.toLowerCase() === 'signer' || r.role?.toLowerCase() === 'approver' || !r.role,
     );
     const totalCount =
-      activeSigners.length > 0
-        ? activeSigners.length
-        : recipients.length > 0
-          ? recipients.length
-          : 0;
+      activeSigners.length > 0 ? activeSigners.length : recipients.length > 0 ? recipients.length : 0;
     const signedCount =
       activeSigners.filter((r: any) => r.status === 'SIGNED').length ||
       recipients.filter((r: any) => r.status === 'SIGNED').length ||
       0;
 
-    const isCertRevoked = seal.certificate?.status === 'REVOKED';
-    const status = isCertRevoked ? 'REVOKED' : seal.status === 'SUCCESS' ? 'VALID' : 'TAMPERED';
+    // Validate certificate with CrlOcspService (INK-139)
+    const certValidation = await this.crlOcspService.validateCertificate({
+      certificateId: seal.certificateId,
+      certificatePem: seal.certificate?.certificatePem,
+      validFrom: seal.certificate?.validFrom,
+      validTo: seal.certificate?.validTo,
+      storedStatus: seal.certificate?.status,
+    });
+
+    let status: PublicVerificationReport['status'] = 'VALID';
+    let message: string | undefined = undefined;
+
+    if (!certValidation.isValid) {
+      status = certValidation.status as any;
+      message = certValidation.warning || certValidation.reason;
+    } else if (seal.status !== 'SUCCESS') {
+      status = 'TAMPERED';
+      message = 'Invalid: Document has been altered or signature is corrupted.';
+    }
 
     const meta = (seal.metadata as any) || {};
+
+    // Determine primary signer details
+    const firstSignedRecipient = recipients.find((r: any) => r.status === 'SIGNED');
+    const signerDetails: SignerInfo | null = firstSignedRecipient
+      ? {
+          name: firstSignedRecipient.name,
+          email: firstSignedRecipient.email,
+          timestamp: firstSignedRecipient.signedAt ? new Date(firstSignedRecipient.signedAt).toISOString() : undefined,
+        }
+      : meta.signerName
+        ? {
+            name: meta.signerName,
+            email: meta.signerEmail,
+            timestamp: seal.createdAt ? new Date(seal.createdAt).toISOString() : undefined,
+          }
+        : null;
 
     return {
       isValid: status === 'VALID',
       status,
+      message,
       verificationToken: seal.verificationToken,
-      verificationUrl:
-        meta.verificationUrl || `https://graphsign.ink/verify/${seal.verificationToken}`,
+      verificationUrl: meta.verificationUrl || `https://graphsign.ink/verify/${seal.verificationToken}`,
       qrCodeDataUrl: meta.qrCodeDataUrl,
       documentTitle: agreement.title || 'Sealed Document',
       documentHash: seal.documentHash,
@@ -280,6 +564,7 @@ export class VerificationService {
         : null,
       totalSigners: totalCount,
       signedSigners: signedCount,
+      signerDetails,
       sealDetails: {
         algorithm: seal.algorithm,
         padesLevel: seal.padesLevel,
@@ -292,6 +577,7 @@ export class VerificationService {
         tsaProvider: meta.tsaProvider || 'RFC 3161 TSA',
         certificateSubject: seal.certificate?.subjectDn || meta.subjectDn,
         certificateIssuer: seal.certificate?.issuerDn || meta.issuerDn,
+        certificateStatus: certValidation.status,
       },
       organisationName: agreement.organisation?.name || 'graphsign.ink',
       sealedAt: seal.createdAt
@@ -302,33 +588,35 @@ export class VerificationService {
     };
   }
 
-  /**
-   * Method 3: Uploaded file verification. Computes hash and inspects PAdES signature tokens.
-   */
-  async verifyUploadedFile(fileContent: string | Uint8Array): Promise<PublicVerificationReport> {
-    let hash: string;
-    let tokenFromPdf: string | null = null;
+  private async logAuditAttempt(
+    organisationId: string | undefined,
+    resourceId: string,
+    report: PublicVerificationReport,
+    context?: VerifyContext,
+  ): Promise<void> {
+    if (!this.auditService) return;
 
-    if (typeof fileContent === 'string') {
-      hash = await sha256(fileContent);
-      const match = fileContent.match(/GS-[0-9a-fA-F]{8}/);
-      if (match) tokenFromPdf = match[0]!;
-    } else {
-      const text = new TextDecoder().decode(fileContent);
-      hash = await sha256(text);
-      const match = text.match(/GS-[0-9a-fA-F]{8}/);
-      if (match) tokenFromPdf = match[0]!;
+    try {
+      await this.auditService.log({
+        organisationId: organisationId || '00000000-0000-0000-0000-000000000000',
+        action: 'DOCUMENT_VERIFIED',
+        resourceType: 'document',
+        resourceId,
+        metadata: {
+          outcome: report.isValid ? 'SUCCESS' : 'FAILURE',
+          status: report.status,
+          verificationToken: report.verificationToken,
+          documentHash: report.documentHash,
+          algorithm: report.sealDetails.algorithm,
+          certificateStatus: report.sealDetails.certificateStatus,
+          warning: report.message,
+        },
+        ipAddress: context?.ipAddress,
+        userAgent: context?.userAgent,
+      });
+    } catch {
+      // Never let audit logging fail the primary verification response
     }
-
-    if (tokenFromPdf) {
-      try {
-        return await this.verifyByToken(tokenFromPdf);
-      } catch {
-        // Fall back to hash search
-      }
-    }
-
-    return this.verifyByHash(hash);
   }
 
   /**

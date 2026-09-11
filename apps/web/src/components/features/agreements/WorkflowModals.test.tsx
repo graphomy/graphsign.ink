@@ -173,4 +173,74 @@ describe('Workflow Modals Unit Tests (INK-87 to INK-95, INK-268)', () => {
     expect(handleOpenEditor).toHaveBeenCalledTimes(1);
     expect(handleClose).not.toHaveBeenCalled();
   });
+
+  describe('Signature Validity Indicators (INK-138)', () => {
+    it('displays Unsigned indicator for draft unsigned agreement and toggles indicators', () => {
+      const mockAg = {
+        id: 'ag-unsigned',
+        title: 'Unsigned Draft Document',
+        version: 1,
+        status: 'DRAFT',
+        markdownContent: '# Unsigned Document\n\nContent here.',
+        createdAt: '2026-08-27T00:00:00Z',
+        updatedAt: '2026-08-27T00:00:00Z',
+      };
+
+      render(<PdfViewerModal agreement={mockAg} onClose={vi.fn()} />);
+
+      const unsignedBadge = screen.getByTestId('indicator-unsigned');
+      expect(unsignedBadge).toBeDefined();
+      expect(unsignedBadge.textContent).toContain('Unsigned Document');
+
+      const toggleBtn = screen.getByRole('button', { name: /Hide signature indicators/i });
+      expect(toggleBtn).toBeDefined();
+
+      fireEvent.click(toggleBtn);
+      expect(screen.queryByTestId('indicator-unsigned')).toBeNull();
+
+      fireEvent.click(screen.getByRole('button', { name: /Show signature indicators/i }));
+      expect(screen.getByTestId('indicator-unsigned')).toBeDefined();
+    });
+
+    it('displays Valid Signature indicator for completed agreement with seal metadata', () => {
+      const mockAg = {
+        id: 'ag-completed',
+        title: 'Signed Employment Contract',
+        version: 1,
+        status: 'COMPLETED',
+        markdownContent: '# Employment Contract\n\nExecuted agreement.',
+        createdAt: '2026-08-27T00:00:00Z',
+        updatedAt: '2026-08-27T01:00:00Z',
+        metadata: {
+          sealedAt: '2026-08-27T01:00:00Z',
+          signerName: 'Jane Doe',
+          signerEmail: 'jane@example.com',
+          padesLevel: 'PAdES B-T',
+        },
+      };
+
+      render(<PdfViewerModal agreement={mockAg} onClose={vi.fn()} />);
+
+      expect(screen.getByTestId('indicator-valid')).toBeDefined();
+      expect(screen.getByText(/Valid Signature/i)).toBeDefined();
+      expect(screen.getByText(/Jane Doe/i)).toBeDefined();
+    });
+
+    it('displays Invalid Signature watermark and badge for voided agreement', () => {
+      const mockAg = {
+        id: 'ag-voided',
+        title: 'Voided Contract',
+        version: 1,
+        status: 'VOIDED',
+        markdownContent: '# Contract\n\nVoided content.',
+        createdAt: '2026-08-27T00:00:00Z',
+        updatedAt: '2026-08-27T02:00:00Z',
+      };
+
+      render(<PdfViewerModal agreement={mockAg} onClose={vi.fn()} />);
+
+      expect(screen.getByTestId('indicator-invalid')).toBeDefined();
+      expect(screen.getByTestId('invalid-signature-watermark')).toBeDefined();
+    });
+  });
 });
