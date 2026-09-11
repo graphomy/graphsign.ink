@@ -121,9 +121,7 @@ export class CrlOcspService {
   /**
    * Helper to inspect certificate CRL distribution points with timeout & cache.
    */
-  private async checkCrl(
-    certificatePem?: string,
-  ): Promise<{
+  private async checkCrl(certificatePem?: string): Promise<{
     checked: boolean;
     isRevoked: boolean;
     reason?: string;
