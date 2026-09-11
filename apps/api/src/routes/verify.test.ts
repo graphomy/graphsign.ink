@@ -26,8 +26,20 @@ describe('Public Verification Routes Integration Tests (INK-17, INK-135, INK-136
             completedAt: new Date('2026-08-30T10:00:00Z'),
             organisation: { name: 'Acme Corp' },
             recipients: [
-              { role: 'signer', status: 'SIGNED', name: 'Alice', email: 'alice@acme.com', signedAt: new Date() },
-              { role: 'signer', status: 'SIGNED', name: 'Bob', email: 'bob@acme.com', signedAt: new Date() },
+              {
+                role: 'signer',
+                status: 'SIGNED',
+                name: 'Alice',
+                email: 'alice@acme.com',
+                signedAt: new Date(),
+              },
+              {
+                role: 'signer',
+                status: 'SIGNED',
+                name: 'Bob',
+                email: 'bob@acme.com',
+                signedAt: new Date(),
+              },
             ],
           },
           certificate: {
@@ -55,7 +67,11 @@ describe('Public Verification Routes Integration Tests (INK-17, INK-135, INK-136
             organisation: { name: 'Acme Corp' },
             recipients: [],
           },
-          certificate: { status: 'ACTIVE', validFrom: new Date('2026-01-01'), validTo: new Date('2027-01-01') },
+          certificate: {
+            status: 'ACTIVE',
+            validFrom: new Date('2026-01-01'),
+            validTo: new Date('2027-01-01'),
+          },
         }),
       },
     };

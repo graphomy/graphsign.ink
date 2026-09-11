@@ -23,14 +23,19 @@ export interface CertificateValidationOptions {
  * Validates certificate lifecycle, expiration dates, and revocation via stored status, CRL, and OCSP (INK-139).
  */
 export class CrlOcspService {
-  private readonly cache = new Map<string, { result: CertificateValidationResult; expires: number }>();
+  private readonly cache = new Map<
+    string,
+    { result: CertificateValidationResult; expires: number }
+  >();
 
   constructor(private readonly prisma?: PrismaClient) {}
 
   /**
    * Validates a signing certificate for expiration and revocation.
    */
-  async validateCertificate(options: CertificateValidationOptions): Promise<CertificateValidationResult> {
+  async validateCertificate(
+    options: CertificateValidationOptions,
+  ): Promise<CertificateValidationResult> {
     const now = new Date();
     const checkedAt = now.toISOString();
 
@@ -43,8 +48,16 @@ export class CrlOcspService {
     }
 
     const effectiveStatus = certRecord?.status || options.storedStatus || 'ACTIVE';
-    const validFrom = certRecord?.validFrom ? new Date(certRecord.validFrom) : options.validFrom ? new Date(options.validFrom) : null;
-    const validTo = certRecord?.validTo ? new Date(certRecord.validTo) : options.validTo ? new Date(options.validTo) : null;
+    const validFrom = certRecord?.validFrom
+      ? new Date(certRecord.validFrom)
+      : options.validFrom
+        ? new Date(options.validFrom)
+        : null;
+    const validTo = certRecord?.validTo
+      ? new Date(certRecord.validTo)
+      : options.validTo
+        ? new Date(options.validTo)
+        : null;
 
     // 2. Check Expiration
     if (validTo && now > validTo) {
@@ -74,7 +87,9 @@ export class CrlOcspService {
         status: 'REVOKED',
         warning: "Warning: Signer's certificate has been revoked.",
         reason: 'Certificate is marked as revoked in trust authority records.',
-        revocationDate: certRecord?.updatedAt ? new Date(certRecord.updatedAt).toISOString() : checkedAt,
+        revocationDate: certRecord?.updatedAt
+          ? new Date(certRecord.updatedAt).toISOString()
+          : checkedAt,
         checkedAt,
       };
     }
@@ -108,7 +123,12 @@ export class CrlOcspService {
    */
   private async checkCrl(
     certificatePem?: string,
-  ): Promise<{ checked: boolean; isRevoked: boolean; reason?: string; revocationDate?: string } | null> {
+  ): Promise<{
+    checked: boolean;
+    isRevoked: boolean;
+    reason?: string;
+    revocationDate?: string;
+  } | null> {
     if (!certificatePem) return null;
 
     const cacheKey = certificatePem.substring(0, 100);
@@ -122,7 +142,10 @@ export class CrlOcspService {
     }
 
     // If PEM text contains an explicit REVOKED marker or simulation flag
-    if (certificatePem.includes('REVOKED') || certificatePem.includes('X509v3 CRL Distribution Points: revoked')) {
+    if (
+      certificatePem.includes('REVOKED') ||
+      certificatePem.includes('X509v3 CRL Distribution Points: revoked')
+    ) {
       return {
         checked: true,
         isRevoked: true,

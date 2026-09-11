@@ -1,6 +1,10 @@
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 import { BadRequestError } from '../utils/errors.js';
-import type { VerificationService, PublicVerificationReport, VerifyContext } from './verification-service.js';
+import type {
+  VerificationService,
+  PublicVerificationReport,
+  VerifyContext,
+} from './verification-service.js';
 import type { AuditService } from './audit-service.js';
 
 export interface BatchItemInput {
@@ -46,7 +50,9 @@ export class BatchVerificationService {
     }
 
     if (items.length > 100) {
-      throw new BadRequestError('Batch verification exceeds maximum limit of 100 documents per job.');
+      throw new BadRequestError(
+        'Batch verification exceeds maximum limit of 100 documents per job.',
+      );
     }
 
     const results: Array<PublicVerificationReport & { filename?: string }> = [];
@@ -303,13 +309,16 @@ export class BatchVerificationService {
     }
 
     if (batchResult.results.length > 25) {
-      page.drawText(`...and ${batchResult.results.length - 25} more items. See CSV export for complete list.`, {
-        x: 50,
-        y: 40,
-        size: 8,
-        font,
-        color: rgb(0.5, 0.5, 0.5),
-      });
+      page.drawText(
+        `...and ${batchResult.results.length - 25} more items. See CSV export for complete list.`,
+        {
+          x: 50,
+          y: 40,
+          size: 8,
+          font,
+          color: rgb(0.5, 0.5, 0.5),
+        },
+      );
     }
 
     return await pdfDoc.save();

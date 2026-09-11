@@ -25,7 +25,12 @@ describe('VerificationService Unit Tests (INK-17, INK-135, INK-137, INK-139)', (
       log: vi.fn().mockResolvedValue({}),
     };
 
-    verificationService = new VerificationService(mockPrisma as any, undefined, undefined, mockAudit as any);
+    verificationService = new VerificationService(
+      mockPrisma as any,
+      undefined,
+      undefined,
+      mockAudit as any,
+    );
   });
 
   it('verifies document by public token (Method 1: Token Lookup)', async () => {
@@ -45,8 +50,20 @@ describe('VerificationService Unit Tests (INK-17, INK-135, INK-137, INK-139)', (
         completedAt: new Date('2026-08-30T10:00:00Z'),
         organisation: { name: 'Acme Corp' },
         recipients: [
-          { role: 'signer', status: 'SIGNED', name: 'Alice', email: 'alice@acme.com', signedAt: new Date() },
-          { role: 'signer', status: 'SIGNED', name: 'Bob', email: 'bob@acme.com', signedAt: new Date() },
+          {
+            role: 'signer',
+            status: 'SIGNED',
+            name: 'Alice',
+            email: 'alice@acme.com',
+            signedAt: new Date(),
+          },
+          {
+            role: 'signer',
+            status: 'SIGNED',
+            name: 'Bob',
+            email: 'bob@acme.com',
+            signedAt: new Date(),
+          },
         ],
       },
       certificate: {
@@ -101,7 +118,11 @@ describe('VerificationService Unit Tests (INK-17, INK-135, INK-137, INK-139)', (
         title: 'Tampered Contract',
         recipients: [],
       },
-      certificate: { status: 'ACTIVE', validFrom: new Date('2026-01-01'), validTo: new Date('2027-01-01') },
+      certificate: {
+        status: 'ACTIVE',
+        validFrom: new Date('2026-01-01'),
+        validTo: new Date('2027-01-01'),
+      },
       metadata: {},
     });
 

@@ -81,16 +81,32 @@ export class DocumentSignatureExtractor {
    * Detects the document format using magic bytes and signatures.
    */
   private static detectFormat(bytes: Buffer, text: string): SupportedFormat {
-    if (bytes.length >= 4 && bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46) {
+    if (
+      bytes.length >= 4 &&
+      bytes[0] === 0x25 &&
+      bytes[1] === 0x50 &&
+      bytes[2] === 0x44 &&
+      bytes[3] === 0x46
+    ) {
       return 'pdf';
     }
     // ZIP magic bytes: PK\x03\x04
-    if (bytes.length >= 4 && bytes[0] === 0x50 && bytes[1] === 0x4b && bytes[2] === 0x03 && bytes[3] === 0x04) {
+    if (
+      bytes.length >= 4 &&
+      bytes[0] === 0x50 &&
+      bytes[1] === 0x4b &&
+      bytes[2] === 0x03 &&
+      bytes[3] === 0x04
+    ) {
       return 'docx';
     }
     // HTML detection
     const trimmed = text.trimStart().toLowerCase();
-    if (trimmed.startsWith('<!doctype html') || trimmed.startsWith('<html') || /<head[\s>]|<body[\s>]/.test(trimmed)) {
+    if (
+      trimmed.startsWith('<!doctype html') ||
+      trimmed.startsWith('<html') ||
+      /<head[\s>]|<body[\s>]/.test(trimmed)
+    ) {
       return 'html';
     }
 
@@ -100,7 +116,10 @@ export class DocumentSignatureExtractor {
   /**
    * Extracts PAdES B-T cryptographic signature trailer from PDF.
    */
-  private static async extractPdfSignature(bytes: Buffer, text: string): Promise<ExtractedSignature> {
+  private static async extractPdfSignature(
+    bytes: Buffer,
+    text: string,
+  ): Promise<ExtractedSignature> {
     const tokenMatch = text.match(/%PAdES-B-T-SEAL:\s*([A-Za-z0-9_-]+)/);
     const sigMatch = text.match(/%SIG:\s*([A-Za-z0-9+/=]+)/);
     const tsaMatch = text.match(/%TSA:\s*([A-Za-z0-9+/=]+)/);
@@ -164,7 +183,10 @@ export class DocumentSignatureExtractor {
   /**
    * Extracts digital signature from DOCX package or embedded seal comment.
    */
-  private static async extractDocxSignature(bytes: Buffer, text: string): Promise<ExtractedSignature> {
+  private static async extractDocxSignature(
+    bytes: Buffer,
+    text: string,
+  ): Promise<ExtractedSignature> {
     const sealCommentMatch = text.match(/GRAPHSIGN-SEAL:([A-Za-z0-9+/=]+)/);
     const tokenMatch = text.match(/GS-[0-9a-fA-F]{8}/);
 
@@ -216,7 +238,10 @@ export class DocumentSignatureExtractor {
   /**
    * Extracts seal metadata and signatures from HTML comment / meta tags.
    */
-  private static async extractHtmlSignature(bytes: Buffer, text: string): Promise<ExtractedSignature> {
+  private static async extractHtmlSignature(
+    bytes: Buffer,
+    text: string,
+  ): Promise<ExtractedSignature> {
     const commentMatch = text.match(/<!--\s*GRAPHSIGN-SEAL:([A-Za-z0-9+/=]+)\s*-->/);
     const metaMatch = text.match(/<meta\s+name=["']graphsign-seal["']\s+content=["']([^"']+)["']/i);
     const tokenMatch = text.match(/GS-[0-9a-fA-F]{8}/);

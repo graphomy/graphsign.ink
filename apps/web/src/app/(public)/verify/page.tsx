@@ -405,8 +405,7 @@ export default function PublicVerifyPage() {
   const faqs = [
     {
       id: 1,
-      question:
-        'How do I get the Green Checkmark ("Signature is VALID") in Adobe Acrobat Reader?',
+      question: 'How do I get the Green Checkmark ("Signature is VALID") in Adobe Acrobat Reader?',
       answer: (
         <div className="space-y-3 text-slate-600 text-sm">
           <p>
@@ -420,8 +419,8 @@ export default function PublicVerifyPage() {
               <em>Signature Panel</em> (top bar or left pane).
             </li>
             <li>
-              Right-click the signature and choose <strong>Show Signature Properties</strong>{' '}
-              → <strong>Show Signer&apos;s Certificate</strong>.
+              Right-click the signature and choose <strong>Show Signature Properties</strong> →{' '}
+              <strong>Show Signer&apos;s Certificate</strong>.
             </li>
             <li>
               Navigate to the <strong>Trust</strong> tab and click{' '}
@@ -809,9 +808,7 @@ export default function PublicVerifyPage() {
                       </div>
                     </div>
                     <div className="bg-slate-100 border border-slate-300 rounded-xl p-3 text-center">
-                      <div className="text-[11px] text-slate-600 font-bold uppercase">
-                        Unsigned
-                      </div>
+                      <div className="text-[11px] text-slate-600 font-bold uppercase">Unsigned</div>
                       <div className="text-xl font-extrabold text-slate-700 mt-0.5">
                         {batchResult.unsignedCount}
                       </div>
@@ -860,8 +857,8 @@ export default function PublicVerifyPage() {
                                   r.isValid
                                     ? 'bg-emerald-100 text-emerald-800'
                                     : r.status === 'UNSIGNED'
-                                    ? 'bg-slate-100 text-slate-700'
-                                    : 'bg-red-100 text-red-800'
+                                      ? 'bg-slate-100 text-slate-700'
+                                      : 'bg-red-100 text-red-800'
                                 }`}
                               >
                                 {r.isValid ? 'VALID' : r.status}
@@ -894,8 +891,8 @@ export default function PublicVerifyPage() {
                     Offline Standalone Verification
                   </h3>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    Verify digital signature validity without connecting to any centralized
-                    database or network service.
+                    Verify digital signature validity without connecting to any centralized database
+                    or network service.
                   </p>
                 </div>
               </div>
@@ -978,8 +975,8 @@ export default function PublicVerifyPage() {
                       offlineResult.isValid
                         ? 'bg-emerald-50 border-emerald-300 text-emerald-950'
                         : offlineResult.status === 'UNSIGNED'
-                        ? 'bg-slate-100 border-slate-300 text-slate-800'
-                        : 'bg-red-50 border-red-300 text-red-950'
+                          ? 'bg-slate-100 border-slate-300 text-slate-800'
+                          : 'bg-red-50 border-red-300 text-red-950'
                     }`}
                   >
                     <div className="flex items-center gap-2.5">
@@ -993,8 +990,8 @@ export default function PublicVerifyPage() {
                           {offlineResult.isValid
                             ? 'Cryptographically Valid (Offline)'
                             : offlineResult.status === 'UNSIGNED'
-                            ? 'Unsigned Document'
-                            : 'Invalid Signature / Modified'}
+                              ? 'Unsigned Document'
+                              : 'Invalid Signature / Modified'}
                         </div>
                         <p className="text-[11px] opacity-80">
                           {offlineResult.details || 'Integrity check complete.'}
@@ -1059,10 +1056,10 @@ export default function PublicVerifyPage() {
                 report.isValid
                   ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
                   : report.status === 'EXPIRED'
-                  ? 'bg-amber-50 border-amber-200 text-amber-900'
-                  : report.status === 'UNSIGNED'
-                  ? 'bg-slate-100 border-slate-300 text-slate-800'
-                  : 'bg-red-50 border-red-200 text-red-800'
+                    ? 'bg-amber-50 border-amber-200 text-amber-900'
+                    : report.status === 'UNSIGNED'
+                      ? 'bg-slate-100 border-slate-300 text-slate-800'
+                      : 'bg-red-50 border-red-200 text-red-800'
               }`}
             >
               <div className="flex items-center gap-3">
@@ -1071,10 +1068,10 @@ export default function PublicVerifyPage() {
                     report.isValid
                       ? 'bg-emerald-600'
                       : report.status === 'EXPIRED'
-                      ? 'bg-amber-600'
-                      : report.status === 'UNSIGNED'
-                      ? 'bg-slate-500'
-                      : 'bg-red-600'
+                        ? 'bg-amber-600'
+                        : report.status === 'UNSIGNED'
+                          ? 'bg-slate-500'
+                          : 'bg-red-600'
                   }`}
                 >
                   {report.isValid ? '✓' : report.status === 'UNSIGNED' ? '—' : '!'}
@@ -1084,23 +1081,23 @@ export default function PublicVerifyPage() {
                     {report.isValid
                       ? 'Cryptographically Sealed & Authentic'
                       : report.status === 'EXPIRED'
-                      ? 'Signature Expired'
-                      : report.status === 'REVOKED'
-                      ? 'Certificate Revoked'
-                      : report.status === 'UNSIGNED'
-                      ? 'Unsigned Document'
-                      : 'Tamper Detected / Invalid Seal'}
+                        ? 'Signature Expired'
+                        : report.status === 'REVOKED'
+                          ? 'Certificate Revoked'
+                          : report.status === 'UNSIGNED'
+                            ? 'Unsigned Document'
+                            : 'Tamper Detected / Invalid Seal'}
                   </h3>
                   <p className="text-xs text-slate-600">
                     {report.isValid
                       ? 'Document integrity verified via digital signature & RFC 3161 timestamp.'
                       : report.status === 'EXPIRED'
-                      ? 'The digital signature or certificate is outside its valid lifecycle dates.'
-                      : report.status === 'REVOKED'
-                      ? 'The signing certificate has been revoked via CRL/OCSP.'
-                      : report.status === 'UNSIGNED'
-                      ? 'No cryptographic seal or digital signature found in this document.'
-                      : 'Document has been altered since sealing, or certificate is invalid.'}
+                        ? 'The digital signature or certificate is outside its valid lifecycle dates.'
+                        : report.status === 'REVOKED'
+                          ? 'The signing certificate has been revoked via CRL/OCSP.'
+                          : report.status === 'UNSIGNED'
+                            ? 'No cryptographic seal or digital signature found in this document.'
+                            : 'Document has been altered since sealing, or certificate is invalid.'}
                   </p>
                 </div>
               </div>

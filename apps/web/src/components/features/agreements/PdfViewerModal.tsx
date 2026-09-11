@@ -414,9 +414,17 @@ export function PdfViewerModal({ agreement, onClose, onOpenEditor }: PdfViewerMo
             <Button
               variant="outline"
               size="sm"
-              leftIcon={showIndicators ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+              leftIcon={
+                showIndicators ? (
+                  <EyeOff className="w-3.5 h-3.5" />
+                ) : (
+                  <Eye className="w-3.5 h-3.5" />
+                )
+              }
               onClick={() => setShowIndicators((prev) => !prev)}
-              aria-label={showIndicators ? 'Hide signature indicators' : 'Show signature indicators'}
+              aria-label={
+                showIndicators ? 'Hide signature indicators' : 'Show signature indicators'
+              }
               title={showIndicators ? 'Hide signature indicators' : 'Show signature indicators'}
             >
               {showIndicators ? 'Hide Indicators' : 'Show Indicators'}
@@ -496,15 +504,19 @@ export function PdfViewerModal({ agreement, onClose, onOpenEditor }: PdfViewerMo
                       </div>
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
-                          <span className="text-xs font-bold text-emerald-900">Valid Signature</span>
+                          <span className="text-xs font-bold text-emerald-900">
+                            Valid Signature
+                          </span>
                           <span className="text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-emerald-200/70 text-emerald-800 font-semibold">
                             {signatureInfo.algorithm || 'PAdES B-T'}
                           </span>
                         </div>
                         <p className="text-[11px] text-emerald-700 truncate">
-                          Signed by <span className="font-semibold">{signatureInfo.signerName}</span>
+                          Signed by{' '}
+                          <span className="font-semibold">{signatureInfo.signerName}</span>
                           {signatureInfo.signerEmail ? ` (${signatureInfo.signerEmail})` : ''}
-                          {signatureInfo.signedAt && ` • ${new Date(signatureInfo.signedAt).toLocaleString()}`}
+                          {signatureInfo.signedAt &&
+                            ` • ${new Date(signatureInfo.signedAt).toLocaleString()}`}
                         </p>
                       </div>
                     </div>
@@ -546,10 +558,10 @@ export function PdfViewerModal({ agreement, onClose, onOpenEditor }: PdfViewerMo
                           {signatureInfo.status === 'TAMPERED'
                             ? 'Document bytes have been modified since sealing.'
                             : signatureInfo.status === 'REVOKED'
-                            ? 'Signing certificate has been revoked.'
-                            : signatureInfo.status === 'EXPIRED'
-                            ? 'Signature or certificate timestamp has expired.'
-                            : 'Cryptographic signature verification failed.'}
+                              ? 'Signing certificate has been revoked.'
+                              : signatureInfo.status === 'EXPIRED'
+                                ? 'Signature or certificate timestamp has expired.'
+                                : 'Cryptographic signature verification failed.'}
                         </p>
                       </div>
                     </div>

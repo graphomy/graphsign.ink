@@ -45,7 +45,8 @@ export function createPublicVerifyRoutes(deps?: VerifyDeps) {
 
     const verificationService =
       deps?.verificationService || new VerificationService(prisma, keyCustody, crlOcsp, audit);
-    const batchService = deps?.batchService || new BatchVerificationService(verificationService, audit);
+    const batchService =
+      deps?.batchService || new BatchVerificationService(verificationService, audit);
 
     const context = {
       ipAddress: c.req.header('cf-connecting-ip') || c.req.header('x-forwarded-for') || undefined,

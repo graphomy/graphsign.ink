@@ -98,7 +98,9 @@ export class VerificationService {
       });
     }
 
-    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cleanToken);
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+      cleanToken,
+    );
 
     if (!seal && this.prisma.documentSeal?.findFirst) {
       const tokenVariations = Array.from(
@@ -178,7 +180,8 @@ export class VerificationService {
             candidateAgreements.find(
               (ag) =>
                 ag.id.replace(/-/g, '').toLowerCase().startsWith(envHex) ||
-                ((ag.metadata as any)?.envelopeId as string)?.toUpperCase() === cleanToken.toUpperCase(),
+                ((ag.metadata as any)?.envelopeId as string)?.toUpperCase() ===
+                  cleanToken.toUpperCase(),
             ) || null;
         }
       }
@@ -199,9 +202,12 @@ export class VerificationService {
             verificationToken: cleanToken,
             documentTitle: agreement.title || 'Agreement',
             documentHash: '',
-            completedAt: agreement.completedAt ? new Date(agreement.completedAt).toISOString() : null,
+            completedAt: agreement.completedAt
+              ? new Date(agreement.completedAt).toISOString()
+              : null,
             totalSigners: (agreement.recipients || []).length,
-            signedSigners: (agreement.recipients || []).filter((r: any) => r.status === 'SIGNED').length,
+            signedSigners: (agreement.recipients || []).filter((r: any) => r.status === 'SIGNED')
+              .length,
             sealDetails: {
               algorithm: 'NONE',
               padesLevel: 'NONE',
@@ -212,7 +218,12 @@ export class VerificationService {
             sealedAt: new Date().toISOString(),
           };
 
-          await this.logAuditAttempt(agreement.organisationId, agreement.id, unsealedReport, context);
+          await this.logAuditAttempt(
+            agreement.organisationId,
+            agreement.id,
+            unsealedReport,
+            context,
+          );
           return unsealedReport;
         }
       }
@@ -316,9 +327,11 @@ export class VerificationService {
       }
 
       if (seal) {
-        const matchesOverallHash = computedFileHash.toLowerCase() === seal.documentHash.toLowerCase();
+        const matchesOverallHash =
+          computedFileHash.toLowerCase() === seal.documentHash.toLowerCase();
         const preSealDigest = (seal.metadata as any)?.preSealDigest as string | undefined;
-        const matchesPreSealDigest = preSealDigest && extracted.signedContentDigest === preSealDigest;
+        const matchesPreSealDigest =
+          preSealDigest && extracted.signedContentDigest === preSealDigest;
 
         // Critical correctness check: If the file hash doesn't match the seal, it's altered!
         if (!matchesOverallHash && !matchesPreSealDigest) {
@@ -329,9 +342,13 @@ export class VerificationService {
             verificationToken: seal.verificationToken,
             documentTitle: seal.agreement?.title || 'Sealed Document',
             documentHash: computedFileHash,
-            completedAt: seal.agreement?.completedAt ? new Date(seal.agreement.completedAt).toISOString() : null,
+            completedAt: seal.agreement?.completedAt
+              ? new Date(seal.agreement.completedAt).toISOString()
+              : null,
             totalSigners: seal.agreement?.recipients?.length || 0,
-            signedSigners: (seal.agreement?.recipients || []).filter((r: any) => r.status === 'SIGNED').length,
+            signedSigners: (seal.agreement?.recipients || []).filter(
+              (r: any) => r.status === 'SIGNED',
+            ).length,
             signerDetails: extracted.signerDetails,
             sealDetails: {
               algorithm: seal.algorithm,
@@ -342,10 +359,17 @@ export class VerificationService {
               certificateIssuer: seal.certificate?.issuerDn,
             },
             organisationName: seal.agreement?.organisation?.name || 'graphsign.ink',
-            sealedAt: seal.createdAt ? new Date(seal.createdAt).toISOString() : new Date().toISOString(),
+            sealedAt: seal.createdAt
+              ? new Date(seal.createdAt).toISOString()
+              : new Date().toISOString(),
           };
 
-          await this.logAuditAttempt(seal.organisationId, seal.id, tamperedReport, options?.context);
+          await this.logAuditAttempt(
+            seal.organisationId,
+            seal.id,
+            tamperedReport,
+            options?.context,
+          );
           return tamperedReport;
         }
 
@@ -459,7 +483,12 @@ export class VerificationService {
 
     // Cryptographically verify signature if KeyCustodyService is provided
     let isSigValid = true;
-    if (this.keyCustodyService && extracted.signatureBase64 && extracted.signedContentDigest && effectiveCertPem) {
+    if (
+      this.keyCustodyService &&
+      extracted.signatureBase64 &&
+      extracted.signedContentDigest &&
+      effectiveCertPem
+    ) {
       try {
         isSigValid = await this.keyCustodyService.verifySignature(
           effectiveCertPem,
@@ -477,7 +506,9 @@ export class VerificationService {
     return {
       isValid: isSigValid,
       status,
-      message: isSigValid ? undefined : 'Invalid: Document has been altered or signature is corrupted.',
+      message: isSigValid
+        ? undefined
+        : 'Invalid: Document has been altered or signature is corrupted.',
       verificationToken: extracted.verificationToken || 'OFFLINE',
       documentTitle: 'Offline Document',
       documentHash: computedHash,
@@ -501,10 +532,15 @@ export class VerificationService {
     const agreement = seal.agreement || {};
     const recipients = agreement.recipients || [];
     const activeSigners = recipients.filter(
-      (r: any) => r.role?.toLowerCase() === 'signer' || r.role?.toLowerCase() === 'approver' || !r.role,
+      (r: any) =>
+        r.role?.toLowerCase() === 'signer' || r.role?.toLowerCase() === 'approver' || !r.role,
     );
     const totalCount =
-      activeSigners.length > 0 ? activeSigners.length : recipients.length > 0 ? recipients.length : 0;
+      activeSigners.length > 0
+        ? activeSigners.length
+        : recipients.length > 0
+          ? recipients.length
+          : 0;
     const signedCount =
       activeSigners.filter((r: any) => r.status === 'SIGNED').length ||
       recipients.filter((r: any) => r.status === 'SIGNED').length ||
@@ -538,7 +574,9 @@ export class VerificationService {
       ? {
           name: firstSignedRecipient.name,
           email: firstSignedRecipient.email,
-          timestamp: firstSignedRecipient.signedAt ? new Date(firstSignedRecipient.signedAt).toISOString() : undefined,
+          timestamp: firstSignedRecipient.signedAt
+            ? new Date(firstSignedRecipient.signedAt).toISOString()
+            : undefined,
         }
       : meta.signerName
         ? {
@@ -553,7 +591,8 @@ export class VerificationService {
       status,
       message,
       verificationToken: seal.verificationToken,
-      verificationUrl: meta.verificationUrl || `https://graphsign.ink/verify/${seal.verificationToken}`,
+      verificationUrl:
+        meta.verificationUrl || `https://graphsign.ink/verify/${seal.verificationToken}`,
       qrCodeDataUrl: meta.qrCodeDataUrl,
       documentTitle: agreement.title || 'Sealed Document',
       documentHash: seal.documentHash,

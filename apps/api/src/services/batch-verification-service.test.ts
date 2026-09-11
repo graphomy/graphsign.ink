@@ -34,7 +34,12 @@ describe('BatchVerificationService Unit Tests (INK-136)', () => {
             totalSigners: 1,
             signedSigners: 1,
             signerDetails: { name: 'Alice' },
-            sealDetails: { algorithm: 'RSA_2048', padesLevel: 'B_T', tsaUrl: null, tsaTimestamp: null },
+            sealDetails: {
+              algorithm: 'RSA_2048',
+              padesLevel: 'B_T',
+              tsaUrl: null,
+              tsaTimestamp: null,
+            },
             organisationName: 'Acme',
             sealedAt: '2026-09-01T10:00:00Z',
           };
@@ -49,7 +54,12 @@ describe('BatchVerificationService Unit Tests (INK-136)', () => {
             completedAt: null,
             totalSigners: 1,
             signedSigners: 0,
-            sealDetails: { algorithm: 'RSA_2048', padesLevel: 'B_T', tsaUrl: null, tsaTimestamp: null },
+            sealDetails: {
+              algorithm: 'RSA_2048',
+              padesLevel: 'B_T',
+              tsaUrl: null,
+              tsaTimestamp: null,
+            },
             organisationName: 'Acme',
             sealedAt: '2026-09-01T10:00:00Z',
           };

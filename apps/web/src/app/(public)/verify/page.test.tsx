@@ -16,9 +16,7 @@ describe('PublicVerifyPage Component Tests (INK-135 to INK-139)', () => {
     expect(screen.getByRole('button', { name: /Batch Verify/i })).toBeDefined();
     expect(screen.getByRole('button', { name: /Offline Verify/i })).toBeDefined();
 
-    expect(
-      screen.getByLabelText(/Verification Token, Document ID, or Envelope ID/i),
-    ).toBeDefined();
+    expect(screen.getByLabelText(/Verification Token, Document ID, or Envelope ID/i)).toBeDefined();
   });
 
   it('switches to Batch Verify tab and enforces max 100 documents limit', async () => {
@@ -42,9 +40,7 @@ describe('PublicVerifyPage Component Tests (INK-135 to INK-139)', () => {
     fireEvent.change(fileInput, { target: { files: excessFiles } });
 
     await waitFor(() => {
-      expect(
-        screen.getByText(/Maximum 100 documents allowed per batch/i),
-      ).toBeDefined();
+      expect(screen.getByText(/Maximum 100 documents allowed per batch/i)).toBeDefined();
       expect(screen.getByText(/100 \/ 100 files/i)).toBeDefined();
     });
   });
@@ -169,9 +165,7 @@ describe('PublicVerifyPage Component Tests (INK-135 to INK-139)', () => {
 
     await waitFor(() => {
       expect(screen.getByText(/Signature Expired/i)).toBeDefined();
-      expect(
-        screen.getByText(/outside its valid lifecycle dates/i),
-      ).toBeDefined();
+      expect(screen.getByText(/outside its valid lifecycle dates/i)).toBeDefined();
     });
   });
 });
