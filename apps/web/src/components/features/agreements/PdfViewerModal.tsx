@@ -15,6 +15,11 @@ import {
   ZoomIn,
   ZoomOut,
   FilePenLine,
+  ShieldCheck,
+  CheckCircle2,
+  AlertTriangle,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 
 interface AgreementData {
@@ -59,6 +64,69 @@ export function PdfViewerModal({ agreement, onClose, onOpenEditor }: PdfViewerMo
   const printableAreaRef = useRef<HTMLDivElement>(null);
 
   const meta = (agreement.metadata as Record<string, unknown>) || {};
+  const [showIndicators, setShowIndicators] = useState<boolean>(true);
+  const [signatureInfo, setSignatureInfo] = useState<{
+    status: 'VALID' | 'INVALID' | 'TAMPERED' | 'REVOKED' | 'EXPIRED' | 'UNSIGNED';
+    signerName?: string;
+    signerEmail?: string;
+    signedAt?: string;
+    algorithm?: string;
+  }>(() => {
+    if (agreement.status === 'COMPLETED' || meta.sealedAt || meta.sealedPdfBase64) {
+      return {
+        status: 'VALID',
+        signerName:
+          (meta.signerName as string) ||
+          agreement.author?.name ||
+          agreement.author?.email ||
+          'Authorized Signer',
+        signerEmail: (meta.signerEmail as string) || agreement.author?.email,
+        signedAt: (meta.sealedAt as string) || agreement.updatedAt,
+        algorithm: (meta.padesLevel as string) || 'PAdES B-T',
+      };
+    }
+    if (agreement.status === 'VOIDED' || meta.status === 'INVALID' || meta.isTampered) {
+      return { status: 'INVALID' };
+    }
+    return { status: 'UNSIGNED' };
+  });
+
+  useEffect(() => {
+    const token = meta.verificationToken as string | undefined;
+    if (!token) return;
+
+    let isMounted = true;
+    async function checkLiveVerification() {
+      try {
+        const res = await fetch(`${getApiUrl()}/api/v1/verify/${token}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!isMounted || !data?.data) return;
+
+        const info = data.data;
+        setSignatureInfo({
+          status: info.status || (info.isValid ? 'VALID' : 'INVALID'),
+          signerName:
+            info.signer?.name ||
+            ((info.seal?.metadata as Record<string, unknown>)?.signerName as string) ||
+            agreement.author?.name ||
+            'Authorized Signer',
+          signerEmail: info.signer?.email || agreement.author?.email,
+          signedAt:
+            info.seal?.createdAt ||
+            ((info.seal?.metadata as Record<string, unknown>)?.sealedAt as string) ||
+            agreement.updatedAt,
+          algorithm: info.algorithm || 'PAdES B-T',
+        });
+      } catch {
+        // Fallback already set
+      }
+    }
+    checkLiveVerification();
+    return () => {
+      isMounted = false;
+    };
+  }, [meta.verificationToken, agreement.author, agreement.updatedAt]);
   const rawFileData =
     (meta.signedPdfBase64 as string | undefined) ||
     (meta.sealedPdfBase64 as string | undefined) ||
@@ -344,6 +412,25 @@ export function PdfViewerModal({ agreement, onClose, onOpenEditor }: PdfViewerMo
             )}
 
             <Button
+              variant="outline"
+              size="sm"
+              leftIcon={
+                showIndicators ? (
+                  <EyeOff className="w-3.5 h-3.5" />
+                ) : (
+                  <Eye className="w-3.5 h-3.5" />
+                )
+              }
+              onClick={() => setShowIndicators((prev) => !prev)}
+              aria-label={
+                showIndicators ? 'Hide signature indicators' : 'Show signature indicators'
+              }
+              title={showIndicators ? 'Hide signature indicators' : 'Show signature indicators'}
+            >
+              {showIndicators ? 'Hide Indicators' : 'Show Indicators'}
+            </Button>
+
+            <Button
               variant="ghost"
               size="sm"
               leftIcon={<Printer className="w-3.5 h-3.5" />}
@@ -402,7 +489,101 @@ export function PdfViewerModal({ agreement, onClose, onOpenEditor }: PdfViewerMo
           )}
 
           {/* Centre Document Viewport */}
-          <div className="flex-1 overflow-hidden p-2 sm:p-4 flex flex-col items-center justify-start h-full">
+          <div className="flex-1 overflow-hidden p-2 sm:p-4 flex flex-col items-center justify-start h-full relative w-full">
+            {/* Visual Signature Indicator Banner (INK-138) */}
+            {showIndicators && (
+              <div className="w-full max-w-4xl mb-2.5 shrink-0 z-20 transition-all duration-200">
+                {signatureInfo.status === 'VALID' ? (
+                  <div
+                    data-testid="indicator-valid"
+                    className="flex items-center justify-between gap-3 px-3.5 py-2 rounded-lg bg-emerald-50 border border-emerald-300 shadow-xs text-emerald-950"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="h-6 w-6 rounded-full bg-emerald-100 flex items-center justify-center shrink-0 text-emerald-600">
+                        <CheckCircle2 className="w-4 h-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-emerald-900">
+                            Valid Signature
+                          </span>
+                          <span className="text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-emerald-200/70 text-emerald-800 font-semibold">
+                            {signatureInfo.algorithm || 'PAdES B-T'}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-emerald-700 truncate">
+                          Signed by{' '}
+                          <span className="font-semibold">{signatureInfo.signerName}</span>
+                          {signatureInfo.signerEmail ? ` (${signatureInfo.signerEmail})` : ''}
+                          {signatureInfo.signedAt &&
+                            ` • ${new Date(signatureInfo.signedAt).toLocaleString()}`}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="hidden sm:flex items-center gap-1 text-[11px] font-medium text-emerald-700 shrink-0">
+                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>Cryptographically Sealed</span>
+                    </div>
+                  </div>
+                ) : signatureInfo.status === 'UNSIGNED' ? (
+                  <div
+                    data-testid="indicator-unsigned"
+                    className="flex items-center justify-between gap-3 px-3.5 py-2 rounded-lg bg-ink-100 border border-ink-300 shadow-xs text-ink-700"
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <FileText className="w-4 h-4 text-ink-500 shrink-0" />
+                      <span className="text-xs font-semibold text-ink-800">Unsigned Document</span>
+                      <span className="text-[11px] text-ink-500 hidden sm:inline">
+                        — No cryptographic seal or digital signature found.
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <div
+                    data-testid="indicator-invalid"
+                    className="flex items-center justify-between gap-3 px-3.5 py-2 rounded-lg bg-red-50 border border-red-300 shadow-xs text-red-950"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="h-6 w-6 rounded-full bg-red-100 flex items-center justify-center shrink-0 text-red-600">
+                        <AlertTriangle className="w-4 h-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-red-900">Invalid Signature</span>
+                          <span className="text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-red-200 text-red-900 font-bold">
+                            {signatureInfo.status}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-red-700 truncate">
+                          {signatureInfo.status === 'TAMPERED'
+                            ? 'Document bytes have been modified since sealing.'
+                            : signatureInfo.status === 'REVOKED'
+                              ? 'Signing certificate has been revoked.'
+                              : signatureInfo.status === 'EXPIRED'
+                                ? 'Signature or certificate timestamp has expired.'
+                                : 'Cryptographic signature verification failed.'}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Invalid signature watermark overlay (INK-138) */}
+            {showIndicators &&
+              signatureInfo.status !== 'VALID' &&
+              signatureInfo.status !== 'UNSIGNED' && (
+                <div
+                  data-testid="invalid-signature-watermark"
+                  className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center select-none overflow-hidden"
+                  aria-hidden="true"
+                >
+                  <div className="transform -rotate-25 border-8 border-dashed border-red-600/25 text-red-600/30 text-5xl sm:text-7xl font-black uppercase tracking-widest px-8 py-4 rounded-3xl">
+                    INVALID SIGNATURE
+                  </div>
+                </div>
+              )}
             {isLoadingFile ? (
               <div className="flex flex-col items-center justify-center p-12 text-center text-ink-600 space-y-3 my-auto">
                 <div className="w-8 h-8 border-2 border-ink-300 border-t-brand-600 rounded-full animate-spin" />

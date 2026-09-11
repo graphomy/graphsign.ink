@@ -4,11 +4,12 @@ import { ResendMailerService, ConsoleMailerService, createMailerService } from '
 // Mock Resend SDK
 vi.mock('resend', () => {
   return {
-    Resend: vi.fn().mockImplementation(() => ({
-      emails: {
+    Resend: vi.fn().mockImplementation(function (this: any) {
+      this.emails = {
         send: vi.fn().mockResolvedValue({ data: { id: 'msg-123' }, error: null }),
-      },
-    })),
+      };
+      return this;
+    }),
   };
 });
 
