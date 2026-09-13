@@ -15,7 +15,7 @@
   },
   "dependencies": {
     "@graphsign/db": "workspace:*",
-    "hono": "^4.13.3",
+    "hono": "^4.13.5",
     "jose": "^6.2.8",
     "qrcode": "^1.5.4",
     "resend": "^6.20.0",
@@ -29,7 +29,7 @@
     "@types/qrcode": "^1.5.6",
     "@types/uuid": "^11.0.0",
     "typescript": "^5.9.3",
-    "vitest": "^3.2.6",
+    "vitest": "^5.0.0",
     "wrangler": "^4.115.0"
   }
 }

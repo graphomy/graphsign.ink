@@ -11,7 +11,7 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "next": "16.3.1",
+    "next": "16.3.3",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "zod": "^3.24.2"
@@ -34,7 +34,7 @@
     "jsdom": "^30.0.1",
     "tailwindcss": "^4",
     "typescript": "^5.9.3",
-    "vitest": "^3.2.6",
+    "vitest": "^5.0.0",
     "wrangler": "^4.115.0"
   }
 }
