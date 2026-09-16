@@ -23,6 +23,8 @@ import type {
   CreateCustomRoleInput,
   AddDomainInput,
   AuditLogQueryInput,
+  AuditLogExportInput,
+  UpdateMemberStatusInput,
 } from '../validators/organisation-validators.js';
 
 export interface UsageSummary {
@@ -141,7 +143,15 @@ export class OrganisationService {
     actorUserId: string,
     data: UpdateOrganisationSettingsInput,
   ): Promise<Organisation> {
-    await this.getOrganisationById(orgId);
+    const current = await this.getOrganisationById(orgId);
+
+    const changes = Object.entries(data)
+      .filter(([_, v]) => v !== undefined)
+      .map(([k, v]) => ({
+        field: k,
+        oldValue: (current as any)[k] ?? null,
+        newValue: v,
+      }));
 
     const updated = await this.prisma.organisation.update({
       where: { id: orgId },
@@ -163,7 +173,7 @@ export class OrganisationService {
       action: 'ORGANISATION_SETTINGS_UPDATED',
       resourceType: 'organisation',
       resourceId: orgId,
-      metadata: { updatedFields: Object.keys(data) },
+      metadata: { updatedFields: Object.keys(data), changes },
     });
 
     return updated;
@@ -198,7 +208,15 @@ export class OrganisationService {
     actorUserId: string,
     data: UpdateBrandingInput,
   ): Promise<Organisation> {
-    await this.getOrganisationById(orgId);
+    const current = await this.getOrganisationById(orgId);
+
+    const changes = Object.entries(data)
+      .filter(([_, v]) => v !== undefined)
+      .map(([k, v]) => ({
+        field: k,
+        oldValue: (current as any)[k] ?? null,
+        newValue: v,
+      }));
 
     const updated = await this.prisma.organisation.update({
       where: { id: orgId },
@@ -218,7 +236,7 @@ export class OrganisationService {
       action: 'ORGANISATION_BRANDING_UPDATED',
       resourceType: 'organisation',
       resourceId: orgId,
-      metadata: { updatedFields: Object.keys(data) },
+      metadata: { updatedFields: Object.keys(data), changes },
     });
 
     return updated;
@@ -544,6 +562,100 @@ export class OrganisationService {
   }
 
   /**
+   * INK-286 (FR-014.006): Exports audit logs as CSV or JSON.
+   */
+  async exportAuditLogs(
+    orgId: string,
+    query: AuditLogExportInput,
+  ): Promise<{ data: string; contentType: string; filename: string }> {
+    await this.getOrganisationById(orgId);
+
+    const where: any = { organisationId: orgId };
+
+    if (query.action) where.action = query.action;
+    if (query.userId) where.userId = query.userId;
+
+    if (query.startDate || query.endDate) {
+      where.createdAt = {};
+      if (query.startDate) where.createdAt.gte = new Date(query.startDate);
+      if (query.endDate) where.createdAt.lte = new Date(query.endDate);
+    }
+
+    const logs = await this.prisma.auditLog.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      take: 5000,
+      include: { user: { select: { id: true, name: true, email: true } } },
+    });
+
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+
+    if (query.format === 'json') {
+      const formatted = logs.map((log) => ({
+        id: log.id,
+        timestamp: log.createdAt.toISOString(),
+        action: log.action,
+        resourceType: log.resourceType,
+        resourceId: log.resourceId,
+        actor: (log as any).user
+          ? {
+              id: (log as any).user.id,
+              name: (log as any).user.name,
+              email: (log as any).user.email,
+            }
+          : { email: 'System' },
+        ipAddress: log.ipAddress || null,
+        userAgent: log.userAgent || null,
+        metadata: log.metadata,
+      }));
+      return {
+        data: JSON.stringify(formatted, null, 2),
+        contentType: 'application/json',
+        filename: `audit-logs-${orgId}-${timestamp}.json`,
+      };
+    }
+
+    const escapeCsv = (str: any) => {
+      if (str === null || str === undefined) return '""';
+      const val = typeof str === 'object' ? JSON.stringify(str) : String(str);
+      return `"${val.replace(/"/g, '""')}"`;
+    };
+
+    const headers = [
+      'ID',
+      'Timestamp',
+      'Action',
+      'ResourceType',
+      'ResourceId',
+      'ActorEmail',
+      'ActorName',
+      'IPAddress',
+      'Metadata',
+    ];
+    const rows = logs.map((log) => {
+      const user = (log as any).user;
+      return [
+        escapeCsv(log.id),
+        escapeCsv(log.createdAt.toISOString()),
+        escapeCsv(log.action),
+        escapeCsv(log.resourceType),
+        escapeCsv(log.resourceId),
+        escapeCsv(user?.email || 'System'),
+        escapeCsv(user?.name || ''),
+        escapeCsv(log.ipAddress || ''),
+        escapeCsv(log.metadata),
+      ].join(',');
+    });
+
+    const csvContent = [headers.join(','), ...rows].join('\n');
+    return {
+      data: csvContent,
+      contentType: 'text/csv; charset=utf-8',
+      filename: `audit-logs-${orgId}-${timestamp}.csv`,
+    };
+  }
+
+  /**
    * INK-59: Lists all organisations a multi-tenant user belongs to.
    */
   async getUserOrganisations(userId: string): Promise<any[]> {
@@ -562,6 +674,174 @@ export class OrganisationService {
       planType: m.organisation.planType || 'individual',
       role: m.role,
     }));
+  }
+
+  /**
+   * INK-286 (FR-014.001): Lists active members belonging to an organisation.
+   */
+  async listMembers(orgId: string): Promise<any[]> {
+    await this.getOrganisationById(orgId);
+
+    const primaryUsers = await this.prisma.user.findMany({
+      where: { organisationId: orgId, deletedAt: null },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        status: true,
+        lastLoginAt: true,
+        createdAt: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    let additionalMembers: any[] = [];
+    if (this.prisma.userOrganisation) {
+      const memberships = await this.prisma.userOrganisation.findMany({
+        where: { organisationId: orgId },
+        include: {
+          user: {
+            select: {
+              id: true,
+              email: true,
+              name: true,
+              role: true,
+              status: true,
+              lastLoginAt: true,
+              createdAt: true,
+            },
+          },
+        },
+      });
+
+      additionalMembers = memberships
+        .filter((m) => m.user && !primaryUsers.some((u) => u.id === m.user.id))
+        .map((m) => ({
+          id: m.user.id,
+          email: m.user.email,
+          name: m.user.name,
+          role: m.role || m.user.role,
+          status: m.user.status,
+          lastLoginAt: m.user.lastLoginAt,
+          createdAt: m.user.createdAt,
+        }));
+    }
+
+    return [...primaryUsers, ...additionalMembers];
+  }
+
+  /**
+   * INK-286 (FR-014.001): Removes a member from an organisation.
+   */
+  async removeMember(orgId: string, actorUserId: string, targetUserId: string): Promise<void> {
+    await this.getOrganisationById(orgId);
+
+    const targetUser = await this.prisma.user.findFirst({
+      where: { id: targetUserId },
+    });
+    if (!targetUser) {
+      throw new NotFoundError('User not found.');
+    }
+
+    if (actorUserId === targetUserId) {
+      throw new BadRequestError('You cannot remove yourself from the organisation.');
+    }
+
+    if (targetUser.role === 'admin' || targetUser.role === 'org_admin') {
+      const adminCount = await this.prisma.user.count({
+        where: {
+          organisationId: orgId,
+          role: { in: ['admin', 'org_admin', 'super_admin'] },
+          deletedAt: null,
+        },
+      });
+      if (adminCount <= 1) {
+        throw new BadRequestError('Cannot remove the only administrator of the organisation.');
+      }
+    }
+
+    if (this.prisma.userOrganisation) {
+      await this.prisma.userOrganisation.deleteMany({
+        where: { organisationId: orgId, userId: targetUserId },
+      });
+    }
+
+    if (this.prisma.teamMember) {
+      const orgTeams = await this.prisma.team.findMany({
+        where: { organisationId: orgId },
+        select: { id: true },
+      });
+      if (orgTeams.length > 0) {
+        await this.prisma.teamMember.deleteMany({
+          where: {
+            userId: targetUserId,
+            teamId: { in: orgTeams.map((t) => t.id) },
+          },
+        });
+      }
+    }
+
+    if (targetUser.organisationId === orgId) {
+      await this.prisma.user.update({
+        where: { id: targetUserId },
+        data: { status: 'suspended', deletedAt: new Date() },
+      });
+    }
+
+    await this.auditService.log({
+      organisationId: orgId,
+      userId: actorUserId,
+      action: 'ORGANISATION_MEMBER_REMOVED',
+      resourceType: 'user',
+      resourceId: targetUserId,
+      metadata: { targetUserEmail: targetUser.email, targetUserRole: targetUser.role },
+    });
+  }
+
+  /**
+   * INK-286 (FR-014.001): Toggles a member status (active / suspended).
+   */
+  async updateMemberStatus(
+    orgId: string,
+    actorUserId: string,
+    targetUserId: string,
+    status: UpdateMemberStatusInput['status'],
+  ): Promise<any> {
+    await this.getOrganisationById(orgId);
+
+    const user = await this.prisma.user.findFirst({
+      where: { id: targetUserId, organisationId: orgId },
+    });
+    if (!user) {
+      throw new NotFoundError('Member not found in organisation.');
+    }
+
+    if (actorUserId === targetUserId && status === 'suspended') {
+      throw new BadRequestError('You cannot suspend your own account.');
+    }
+
+    const previousStatus = user.status;
+    const updated = await this.prisma.user.update({
+      where: { id: targetUserId },
+      data: { status },
+      select: { id: true, email: true, name: true, role: true, status: true },
+    });
+
+    await this.auditService.log({
+      organisationId: orgId,
+      userId: actorUserId,
+      action: 'ORGANISATION_MEMBER_STATUS_UPDATED',
+      resourceType: 'user',
+      resourceId: targetUserId,
+      metadata: {
+        targetUserEmail: user.email,
+        previousStatus,
+        newStatus: status,
+      },
+    });
+
+    return updated;
   }
 
   /**
@@ -659,7 +939,15 @@ export class OrganisationService {
     actorUserId: string,
     data: UpdateComplianceSettingsInput,
   ): Promise<Organisation> {
-    await this.getOrganisationById(orgId);
+    const current = await this.getOrganisationById(orgId);
+
+    const changes = Object.entries(data)
+      .filter(([_, v]) => v !== undefined)
+      .map(([k, v]) => ({
+        field: k,
+        oldValue: (current as any)[k] ?? null,
+        newValue: v,
+      }));
 
     const updated = await this.prisma.organisation.update({
       where: { id: orgId },
@@ -685,7 +973,7 @@ export class OrganisationService {
       action: 'ORGANISATION_COMPLIANCE_UPDATED',
       resourceType: 'organisation',
       resourceId: orgId,
-      metadata: { updatedFields: Object.keys(data) },
+      metadata: { updatedFields: Object.keys(data), changes },
     });
 
     return updated;
@@ -740,6 +1028,20 @@ export class OrganisationService {
   ): Promise<OrganisationInvitation> {
     const org = await this.requireTeamsPlan(orgId, 'Member invitations');
     const email = data.email.toLowerCase().trim();
+
+    if (org.maxUsers > 0) {
+      const activeCount = await this.prisma.user.count({
+        where: { organisationId: orgId, deletedAt: null },
+      });
+      const pendingCount = await this.prisma.organisationInvitation.count({
+        where: { organisationId: orgId, status: 'pending' },
+      });
+      if (activeCount + pendingCount >= org.maxUsers) {
+        throw new ForbiddenError(
+          `Organisation user quota reached (maximum: ${org.maxUsers} users). Upgrade plan or remove inactive members to invite more users.`,
+        );
+      }
+    }
 
     const existingMembership = this.prisma.userOrganisation
       ? await this.prisma.userOrganisation.findFirst({
@@ -876,6 +1178,17 @@ export class OrganisationService {
     if (existingUser) {
       userId = existingUser.id;
     } else {
+      if (invitation.organisation && invitation.organisation.maxUsers > 0) {
+        const activeCount = await this.prisma.user.count({
+          where: { organisationId: invitation.organisationId, deletedAt: null },
+        });
+        if (activeCount >= invitation.organisation.maxUsers) {
+          throw new ForbiddenError(
+            `Organisation user quota reached (maximum: ${invitation.organisation.maxUsers} users). Please contact your workspace administrator.`,
+          );
+        }
+      }
+
       if (!data.name || !data.password) {
         throw new BadRequestError('Name and password are required for new account setup.');
       }

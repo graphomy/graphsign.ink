@@ -72,6 +72,31 @@ export class AgreementService {
   }
 
   /**
+   * Checks organisation-level document quota sufficiency (INK-286 / FR-014.009).
+   * Throws ForbiddenError if maximum document count is reached.
+   */
+  private async checkOrganisationDocumentQuota(orgId: string): Promise<void> {
+    if (!this.prisma.organisation || !this.prisma.agreement) return;
+
+    const org = await this.prisma.organisation.findUnique({
+      where: { id: orgId },
+      select: { maxDocuments: true },
+    });
+
+    if (org && org.maxDocuments > 0) {
+      const currentCount = await this.prisma.agreement.count({
+        where: { organisationId: orgId, deletedAt: null },
+      });
+      if (currentCount >= org.maxDocuments) {
+        throw new ForbiddenError(
+          `Organisation document limit reached (maximum: ${org.maxDocuments} documents). ` +
+            'Please delete or archive existing agreements, or upgrade your workspace plan.',
+        );
+      }
+    }
+  }
+
+  /**
    * Updates per-user storage usage after a successful upload (INK-206).
    */
   private async updateUserStorageUsage(userId: string, additionalBytes: number): Promise<void> {
@@ -97,7 +122,8 @@ export class AgreementService {
       );
     }
 
-    // Enforce user storage quota (INK-206)
+    // Enforce user storage quota (INK-206) and organisation document quota (INK-286)
+    await this.checkOrganisationDocumentQuota(orgId);
     if (authorId !== 'unknown') {
       await this.checkUserStorageQuota(authorId, input.fileSize);
     }
@@ -199,6 +225,7 @@ export class AgreementService {
       ? Buffer.byteLength(input.markdownContent, 'utf8')
       : DEFAULT_SCRATCH_SIZE_BYTES;
 
+    await this.checkOrganisationDocumentQuota(orgId);
     if (authorId !== 'unknown') {
       await this.checkUserStorageQuota(authorId, estimatedSizeBytes);
     }

@@ -17,6 +17,8 @@ import {
   addDomainSchema,
   switchOrganisationSchema,
   auditLogQuerySchema,
+  auditLogExportSchema,
+  updateMemberStatusSchema,
   upgradeToTeamsSchema,
 } from '../validators/organisation-validators.js';
 import { OrganisationService } from '../services/organisation-service.js';
@@ -431,6 +433,29 @@ export function createOrganisationRoutes(deps?: OrganisationDeps) {
     },
   );
 
+  // INK-286 (FR-014.006): GET /api/v1/organisations/me/audit-logs/export
+  orgs.get(
+    '/me/audit-logs/export',
+    jwtAuth(),
+    enforceTenantActiveStatus(),
+    requirePermission('audit:read'),
+    async (c) => {
+      const queryParams = c.req.query();
+      const parsed = auditLogExportSchema.safeParse(queryParams);
+      if (!parsed.success) {
+        throw new ValidationError('Invalid query parameters for audit log export.');
+      }
+
+      const payload = c.get('userPayload');
+      const service = getService(c);
+      const result = await service.exportAuditLogs(payload.orgId, parsed.data);
+
+      c.header('Content-Type', result.contentType);
+      c.header('Content-Disposition', `attachment; filename="${result.filename}"`);
+      return c.body(result.data, 200);
+    },
+  );
+
   // GET & PUT compliance
   orgs.get('/me/compliance', jwtAuth(), enforceTenantActiveStatus(), async (c) => {
     const payload = c.get('userPayload');
@@ -557,6 +582,58 @@ export function createOrganisationRoutes(deps?: OrganisationDeps) {
       await service.updateMemberRole(payload.orgId, payload.sub, targetUserId, parsed.data.role);
 
       return c.json({ message: 'Member role updated successfully.' });
+    },
+  );
+
+  // INK-286 (FR-014.001): GET /api/v1/organisations/me/members (List active organisation members)
+  orgs.get('/me/members', jwtAuth(), enforceTenantActiveStatus(), async (c) => {
+    const payload = c.get('userPayload');
+    const service = getService(c);
+    const members = await service.listMembers(payload.orgId);
+    return c.json(members);
+  });
+
+  // INK-286 (FR-014.001): DELETE /api/v1/organisations/me/members/:userId (Remove member from organisation)
+  orgs.delete(
+    '/me/members/:userId',
+    jwtAuth(),
+    enforceTenantActiveStatus(),
+    requirePermission('roles:manage'),
+    async (c) => {
+      const targetUserId = c.req.param('userId');
+      const payload = c.get('userPayload');
+      const service = getService(c);
+      await service.removeMember(payload.orgId, payload.sub, targetUserId);
+      return c.json({ message: 'Member removed from organisation successfully.' });
+    },
+  );
+
+  // INK-286 (FR-014.001): PATCH /api/v1/organisations/me/members/:userId/status (Deactivate or reactivate member)
+  orgs.patch(
+    '/me/members/:userId/status',
+    jwtAuth(),
+    enforceTenantActiveStatus(),
+    requirePermission('roles:manage'),
+    async (c) => {
+      const targetUserId = c.req.param('userId');
+      const body = await c.req.json().catch(() => null);
+      if (!body) throw new ValidationError('Request body is required.');
+
+      const parsed = updateMemberStatusSchema.safeParse(body);
+      if (!parsed.success) {
+        throw new ValidationError('Invalid status payload. Must be "active" or "suspended".');
+      }
+
+      const payload = c.get('userPayload');
+      const service = getService(c);
+      const updated = await service.updateMemberStatus(
+        payload.orgId,
+        payload.sub,
+        targetUserId,
+        parsed.data.status,
+      );
+
+      return c.json(updated);
     },
   );
 

@@ -43,6 +43,16 @@ interface ComplianceSettings {
   documentRetentionDays: number;
 }
 
+interface MemberItem {
+  id: string;
+  name?: string;
+  email: string;
+  role: string;
+  status: 'active' | 'suspended' | string;
+  isPrimary: boolean;
+  joinedAt: string;
+}
+
 interface InvitationItem {
   id: string;
   email: string;
@@ -165,6 +175,11 @@ function OrganisationSettingsContent() {
     signatureReasonRequired: false,
     documentRetentionDays: 365,
   });
+
+  const [members, setMembers] = useState<MemberItem[]>([]);
+  const [isLoadingMembers, setIsLoadingMembers] = useState<boolean>(false);
+  const [isExportingAudit, setIsExportingAudit] = useState<boolean>(false);
+  const [verifyingDomainId, setVerifyingDomainId] = useState<string | null>(null);
 
   const [invitations, setInvitations] = useState<InvitationItem[]>([]);
   const [inviteEmail, setInviteEmail] = useState<string>('');
@@ -291,6 +306,7 @@ function OrganisationSettingsContent() {
           resAudit,
           resUserOrgs,
           resNotifs,
+          resMembers,
         ] = await Promise.all([
           fetch(`${apiUrl}/api/v1/organisations/me`, { headers }).catch(() => null),
           fetch(`${apiUrl}/api/v1/organisations/me/branding`, { headers }).catch(() => null),
@@ -305,6 +321,7 @@ function OrganisationSettingsContent() {
           ),
           fetch(`${apiUrl}/api/v1/organisations/my-organisations`, { headers }).catch(() => null),
           fetch(`${apiUrl}/api/v1/organisations/me/notifications`, { headers }).catch(() => null),
+          fetch(`${apiUrl}/api/v1/organisations/me/members`, { headers }).catch(() => null),
         ]);
 
         if (resOrg?.ok) {
@@ -360,6 +377,10 @@ function OrganisationSettingsContent() {
           setAuditTotalPages(data.totalPages ?? 1);
         }
         if (resUserOrgs?.ok) setUserOrgs(await resUserOrgs.json());
+        if (resMembers?.ok) {
+          const membersData = await resMembers.json();
+          setMembers(Array.isArray(membersData) ? membersData : []);
+        }
       } catch {
         setError('Failed to load organisation settings.');
       } finally {
@@ -369,6 +390,139 @@ function OrganisationSettingsContent() {
 
     loadData();
   }, []);
+
+  // Active Workspace Members (FR-014)
+  async function fetchMembers() {
+    setIsLoadingMembers(true);
+    try {
+      const token = localStorage.getItem('graphsign_session_token') ?? '';
+      const userId = localStorage.getItem('graphsign_user_id') ?? '';
+      const apiUrl = getApiUrl();
+      const res = await fetch(`${apiUrl}/api/v1/organisations/me/members`, {
+        headers: { Authorization: `Bearer ${token}`, 'x-user-id': userId },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setMembers(Array.isArray(data) ? data : []);
+      }
+    } catch {
+      setError('Failed to fetch organisation members.');
+    } finally {
+      setIsLoadingMembers(false);
+    }
+  }
+
+  async function handleToggleMemberStatus(targetUserId: string, currentStatus: string) {
+    try {
+      const token = localStorage.getItem('graphsign_session_token') ?? '';
+      const apiUrl = getApiUrl();
+      const nextStatus = currentStatus === 'suspended' ? 'active' : 'suspended';
+      const res = await fetch(`${apiUrl}/api/v1/organisations/me/members/${targetUserId}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ status: nextStatus }),
+      });
+      const data = await res.json().catch(() => null);
+      if (res.ok) {
+        setMembers((prev) =>
+          prev.map((m) => (m.id === targetUserId ? { ...m, status: nextStatus } : m)),
+        );
+        setMessage(`Member status updated to ${nextStatus}.`);
+      } else {
+        setError(data?.error?.message ?? 'Failed to update member status.');
+      }
+    } catch {
+      setError('Failed to update member status.');
+    }
+  }
+
+  async function handleRemoveMember(targetUserId: string, memberEmail: string) {
+    if (!confirm(`Are you sure you want to remove ${memberEmail} from this organisation?`)) {
+      return;
+    }
+    try {
+      const token = localStorage.getItem('graphsign_session_token') ?? '';
+      const apiUrl = getApiUrl();
+      const res = await fetch(`${apiUrl}/api/v1/organisations/me/members/${targetUserId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json().catch(() => null);
+      if (res.ok) {
+        setMembers((prev) => prev.filter((m) => m.id !== targetUserId));
+        setMessage('Member removed from organisation.');
+      } else {
+        setError(data?.error?.message ?? 'Failed to remove member.');
+      }
+    } catch {
+      setError('Failed to remove member.');
+    }
+  }
+
+  // Audit Logs Export (FR-014 CSV & JSON)
+  async function handleExportAudit(format: 'csv' | 'json') {
+    setIsExportingAudit(true);
+    try {
+      const token = localStorage.getItem('graphsign_session_token') ?? '';
+      const apiUrl = getApiUrl();
+      const res = await fetch(
+        `${apiUrl}/api/v1/organisations/me/audit-logs/export?format=${format}`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
+      if (res.ok) {
+        const blob = await res.blob();
+        const downloadUrl = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = downloadUrl;
+        link.download = `audit-logs-${org?.slug || 'export'}.${format}`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(downloadUrl);
+        setMessage(`Audit logs exported as ${format.toUpperCase()} successfully.`);
+      } else {
+        const data = await res.json().catch(() => null);
+        setError(data?.error?.message ?? 'Failed to export audit logs.');
+      }
+    } catch {
+      setError('Failed to export audit logs.');
+    } finally {
+      setIsExportingAudit(false);
+    }
+  }
+
+  // Custom Domain Verification (FR-014)
+  async function handleVerifyDomain(domainId: string) {
+    setVerifyingDomainId(domainId);
+    try {
+      const token = localStorage.getItem('graphsign_session_token') ?? '';
+      const apiUrl = getApiUrl();
+      const res = await fetch(`${apiUrl}/api/v1/organisations/domains/${domainId}/verify`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json().catch(() => null);
+      if (res.ok) {
+        setDomains((prev) =>
+          prev.map((d) =>
+            d.id === domainId ? { ...d, status: 'verified', verifiedAt: new Date().toISOString() } : d,
+          ),
+        );
+        setMessage(data?.message || 'Domain verified successfully.');
+      } else {
+        setError(
+          data?.error?.message ??
+            'Domain DNS verification failed. Please ensure the TXT record has propagated.',
+        );
+      }
+    } catch {
+      setError('Failed to verify domain.');
+    } finally {
+      setVerifyingDomainId(null);
+    }
+  }
 
   // Fetch Paginated Audit Logs (10 per page)
   async function fetchAuditLogs(page: number) {
@@ -1212,9 +1366,98 @@ function OrganisationSettingsContent() {
               </form>
             )}
 
-            {/* MEMBERS TAB (INK-56) */}
+            {/* MEMBERS TAB (INK-56 & FR-014) */}
             {activeTab === 'members' && (
               <div className="space-y-6" data-testid="members-section">
+                {/* ACTIVE MEMBERS TABLE */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="text-xs font-bold text-neutral-900 uppercase">
+                        Active Workspace Members ({members.length})
+                      </h4>
+                      <p className="text-xs text-neutral-500">
+                        Manage existing workspace team members, their roles, and access status.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={fetchMembers}
+                      disabled={isLoadingMembers}
+                      className="text-xs font-semibold text-neutral-600 hover:text-neutral-900 bg-neutral-100 hover:bg-neutral-200 px-3 py-1.5 rounded-lg border border-neutral-200 transition-colors disabled:opacity-50"
+                      data-testid="refresh-members-button"
+                    >
+                      {isLoadingMembers ? 'Refreshing...' : '🔄 Refresh'}
+                    </button>
+                  </div>
+
+                  <div className="divide-y border rounded-xl overflow-hidden bg-white shadow-xs">
+                    {isLoadingMembers && members.length === 0 ? (
+                      <div className="p-8 text-center text-xs text-neutral-400 animate-pulse">
+                        Loading workspace members...
+                      </div>
+                    ) : members.length > 0 ? (
+                      members.map((m) => (
+                        <div
+                          key={m.id}
+                          className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-neutral-50/50"
+                          data-testid={`member-row-${m.id}`}
+                        >
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-sm text-neutral-900">
+                                {m.name || m.email}
+                              </span>
+                              {m.isPrimary && (
+                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 uppercase">
+                                  Primary Org
+                                </span>
+                              )}
+                              <span
+                                className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase ${
+                                  m.status === 'suspended'
+                                    ? 'bg-red-100 text-red-800'
+                                    : 'bg-green-100 text-green-800'
+                                }`}
+                              >
+                                {m.status}
+                              </span>
+                            </div>
+                            <p className="text-xs text-neutral-500 mt-0.5">{m.email}</p>
+                            <p className="text-[11px] text-neutral-400 mt-0.5">
+                              Role: <span className="font-semibold text-neutral-700 font-mono">{m.role}</span>
+                              {m.joinedAt && ` • Joined ${formatDateTime(m.joinedAt)}`}
+                            </p>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => handleToggleMemberStatus(m.id, m.status)}
+                              className="px-2.5 py-1 text-xs font-semibold text-neutral-700 bg-neutral-100 hover:bg-neutral-200 rounded border border-neutral-300 transition-colors"
+                              data-testid={`toggle-status-${m.id}`}
+                            >
+                              {m.status === 'suspended' ? 'Activate' : 'Suspend'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveMember(m.id, m.email)}
+                              className="px-2.5 py-1 text-xs font-semibold text-red-600 bg-red-50 hover:bg-red-100 rounded border border-red-200 transition-colors"
+                              data-testid={`remove-member-${m.id}`}
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="p-8 text-center text-xs text-neutral-400">
+                        No active workspace members found.
+                      </div>
+                    )}
+                  </div>
+                </div>
+
                 <form
                   onSubmit={handleInviteMember}
                   className="rounded-xl border p-4 bg-neutral-50 space-y-3"
@@ -1671,12 +1914,38 @@ function OrganisationSettingsContent() {
                 <div className="divide-y border rounded-xl">
                   {domains.length > 0 ? (
                     domains.map((d) => (
-                      <div key={d.id} className="p-4 space-y-1">
+                      <div key={d.id} className="p-4 space-y-2">
                         <div className="flex justify-between items-center">
-                          <span className="font-bold text-sm text-neutral-900">{d.domain}</span>
-                          <span className="text-xs font-bold uppercase px-2 py-0.5 rounded bg-amber-100 text-amber-800">
-                            {d.status}
-                          </span>
+                          <div>
+                            <span className="font-bold text-sm text-neutral-900">{d.domain}</span>
+                            {d.verifiedAt && (
+                              <p className="text-[11px] text-green-700 mt-0.5">
+                                Verified on {formatDateTime(d.verifiedAt)}
+                              </p>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span
+                              className={`text-xs font-bold uppercase px-2 py-0.5 rounded ${
+                                d.status === 'verified'
+                                  ? 'bg-green-100 text-green-800'
+                                  : 'bg-amber-100 text-amber-800'
+                              }`}
+                            >
+                              {d.status}
+                            </span>
+                            {d.status !== 'verified' && (
+                              <button
+                                type="button"
+                                disabled={verifyingDomainId === d.id}
+                                onClick={() => handleVerifyDomain(d.id)}
+                                className="px-2.5 py-1 text-xs font-semibold text-white bg-[#ba0000] hover:bg-[#a00000] rounded shadow-xs transition-colors disabled:opacity-50"
+                                data-testid={`verify-domain-${d.id}`}
+                              >
+                                {verifyingDomainId === d.id ? 'Verifying...' : 'Verify DNS 🔍'}
+                              </button>
+                            )}
+                          </div>
                         </div>
                         <p className="text-xs font-mono text-neutral-500">
                           DNS TXT:{' '}
@@ -1696,13 +1965,35 @@ function OrganisationSettingsContent() {
             {/* AUDIT LOGS TAB (INK-58) */}
             {activeTab === 'audit' && (
               <div className="space-y-4" data-testid="audit-section">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-xs font-bold uppercase text-neutral-900">
-                    Organisation Audit Logs
-                  </h3>
-                  <span className="text-xs text-neutral-500 font-medium">
-                    Showing 10 records per page • Total {auditTotal} events
-                  </span>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-xs font-bold uppercase text-neutral-900">
+                      Organisation Audit Logs
+                    </h3>
+                    <span className="text-xs text-neutral-500 font-medium">
+                      Showing 10 records per page • Total {auditTotal} events
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      disabled={isExportingAudit}
+                      onClick={() => handleExportAudit('csv')}
+                      className="px-3 py-1.5 border border-neutral-300 rounded-lg text-xs font-semibold text-neutral-700 bg-white hover:bg-neutral-50 shadow-xs transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                      data-testid="export-audit-csv"
+                    >
+                      <span>📥</span> {isExportingAudit ? 'Exporting...' : 'Export CSV'}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isExportingAudit}
+                      onClick={() => handleExportAudit('json')}
+                      className="px-3 py-1.5 border border-neutral-300 rounded-lg text-xs font-semibold text-neutral-700 bg-white hover:bg-neutral-50 shadow-xs transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                      data-testid="export-audit-json"
+                    >
+                      <span>📥</span> {isExportingAudit ? 'Exporting...' : 'Export JSON'}
+                    </button>
+                  </div>
                 </div>
 
                 <div className="overflow-x-auto border rounded-xl bg-white shadow-xs">
