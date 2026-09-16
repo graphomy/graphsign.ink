@@ -106,6 +106,12 @@ export interface MailerService {
     otpCode: string,
     meta?: EmailTrackingMetadata,
   ): Promise<void>;
+  sendNotificationEmail?(
+    to: string,
+    subject: string,
+    bodyText: string,
+    meta?: EmailTrackingMetadata,
+  ): Promise<void>;
 }
 
 /**
@@ -654,6 +660,25 @@ export class ResendMailerService implements MailerService {
       { ...meta, recipientName, eventType: 'GUEST_SIGNER_OTP' },
     );
   }
+
+  async sendNotificationEmail(
+    to: string,
+    subject: string,
+    bodyText: string,
+    meta?: EmailTrackingMetadata,
+  ): Promise<void> {
+    await this.dispatch(
+      to,
+      subject,
+      `
+        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+          <h2 style="color: #1e293b; font-size: 18px;">${subject}</h2>
+          <p style="color: #334155; font-size: 14px; line-height: 1.6; white-space: pre-wrap;">${bodyText}</p>
+        </div>
+      `,
+      { ...meta, eventType: meta?.eventType || 'SYSTEM_NOTIFICATION' },
+    );
+  }
 }
 
 /**
@@ -857,6 +882,16 @@ export class ConsoleMailerService implements MailerService {
       `[MAILER] OTP verification code for ${recipientName} (${to}) on "${agreementTitle}": ${otpCode}`,
     );
     await this.logDelivery(to, 'GUEST_SIGNER_OTP', meta);
+  }
+
+  async sendNotificationEmail(
+    to: string,
+    subject: string,
+    bodyText: string,
+    meta?: EmailTrackingMetadata,
+  ): Promise<void> {
+    console.log(`[MAILER] Notification to ${to}: ${subject}\n${bodyText}`);
+    await this.logDelivery(to, meta?.eventType || 'SYSTEM_NOTIFICATION', meta);
   }
 }
 
