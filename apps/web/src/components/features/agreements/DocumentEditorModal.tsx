@@ -56,7 +56,7 @@ export interface Recipient {
   name: string;
   email: string;
   role: 'signer' | 'approver' | 'viewer';
-  color: string;
+  color?: string;
 }
 
 interface AgreementData {
@@ -105,7 +105,13 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
   // Recipients State
   const [recipients, setRecipients] = useState<Recipient[]>(() => {
     const existing = agreement.fields?.recipients;
-    if (existing && existing.length > 0) return existing;
+    if (existing && existing.length > 0) {
+      return existing.map((r, idx) => ({
+        ...r,
+        color:
+          r.color || DEFAULT_RECIPIENT_COLORS[idx % DEFAULT_RECIPIENT_COLORS.length] || '#2563EB',
+      }));
+    }
     return [
       {
         id: 'recipient-1',
@@ -773,6 +779,7 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
           </button>
 
           <button
+            type="button"
             onClick={async () => {
               const saved = await handleSaveFields(false);
               if (saved) {
@@ -780,9 +787,9 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
               }
             }}
             disabled={isSaving}
-            className="px-4 py-1.5 bg-[#ba0000] hover:bg-red-700 text-white text-xs font-bold rounded-lg shadow-sm transition-all disabled:opacity-50 flex items-center gap-1.5"
+            className="px-4 py-1.5 bg-[#ba0000] hover:bg-red-700 text-white text-xs font-bold rounded-lg shadow-sm transition-all disabled:opacity-50 flex items-center gap-1.5 whitespace-nowrap shrink-0"
           >
-            <span>✓</span> Done
+            <span aria-hidden="true">✓</span> Send for Signature
           </button>
         </div>
       </header>

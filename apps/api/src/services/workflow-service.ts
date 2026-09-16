@@ -350,13 +350,14 @@ export class WorkflowService {
     }
 
     if (
+      agreement.status === 'SENT' ||
       agreement.status === 'SENT_FOR_SIGNATURE' ||
       agreement.status === 'PARTIALLY_SIGNED' ||
       agreement.status === 'COMPLETED' ||
       agreement.status === 'SIGNED'
     ) {
       throw new ValidationError(
-        'Agreement has already been sent for signature. It cannot be resent unless the previous request is rejected.',
+        'Agreement has already been sent for signature. It cannot be resent unless the previous request is rejected or declined.',
       );
     }
 
@@ -364,20 +365,17 @@ export class WorkflowService {
       agreement.status !== 'DRAFT' &&
       agreement.status !== 'APPROVED' &&
       agreement.status !== 'REJECTED' &&
-      agreement.status !== 'ACTIVE'
+      agreement.status !== 'ACTIVE' &&
+      agreement.status !== 'DECLINED'
     ) {
       throw new ValidationError(
-        `Cannot send agreement in '${agreement.status}' status. Must be DRAFT, APPROVED, or REJECTED.`,
+        `Cannot send agreement in '${agreement.status}' status. Must be DRAFT, APPROVED, REJECTED, or DECLINED.`,
       );
     }
 
     const signingOrder = input.signingOrder || 'PARALLEL';
     const expiresAt = input.expiresAt ? new Date(input.expiresAt) : null;
-
-    // Remove existing recipients to replace with final envelope
-    await this.prisma.agreementRecipient.deleteMany({
-      where: { agreementId },
-    });
+    const tokenExpiresAt = expiresAt || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days default
 
     // Create recipients and generate initial invitation tokens
     const createdRecipients: Array<{
@@ -386,6 +384,21 @@ export class WorkflowService {
       name: string;
       role: string;
       routingOrder: number;
+      color: string;
+      rawToken: string;
+    }> = [];
+
+    const recipientRecordsToCreate: Array<{
+      id: string;
+      agreementId: string;
+      email: string;
+      name: string;
+      role: string;
+      routingOrder: number;
+      color: string;
+      signingTokenHash: string;
+      tokenExpiresAt: Date;
+      status: string;
       rawToken: string;
     }> = [];
 
@@ -394,28 +407,31 @@ export class WorkflowService {
       const rawToken = generateToken();
       const tokenHash = await hashToken(rawToken);
       const routingOrder = signingOrder === 'SEQUENTIAL' ? r.routingOrder || i + 1 : 1;
+      const color = r.color || '#2563EB';
+      const id = generateId();
 
-      const recipientRecord = await this.prisma.agreementRecipient.create({
-        data: {
-          id: generateId(),
-          agreementId,
-          email: r.email.toLowerCase().trim(),
-          name: r.name.trim(),
-          role: r.role || 'signer',
-          routingOrder,
-          color: r.color || '#2563EB',
-          signingTokenHash: tokenHash,
-          tokenExpiresAt: expiresAt || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days default
-          status: 'PENDING',
-        },
-      });
+      const record = {
+        id,
+        agreementId,
+        email: r.email.toLowerCase().trim(),
+        name: r.name.trim(),
+        role: r.role || 'signer',
+        routingOrder,
+        color,
+        signingTokenHash: tokenHash,
+        tokenExpiresAt,
+        status: 'PENDING',
+        rawToken,
+      };
 
+      recipientRecordsToCreate.push(record);
       createdRecipients.push({
-        id: recipientRecord.id,
-        email: recipientRecord.email,
-        name: recipientRecord.name,
-        role: recipientRecord.role,
-        routingOrder: recipientRecord.routingOrder,
+        id: record.id,
+        email: record.email,
+        name: record.name,
+        role: record.role,
+        routingOrder: record.routingOrder,
+        color: record.color,
         rawToken,
       });
     }
@@ -459,21 +475,42 @@ export class WorkflowService {
           email: cr.email,
           role: cr.role,
           routingOrder: cr.routingOrder,
+          color: cr.color,
         })),
       };
     }
 
-    // Update agreement status to SENT
-    const updatedAgreement = await this.prisma.agreement.update({
-      where: { id: agreementId },
-      data: {
-        status: 'SENT',
-        signingOrder,
-        currentStep: 1,
-        expiresAt,
-        ...(synchronizedFields ? { fields: synchronizedFields } : {}),
-      },
-    });
+    const executeDbOps = async (tx: any) => {
+      // Remove existing recipients to replace with final envelope
+      await tx.agreementRecipient.deleteMany({
+        where: { agreementId },
+      });
+
+      for (const item of recipientRecordsToCreate) {
+        const { rawToken: _rawToken, ...data } = item;
+        await tx.agreementRecipient.create({
+          data,
+        });
+      }
+
+      // Update agreement status to SENT and reset rejectionReason
+      return tx.agreement.update({
+        where: { id: agreementId },
+        data: {
+          status: 'SENT',
+          rejectionReason: null,
+          signingOrder,
+          currentStep: 1,
+          expiresAt,
+          ...(synchronizedFields ? { fields: synchronizedFields } : {}),
+        },
+      });
+    };
+
+    const updatedAgreement =
+      typeof this.prisma.$transaction === 'function'
+        ? await this.prisma.$transaction(executeDbOps)
+        : await executeDbOps(this.prisma);
 
     await this.auditService.log({
       organisationId: ctx.organisationId,

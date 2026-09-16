@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, Suspense } from 'react';
+import { FilePlus2, PenLine, Upload, CloudOff, MoreHorizontal, Loader2 } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { SessionGuard } from '@/components/features/auth/SessionGuard';
@@ -699,62 +700,111 @@ function TemplateManagementContent() {
 
                         {/* Actions */}
                         <td className="py-3.5 px-4 whitespace-nowrap text-right">
-                          <div className="flex items-center justify-end gap-2 relative">
+                          <div className="flex items-center justify-end gap-1">
                             {/* Primary Action: Use Template */}
                             <button
+                              type="button"
                               onClick={() => handleUseTemplate(tpl)}
                               disabled={instantiatingId === tpl.id}
-                              className="px-3 py-1.5 bg-[#ba0000] hover:bg-red-700 text-white text-xs font-semibold rounded-lg shadow-2xs transition-all disabled:opacity-50 flex items-center gap-1"
+                              aria-label={instantiatingId === tpl.id ? 'Creating…' : 'Use Template'}
+                              aria-busy={instantiatingId === tpl.id}
+                              title={instantiatingId === tpl.id ? 'Creating…' : 'Use Template'}
+                              className="relative group/tooltip w-10 h-10 inline-flex items-center justify-center shrink-0 rounded-md text-ink-600 hover:text-ink-900 hover:bg-ink-100 transition-colors focus-visible:ring-2 focus-visible:ring-ink-950 focus-visible:ring-offset-2 focus-visible:ring-offset-white focus-visible:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
                             >
-                              {instantiatingId === tpl.id ? 'Creating...' : 'Use Template'}
+                              {instantiatingId === tpl.id ? (
+                                <Loader2
+                                  className="w-4 h-4 animate-spin text-ink-600"
+                                  strokeWidth={2}
+                                  aria-hidden="true"
+                                />
+                              ) : (
+                                <FilePlus2 className="w-4 h-4" strokeWidth={2} aria-hidden="true" />
+                              )}
+                              <span className="sr-only" aria-live="polite">
+                                {instantiatingId === tpl.id ? 'Creating…' : ''}
+                              </span>
+                              <span
+                                role="tooltip"
+                                className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 opacity-0 group-hover/tooltip:opacity-100 group-focus-visible/tooltip:opacity-100 transition-opacity duration-150 px-2 py-0.5 text-xs font-medium text-white bg-ink-900 rounded shadow-xs whitespace-nowrap z-30"
+                              >
+                                {instantiatingId === tpl.id ? 'Creating…' : 'Use Template'}
+                              </span>
                             </button>
 
                             {/* Secondary Action: Edit */}
                             <button
+                              type="button"
                               onClick={() => handleOpenEdit(tpl)}
-                              className="px-2.5 py-1.5 text-xs font-semibold text-neutral-700 hover:text-neutral-900 bg-white hover:bg-neutral-100 border border-neutral-300 rounded-lg transition-all"
+                              aria-label="Edit"
+                              title="Edit"
+                              className="relative group/tooltip w-10 h-10 inline-flex items-center justify-center shrink-0 rounded-md text-ink-600 hover:text-ink-900 hover:bg-ink-100 transition-colors focus-visible:ring-2 focus-visible:ring-ink-950 focus-visible:ring-offset-2 focus-visible:ring-offset-white focus-visible:outline-none"
                             >
-                              Edit
+                              <PenLine className="w-4 h-4" strokeWidth={2} aria-hidden="true" />
+                              <span
+                                role="tooltip"
+                                className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 opacity-0 group-hover/tooltip:opacity-100 group-focus-visible/tooltip:opacity-100 transition-opacity duration-150 px-2 py-0.5 text-xs font-medium text-white bg-ink-900 rounded shadow-xs whitespace-nowrap z-30"
+                              >
+                                Edit
+                              </span>
                             </button>
 
                             {/* Secondary Action: Publish / Unpublish */}
                             <button
+                              type="button"
                               onClick={() => handlePublishToggle(tpl.id, !isPublished)}
-                              className={`px-2.5 py-1.5 text-xs font-semibold rounded-lg border transition-all ${
-                                isPublished
-                                  ? 'bg-neutral-50 hover:bg-neutral-100 text-neutral-700 border-neutral-300'
-                                  : 'bg-green-50 hover:bg-green-100 text-green-800 border-green-300'
-                              }`}
+                              aria-label={isPublished ? 'Unpublish' : 'Publish'}
+                              title={isPublished ? 'Unpublish' : 'Publish'}
+                              className="relative group/tooltip w-10 h-10 inline-flex items-center justify-center shrink-0 rounded-md text-ink-600 hover:text-ink-900 hover:bg-ink-100 transition-colors focus-visible:ring-2 focus-visible:ring-ink-950 focus-visible:ring-offset-2 focus-visible:ring-offset-white focus-visible:outline-none"
                             >
-                              {isPublished ? 'Unpublish' : 'Publish'}
+                              {isPublished ? (
+                                <CloudOff className="w-4 h-4" strokeWidth={2} aria-hidden="true" />
+                              ) : (
+                                <Upload className="w-4 h-4" strokeWidth={2} aria-hidden="true" />
+                              )}
+                              <span
+                                role="tooltip"
+                                className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 opacity-0 group-hover/tooltip:opacity-100 group-focus-visible/tooltip:opacity-100 transition-opacity duration-150 px-2 py-0.5 text-xs font-medium text-white bg-ink-900 rounded shadow-xs whitespace-nowrap z-30"
+                              >
+                                {isPublished ? 'Unpublish' : 'Publish'}
+                              </span>
                             </button>
 
-                            {/* 3-dots Menu Button */}
-                            <div className="relative">
-                              <button
-                                aria-label="More actions"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  if (dropdownAnchor?.id === tpl.id) {
-                                    setDropdownAnchor(null);
-                                  } else {
-                                    const rect = e.currentTarget.getBoundingClientRect();
-                                    const isBottom = rect.bottom + 180 > window.innerHeight;
-                                    setDropdownAnchor({
-                                      id: tpl.id,
-                                      template: tpl,
-                                      top: rect.bottom + 4,
-                                      bottom: window.innerHeight - rect.top + 4,
-                                      right: window.innerWidth - rect.right,
-                                      isBottom,
-                                    });
-                                  }
-                                }}
-                                className="p-1.5 text-neutral-500 hover:text-neutral-900 hover:bg-neutral-100 rounded-lg text-sm font-bold transition-colors"
+                            {/* More actions Menu Button */}
+                            <button
+                              type="button"
+                              aria-label="More actions"
+                              title="More actions"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (dropdownAnchor?.id === tpl.id) {
+                                  setDropdownAnchor(null);
+                                } else {
+                                  const rect = e.currentTarget.getBoundingClientRect();
+                                  const isBottom = rect.bottom + 180 > window.innerHeight;
+                                  setDropdownAnchor({
+                                    id: tpl.id,
+                                    template: tpl,
+                                    top: rect.bottom + 4,
+                                    bottom: window.innerHeight - rect.top + 4,
+                                    right: window.innerWidth - rect.right,
+                                    isBottom,
+                                  });
+                                }
+                              }}
+                              className="relative group/tooltip w-10 h-10 inline-flex items-center justify-center shrink-0 rounded-md text-ink-600 hover:text-ink-900 hover:bg-ink-100 transition-colors focus-visible:ring-2 focus-visible:ring-ink-950 focus-visible:ring-offset-2 focus-visible:ring-offset-white focus-visible:outline-none"
+                            >
+                              <MoreHorizontal
+                                className="w-4 h-4"
+                                strokeWidth={2}
+                                aria-hidden="true"
+                              />
+                              <span
+                                role="tooltip"
+                                className="pointer-events-none absolute -top-8 right-0 opacity-0 group-hover/tooltip:opacity-100 group-focus-visible/tooltip:opacity-100 transition-opacity duration-150 px-2 py-0.5 text-xs font-medium text-white bg-ink-900 rounded shadow-xs whitespace-nowrap z-30"
                               >
-                                •••
-                              </button>
-                            </div>
+                                More actions
+                              </span>
+                            </button>
                           </div>
                         </td>
                       </tr>

@@ -106,7 +106,7 @@ describe('TemplateManagementPage Unit Tests (Epic INK-11, INK-264, INK-270)', ()
     expect(screen.getByText('Active')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument();
 
-    const useTemplateBtn = screen.getByRole('button', { name: /Use Template/i });
+    const useTemplateBtn = screen.getByRole('button', { name: 'Use Template' });
     expect(useTemplateBtn).toBeInTheDocument();
 
     fireEvent.click(useTemplateBtn);
@@ -117,6 +117,19 @@ describe('TemplateManagementPage Unit Tests (Epic INK-11, INK-264, INK-270)', ()
         expect.objectContaining({ method: 'POST' }),
       );
     });
+  });
+
+  it('opens edit modal when clicking Edit action', async () => {
+    render(<TemplateManagementPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Master Service Template')).toBeInTheDocument();
+    });
+
+    const editBtn = screen.getByRole('button', { name: 'Edit' });
+    fireEvent.click(editBtn);
+
+    expect(screen.getByText('Edit Agreement Template')).toBeInTheDocument();
   });
 
   it('publishes and unpublishes template with correct JSON payload (INK-264 & INK-270)', async () => {
@@ -138,6 +151,107 @@ describe('TemplateManagementPage Unit Tests (Epic INK-11, INK-264, INK-270)', ()
         }),
       );
     });
+  });
+
+  it('publishes a draft template with correct JSON payload', async () => {
+    const draftTemplates = [
+      {
+        ...mockTemplates[0],
+        id: 'tpl-draft',
+        isPublished: false,
+      },
+    ];
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation((url: string) => {
+        if (url.includes('/publish')) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({ id: 'tpl-draft', isPublished: true }),
+          });
+        }
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ items: draftTemplates }),
+        });
+      }),
+    );
+
+    render(<TemplateManagementPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Master Service Template')).toBeInTheDocument();
+    });
+
+    const publishBtn = screen.getByRole('button', { name: 'Publish' });
+    fireEvent.click(publishBtn);
+
+    await waitFor(() => {
+      expect(globalThis.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('/templates/tpl-draft/publish'),
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({ isPublished: true }),
+        }),
+      );
+    });
+  });
+
+  it('displays accessible loading state and prevents repeat activation during instantiation', async () => {
+    let resolveInstantiate: (val: unknown) => void;
+    const pendingInstantiate = new Promise((resolve) => {
+      resolveInstantiate = resolve;
+    });
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation((url: string) => {
+        if (url.includes('/instantiate')) {
+          return pendingInstantiate.then(() => ({
+            ok: true,
+            json: () =>
+              Promise.resolve({
+                id: 'ag-new-1',
+                title: '[Draft] Master Service Template',
+                status: 'DRAFT',
+              }),
+          }));
+        }
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ items: mockTemplates }),
+        });
+      }),
+    );
+
+    render(<TemplateManagementPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Master Service Template')).toBeInTheDocument();
+    });
+
+    const useTemplateBtn = screen.getByRole('button', { name: 'Use Template' });
+    fireEvent.click(useTemplateBtn);
+
+    // During instantiation, button should display accessible loading state
+    await waitFor(() => {
+      const loadingBtn = screen.getByRole('button', { name: 'Creating…' });
+      expect(loadingBtn).toBeInTheDocument();
+      expect(loadingBtn).toBeDisabled();
+      expect(loadingBtn).toHaveAttribute('aria-busy', 'true');
+    });
+
+    // Repeat click should be ignored
+    const loadingBtn = screen.getByRole('button', { name: 'Creating…' });
+    fireEvent.click(loadingBtn);
+
+    const instantiateCalls = vi
+      .mocked(globalThis.fetch)
+      .mock.calls.filter((call) => typeof call[0] === 'string' && call[0].includes('/instantiate'));
+    expect(instantiateCalls).toHaveLength(1);
+
+    resolveInstantiate!({});
   });
 
   it('opens 3-dots dropdown menu with Version History, Share, and Delete options (INK-270)', async () => {

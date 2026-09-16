@@ -28,6 +28,46 @@ export interface AgreementDeps {
   agreementService?: AgreementService;
 }
 
+function formatDocumentFieldsValidationError(error: {
+  issues: Array<{ path: PropertyKey[]; message?: string }>;
+}): string {
+  const issue = error.issues[0];
+  if (!issue) return 'Invalid document fields payload';
+
+  const path = issue.path;
+  if (path[0] === 'recipients' && typeof path[1] === 'number') {
+    const recipientIndex = path[1] + 1;
+    const prop = path[2];
+    if (prop === 'color') {
+      return `Recipient ${recipientIndex} has an invalid color.`;
+    }
+    if (prop === 'name') {
+      return `Recipient ${recipientIndex} has an invalid name.`;
+    }
+    if (prop === 'email') {
+      return `Recipient ${recipientIndex} has an invalid email.`;
+    }
+    if (prop === 'role') {
+      return `Recipient ${recipientIndex} has an invalid role.`;
+    }
+    return `Recipient ${recipientIndex} has an invalid ${String(prop || 'field')}.`;
+  }
+
+  if (path[0] === 'fields' && typeof path[1] === 'number') {
+    const fieldIndex = path[1] + 1;
+    const prop = path[2];
+    if (prop === 'recipientId') {
+      return `Field ${fieldIndex} must be assigned to a recipient.`;
+    }
+    if (prop === 'type') {
+      return `Field ${fieldIndex} has an invalid type.`;
+    }
+    return `Field ${fieldIndex} has an invalid ${String(prop || 'property')}.`;
+  }
+
+  return issue.message || 'Invalid document fields payload';
+}
+
 export function createAgreementRoutes(deps?: AgreementDeps) {
   const agreements = new Hono<{ Bindings: Env }>();
 
@@ -541,9 +581,7 @@ export function createAgreementRoutes(deps?: AgreementDeps) {
       const parsed = saveDocumentFieldsSchema.safeParse(body);
 
       if (!parsed.success) {
-        throw new BadRequestError(
-          parsed.error.issues[0]?.message || 'Invalid document fields payload',
-        );
+        throw new BadRequestError(formatDocumentFieldsValidationError(parsed.error));
       }
 
       const result = await service.saveAgreementFields(

@@ -65,6 +65,7 @@ describe('WorkflowService Unit Tests (INK-86 to INK-116)', () => {
           .fn()
           .mockImplementation(({ data }) => Promise.resolve({ id: 'notif-1', ...data })),
       },
+      $transaction: vi.fn(async (cb: any) => cb(mockPrisma)),
     };
 
     mockAudit = {
@@ -489,5 +490,126 @@ describe('WorkflowService Unit Tests (INK-86 to INK-116)', () => {
       'Need to change pricing',
       expect.anything(),
     );
+  });
+
+  describe('sendForSignature (INK-284)', () => {
+    it('successfully resends a DECLINED agreement, preserves colors, clears rejectionReason, and remaps fields', async () => {
+      mockPrisma.agreement.findFirst.mockResolvedValue({
+        ...mockAgreement,
+        status: 'DECLINED',
+        rejectionReason: 'Signer 1 disagreed with clause 2',
+        fields: {
+          fields: [
+            { id: 'f-1', type: 'SIGNATURE', recipientId: 'old-r1' },
+            { id: 'f-2', type: 'INITIALS', recipientId: 'old-r2' },
+          ],
+          recipients: [
+            { id: 'old-r1', name: 'Signer One', email: 's1@example.com', color: '#DB2777' },
+            { id: 'old-r2', name: 'Signer Two', email: 's2@example.com', color: '#059669' },
+          ],
+        },
+      });
+
+      let createdIndex = 0;
+      mockPrisma.agreementRecipient.create.mockImplementation(({ data }: any) => {
+        createdIndex++;
+        return Promise.resolve({
+          ...data,
+          id: `new-recip-${createdIndex}`,
+        });
+      });
+
+      const res = await service.sendForSignature(mockCtx, 'ag-1', {
+        signingOrder: 'PARALLEL',
+        recipients: [
+          {
+            id: 'old-r1',
+            name: 'Signer One',
+            email: 's1@example.com',
+            role: 'signer',
+            routingOrder: 1,
+            color: '#DB2777',
+          },
+          {
+            id: 'old-r2',
+            name: 'Signer Two',
+            email: 's2@example.com',
+            role: 'signer',
+            routingOrder: 1,
+            color: '#059669',
+          },
+        ],
+      });
+
+      expect(mockPrisma.agreementRecipient.deleteMany).toHaveBeenCalledWith({
+        where: { agreementId: 'ag-1' },
+      });
+      expect(mockPrisma.$transaction).toHaveBeenCalled();
+
+      const updateCall = mockPrisma.agreement.update.mock.calls[0][0];
+      expect(updateCall.where).toEqual({ id: 'ag-1' });
+      expect(updateCall.data.status).toBe('SENT');
+      expect(updateCall.data.rejectionReason).toBeNull();
+
+      const updatedRecipients = updateCall.data.fields.recipients;
+      const updatedFields = updateCall.data.fields.fields;
+      expect(updatedRecipients).toHaveLength(2);
+      expect(updatedRecipients[0].color).toBe('#DB2777');
+      expect(updatedRecipients[0].email).toBe('s1@example.com');
+      expect(updatedRecipients[1].color).toBe('#059669');
+      expect(updatedRecipients[1].email).toBe('s2@example.com');
+
+      // Verify field remapping matches the freshly generated recipient IDs
+      expect(updatedFields[0].recipientId).toBe(updatedRecipients[0].id);
+      expect(updatedFields[1].recipientId).toBe(updatedRecipients[1].id);
+
+      // Verify tokens are not in recipient definitions
+      expect((res.agreement.fields as any).recipients[0].rawToken).toBeUndefined();
+      expect((res.agreement.fields as any).recipients[0].signingTokenHash).toBeUndefined();
+    });
+
+    it('rejects resending agreements in active or completed states (SENT, COMPLETED, SIGNED)', async () => {
+      for (const forbiddenStatus of [
+        'SENT',
+        'SENT_FOR_SIGNATURE',
+        'PARTIALLY_SIGNED',
+        'COMPLETED',
+        'SIGNED',
+      ]) {
+        mockPrisma.agreement.findFirst.mockResolvedValue({
+          ...mockAgreement,
+          status: forbiddenStatus,
+        });
+
+        await expect(
+          service.sendForSignature(mockCtx, 'ag-1', {
+            signingOrder: 'PARALLEL',
+            recipients: [
+              { name: 'Signer 1', email: 's1@example.com', role: 'signer', routingOrder: 1 },
+            ],
+          }),
+        ).rejects.toThrow(
+          'Agreement has already been sent for signature. It cannot be resent unless the previous request is rejected or declined.',
+        );
+      }
+    });
+
+    it('rejects sending agreements in invalid states', async () => {
+      mockPrisma.agreement.findFirst.mockResolvedValue({
+        ...mockAgreement,
+        status: 'ARCHIVED',
+      });
+
+      await expect(
+        service.sendForSignature(mockCtx, 'ag-1', {
+          signingOrder: 'PARALLEL',
+          recipients: [
+            { name: 'Signer 1', email: 's1@example.com', role: 'signer', routingOrder: 1 },
+          ],
+        }),
+      ).rejects.toThrow(
+        "Cannot send agreement in 'ARCHIVED' status. Must be DRAFT, APPROVED, REJECTED, or DECLINED.",
+      );
+    });
   });
 });

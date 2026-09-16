@@ -1079,6 +1079,7 @@ export class AgreementService {
   async getAgreementFields(orgId: string, agreementId: string, userId?: string, userRole?: string) {
     const agreement = await this.prisma.agreement.findFirst({
       where: { id: agreementId, organisationId: orgId, deletedAt: null },
+      include: { recipients: true },
     });
 
     if (!agreement) {
@@ -1105,10 +1106,54 @@ export class AgreementService {
         : [];
     const recipientsList = Array.isArray(fieldsData.recipients) ? fieldsData.recipients : [];
 
+    const defaultColors = ['#2563EB', '#059669', '#D97706', '#7C3AED', '#DB2777', '#0891B2'];
+    const persistedRecipients = (agreement as any).recipients || [];
+    const persistedById = new Map<string, any>(persistedRecipients.map((r: any) => [r.id, r]));
+    const persistedByEmail = new Map<string, any>(
+      persistedRecipients.map((r: any) => [r.email?.toLowerCase(), r]),
+    );
+
+    const recipientsSource =
+      recipientsList.length > 0
+        ? recipientsList
+        : persistedRecipients.map((pr: any) => ({
+            id: pr.id,
+            name: pr.name,
+            email: pr.email,
+            role: pr.role,
+            routingOrder: pr.routingOrder,
+            color: pr.color,
+          }));
+
+    const normalizedRecipients = recipientsSource.map((r: any, idx: number) => {
+      const persisted =
+        (r.id ? persistedById.get(r.id) : null) ||
+        (r.email ? persistedByEmail.get(r.email.toLowerCase()) : null);
+
+      const isValidHex =
+        typeof r.color === 'string' && /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(r.color.trim());
+
+      const persistedValidHex =
+        persisted &&
+        typeof persisted.color === 'string' &&
+        /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(persisted.color.trim());
+
+      const color = isValidHex
+        ? r.color.trim()
+        : persistedValidHex
+          ? persisted.color.trim()
+          : defaultColors[idx % defaultColors.length] || '#2563EB';
+
+      return {
+        ...r,
+        color,
+      };
+    });
+
     return {
       agreementId,
       fields: fieldsList,
-      recipients: recipientsList,
+      recipients: normalizedRecipients,
     };
   }
 

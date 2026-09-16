@@ -432,6 +432,41 @@ describe('AgreementService Unit Tests (Epic INK-8)', () => {
       expect(res.fields).toHaveLength(1);
       expect(res.fields[0].type).toBe('SIGNATURE');
       expect(res.recipients).toHaveLength(1);
+      expect(res.recipients[0].color).toBe('#3B82F6');
+    });
+
+    it('getAgreementFields - normalizes missing recipient color from persisted records and fallback palette', async () => {
+      mockPrisma.agreement.findFirst.mockResolvedValue({
+        id: 'ag-1',
+        organisationId: 'org-1',
+        authorId: 'user-1',
+        fields: {
+          fields: [],
+          recipients: [
+            {
+              id: 'r-persisted',
+              name: 'Alice',
+              email: 'alice@example.com',
+            },
+            {
+              id: 'r-fallback',
+              name: 'Bob',
+              email: 'bob@example.com',
+            },
+          ],
+        },
+        recipients: [
+          {
+            id: 'r-persisted',
+            email: 'alice@example.com',
+            color: '#7C3AED',
+          },
+        ],
+      });
+
+      const res = await service.getAgreementFields('org-1', 'ag-1', 'user-1', 'user');
+      expect(res.recipients[0].color).toBe('#7C3AED');
+      expect(res.recipients[1].color).toBe('#059669'); // 2nd item in defaultColors palette
     });
 
     it('saveAgreementFields - updates fields JSONB and logs audit event', async () => {

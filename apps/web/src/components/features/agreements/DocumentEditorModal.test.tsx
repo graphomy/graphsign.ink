@@ -139,7 +139,7 @@ describe('DocumentEditorModal Component Tests (INK-78 to INK-85, INK-270)', () =
     expect(screen.getByText('✍️ Click to Sign')).toBeDefined();
   });
 
-  it('allows renaming signers and opening send modal on Done (INK-266)', async () => {
+  it('allows renaming signers and opening send modal on Send for Signature (INK-266)', async () => {
     const onSuccessMock = vi.fn();
     const onCloseMock = vi.fn();
 
@@ -156,8 +156,8 @@ describe('DocumentEditorModal Component Tests (INK-78 to INK-85, INK-270)', () =
     fireEvent.change(nameInput, { target: { value: 'Author' } });
     expect(screen.getByDisplayValue('Author')).toBeDefined();
 
-    const doneBtn = screen.getByText('Done');
-    fireEvent.click(doneBtn);
+    const sendBtn = screen.getByRole('button', { name: 'Send for Signature' });
+    fireEvent.click(sendBtn);
 
     // Send modal should open
     await waitFor(() => {
@@ -181,6 +181,45 @@ describe('DocumentEditorModal Component Tests (INK-78 to INK-85, INK-270)', () =
     await waitFor(() => {
       expect(screen.getByTitle('Document PDF Preview')).toBeInTheDocument();
       expect(screen.getByText('In Review')).toBeInTheDocument();
+    });
+  });
+
+  it('supplies fallback color when recipient color is missing from agreement and saves successfully (INK-284)', async () => {
+    const agreementWithMissingColor = {
+      ...mockAgreement,
+      status: 'DECLINED',
+      fields: {
+        fields: [],
+        recipients: [
+          {
+            id: 'recipient-no-color',
+            name: 'Kunal Signer',
+            email: 'kunal@example.com',
+            role: 'signer' as const,
+          },
+        ],
+      },
+    };
+
+    render(
+      <DocumentEditorModal
+        agreement={agreementWithMissingColor}
+        onClose={vi.fn()}
+        onSuccess={vi.fn()}
+      />,
+    );
+
+    const saveDraftBtn = screen.getByText('Save Draft');
+    fireEvent.click(saveDraftBtn);
+
+    await waitFor(() => {
+      expect(fetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/agreements/ag-edit-1/fields'),
+        expect.objectContaining({
+          method: 'PUT',
+          body: expect.stringContaining('"color":"#2563EB"'),
+        }),
+      );
     });
   });
 });
