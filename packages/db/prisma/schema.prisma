@@ -572,4 +572,33 @@ model TsaTrustEntry {
   @@map("tsa_trust_entries")
 }
 
+/// FeatureFlag model for global and tenant-scoped dynamic toggles (FR-015.007).
+model FeatureFlag {
+  id              String    @id @default(uuid()) @db.Uuid
+  key             String    @unique @db.VarChar(100)
+  name            String    @db.VarChar(255)
+  description     String?   @db.VarChar(500)
+  isEnabled       Boolean   @default(false) @map("is_enabled")
+  tenantOverrides Json?     @map("tenant_overrides") @db.JsonB
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
+
+  @@map("feature_flags")
+}
+
+/// PlatformMaintenance model for maintenance state management (FR-015.005 / .006).
+model PlatformMaintenance {
+  id             String    @id @default(uuid()) @db.Uuid
+  isActive       Boolean   @default(false) @map("is_active")
+  message        String?   @default("System maintenance in progress. Please check back shortly.") @db.VarChar(500)
+  scope          String    @default("platform") @db.VarChar(50)
+  targetTenantId String?   @map("target_tenant_id") @db.Uuid
+  activatedBy    String?   @map("activated_by") @db.Uuid
+  activatedAt    DateTime? @map("activated_at") @db.Timestamptz()
+  deactivatedAt  DateTime? @map("deactivated_at") @db.Timestamptz()
+
+  @@map("platform_maintenance")
+}
+
+
 
