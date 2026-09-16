@@ -19,7 +19,13 @@ describe('OrganisationService', () => {
       },
       user: {
         findFirst: vi.fn(),
+        findMany: vi.fn(),
         create: vi.fn(),
+        update: vi.fn(),
+        count: vi.fn(),
+      },
+      auditLog: {
+        findMany: vi.fn(),
         count: vi.fn(),
       },
       organisationInvitation: {
@@ -234,6 +240,151 @@ describe('OrganisationService', () => {
       });
 
       await expect(service.checkStorageQuota('org-1', 200)).rejects.toThrow(ForbiddenError);
+    });
+  });
+
+  describe('exportAuditLogs (INK-286 / FR-014.006)', () => {
+    it('exports audit logs as CSV', async () => {
+      mockPrisma.organisation.findUnique.mockResolvedValue({ id: 'org-1' });
+      mockPrisma.auditLog.findMany.mockResolvedValue([
+        {
+          id: 'log-1',
+          createdAt: new Date('2026-09-16T10:00:00Z'),
+          action: 'LOGIN',
+          resourceType: 'user',
+          resourceId: 'user-1',
+          user: { email: 'admin@acme.com', name: 'Admin' },
+          ipAddress: '127.0.0.1',
+          metadata: { provider: 'password' },
+        },
+      ]);
+
+      const result = await service.exportAuditLogs('org-1', { format: 'csv' });
+      expect(result.contentType).toContain('text/csv');
+      expect(result.data).toContain('ID,Timestamp,Action');
+      expect(result.data).toContain('admin@acme.com');
+      expect(result.filename).toMatch(/audit-logs-org-1-.*\.csv/);
+    });
+
+    it('exports audit logs as JSON', async () => {
+      mockPrisma.organisation.findUnique.mockResolvedValue({ id: 'org-1' });
+      mockPrisma.auditLog.findMany.mockResolvedValue([
+        {
+          id: 'log-1',
+          createdAt: new Date('2026-09-16T10:00:00Z'),
+          action: 'LOGIN',
+          resourceType: 'user',
+          resourceId: 'user-1',
+          user: { id: 'u-1', email: 'admin@acme.com', name: 'Admin' },
+          metadata: null,
+        },
+      ]);
+
+      const result = await service.exportAuditLogs('org-1', { format: 'json' });
+      expect(result.contentType).toBe('application/json');
+      const parsed = JSON.parse(result.data);
+      expect(Array.isArray(parsed)).toBe(true);
+      expect(parsed[0].id).toBe('log-1');
+    });
+  });
+
+  describe('Member Management (INK-286 / FR-014.001)', () => {
+    it('listMembers returns primary organisation members', async () => {
+      mockPrisma.organisation.findUnique.mockResolvedValue({ id: 'org-1' });
+      mockPrisma.user.findMany.mockResolvedValue([
+        {
+          id: 'u-1',
+          email: 'admin@acme.com',
+          name: 'Admin',
+          role: 'org_admin',
+          status: 'active',
+          lastLoginAt: new Date(),
+          createdAt: new Date(),
+        },
+      ]);
+
+      const members = await service.listMembers('org-1');
+      expect(members).toHaveLength(1);
+      expect(members[0].email).toBe('admin@acme.com');
+    });
+
+    it('removeMember deletes member and logs audit event', async () => {
+      mockPrisma.organisation.findUnique.mockResolvedValue({ id: 'org-1' });
+      mockPrisma.user.findFirst.mockResolvedValue({
+        id: 'u-2',
+        email: 'user@acme.com',
+        role: 'user',
+        organisationId: 'org-1',
+      });
+      mockPrisma.user.update.mockResolvedValue({});
+
+      await service.removeMember('org-1', 'admin-1', 'u-2');
+
+      expect(mockPrisma.user.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'u-2' },
+          data: expect.objectContaining({ status: 'suspended' }),
+        }),
+      );
+      expect(mockAuditService.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'ORGANISATION_MEMBER_REMOVED',
+          resourceId: 'u-2',
+        }),
+      );
+    });
+
+    it('removeMember prevents removing oneself', async () => {
+      mockPrisma.organisation.findUnique.mockResolvedValue({ id: 'org-1' });
+      mockPrisma.user.findFirst.mockResolvedValue({
+        id: 'admin-1',
+        email: 'admin@acme.com',
+        role: 'org_admin',
+      });
+
+      await expect(service.removeMember('org-1', 'admin-1', 'admin-1')).rejects.toThrow(
+        'You cannot remove yourself from the organisation.',
+      );
+    });
+
+    it('updateMemberStatus updates status and logs audit event', async () => {
+      mockPrisma.organisation.findUnique.mockResolvedValue({ id: 'org-1' });
+      mockPrisma.user.findFirst.mockResolvedValue({
+        id: 'u-2',
+        email: 'user@acme.com',
+        status: 'active',
+        organisationId: 'org-1',
+      });
+      mockPrisma.user.update.mockResolvedValue({
+        id: 'u-2',
+        email: 'user@acme.com',
+        status: 'suspended',
+      });
+
+      const updated = await service.updateMemberStatus('org-1', 'admin-1', 'u-2', 'suspended');
+      expect(updated.status).toBe('suspended');
+      expect(mockAuditService.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'ORGANISATION_MEMBER_STATUS_UPDATED',
+          metadata: expect.objectContaining({ newStatus: 'suspended' }),
+        }),
+      );
+    });
+  });
+
+  describe('User Quota Enforcement (INK-286 / FR-014.009)', () => {
+    it('throws ForbiddenError when invite exceeds maxUsers quota', async () => {
+      mockPrisma.organisation.findUnique.mockResolvedValue({
+        id: 'org-1',
+        planType: 'teams',
+        maxUsers: 2,
+      });
+      mockPrisma.user.count.mockResolvedValue(2);
+      mockPrisma.organisationInvitation.count.mockResolvedValue(0);
+
+      await expect(
+        service.inviteMember('org-1', 'admin-1', { email: 'new@example.com', role: 'user' }),
+      ).rejects.toThrow(ForbiddenError);
     });
   });
 });

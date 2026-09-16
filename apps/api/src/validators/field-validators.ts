@@ -34,7 +34,11 @@ export const recipientSchema = z.object({
   name: z.string().min(1).max(100),
   email: z.string().email().optional().or(z.literal('')).default(''),
   role: z.enum(['signer', 'approver', 'viewer']).default('signer'),
-  color: z.string().regex(/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/, 'Invalid hex color code'),
+  color: z
+    .string()
+    .regex(/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/, 'Invalid hex color code')
+    .nullish()
+    .transform((val) => val || '#2563EB'),
 });
 
 export const documentFieldSchema = z.object({

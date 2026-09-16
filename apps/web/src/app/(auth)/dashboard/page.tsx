@@ -9,6 +9,15 @@ import { Footer } from '@/components/layout/Footer';
 import { getApiUrl } from '@/lib/api';
 import { formatDate, formatStatus } from '@/lib/date-utils';
 
+interface AgreementRecipient {
+  id?: string;
+  name?: string;
+  email: string;
+  role?: string;
+  status: string;
+  routingOrder?: number;
+}
+
 interface AgreementItem {
   id: string;
   title: string;
@@ -19,6 +28,7 @@ interface AgreementItem {
   createdAt: string;
   updatedAt: string;
   author?: { name?: string; email: string };
+  recipients?: AgreementRecipient[];
 }
 
 const emptySubscribe = () => () => {};
@@ -51,7 +61,7 @@ function DashboardContent() {
       try {
         const token = getToken();
         const [agreementsRes, certsRes] = await Promise.all([
-          fetch(`${getApiUrl()}/api/v1/agreements`, {
+          fetch(`${getApiUrl()}/api/v1/agreements?limit=100`, {
             headers: { Authorization: `Bearer ${token}` },
           }),
           fetch(`${getApiUrl()}/api/v1/certificates`, {
@@ -124,6 +134,25 @@ function DashboardContent() {
         a.reviewerId === currentUserId ||
         (currentUserEmail && a.author?.email !== currentUserEmail)),
   ).length;
+  const pendingSignatureCount = agreements.filter((a) => {
+    const isPendingSigStatus =
+      a.status === 'SENT' || a.status === 'PARTIALLY_SIGNED' || a.status === 'PENDING';
+    if (!isPendingSigStatus) return false;
+    if (a.recipients && a.recipients.length > 0 && currentUserEmail) {
+      const isSignerForUser = a.recipients.some(
+        (r) =>
+          r.email?.trim().toLowerCase() === currentUserEmail.trim().toLowerCase() &&
+          (r.status === 'PENDING' || r.status === 'INVITED'),
+      );
+      if (isSignerForUser) return true;
+      const isAuthorWithPendingSigners =
+        a.author?.email?.trim().toLowerCase() === currentUserEmail.trim().toLowerCase() &&
+        a.recipients.some((r) => r.status === 'PENDING' || r.status === 'INVITED');
+      if (isAuthorWithPendingSigners) return true;
+      return false;
+    }
+    return true;
+  }).length;
   const completedCount = agreements.filter(
     (a) => a.status === 'COMPLETED' || a.status === 'SEALED',
   ).length;
@@ -175,20 +204,26 @@ function DashboardContent() {
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3">
-            <Link
-              href="/agreements?tab=review_required"
-              className="px-4 py-2.5 bg-white border border-neutral-300 hover:bg-neutral-100 text-neutral-800 text-xs font-semibold rounded-lg shadow-sm transition-all flex items-center gap-1.5"
-            >
-              Pending Review
-            </Link>
-            <Link
-              href="/agreements?tab=waiting_for_me"
-              className="px-4 py-2.5 bg-neutral-900 hover:bg-neutral-800 text-white text-xs font-semibold rounded-lg shadow-sm transition-all flex items-center gap-1.5"
-            >
-              Pending Signature
-            </Link>
-          </div>
+          {(reviewCount > 0 || pendingSignatureCount > 0) && (
+            <div className="flex flex-wrap items-center gap-3">
+              {reviewCount > 0 && (
+                <Link
+                  href="/agreements?tab=review_required"
+                  className="px-4 py-2.5 bg-white border border-neutral-300 hover:bg-neutral-100 text-neutral-800 text-xs font-semibold rounded-lg shadow-sm transition-all flex items-center gap-1.5"
+                >
+                  Pending Review ({reviewCount})
+                </Link>
+              )}
+              {pendingSignatureCount > 0 && (
+                <Link
+                  href="/agreements?tab=waiting_for_me"
+                  className="px-4 py-2.5 bg-neutral-900 hover:bg-neutral-800 text-white text-xs font-semibold rounded-lg shadow-sm transition-all flex items-center gap-1.5"
+                >
+                  Pending Signature ({pendingSignatureCount})
+                </Link>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Section Navigation (INK-269) */}

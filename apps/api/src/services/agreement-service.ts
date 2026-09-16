@@ -72,6 +72,31 @@ export class AgreementService {
   }
 
   /**
+   * Checks organisation-level document quota sufficiency (INK-286 / FR-014.009).
+   * Throws ForbiddenError if maximum document count is reached.
+   */
+  private async checkOrganisationDocumentQuota(orgId: string): Promise<void> {
+    if (!this.prisma.organisation || !this.prisma.agreement) return;
+
+    const org = await this.prisma.organisation.findUnique({
+      where: { id: orgId },
+      select: { maxDocuments: true },
+    });
+
+    if (org && org.maxDocuments > 0) {
+      const currentCount = await this.prisma.agreement.count({
+        where: { organisationId: orgId, deletedAt: null },
+      });
+      if (currentCount >= org.maxDocuments) {
+        throw new ForbiddenError(
+          `Organisation document limit reached (maximum: ${org.maxDocuments} documents). ` +
+            'Please delete or archive existing agreements, or upgrade your workspace plan.',
+        );
+      }
+    }
+  }
+
+  /**
    * Updates per-user storage usage after a successful upload (INK-206).
    */
   private async updateUserStorageUsage(userId: string, additionalBytes: number): Promise<void> {
@@ -97,7 +122,8 @@ export class AgreementService {
       );
     }
 
-    // Enforce user storage quota (INK-206)
+    // Enforce user storage quota (INK-206) and organisation document quota (INK-286)
+    await this.checkOrganisationDocumentQuota(orgId);
     if (authorId !== 'unknown') {
       await this.checkUserStorageQuota(authorId, input.fileSize);
     }
@@ -199,6 +225,7 @@ export class AgreementService {
       ? Buffer.byteLength(input.markdownContent, 'utf8')
       : DEFAULT_SCRATCH_SIZE_BYTES;
 
+    await this.checkOrganisationDocumentQuota(orgId);
     if (authorId !== 'unknown') {
       await this.checkUserStorageQuota(authorId, estimatedSizeBytes);
     }
@@ -1052,6 +1079,7 @@ export class AgreementService {
   async getAgreementFields(orgId: string, agreementId: string, userId?: string, userRole?: string) {
     const agreement = await this.prisma.agreement.findFirst({
       where: { id: agreementId, organisationId: orgId, deletedAt: null },
+      include: { recipients: true },
     });
 
     if (!agreement) {
@@ -1078,10 +1106,54 @@ export class AgreementService {
         : [];
     const recipientsList = Array.isArray(fieldsData.recipients) ? fieldsData.recipients : [];
 
+    const defaultColors = ['#2563EB', '#059669', '#D97706', '#7C3AED', '#DB2777', '#0891B2'];
+    const persistedRecipients = (agreement as any).recipients || [];
+    const persistedById = new Map<string, any>(persistedRecipients.map((r: any) => [r.id, r]));
+    const persistedByEmail = new Map<string, any>(
+      persistedRecipients.map((r: any) => [r.email?.toLowerCase(), r]),
+    );
+
+    const recipientsSource =
+      recipientsList.length > 0
+        ? recipientsList
+        : persistedRecipients.map((pr: any) => ({
+            id: pr.id,
+            name: pr.name,
+            email: pr.email,
+            role: pr.role,
+            routingOrder: pr.routingOrder,
+            color: pr.color,
+          }));
+
+    const normalizedRecipients = recipientsSource.map((r: any, idx: number) => {
+      const persisted =
+        (r.id ? persistedById.get(r.id) : null) ||
+        (r.email ? persistedByEmail.get(r.email.toLowerCase()) : null);
+
+      const isValidHex =
+        typeof r.color === 'string' && /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(r.color.trim());
+
+      const persistedValidHex =
+        persisted &&
+        typeof persisted.color === 'string' &&
+        /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(persisted.color.trim());
+
+      const color = isValidHex
+        ? r.color.trim()
+        : persistedValidHex
+          ? persisted.color.trim()
+          : defaultColors[idx % defaultColors.length] || '#2563EB';
+
+      return {
+        ...r,
+        color,
+      };
+    });
+
     return {
       agreementId,
       fields: fieldsList,
-      recipients: recipientsList,
+      recipients: normalizedRecipients,
     };
   }
 

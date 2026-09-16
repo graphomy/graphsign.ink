@@ -122,6 +122,18 @@ export const upgradeToTeamsSchema = z.object({
   companyName: z.string().min(2, 'Company name must be at least 2 characters').max(255).optional(),
 });
 
+export const auditLogExportSchema = z.object({
+  format: z.enum(['csv', 'json']).default('csv'),
+  action: z.string().optional(),
+  userId: z.string().optional(),
+  startDate: z.string().optional(),
+  endDate: z.string().optional(),
+});
+
+export const updateMemberStatusSchema = z.object({
+  status: z.enum(['active', 'suspended']),
+});
+
 export type CreateOrganisationInput = z.infer<typeof createOrganisationSchema>;
 export type InviteMemberInput = z.infer<typeof inviteMemberSchema>;
 export type AcceptInvitationInput = z.infer<typeof acceptInvitationSchema>;
@@ -134,4 +146,6 @@ export type CreateTeamInput = z.infer<typeof createTeamSchema>;
 export type CreateCustomRoleInput = z.infer<typeof createCustomRoleSchema>;
 export type AddDomainInput = z.infer<typeof addDomainSchema>;
 export type AuditLogQueryInput = z.infer<typeof auditLogQuerySchema>;
+export type AuditLogExportInput = z.infer<typeof auditLogExportSchema>;
+export type UpdateMemberStatusInput = z.infer<typeof updateMemberStatusSchema>;
 export type UpgradeToTeamsInput = z.infer<typeof upgradeToTeamsSchema>;

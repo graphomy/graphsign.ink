@@ -178,5 +178,107 @@ describe('OrganisationSettingsPage', () => {
     expect(screen.getByTestId('audit-section')).toBeInTheDocument();
     expect(screen.getByText('DOCUMENT_CREATED')).toBeInTheDocument();
     expect(screen.getByText('Page 1 of 1')).toBeInTheDocument();
+    expect(screen.getByTestId('export-audit-csv')).toBeInTheDocument();
+    expect(screen.getByTestId('export-audit-json')).toBeInTheDocument();
+  });
+
+  it('renders active workspace members with management controls in members tab', async () => {
+    vi.mocked(global.fetch).mockImplementation((url: RequestInfo | URL) => {
+      const urlStr = url.toString();
+      if (urlStr.includes('/organisations/me/members')) {
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve([
+              {
+                id: 'user-1',
+                name: 'Alice Admin',
+                email: 'alice@acme.com',
+                role: 'org_admin',
+                status: 'active',
+                isPrimary: true,
+                joinedAt: new Date().toISOString(),
+              },
+              {
+                id: 'user-2',
+                name: 'Bob Signer',
+                email: 'bob@acme.com',
+                role: 'signer',
+                status: 'suspended',
+                isPrimary: false,
+                joinedAt: new Date().toISOString(),
+              },
+            ]),
+        } as Response);
+      }
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({ name: 'Acme Legal' }),
+      } as Response);
+    });
+
+    render(<OrganisationSettingsPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('tab-members')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByTestId('tab-members'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Active Workspace Members (2)')).toBeInTheDocument();
+    });
+
+    expect(screen.getByText('Alice Admin')).toBeInTheDocument();
+    expect(screen.getByText('Bob Signer')).toBeInTheDocument();
+    expect(screen.getByTestId('toggle-status-user-1')).toHaveTextContent('Suspend');
+    expect(screen.getByTestId('toggle-status-user-2')).toHaveTextContent('Activate');
+    expect(screen.getByTestId('remove-member-user-1')).toBeInTheDocument();
+  });
+
+  it('renders verify DNS button for unverified custom domains', async () => {
+    vi.mocked(global.fetch).mockImplementation((url: RequestInfo | URL) => {
+      const urlStr = url.toString();
+      if (urlStr.includes('/organisations/domains')) {
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve([
+              {
+                id: 'dom-1',
+                domain: 'sign.acme.com',
+                verificationToken: 'graphsign-verify=abc123token',
+                status: 'pending',
+              },
+              {
+                id: 'dom-2',
+                domain: 'legal.acme.com',
+                verificationToken: 'graphsign-verify=xyz789token',
+                status: 'verified',
+                verifiedAt: new Date().toISOString(),
+              },
+            ]),
+        } as Response);
+      }
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({ name: 'Acme Legal' }),
+      } as Response);
+    });
+
+    render(<OrganisationSettingsPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('tab-domains')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByTestId('tab-domains'));
+
+    await waitFor(() => {
+      expect(screen.getByText('sign.acme.com')).toBeInTheDocument();
+    });
+
+    expect(screen.getByTestId('verify-domain-dom-1')).toBeInTheDocument();
+    expect(screen.queryByTestId('verify-domain-dom-2')).not.toBeInTheDocument();
   });
 });

@@ -411,6 +411,116 @@ describe('Agreement Routes Integration Tests (Epic INK-8)', () => {
     );
   });
 
+  it('PUT /api/v1/agreements/:id/fields - returns contextual error when recipient color is invalid (INK-284)', async () => {
+    const payload = {
+      fields: [],
+      recipients: [
+        {
+          id: 'r-1',
+          name: 'Jane Signer',
+          email: 'jane@example.com',
+          color: 'invalid-color-value',
+        },
+      ],
+    };
+
+    const res = await app.request('/api/v1/agreements/ag-fields-1/fields', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as any;
+    expect(body.error?.message).toBe('Recipient 1 has an invalid color.');
+  });
+
+  it('PUT /api/v1/agreements/:id/fields - returns contextual error when field recipient is missing (INK-284)', async () => {
+    const payload = {
+      fields: [
+        {
+          id: 'f-1',
+          type: 'SIGNATURE',
+          pageNumber: 1,
+          x: 10,
+          y: 20,
+          width: 20,
+          height: 10,
+          recipientId: '',
+        },
+      ],
+      recipients: [],
+    };
+
+    const res = await app.request('/api/v1/agreements/ag-fields-1/fields', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as any;
+    expect(body.error?.message).toBe('Field 1 must be assigned to a recipient.');
+  });
+
+  it('PUT /api/v1/agreements/:id/fields - defaults omitted color to #2563EB and saves (INK-284)', async () => {
+    mockAgreementService.saveAgreementFields = vi.fn().mockResolvedValue({
+      agreementId: 'ag-fields-1',
+      fields: [],
+      recipients: [
+        {
+          id: 'r-1',
+          name: 'Jane Signer',
+          email: 'jane@example.com',
+          role: 'signer',
+          color: '#2563EB',
+        },
+      ],
+    });
+
+    const payload = {
+      fields: [],
+      recipients: [
+        {
+          id: 'r-1',
+          name: 'Jane Signer',
+          email: 'jane@example.com',
+        },
+      ],
+    };
+
+    const res = await app.request('/api/v1/agreements/ag-fields-1/fields', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    expect(res.status).toBe(200);
+    expect(mockAgreementService.saveAgreementFields).toHaveBeenCalledWith(
+      'org-123',
+      'user-123',
+      'ag-fields-1',
+      expect.objectContaining({
+        recipients: [
+          expect.objectContaining({
+            id: 'r-1',
+            color: '#2563EB',
+          }),
+        ],
+      }),
+      'sender',
+    );
+  });
+
   it('DELETE /api/v1/agreements/:id - deletes agreement record (INK-271)', async () => {
     mockAgreementService.deleteAgreement.mockResolvedValue({
       success: true,

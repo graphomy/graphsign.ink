@@ -48,6 +48,7 @@ export function SendAgreementModal({
         ...r,
         email: r.email && !r.email.endsWith('@example.com') ? r.email : '',
         routingOrder: r.routingOrder || idx + 1,
+        color: r.color || '#2563EB',
       }));
     }
     return [

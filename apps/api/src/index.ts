@@ -16,6 +16,8 @@ import { createSigningRoutes } from './routes/signing.js';
 import { createPublicVerifyRoutes } from './routes/verify.js';
 import { createCscRoutes } from './routes/csc.js';
 import { createTrustStoreRoutes } from './routes/trust-store.js';
+import { createFeatureFlagRoutes } from './routes/feature-flags.js';
+import { maintenanceMiddleware } from './middleware/maintenance-middleware.js';
 
 /** Cloudflare Worker environment bindings. */
 export type Env = {
@@ -106,6 +108,9 @@ app.use('*', async (c, next) => {
 // Health check
 app.get('/health', (c) => c.json({ status: 'ok', timestamp: new Date().toISOString() }));
 
+// Maintenance mode write guard (FR-015)
+app.use('/api/v1/*', maintenanceMiddleware());
+
 // API v1 routes
 app.route('/api/v1/auth', createAuthRoutes());
 app.route('/api/v1/organisations', createOrganisationRoutes());
@@ -116,6 +121,7 @@ app.route('/api/v1/agreements', createWorkflowRoutes());
 app.route('/api/v1/sign', createSignRoutes());
 app.route('/api/v1/templates', createTemplateRoutes());
 app.route('/api/v1/admin', createAdminRoutes());
+app.route('/api/v1/feature-flags', createFeatureFlagRoutes());
 app.route('/api/v1/search', createSearchRoutes());
 app.route('/api/v1/certificates', createCertificateRoutes());
 app.route('/api/v1/signing', createSigningRoutes());

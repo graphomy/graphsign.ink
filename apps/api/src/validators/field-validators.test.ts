@@ -121,5 +121,48 @@ describe('Field Validators Unit Tests (INK-78 to INK-85)', () => {
       const result = saveDocumentFieldsSchema.safeParse(payload);
       expect(result.success).toBe(true);
     });
+
+    it('defaults omitted or null recipient color to #2563EB and preserves valid custom color', () => {
+      const payload = {
+        recipients: [
+          {
+            id: 'recipient-1',
+            name: 'Signer 1',
+            email: 'signer1@example.com',
+          },
+          {
+            id: 'recipient-2',
+            name: 'Signer 2',
+            email: 'signer2@example.com',
+            color: '#059669',
+          },
+        ],
+        fields: [],
+      };
+      const result = saveDocumentFieldsSchema.safeParse(payload);
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.recipients[0]?.color).toBe('#2563EB');
+        expect(result.data.recipients[1]?.color).toBe('#059669');
+      }
+    });
+
+    it('rejects invalid recipient color format', () => {
+      const payload = {
+        recipients: [
+          {
+            id: 'recipient-1',
+            name: 'Signer 1',
+            color: 'not-a-color',
+          },
+        ],
+        fields: [],
+      };
+      const result = saveDocumentFieldsSchema.safeParse(payload);
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.issues[0]?.message).toBe('Invalid hex color code');
+      }
+    });
   });
 });
