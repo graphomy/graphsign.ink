@@ -81,7 +81,9 @@ export function maintenanceMiddleware(options?: MaintenanceMiddlewareOptions): M
         {
           error: {
             code: 'MAINTENANCE_MODE',
-            message: state.message || 'System maintenance in progress. State-changing actions are temporarily blocked.',
+            message:
+              state.message ||
+              'System maintenance in progress. State-changing actions are temporarily blocked.',
             scope: state.scope,
           },
         },

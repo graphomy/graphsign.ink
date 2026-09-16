@@ -56,7 +56,8 @@ export function createAdminRoutes(deps?: AdminDeps) {
     const audit = deps?.audit || new PrismaAuditService(prisma);
     const configService = deps?.configService || new PlatformConfigService(prisma, audit);
     const healthService = deps?.healthService || new PlatformHealthService(prisma);
-    const maintenanceService = deps?.maintenanceService || new PlatformMaintenanceService(prisma, audit);
+    const maintenanceService =
+      deps?.maintenanceService || new PlatformMaintenanceService(prisma, audit);
     const featureFlagService = deps?.featureFlagService || new FeatureFlagService(prisma, audit);
 
     return { prisma, audit, configService, healthService, maintenanceService, featureFlagService };

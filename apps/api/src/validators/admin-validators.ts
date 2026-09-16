@@ -66,4 +66,3 @@ export type CreateFeatureFlagInput = z.infer<typeof createFeatureFlagSchema>;
 export type UpdateFeatureFlagInput = z.infer<typeof updateFeatureFlagSchema>;
 export type SetTenantFeatureFlagOverrideInput = z.infer<typeof setTenantFeatureFlagOverrideSchema>;
 export type SetMaintenanceModeInput = z.infer<typeof setMaintenanceModeSchema>;
-

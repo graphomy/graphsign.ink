@@ -507,7 +507,9 @@ function OrganisationSettingsContent() {
       if (res.ok) {
         setDomains((prev) =>
           prev.map((d) =>
-            d.id === domainId ? { ...d, status: 'verified', verifiedAt: new Date().toISOString() } : d,
+            d.id === domainId
+              ? { ...d, status: 'verified', verifiedAt: new Date().toISOString() }
+              : d,
           ),
         );
         setMessage(data?.message || 'Domain verified successfully.');
@@ -1425,7 +1427,10 @@ function OrganisationSettingsContent() {
                             </div>
                             <p className="text-xs text-neutral-500 mt-0.5">{m.email}</p>
                             <p className="text-[11px] text-neutral-400 mt-0.5">
-                              Role: <span className="font-semibold text-neutral-700 font-mono">{m.role}</span>
+                              Role:{' '}
+                              <span className="font-semibold text-neutral-700 font-mono">
+                                {m.role}
+                              </span>
                               {m.joinedAt && ` • Joined ${formatDateTime(m.joinedAt)}`}
                             </p>
                           </div>

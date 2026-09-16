@@ -371,7 +371,10 @@ describe('Admin Routes Integration Tests (Epic INK-61 & INK-65)', () => {
         Authorization: `Bearer ${superAdminToken}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ organisationId: '00000000-0000-0000-0000-000000000001', isEnabled: false }),
+      body: JSON.stringify({
+        organisationId: '00000000-0000-0000-0000-000000000001',
+        isEnabled: false,
+      }),
     });
     expect(resOverride.status).toBe(200);
   });

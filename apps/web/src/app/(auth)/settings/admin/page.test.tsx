@@ -174,9 +174,7 @@ describe('AdminDashboardPage Control Plane Unit Tests (FR-015 / INK-287)', () =>
     fireEvent.click(screen.getByText('Feature Flags'));
 
     await waitFor(() => {
-      expect(
-        screen.getByText('Platform Feature Flags & Progressive Rollouts'),
-      ).toBeInTheDocument();
+      expect(screen.getByText('Platform Feature Flags & Progressive Rollouts')).toBeInTheDocument();
       expect(screen.getByText('QES Signatures')).toBeInTheDocument();
       expect(screen.getByText('qes_signatures')).toBeInTheDocument();
     });

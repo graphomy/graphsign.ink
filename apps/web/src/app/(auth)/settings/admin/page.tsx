@@ -295,7 +295,8 @@ export default function AdminDashboardPage() {
         },
         body: JSON.stringify({
           isActive: nextActive,
-          message: maintenanceInputMessage || 'System maintenance in progress. Please check back shortly.',
+          message:
+            maintenanceInputMessage || 'System maintenance in progress. Please check back shortly.',
           scope: maintenanceScope,
         }),
       });
@@ -482,14 +483,17 @@ export default function AdminDashboardPage() {
     setMessage(null);
     setError(null);
     try {
-      const res = await fetch(`${getApiUrl()}/api/v1/admin/feature-flags/${encodeURIComponent(key)}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${getToken()}`,
+      const res = await fetch(
+        `${getApiUrl()}/api/v1/admin/feature-flags/${encodeURIComponent(key)}`,
+        {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${getToken()}`,
+          },
+          body: JSON.stringify({ isEnabled: !currentEnabled }),
         },
-        body: JSON.stringify({ isEnabled: !currentEnabled }),
-      });
+      );
 
       if (res.ok) {
         setMessage(`Feature flag '${key}' updated to ${!currentEnabled ? 'ENABLED' : 'DISABLED'}.`);
@@ -508,10 +512,13 @@ export default function AdminDashboardPage() {
     setMessage(null);
     setError(null);
     try {
-      const res = await fetch(`${getApiUrl()}/api/v1/admin/feature-flags/${encodeURIComponent(key)}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${getToken()}` },
-      });
+      const res = await fetch(
+        `${getApiUrl()}/api/v1/admin/feature-flags/${encodeURIComponent(key)}`,
+        {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${getToken()}` },
+        },
+      );
 
       if (res.ok) {
         setMessage(`Feature flag '${key}' deleted.`);
@@ -639,7 +646,8 @@ export default function AdminDashboardPage() {
                 )}
               </div>
               <p className="text-xs text-neutral-600 mt-1">
-                Centralized platform governance: tenants directory, operational health, feature flags, maintenance controls, and privileged audit logs.
+                Centralized platform governance: tenants directory, operational health, feature
+                flags, maintenance controls, and privileged audit logs.
               </p>
             </div>
 
@@ -656,9 +664,7 @@ export default function AdminDashboardPage() {
               >
                 <span
                   className={`w-2 h-2 rounded-full ${
-                    health?.status === 'healthy'
-                      ? 'bg-emerald-500 animate-ping'
-                      : 'bg-amber-500'
+                    health?.status === 'healthy' ? 'bg-emerald-500 animate-ping' : 'bg-amber-500'
                   }`}
                 />
                 <span>
@@ -682,7 +688,10 @@ export default function AdminDashboardPage() {
           {message && (
             <div className="p-3.5 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold rounded-xl flex items-center justify-between">
               <span>✓ {message}</span>
-              <button onClick={() => setMessage(null)} className="text-emerald-600 hover:text-emerald-900">
+              <button
+                onClick={() => setMessage(null)}
+                className="text-emerald-600 hover:text-emerald-900"
+              >
                 ✕
               </button>
             </div>
@@ -784,7 +793,8 @@ export default function AdminDashboardPage() {
                       Platform Runtime Telemetry & Diagnostics
                     </h2>
                     <p className="text-xs text-neutral-500 mt-0.5">
-                      Operational health status of core microservices, database connectivity, and runtime metrics.
+                      Operational health status of core microservices, database connectivity, and
+                      runtime metrics.
                     </p>
                   </div>
                   <span className="text-[11px] text-neutral-400 font-mono">
@@ -795,7 +805,9 @@ export default function AdminDashboardPage() {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
                   <div className="p-4 border border-neutral-200 rounded-xl bg-neutral-50/50 space-y-2">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-neutral-800">Database (Postgres)</span>
+                      <span className="text-xs font-bold text-neutral-800">
+                        Database (Postgres)
+                      </span>
                       <span
                         className={`px-2 py-0.5 rounded text-[10px] font-extrabold uppercase ${
                           health?.database.status === 'connected'
@@ -807,7 +819,8 @@ export default function AdminDashboardPage() {
                       </span>
                     </div>
                     <div className="text-xs text-neutral-600 font-mono">
-                      Latency: <span className="font-bold">{health?.database.latencyMs ?? '—'} ms</span>
+                      Latency:{' '}
+                      <span className="font-bold">{health?.database.latencyMs ?? '—'} ms</span>
                     </div>
                     {health?.database.error && (
                       <div className="text-[10px] text-red-600">{health.database.error}</div>
@@ -822,7 +835,10 @@ export default function AdminDashboardPage() {
                       </span>
                     </div>
                     <div className="text-xs text-neutral-600 font-mono">
-                      Uptime: <span className="font-bold">{health ? formatDuration(health.uptimeSeconds) : '—'}</span>
+                      Uptime:{' '}
+                      <span className="font-bold">
+                        {health ? formatDuration(health.uptimeSeconds) : '—'}
+                      </span>
                     </div>
                   </div>
 
@@ -834,7 +850,8 @@ export default function AdminDashboardPage() {
                       </span>
                     </div>
                     <div className="text-xs text-neutral-600 font-mono">
-                      RSS: <span className="font-bold">{formatBytes(health?.memory.rssBytes)}</span> | Heap:{' '}
+                      RSS: <span className="font-bold">{formatBytes(health?.memory.rssBytes)}</span>{' '}
+                      | Heap:{' '}
                       <span className="font-bold">{formatBytes(health?.memory.heapUsedBytes)}</span>
                     </div>
                   </div>
@@ -852,7 +869,8 @@ export default function AdminDashboardPage() {
                     Workspace Tenants Directory
                   </h2>
                   <p className="text-xs text-neutral-500 mt-0.5">
-                    Manage tenant workspaces, override user/storage quotas, or suspend non-compliant tenants.
+                    Manage tenant workspaces, override user/storage quotas, or suspend non-compliant
+                    tenants.
                   </p>
                 </div>
 
@@ -923,7 +941,8 @@ export default function AdminDashboardPage() {
                               {org.documentCount} / {org.maxDocuments}
                             </td>
                             <td className="py-3 px-4 font-mono text-neutral-700">
-                              {formatBytes(org.storageUsedBytes)} / {formatBytes(org.storageQuotaBytes)}
+                              {formatBytes(org.storageUsedBytes)} /{' '}
+                              {formatBytes(org.storageQuotaBytes)}
                             </td>
                             <td className="py-3 px-4 text-right space-x-2">
                               <button
@@ -932,7 +951,9 @@ export default function AdminDashboardPage() {
                                   setOverrideUsers(org.maxUsers);
                                   setOverrideDocs(org.maxDocuments);
                                   setOverrideStorageMb(
-                                    Math.round(parseInt(org.storageQuotaBytes || '0', 10) / (1024 * 1024)),
+                                    Math.round(
+                                      parseInt(org.storageQuotaBytes || '0', 10) / (1024 * 1024),
+                                    ),
                                   );
                                   setOverrideReason('');
                                   setOverrideModalOpen(true);
@@ -999,7 +1020,9 @@ export default function AdminDashboardPage() {
                   Platform Maintenance Mode Control
                 </h2>
                 <p className="text-xs text-neutral-500 mt-0.5">
-                  When active, state-mutating requests (POST, PATCH, DELETE) return HTTP 503 Maintenance Mode. Read-only GET queries and Super Admin access remain fully permitted.
+                  When active, state-mutating requests (POST, PATCH, DELETE) return HTTP 503
+                  Maintenance Mode. Read-only GET queries and Super Admin access remain fully
+                  permitted.
                 </p>
               </div>
 
@@ -1018,7 +1041,8 @@ export default function AdminDashboardPage() {
                     </div>
                     {maintenance.activatedAt && (
                       <div className="text-[11px] text-neutral-500">
-                        Activated at: {formatDate(maintenance.activatedAt)} by {maintenance.activatedBy || 'Super Admin'}
+                        Activated at: {formatDate(maintenance.activatedAt)} by{' '}
+                        {maintenance.activatedBy || 'Super Admin'}
                       </div>
                     )}
                   </div>
@@ -1081,7 +1105,8 @@ export default function AdminDashboardPage() {
                     Platform Feature Flags & Progressive Rollouts
                   </h2>
                   <p className="text-xs text-neutral-500 mt-0.5">
-                    Toggle capabilities dynamically without code deployments. Supports tenant-specific overrides.
+                    Toggle capabilities dynamically without code deployments. Supports
+                    tenant-specific overrides.
                   </p>
                 </div>
 
@@ -1120,7 +1145,9 @@ export default function AdminDashboardPage() {
                           <tr key={flag.id} className="hover:bg-neutral-50/80 transition-colors">
                             <td className="py-3 px-4">
                               <div className="font-bold text-neutral-900">{flag.name}</div>
-                              <div className="text-[11px] text-neutral-500 font-mono">{flag.key}</div>
+                              <div className="text-[11px] text-neutral-500 font-mono">
+                                {flag.key}
+                              </div>
                             </td>
                             <td className="py-3 px-4 text-neutral-600 text-xs max-w-md">
                               {flag.description || '—'}
@@ -1172,7 +1199,8 @@ export default function AdminDashboardPage() {
                   Global Platform Limits & Quotas
                 </h2>
                 <p className="text-xs text-neutral-500 mt-0.5">
-                  Update product limits dynamically. Changes take effect immediately across all users and organisations.
+                  Update product limits dynamically. Changes take effect immediately across all
+                  users and organisations.
                 </p>
               </div>
 
@@ -1183,7 +1211,9 @@ export default function AdminDashboardPage() {
                     className="border border-neutral-200 rounded-xl p-4 bg-neutral-50/50 space-y-3"
                   >
                     <div>
-                      <label className="text-xs font-bold text-neutral-800 block">{cfg.label}</label>
+                      <label className="text-xs font-bold text-neutral-800 block">
+                        {cfg.label}
+                      </label>
                       <p className="text-[11px] text-neutral-500 mt-0.5 leading-relaxed">
                         {cfg.description}
                       </p>
@@ -1216,7 +1246,9 @@ export default function AdminDashboardPage() {
                       </span>
                       <span>
                         Default:{' '}
-                        {cfg.key.includes('bytes') ? formatBytes(cfg.defaultValue) : cfg.defaultValue}
+                        {cfg.key.includes('bytes')
+                          ? formatBytes(cfg.defaultValue)
+                          : cfg.defaultValue}
                       </span>
                     </div>
                   </div>
@@ -1286,7 +1318,9 @@ export default function AdminDashboardPage() {
                               <div className="font-semibold text-neutral-900">
                                 {u.name || 'Unnamed User'}
                               </div>
-                              <div className="text-[11px] text-neutral-500 font-mono">{u.email}</div>
+                              <div className="text-[11px] text-neutral-500 font-mono">
+                                {u.email}
+                              </div>
                             </td>
                             <td className="py-3 px-4">
                               <div className="font-medium text-neutral-800">
@@ -1386,7 +1420,8 @@ export default function AdminDashboardPage() {
                   Privileged Super Admin Audit Logs
                 </h2>
                 <p className="text-xs text-neutral-500 mt-0.5">
-                  Immutable forensic audit trail of all platform-level actions, maintenance mode shifts, and quota adjustments.
+                  Immutable forensic audit trail of all platform-level actions, maintenance mode
+                  shifts, and quota adjustments.
                 </p>
               </div>
 
@@ -1501,7 +1536,9 @@ export default function AdminDashboardPage() {
                   </div>
 
                   <div>
-                    <label className="font-bold text-neutral-700 block mb-1">Storage Quota (MB)</label>
+                    <label className="font-bold text-neutral-700 block mb-1">
+                      Storage Quota (MB)
+                    </label>
                     <input
                       type="number"
                       value={overrideStorageMb}
@@ -1547,7 +1584,8 @@ export default function AdminDashboardPage() {
               <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
                 <div className="flex items-center justify-between border-b pb-3">
                   <h3 className="text-base font-bold text-neutral-900">
-                    {selectedOrg.status === 'suspended' ? 'Restore Tenant' : 'Suspend Tenant'}: {selectedOrg.name}
+                    {selectedOrg.status === 'suspended' ? 'Restore Tenant' : 'Suspend Tenant'}:{' '}
+                    {selectedOrg.name}
                   </h3>
                   <button
                     onClick={() => setSuspendModalOpen(false)}
