@@ -46,8 +46,8 @@ importers:
         version: 3.25.76
     devDependencies:
       '@cloudflare/workers-types':
-        specifier: ^5.20260729.1
-        version: 5.20260812.1
+        specifier: ^5.20260911.1
+        version: 5.20260911.1
       '@types/node':
         specifier: ^26.2.0
         version: 26.2.0
@@ -65,7 +65,7 @@ importers:
         version: 3.2.6(@types/node@26.2.0)(jiti@2.7.0)(jsdom@30.0.1)(lightningcss@1.32.0)
       wrangler:
         specifier: ^4.115.0
-        version: 4.122.0(@cloudflare/workers-types@5.20260812.1)
+        version: 4.122.0(@cloudflare/workers-types@5.20260911.1)
 
   apps/web:
     dependencies:
@@ -138,7 +138,7 @@ importers:
         version: 3.2.6(@types/node@26.2.0)(jiti@2.7.0)(jsdom@30.0.1)(lightningcss@1.32.0)
       wrangler:
         specifier: ^4.115.0
-        version: 4.122.0(@cloudflare/workers-types@5.20260812.1)
+        version: 4.122.0(@cloudflare/workers-types@5.20260911.1)
 
   packages/db:
     dependencies:
@@ -340,8 +340,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@cloudflare/workers-types@5.20260812.1':
-    resolution: {integrity: sha512-eG2aQdUWH8RYEubpBjUE98L2G57JYzGEcI8PgROTjt9YjunbEnPBHP4371Usj8v8pTWcXtbOmI+LRCXF4KhJgQ==}
+  '@cloudflare/workers-types@5.20260911.1':
+    resolution: {integrity: sha512-yiAvknjulcU85B3yB4aKOn9+l+garWP+AbHgsdCFckeRYDdhZ1rPULi64BDf52R3VTaKqxi47kF+o9ZbjsCt5g==}
 
   '@cspotcode/source-map-support@0.8.1':
     resolution: {integrity: sha512-IchNf6dN4tHoMFIn/7OE8LWZ19Y6q/67Bmf6vnGREv8RSbBVb9LPJxEcnwrcwX6ixSvaiGoomAUvu4YSxXrVgw==}
@@ -2450,6 +2450,7 @@ packages:
   eslint@9.39.5:
     resolution: {integrity: sha512-DgZS62aPLXKlnxILS/AYCoRvHaZeXceIzlXPkkGGzJWSow1aEk0lbTlxUSlyjC8jcaKxAdOnTDz+o1JFSBsyjw==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
+    deprecated: This version is no longer supported. Please see https://eslint.org/version-support for other options.
     hasBin: true
     peerDependencies:
       jiti: '*'
@@ -3265,6 +3266,11 @@ packages:
 
   prettier@3.9.6:
     resolution: {integrity: sha512-OpN0zzVdiaiAhxpuuj5efpIS4sY9j7bY6uR5mnj5yPzGkdkjNKSJeUThPb60Jw29QuAZgA4o+/iB49kFiaBX6g==}
+    engines: {node: '>=14'}
+    hasBin: true
+
+  prettier@3.9.7:
+    resolution: {integrity: sha512-T3mF5P7HFzZVLDQuCUNtJj6WK1pcpLMweMNUVwGb01bLNkH9AkKxtZvmInw8K6bnn2O3d6/5RHl6zSHiBAD0Og==}
     engines: {node: '>=14'}
     hasBin: true
 
@@ -4086,7 +4092,7 @@ snapshots:
       package-manager-manager: 0.2.0
       pcre-to-regexp: 1.1.0
       semver: 7.8.5
-      wrangler: 4.122.0(@cloudflare/workers-types@5.20260812.1)
+      wrangler: 4.122.0(@cloudflare/workers-types@5.20260911.1)
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
@@ -4127,7 +4133,7 @@ snapshots:
   '@cloudflare/workerd-windows-64@1.20260811.1':
     optional: true
 
-  '@cloudflare/workers-types@5.20260812.1': {}
+  '@cloudflare/workers-types@5.20260911.1': {}
 
   '@cspotcode/source-map-support@0.8.1':
     dependencies:
@@ -4764,7 +4770,7 @@ snapshots:
   '@react-email/render@1.1.2(react-dom@19.2.8(react@19.2.8))(react@19.2.8)':
     dependencies:
       html-to-text: 9.0.5
-      prettier: 3.9.6
+      prettier: 3.9.7
       react: 19.2.8
       react-dom: 19.2.8(react@19.2.8)
       react-promise-suspense: 0.3.4
@@ -6896,6 +6902,9 @@ snapshots:
 
   prettier@3.9.6: {}
 
+  prettier@3.9.7:
+    optional: true
+
   pretty-format@27.5.1:
     dependencies:
       ansi-regex: 5.0.1
@@ -7665,7 +7674,7 @@ snapshots:
       '@cloudflare/workerd-linux-arm64': 1.20260811.1
       '@cloudflare/workerd-windows-64': 1.20260811.1
 
-  wrangler@4.122.0(@cloudflare/workers-types@5.20260812.1):
+  wrangler@4.122.0(@cloudflare/workers-types@5.20260911.1):
     dependencies:
       '@cloudflare/kv-asset-handler': 0.5.0
       '@cloudflare/unenv-preset': 2.16.1(unenv@2.0.0-rc.24)(workerd@1.20260811.1)
@@ -7676,7 +7685,7 @@ snapshots:
       unenv: 2.0.0-rc.24
       workerd: 1.20260811.1
     optionalDependencies:
-      '@cloudflare/workers-types': 5.20260812.1
+      '@cloudflare/workers-types': 5.20260911.1
       fsevents: 2.3.3
     transitivePeerDependencies:
       - bufferutil
