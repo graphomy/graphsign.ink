@@ -6,6 +6,7 @@ import { HeaderNav } from '@/components/layout/HeaderNav';
 import { Footer } from '@/components/layout/Footer';
 import { getApiUrl } from '@/lib/api';
 import { formatDateTime } from '@/lib/date-utils';
+import { Webhook, ExternalLink } from 'lucide-react';
 
 type AdminTab = 'overview' | 'tenants' | 'maintenance' | 'flags' | 'limits' | 'users' | 'audit';
 
@@ -651,8 +652,20 @@ export default function AdminDashboardPage() {
               </p>
             </div>
 
-            {/* Quick Health Indicator Pill */}
+            {/* Quick Actions & Health Indicator Pill */}
             <div className="flex items-center gap-3">
+              <a
+                href="/settings/integrations"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-neutral-700 bg-white border border-neutral-200 rounded-xl hover:bg-neutral-50 hover:text-neutral-900 shadow-sm transition-all"
+                title="Open Integrations & Developer APIs in a new tab"
+              >
+                <Webhook className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Integrations & APIs</span>
+                <ExternalLink className="w-3 h-3 text-neutral-400" />
+              </a>
+
               <div
                 className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-bold shadow-sm ${
                   health?.status === 'healthy'
@@ -729,6 +742,18 @@ export default function AdminDashboardPage() {
                 {tab.label}
               </button>
             ))}
+
+            <a
+              href="/settings/integrations"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="ml-auto inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100/60 rounded-t-xl transition-all whitespace-nowrap"
+              title="Open Integrations & Developer APIs in a new tab"
+            >
+              <Webhook className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Integrations & APIs</span>
+              <ExternalLink className="w-3 h-3 text-neutral-400" />
+            </a>
           </div>
 
           {/* TAB 1: OVERVIEW & OPERATIONAL HEALTH */}
