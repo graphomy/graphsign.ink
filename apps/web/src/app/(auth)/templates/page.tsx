@@ -17,6 +17,8 @@ import {
   TemplateFilterState,
 } from '@/components/features/templates/TemplateFilterBar';
 import { getApiUrl } from '@/lib/api';
+import { fetchRead } from '@/lib/fetch-read';
+import { RecordListState } from '@/components/ui/RecordListState';
 import { formatDate } from '@/lib/date-utils';
 
 interface TemplateItem {
@@ -55,6 +57,7 @@ function TemplateManagementContent() {
   const [activeTab, setActiveTab] = useState<'org' | 'my' | 'shared'>('org');
   const [templates, setTemplates] = useState<TemplateItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [filterState, setFilterState] = useState<TemplateFilterState>({
     keyword: '',
     status: 'ALL',
@@ -131,9 +134,11 @@ function TemplateManagementContent() {
 
   useEffect(() => {
     let ignore = false;
+    const controller = new AbortController();
     async function load() {
       const startTime = Date.now();
       setLoading(true);
+      setLoadError(null);
       setActionError(null);
       try {
         const viewParam =
@@ -151,7 +156,8 @@ function TemplateManagementContent() {
           url += `&isPublished=false`;
         }
 
-        const res = await fetch(url, {
+        const res = await fetchRead(url, {
+          signal: controller.signal,
           headers: { Authorization: `Bearer ${getToken()}` },
         });
 
@@ -207,7 +213,7 @@ function TemplateManagementContent() {
         }
       } catch (err: unknown) {
         if (!ignore) {
-          setActionError((err as Error).message);
+          setLoadError(err instanceof Error ? err.message : 'Failed to load templates.');
         }
       } finally {
         if (!ignore) {
@@ -219,6 +225,7 @@ function TemplateManagementContent() {
     load();
     return () => {
       ignore = true;
+      controller.abort();
     };
   }, [activeTab, filterState, refreshTrigger]);
 
@@ -584,10 +591,13 @@ function TemplateManagementContent() {
         />
 
         {/* Templates Table View (INK-270) */}
-        {loading ? (
-          <div className="text-center py-16 text-xs font-medium text-neutral-500 bg-white rounded-xl border border-neutral-200">
-            Loading templates...
-          </div>
+        {loading || loadError ? (
+          <RecordListState
+            key={loading ? 'loading' : 'error'}
+            label="templates"
+            error={loading ? null : loadError}
+            onRetry={() => setRefreshTrigger((value) => value + 1)}
+          />
         ) : templates.length === 0 ? (
           <div className="text-center py-16 bg-white border border-dashed border-neutral-300 rounded-xl p-8 space-y-3">
             <div className="h-12 w-12 rounded-full bg-neutral-100 text-neutral-400 mx-auto flex items-center justify-center text-xl">

@@ -2,6 +2,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { getApiUrl } from '@/lib/api';
+import { fetchRead } from '@/lib/fetch-read';
+import { RecordListState } from '@/components/ui/RecordListState';
 
 export interface TemplateItem {
   id: string;
@@ -35,14 +37,18 @@ export function ChooseTemplateModal({ onClose, onSuccess }: ChooseTemplateModalP
   const [activeTab, setActiveTab] = useState<'library' | 'mine'>('library');
   const [templates, setTemplates] = useState<TemplateItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
   const [instantiatingId, setInstantiatingId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
+    const controller = new AbortController();
     let ignore = false;
     async function loadTemplates() {
       setLoading(true);
+      setLoadError(null);
       setErrorMessage(null);
       try {
         let url = `${getApiUrl()}/api/v1/templates?view=${activeTab}`;
@@ -50,7 +56,8 @@ export function ChooseTemplateModal({ onClose, onSuccess }: ChooseTemplateModalP
           url += `&search=${encodeURIComponent(searchQuery.trim())}`;
         }
 
-        const res = await fetch(url, {
+        const res = await fetchRead(url, {
+          signal: controller.signal,
           headers: { Authorization: `Bearer ${getToken()}` },
         });
 
@@ -74,7 +81,7 @@ export function ChooseTemplateModal({ onClose, onSuccess }: ChooseTemplateModalP
         }
       } catch (err: unknown) {
         if (!ignore) {
-          setErrorMessage((err as Error).message);
+          setLoadError(err instanceof Error ? err.message : 'Failed to load templates.');
           setTemplates([]);
         }
       } finally {
@@ -85,8 +92,9 @@ export function ChooseTemplateModal({ onClose, onSuccess }: ChooseTemplateModalP
     loadTemplates();
     return () => {
       ignore = true;
+      controller.abort();
     };
-  }, [activeTab, searchQuery]);
+  }, [activeTab, searchQuery, refreshTrigger]);
 
   async function handleInstantiate(template: TemplateItem) {
     if (instantiatingId) return;
@@ -195,8 +203,13 @@ export function ChooseTemplateModal({ onClose, onSuccess }: ChooseTemplateModalP
 
         {/* Template List Grid */}
         <div className="flex-1 overflow-y-auto pr-1 py-1 space-y-3">
-          {loading ? (
-            <div className="text-center py-16 text-xs text-neutral-500">Loading templates...</div>
+          {loading || loadError ? (
+            <RecordListState
+              key={loading ? 'loading' : 'error'}
+              label="templates"
+              error={loading ? null : loadError}
+              onRetry={() => setRefreshTrigger((value) => value + 1)}
+            />
           ) : templates.length === 0 ? (
             <div className="text-center py-14 bg-neutral-50 border border-dashed border-neutral-200 rounded-xl p-6 space-y-2">
               <div className="text-2xl">📐</div>

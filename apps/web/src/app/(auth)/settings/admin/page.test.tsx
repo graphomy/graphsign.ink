@@ -131,6 +131,15 @@ describe('AdminDashboardPage Control Plane Unit Tests (FR-015 / INK-287)', () =>
     expect(screen.getByText('Maintenance Mode')).toBeInTheDocument();
     expect(screen.getByText('Feature Flags')).toBeInTheDocument();
 
+    // Verify links to /settings/integrations opening in new tab
+    const integrationLinks = screen.getAllByRole('link', { name: /integrations/i });
+    expect(integrationLinks.length).toBeGreaterThan(0);
+    integrationLinks.forEach((link) => {
+      expect(link).toHaveAttribute('href', '/settings/integrations');
+      expect(link).toHaveAttribute('target', '_blank');
+      expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+    });
+
     await waitFor(() => {
       expect(screen.getByText('Platform Runtime Telemetry & Diagnostics')).toBeInTheDocument();
       expect(screen.getByText(/HEALTHY/i)).toBeInTheDocument();

@@ -65,6 +65,16 @@ We build around five core principles:
 - Global unified search across documents, templates, and recipients.
 - Faceted multi-criteria filtering with custom saved filter presets.
 
+### 🔌 Developer APIs & Webhooks (INK-25 / FR-016 & INK-26 / FR-017)
+
+- **Versioned REST API (`/api/v1`, `/api/v2`)**: Full document CRUD, template lifecycle, and signing endpoints with standard error models.
+- **Machine Authentication**: OAuth2 Client Credentials bindings (`ApiClientBinding`) and typed request principals.
+- **Resilient Mutation**: Idempotency-Key support with transactional deduplication to eliminate duplicate document creations.
+- **Asynchronous Webhook Pipeline**: Real-time push notifications across 15+ canonical lifecycle and user events.
+- **Zero-Trust Security**: HMAC-SHA256 signature digests, 24-hour dual-key rotation, and strict SSRF egress protection (`SafeWebhookTransport`).
+- **Enterprise Delivery**: 4-attempt exponential backoff, 30-day Dead Letter Queue (DLQ), and manual delivery replay.
+- **JSON AST Filters & Payload Projections**: Event rule matching and selective data masking for privacy compliance.
+
 ### 🛡️ Immutable Audit Trail
 
 - Cryptographic SHA-256 hash-chained audit logging (`previous_hash` $\rightarrow$ `current_hash`).
@@ -94,5 +104,6 @@ We build around five core principles:
 - **[Visual Document Editor & Field Placement](Document-Editor-and-Fields.md)** — Field palette, drag & drop, validation, and preview mode
 - **[Workflow Engine & Signer Portal](Workflow-Engine-and-Signer-Portal.md)** — Review workflows, sequential/parallel routing, signer interface, and conditional logic
 - **[Cryptographic Signing & Verification](Cryptographic-Signing-and-Verification.md)** — PAdES B-T/B-LTA sealing, BYO certificates, RFC 3161 timestamps, CSC v2.2, and public verification portal
+- **[Webhooks & REST API Integration Guide](Webhooks-and-REST-API-Integration.md)** — Comprehensive architecture, HMAC security, event catalogue, and delivery pipeline
 - **[REST API Reference](REST-API-Reference.md)** — Complete endpoints, schemas, and developer integration guide
 - **[Security & Immutable Audit Trail](Security-and-Audit-Trail.md)** — Cryptographic hash chaining and compliance
