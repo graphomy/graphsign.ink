@@ -60,8 +60,17 @@ export class PrismaRateLimitStore implements RateLimitStore {
       const existing = await this.prisma.rateLimitState.findUnique({
         where: { key },
       });
+      // Clamp persisted windows from the milliseconds/seconds regression on the next request.
+      const effectiveExpiry = existing
+        ? new Date(
+            Math.min(
+              existing.expiresAt.getTime(),
+              existing.lastRefillAt.getTime() + windowSeconds * 1000,
+            ),
+          )
+        : now;
 
-      if (!existing || existing.expiresAt <= now) {
+      if (!existing || effectiveExpiry <= now) {
         await this.prisma.rateLimitState.upsert({
           where: { key },
           create: {
@@ -89,13 +98,14 @@ export class PrismaRateLimitStore implements RateLimitStore {
       const remaining = Math.max(0, limit - Math.floor(newTokens));
       const resetSeconds = Math.max(
         1,
-        Math.ceil((existing.expiresAt.getTime() - now.getTime()) / 1000),
+        Math.ceil((effectiveExpiry.getTime() - now.getTime()) / 1000),
       );
 
       await this.prisma.rateLimitState.update({
         where: { key },
         data: {
           tokens: newTokens,
+          expiresAt: effectiveExpiry,
         },
       });
 
@@ -111,16 +121,19 @@ const defaultMemoryStore = new MemoryRateLimitStore();
 
 /**
  * Creates durable rate limiting middleware (INK-149).
+ * The public window argument is milliseconds, preserving the existing route contract.
+ * Stores and response headers use seconds.
  */
 export function createRateLimiter(
   maxRequests: number = 100,
-  windowSeconds: number = 60,
+  windowMs: number = 60_000,
   options?: {
     routeTemplate?: string;
     store?: RateLimitStore;
     prisma?: PrismaClient;
   },
 ): MiddlewareHandler {
+  const windowSeconds = windowMs / 1000;
   return async (c, next) => {
     // Resolve client IP securely
     const ip =

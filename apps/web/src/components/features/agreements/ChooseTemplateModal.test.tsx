@@ -1,8 +1,13 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { act, cleanup, render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { ChooseTemplateModal } from './ChooseTemplateModal';
 
 describe('ChooseTemplateModal Unit Tests (INK-264)', () => {
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
   const mockTemplates = [
     {
       id: 'tpl-1',
@@ -39,6 +44,34 @@ describe('ChooseTemplateModal Unit Tests (INK-264)', () => {
         });
       }),
     );
+  });
+
+  it('keeps loading through a transient failure and displays records without a refresh', async () => {
+    vi.useFakeTimers();
+    vi.mocked(fetch).mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    render(<ChooseTemplateModal onClose={vi.fn()} onSuccess={vi.fn()} />);
+    expect(screen.getByRole('status')).toHaveTextContent('Loading templates');
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+    expect(screen.getByText('Sales Agreement Template')).toBeInTheDocument();
+    expect(screen.queryByText('No templates found.')).not.toBeInTheDocument();
+  });
+
+  it('offers a working retry after exhausted attempts instead of an empty list', async () => {
+    vi.useFakeTimers();
+    vi.mocked(fetch).mockRejectedValue(new TypeError('Failed to fetch'));
+    render(<ChooseTemplateModal onClose={vi.fn()} onSuccess={vi.fn()} />);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3000);
+    });
+    expect(screen.getByRole('alert')).toHaveTextContent('Please try again');
+    expect(screen.queryByText('No templates found.')).not.toBeInTheDocument();
+    vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({ items: mockTemplates })));
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    });
+    expect(screen.getByText('Sales Agreement Template')).toBeInTheDocument();
   });
 
   it('renders modal header and loads organization templates by default', async () => {

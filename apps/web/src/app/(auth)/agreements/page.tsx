@@ -11,7 +11,8 @@ import { Footer } from '@/components/layout/Footer';
 import { Button } from '@/components/ui/Button';
 import { StatusPill } from '@/components/ui/Badge';
 import { Card } from '@/components/ui/Card';
-import { Skeleton } from '@/components/ui/Skeleton';
+import { RecordListState } from '@/components/ui/RecordListState';
+import { fetchRead } from '@/lib/fetch-read';
 import { orDash, orLabel } from '@/lib/format';
 import { PdfViewerModal } from '@/components/features/agreements/PdfViewerModal';
 import { AgreementHistoryModal } from '@/components/features/agreements/AgreementHistoryModal';
@@ -148,6 +149,7 @@ function AgreementManagementContent() {
   const [isSigningId, setIsSigningId] = useState<string | null>(null);
   const [agreements, setAgreements] = useState<AgreementItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<'updatedAt' | 'createdAt' | 'title'>('updatedAt');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
@@ -276,6 +278,7 @@ function AgreementManagementContent() {
 
     async function load() {
       setLoading(true);
+      setLoadError(null);
       setActionError(null);
       try {
         const isArchivedParam = activeTab === 'archived' ? 'true' : 'false';
@@ -293,7 +296,7 @@ function AgreementManagementContent() {
           url += `&datePreset=${encodeURIComponent(datePreset)}`;
         if (authorEmailFilter) url += `&authorEmail=${encodeURIComponent(authorEmailFilter)}`;
 
-        const res = await fetch(url, {
+        const res = await fetchRead(url, {
           headers: { Authorization: `Bearer ${getToken()}` },
           signal: controller.signal,
         });
@@ -345,7 +348,7 @@ function AgreementManagementContent() {
             (err.name === 'AbortError' || err.message.toLowerCase().includes('abort')));
         if (!isAbort) {
           console.error(err);
-          setActionError(err instanceof Error ? err.message : 'Failed to load agreements.');
+          setLoadError(err instanceof Error ? err.message : 'Failed to load agreements.');
           setAgreements([]);
         }
       } finally {
@@ -921,22 +924,13 @@ function AgreementManagementContent() {
           </div>
 
           {/* Table Content */}
-          {loading ? (
-            <div className="divide-y divide-ink-100">
-              {[1, 2, 3, 4, 5].map((idx) => (
-                <div key={idx} className="h-16 px-4 flex items-center gap-4">
-                  <Skeleton className="h-8 w-8 rounded-md" />
-                  <div className="flex-1 space-y-1.5">
-                    <Skeleton className="h-4 w-48" />
-                    <Skeleton className="h-3 w-24" />
-                  </div>
-                  <Skeleton className="h-4 w-12" />
-                  <Skeleton className="h-5 w-20 rounded-full" />
-                  <Skeleton className="h-4 w-24" />
-                  <Skeleton className="h-8 w-8 rounded-md" />
-                </div>
-              ))}
-            </div>
+          {loading || loadError ? (
+            <RecordListState
+              key={loading ? 'loading' : 'error'}
+              label="agreements"
+              error={loading ? null : loadError}
+              onRetry={() => setRefreshTrigger((value) => value + 1)}
+            />
           ) : agreements.length === 0 ? (
             <div className="py-16 text-center space-y-3">
               <div className="h-12 w-12 rounded-full bg-ink-100 text-ink-400 mx-auto flex items-center justify-center">
