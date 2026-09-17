@@ -49,9 +49,9 @@ export function HeaderNav() {
   return (
     <header className="bg-white border-b border-ink-200 sticky top-0 z-30 shadow-xs">
       <div className="max-w-[1440px] mx-auto px-6 lg:px-8">
-        <div className="flex items-center justify-between h-14">
+        <div className="flex items-center justify-between h-14 relative">
           {/* Left: 'g' mark + wordmark linking to /dashboard */}
-          <div className="flex items-center gap-6">
+          <div className="flex items-center gap-6 z-10">
             <Link href="/dashboard" className="flex items-center gap-2.5 group">
               <div className="h-8 w-8 rounded-lg bg-brand-600 text-white font-black text-lg flex items-center justify-center shadow-xs group-hover:bg-brand-700 transition-colors">
                 g
@@ -63,17 +63,17 @@ export function HeaderNav() {
           </div>
 
           {/* Centre: Section nav underline tabs */}
-          <nav className="hidden md:flex items-center gap-8 h-full">
+          <nav className="hidden md:flex items-center justify-center gap-8 h-full absolute inset-x-0 mx-auto w-fit pointer-events-auto">
             {navTabs.map((tab) => {
               const isActive = pathname === tab.href || pathname.startsWith(`${tab.href}/`);
               return (
                 <Link
                   key={tab.href}
                   href={tab.href}
-                  className={`h-full inline-flex items-center text-sm font-medium border-b-2 transition-colors ${
+                  className={`h-full inline-flex items-center text-sm transition-colors border-b-[3px] -mb-px ${
                     isActive
-                      ? 'border-brand-600 text-ink-900 font-semibold'
-                      : 'border-transparent text-ink-500 hover:text-ink-900'
+                      ? 'border-brand-600 text-ink-900 font-bold'
+                      : 'border-transparent text-ink-500 hover:text-ink-900 font-medium'
                   }`}
                 >
                   {tab.label}
@@ -83,7 +83,7 @@ export function HeaderNav() {
           </nav>
 
           {/* Right: Account menu */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 z-10">
             <ProfileDropdown email={userEmail} orgName={orgName} />
           </div>
         </div>
