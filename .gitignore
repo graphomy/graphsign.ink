@@ -12,6 +12,7 @@ build/
 .idea/
 *.swp
 *.swo
+.codegraph/
 
 # OS
 .DS_Store

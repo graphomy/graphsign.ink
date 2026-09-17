@@ -22,6 +22,7 @@ import {
   ValidationError,
 } from '../utils/errors.js';
 import { generateId, generateToken, hashToken } from '../utils/crypto.js';
+import { DomainEventService } from './domain-event-service.js';
 
 export interface WorkflowContext {
   userId: string;
@@ -35,12 +36,14 @@ export interface WorkflowContext {
 
 export class WorkflowService {
   private readonly sealingService: PadesSealingService;
+  private readonly eventService?: DomainEventService;
 
   constructor(
     private readonly prisma: PrismaClient,
     private readonly auditService: AuditService,
     private readonly mailerService: MailerService,
     sealingService?: PadesSealingService,
+    eventService?: DomainEventService,
   ) {
     this.sealingService =
       sealingService ||
@@ -50,6 +53,9 @@ export class WorkflowService {
         new TsaService(),
         this.auditService,
       );
+    this.eventService =
+      eventService ||
+      ((this.prisma as any)?.domainEvent ? new DomainEventService(this.prisma) : undefined);
   }
 
   private static readonly otpStore = new Map<
@@ -560,6 +566,27 @@ export class WorkflowService {
       }
     }
 
+    try {
+      await this.eventService?.publish({
+        organisationId: ctx.organisationId,
+        eventType: 'document.sent',
+        resourceType: 'agreement',
+        resourceId: agreement.id,
+        actorKind: 'user',
+        actorId: ctx.userId,
+        dedupeKey: `document.sent:${agreement.id}:${Date.now()}`,
+        data: {
+          document_id: agreement.id,
+          document_name: agreement.title,
+          recipients_count: createdRecipients.length,
+          signing_order: signingOrder,
+          expires_at: expiresAt?.toISOString(),
+        },
+      });
+    } catch (e) {
+      console.warn('Failed to publish document.sent domain event', e);
+    }
+
     return {
       agreement: updatedAgreement,
       recipients: createdRecipients.map(({ rawToken, ...rest }) => rest),
@@ -706,6 +733,26 @@ export class WorkflowService {
         ipAddress: ip,
         userAgent,
       });
+
+      try {
+        await this.eventService?.publish({
+          organisationId: recipient.agreement.organisationId,
+          eventType: 'document.viewed',
+          resourceType: 'agreement',
+          resourceId: recipient.agreementId,
+          actorKind: 'signer',
+          actorId: recipient.id,
+          dedupeKey: `document.viewed:${recipient.agreementId}:${recipient.id}`,
+          data: {
+            document_id: recipient.agreementId,
+            recipient_id: recipient.id,
+            recipient_email: recipient.email,
+            viewed_at: new Date().toISOString(),
+          },
+        });
+      } catch (e) {
+        console.warn('Failed to publish document.viewed domain event', e);
+      }
     }
 
     return { success: true };
@@ -1226,6 +1273,27 @@ export class WorkflowService {
       userAgent,
     });
 
+    try {
+      await this.eventService?.publish({
+        organisationId: agreement.organisationId,
+        eventType: 'document.signed',
+        resourceType: 'agreement',
+        resourceId: agreement.id,
+        actorKind: 'signer',
+        actorId: recipient.id,
+        dedupeKey: `document.signed:${agreement.id}:${recipient.id}`,
+        data: {
+          document_id: agreement.id,
+          recipient_id: recipient.id,
+          recipient_email: recipient.email,
+          recipient_name: recipient.name,
+          signed_at: new Date().toISOString(),
+        },
+      });
+    } catch (e) {
+      console.warn('Failed to publish document.signed event', e);
+    }
+
     // Evaluate progression and completion (INK-91, INK-94, INK-109)
     const allRecipients = await this.prisma.agreementRecipient.findMany({
       where: { agreementId: agreement.id },
@@ -1283,6 +1351,27 @@ export class WorkflowService {
       const webUrl = (this.mailerService as any).webUrl || 'https://graphsign.ink';
       const downloadPdfUrl = `${webUrl}/api/v1/sign/${tokenForLink}/download`;
       const verificationUrl = `${webUrl}/verify/${tokenForLink}`;
+
+      try {
+        await this.eventService?.publish({
+          organisationId: agreement.organisationId,
+          eventType: 'document.completed',
+          resourceType: 'agreement',
+          resourceId: agreement.id,
+          actorKind: 'system',
+          actorId: 'pades-seal',
+          dedupeKey: `document.completed:${agreement.id}`,
+          data: {
+            document_id: agreement.id,
+            document_name: agreement.title,
+            completed_at: new Date().toISOString(),
+            verification_url: verificationUrl,
+            total_signers: activeSigners.length,
+          },
+        });
+      } catch (e) {
+        console.warn('Failed to publish document.completed event', e);
+      }
 
       await this.mailerService.sendAgreementCompletedEmail(
         agreement.author.email,
@@ -1441,6 +1530,27 @@ export class WorkflowService {
       userAgent,
     });
 
+    try {
+      await this.eventService?.publish({
+        organisationId: recipient.agreement.organisationId,
+        eventType: 'document.declined',
+        resourceType: 'agreement',
+        resourceId: recipient.agreementId,
+        actorKind: 'signer',
+        actorId: recipient.id,
+        dedupeKey: `document.declined:${recipient.agreementId}:${recipient.id}`,
+        data: {
+          document_id: recipient.agreementId,
+          recipient_id: recipient.id,
+          recipient_email: recipient.email,
+          reason: input.reason,
+          declined_at: new Date().toISOString(),
+        },
+      });
+    } catch (e) {
+      console.warn('Failed to publish document.declined event', e);
+    }
+
     // Notify author of decline (INK-111, INK-113)
     if (recipient.agreement.author?.email) {
       await this.mailerService.sendAgreementDeclinedEmail(
@@ -1516,6 +1626,26 @@ export class WorkflowService {
       ipAddress: ctx.ipAddress,
       userAgent: ctx.userAgent,
     });
+
+    try {
+      await this.eventService?.publish({
+        organisationId: ctx.organisationId,
+        eventType: 'document.voided',
+        resourceType: 'agreement',
+        resourceId: agreementId,
+        actorKind: 'user',
+        actorId: ctx.userId,
+        dedupeKey: `document.voided:${agreementId}:${Date.now()}`,
+        data: {
+          document_id: agreementId,
+          document_name: agreement.title,
+          reason: input.reason,
+          cancelled_at: new Date().toISOString(),
+        },
+      });
+    } catch (e) {
+      console.warn('Failed to publish document.voided event', e);
+    }
 
     // Notify all recipients (INK-113)
     for (const r of agreement.recipients) {

@@ -26,7 +26,8 @@ import { PrismaAuditService } from '../services/audit-service.js';
 import { AppError, ValidationError, UnauthorizedError } from '../utils/errors.js';
 import { createRateLimiter } from '../middleware/rate-limiter.js';
 import { jwtAuth } from '../middleware/jwt-auth.js';
-import { decodeJwt } from '../utils/jwt.js';
+import { decodeJwt, signJwt } from '../utils/jwt.js';
+import { sha256 } from '../utils/crypto.js';
 import type { Env } from '../index.js';
 
 export interface AuthDeps {
@@ -782,6 +783,116 @@ export function createAuthRoutes(deps?: AuthDeps) {
     return c.json({
       success: true,
       message: 'Account permanently deleted. You can create a new account anytime.',
+    });
+  });
+
+  /**
+   * POST /api/v1/auth/refresh
+   * INK-148: Refresh session tokens with atomic rotation and reuse detection
+   */
+  auth.post('/refresh', async (c) => {
+    const body = await c.req.json().catch(() => ({}));
+    const cookieHeader = c.req.header('cookie');
+    let refreshToken = body.refreshToken;
+
+    if (!refreshToken && cookieHeader) {
+      const match = cookieHeader.match(/graphsign_refresh_token=([^;]+)/);
+      if (match && match[1]) refreshToken = match[1];
+    }
+
+    if (!refreshToken || typeof refreshToken !== 'string') {
+      throw new ValidationError('Refresh token is required.');
+    }
+
+    const tokenHash = await sha256(refreshToken.trim());
+    let db = deps?.prisma;
+    if (!db) {
+      const dbUrl = c.env?.DATABASE_URL || process.env.DATABASE_URL;
+      if (dbUrl && (dbUrl.startsWith('postgres://') || dbUrl.startsWith('postgresql://'))) {
+        db = createPrismaClient(dbUrl);
+      }
+    }
+
+    if (!db?.refreshSession) {
+      throw new UnauthorizedError('Session refresh store unavailable.');
+    }
+
+    const session = await db.refreshSession.findUnique({
+      where: { tokenHash },
+      include: {
+        user: {
+          select: { id: true, email: true, role: true, status: true, organisationId: true },
+        },
+      },
+    });
+
+    if (!session) {
+      throw new UnauthorizedError('invalid_refresh_token');
+    }
+
+    const now = new Date();
+
+    // Reuse detection: if token was already consumed, revoke entire family
+    if (session.consumedAt) {
+      await db.refreshSession.updateMany({
+        where: { familyId: session.familyId },
+        data: { revokedAt: now },
+      });
+      throw new UnauthorizedError('Refresh token reuse detected. Family revoked.');
+    }
+
+    if (session.revokedAt || session.expiresAt <= now) {
+      throw new UnauthorizedError('token_expired');
+    }
+
+    if (!session.user || session.user.status === 'suspended') {
+      throw new UnauthorizedError('User account inactive.');
+    }
+
+    // Generate new refresh token
+    const newRawRefreshToken = crypto.randomUUID() + '.' + crypto.randomUUID();
+    const newTokenHash = await sha256(newRawRefreshToken);
+    const newExpiresAt = new Date(now.getTime() + 24 * 3600 * 1000); // 24 hours
+
+    const newSession = await db.refreshSession.create({
+      data: {
+        organisationId: session.organisationId,
+        userId: session.userId,
+        clientBindingId: session.clientBindingId,
+        tokenHash: newTokenHash,
+        familyId: session.familyId,
+        expiresAt: newExpiresAt,
+      },
+    });
+
+    // Mark current session consumed
+    await db.refreshSession.update({
+      where: { id: session.id },
+      data: {
+        consumedAt: now,
+        replacementId: newSession.id,
+      },
+    });
+
+    // Generate new access token
+    const secret = (c.env as any)?.JWT_SECRET || process.env.JWT_SECRET;
+    const accessToken = await signJwt(
+      {
+        sub: session.user.id,
+        orgId: session.organisationId,
+        email: session.user.email,
+        role: session.user.role,
+        jti: crypto.randomUUID(),
+      },
+      secret,
+      15 * 60, // 15 minutes
+    );
+
+    return c.json({
+      accessToken,
+      refreshToken: newRawRefreshToken,
+      expiresIn: 900,
+      tokenType: 'Bearer',
     });
   });
 
