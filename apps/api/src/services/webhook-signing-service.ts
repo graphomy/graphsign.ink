@@ -51,10 +51,10 @@ export class WebhookSigningService {
    * Constant-time comparison to prevent timing attacks.
    */
   static constantTimeEqual(a: string, b: string): boolean {
-    if (a.length !== b.length) return false;
-    let mismatch = 0;
-    for (let i = 0; i < a.length; i++) {
-      mismatch |= a.charCodeAt(i) ^ b.charCodeAt(i);
+    let mismatch = a.length ^ b.length;
+    const len = Math.max(a.length, b.length);
+    for (let i = 0; i < len; i++) {
+      mismatch |= (a.charCodeAt(i) || 0) ^ (b.charCodeAt(i) || 0);
     }
     return mismatch === 0;
   }

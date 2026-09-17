@@ -1,4 +1,4 @@
-const RETRYABLE_STATUSES = new Set([408, 500, 502, 503, 504]);
+const RETRYABLE_STATUSES = new Set([408, 429, 500, 502, 503, 504]);
 const UNAVAILABLE_MESSAGE = 'We couldn’t load your records. Please try again.';
 
 function waitForRetry(delay: number, signal?: AbortSignal | null): Promise<void> {

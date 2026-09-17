@@ -26,17 +26,23 @@ export interface DocumentDeps {
 
 export function createDocumentRoutes(deps?: DocumentDeps) {
   const router = new Hono<{ Bindings: Env }>();
+  let cachedPrisma: PrismaClient | undefined;
 
   function getServices(c: any) {
     let prisma = deps?.prisma;
     if (!prisma) {
-      const dbUrl = c.env?.DATABASE_URL || process.env.DATABASE_URL;
-      const isValidUrl =
-        dbUrl &&
-        typeof dbUrl === 'string' &&
-        dbUrl.trim() !== '' &&
-        (dbUrl.startsWith('postgres://') || dbUrl.startsWith('postgresql://'));
-      prisma = isValidUrl ? createPrismaClient(dbUrl) : getLegacyPrisma();
+      if (cachedPrisma) {
+        prisma = cachedPrisma;
+      } else {
+        const dbUrl = c.env?.DATABASE_URL || process.env.DATABASE_URL;
+        const isValidUrl =
+          dbUrl &&
+          typeof dbUrl === 'string' &&
+          dbUrl.trim() !== '' &&
+          (dbUrl.startsWith('postgres://') || dbUrl.startsWith('postgresql://'));
+        prisma = isValidUrl ? createPrismaClient(dbUrl) : getLegacyPrisma();
+        cachedPrisma = prisma;
+      }
     }
 
     const audit = deps?.audit || new PrismaAuditService(prisma);

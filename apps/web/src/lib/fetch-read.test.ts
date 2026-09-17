@@ -24,10 +24,20 @@ describe('fetchRead', () => {
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
-  it.each([400, 401, 403, 404, 429])('does not retry HTTP %s', async (status) => {
+  it.each([400, 401, 403, 404])('does not retry HTTP %s', async (status) => {
     fetchMock.mockResolvedValue(new Response('', { status }));
     expect((await fetchRead('/records')).status).toBe(status);
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('retries HTTP 429 (rate-limited) and recovers', async () => {
+    fetchMock
+      .mockResolvedValueOnce(new Response('', { status: 429 }))
+      .mockResolvedValueOnce(new Response('{"items":[]}'));
+    const result = fetchRead('/records');
+    await vi.runAllTimersAsync();
+    expect((await result).status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it('stops after three failed attempts with a useful message', async () => {

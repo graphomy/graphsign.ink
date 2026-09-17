@@ -118,6 +118,7 @@ export class PrismaRateLimitStore implements RateLimitStore {
 }
 
 const defaultMemoryStore = new MemoryRateLimitStore();
+const prismaStoreCache = new WeakMap<PrismaClient, PrismaRateLimitStore>();
 
 /**
  * Creates durable rate limiting middleware (INK-149).
@@ -180,11 +181,15 @@ export function createRateLimiter(
       }
     }
 
-    const store =
-      options?.store ||
-      (prisma && (prisma as any).rateLimitState
-        ? new PrismaRateLimitStore(prisma)
-        : defaultMemoryStore);
+    let store: RateLimitStore = options?.store || defaultMemoryStore;
+    if (!options?.store && prisma && (prisma as any).rateLimitState) {
+      let cached = prismaStoreCache.get(prisma);
+      if (!cached) {
+        cached = new PrismaRateLimitStore(prisma);
+        prismaStoreCache.set(prisma, cached);
+      }
+      store = cached;
+    }
     const result = await store.consume(storeKey, maxRequests, windowSeconds);
 
     c.header('X-RateLimit-Limit', String(result.limit));

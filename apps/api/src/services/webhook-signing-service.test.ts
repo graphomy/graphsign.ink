@@ -44,4 +44,27 @@ describe('WebhookSigningService (INK-159, FR-017.009)', () => {
 
     expect(isValid).toBe(false);
   });
+
+  describe('constantTimeEqual', () => {
+    it('returns true for identical strings', () => {
+      expect(WebhookSigningService.constantTimeEqual('abc', 'abc')).toBe(true);
+    });
+
+    it('returns false for same-length different strings', () => {
+      expect(WebhookSigningService.constantTimeEqual('abc', 'abd')).toBe(false);
+    });
+
+    it('returns false for different-length strings without early return', () => {
+      expect(WebhookSigningService.constantTimeEqual('ab', 'abc')).toBe(false);
+      expect(WebhookSigningService.constantTimeEqual('abcd', 'abc')).toBe(false);
+    });
+
+    it('returns true for empty strings', () => {
+      expect(WebhookSigningService.constantTimeEqual('', '')).toBe(true);
+    });
+
+    it('returns false for empty vs non-empty', () => {
+      expect(WebhookSigningService.constantTimeEqual('', 'a')).toBe(false);
+    });
+  });
 });

@@ -89,12 +89,24 @@ export class WebhookDeliveryService {
       'X-Attempt-Number': String(attemptNumber),
     };
 
-    // Custom headers if present
+    // Custom headers if present — strip security-critical keys to prevent override
     if (delivery.subscription.encryptedCustomHeaders) {
       try {
         const parsedCustom = JSON.parse(delivery.subscription.encryptedCustomHeaders);
-        if (typeof parsedCustom === 'object') {
-          Object.assign(headers, parsedCustom);
+        if (typeof parsedCustom === 'object' && parsedCustom !== null) {
+          const immutableKeys = new Set([
+            'content-type',
+            'x-signature',
+            'x-signature-key-id',
+            'x-delivery-id',
+            'x-event-id',
+            'x-attempt-number',
+          ]);
+          for (const [k, v] of Object.entries(parsedCustom)) {
+            if (!immutableKeys.has(k.toLowerCase()) && typeof v === 'string') {
+              headers[k] = v;
+            }
+          }
         }
       } catch {
         // Skip malformed custom headers
@@ -284,6 +296,7 @@ export class WebhookDeliveryService {
           attemptsCount: { increment: 1 },
           successCount: { increment: success ? 1 : 0 },
           failureCount: { increment: success ? 0 : 1 },
+          p50DurationMs: { increment: durationMs },
         },
       });
     } catch {
