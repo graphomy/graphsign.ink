@@ -1,13 +1,14 @@
 'use client';
 
 import { useState, useEffect, useRef, Suspense } from 'react';
-import { FilePlus2, PenLine, Upload, CloudOff, MoreHorizontal, Loader2 } from 'lucide-react';
+import { FilePlus2, PenLine, Upload, CloudOff, MoreHorizontal, Loader2, Plus } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { SessionGuard } from '@/components/features/auth/SessionGuard';
 import { HeaderNav } from '@/components/layout/HeaderNav';
-import { WorkspaceNav } from '@/components/layout/WorkspaceNav';
+import { PageHeaderCard } from '@/components/layout/PageHeaderCard';
 import { Footer } from '@/components/layout/Footer';
+import { Button } from '@/components/ui/Button';
 import { MarkdownEditor } from '@/components/features/agreements/MarkdownEditor';
 import { ShareTemplateModal } from '@/components/features/templates/ShareTemplateModal';
 import { TemplateHistoryModal } from '@/components/features/templates/TemplateHistoryModal';
@@ -474,45 +475,42 @@ function TemplateManagementContent() {
     <div className="min-h-screen bg-neutral-50 flex flex-col font-sans text-neutral-900">
       <HeaderNav />
 
-      <main className="flex-1 py-8 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto w-full space-y-6">
-        {/* Top Action Header */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-neutral-200 pb-6">
-          <div className="space-y-1">
-            <h1 className="text-2xl font-bold tracking-tight text-neutral-900 flex items-center gap-2.5">
-              <span>📐</span> Template Management
-            </h1>
-            <p className="text-xs text-neutral-600">
-              Create reusable agreement blueprints, version templates, publish to team libraries,
-              and manage access.
-            </p>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => {
-                setActionError(null);
-                setShowCreateModal(true);
-              }}
-              className="px-4 py-2 bg-[#ba0000] hover:bg-red-700 text-white text-xs font-semibold rounded-lg shadow-sm transition-all flex items-center gap-1.5"
-            >
-              <span>✨</span> Create Template
-            </button>
-            <button
-              onClick={() => {
-                setActionError(null);
-                setShowUploadModal(true);
-              }}
-              className="px-4 py-2 bg-white border border-neutral-300 hover:bg-neutral-100 text-neutral-800 text-xs font-semibold rounded-lg shadow-sm transition-all flex items-center gap-1.5"
-            >
-              <span>📄</span> Upload Template
-            </button>
-          </div>
-        </div>
-
-        {/* Section Navigation (INK-269) */}
-        <div className="flex items-center justify-between">
-          <WorkspaceNav />
-        </div>
+      <main className="flex-1 py-8 px-6 lg:px-8 max-w-[1440px] mx-auto w-full space-y-6">
+        {/* Onboard Page Header Card */}
+        <PageHeaderCard
+          title={
+            <>
+              Templates <span className="sr-only">Template Management</span>
+            </>
+          }
+          subtitle="Create and manage reusable document templates."
+          actions={
+            <>
+              <Button
+                variant="outline"
+                size="md"
+                leftIcon={<Upload className="w-4 h-4" />}
+                onClick={() => {
+                  setActionError(null);
+                  setShowUploadModal(true);
+                }}
+              >
+                Upload template
+              </Button>
+              <Button
+                variant="primary"
+                size="md"
+                leftIcon={<Plus className="w-4 h-4" />}
+                onClick={() => {
+                  setActionError(null);
+                  setShowCreateModal(true);
+                }}
+              >
+                Create template
+              </Button>
+            </>
+          }
+        />
 
         {/* Global Notifications Banners */}
         {actionMessage && (

@@ -149,12 +149,12 @@ export function ProfileDropdown({ email, token, orgName }: ProfileDropdownProps)
         aria-haspopup="true"
         aria-label="User menu"
         data-testid="profile-menu-button"
-        className="flex items-center gap-2.5 rounded-full p-1 border border-ink-200 bg-white hover:bg-ink-50 hover:border-ink-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-950 transition-all shadow-xs"
+        className="flex items-center gap-2.5 rounded-full p-1 pr-3 border border-ink-200 bg-white hover:bg-ink-50 hover:border-ink-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-950 transition-all shadow-xs"
       >
         <span className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-600 text-xs font-bold text-white select-none">
           {userInitial}
         </span>
-        <span className="hidden md:inline-block max-w-[180px] truncate text-xs font-medium text-ink-700">
+        <span className="hidden md:inline-block max-w-[260px] truncate text-xs font-medium text-ink-700">
           {displayEmail}
         </span>
         <ChevronDown

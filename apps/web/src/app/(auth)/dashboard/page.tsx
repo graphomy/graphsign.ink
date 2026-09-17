@@ -4,7 +4,7 @@ import { useState, useEffect, Suspense, useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import { SessionGuard } from '@/components/features/auth/SessionGuard';
 import { HeaderNav } from '@/components/layout/HeaderNav';
-import { WorkspaceNav } from '@/components/layout/WorkspaceNav';
+import { PageHeaderCard } from '@/components/layout/PageHeaderCard';
 import { Footer } from '@/components/layout/Footer';
 import { getApiUrl } from '@/lib/api';
 import { formatDate, formatStatus } from '@/lib/date-utils';
@@ -162,7 +162,7 @@ function DashboardContent() {
     <div className="min-h-screen bg-neutral-50 flex flex-col font-sans text-neutral-900">
       <HeaderNav />
 
-      <main className="flex-1 py-8 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto w-full space-y-6">
+      <main className="flex-1 py-8 px-6 lg:px-8 max-w-[1440px] mx-auto w-full space-y-6">
         {/* Certificate Setup Callout Banner (Issue 2) */}
         {!loading && hasNoCertificate && (
           <div className="rounded-2xl bg-amber-50 border border-amber-300 p-5 sm:p-6 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -190,46 +190,40 @@ function DashboardContent() {
           </div>
         )}
 
-        {/* Workspace Banner */}
-        <div className="bg-white border border-neutral-200 rounded-2xl p-6 sm:p-8 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div className="space-y-1">
-            <h1 className="text-2xl font-bold tracking-tight text-neutral-900">
+        {/* Onboard Page Header Card */}
+        <PageHeaderCard
+          title={
+            <>
               Welcome back,{' '}
-              <span className="text-[#ba0000]" suppressHydrationWarning>
+              <span className="text-brand-600 font-bold" suppressHydrationWarning>
                 {displayName}
               </span>
-            </h1>
-            <p className="text-xs text-neutral-600">
-              Manage e-signatures, document templates, custom permissions, and audit logs.
-            </p>
-          </div>
-
-          {(reviewCount > 0 || pendingSignatureCount > 0) && (
-            <div className="flex flex-wrap items-center gap-3">
-              {reviewCount > 0 && (
-                <Link
-                  href="/agreements?tab=review_required"
-                  className="px-4 py-2.5 bg-white border border-neutral-300 hover:bg-neutral-100 text-neutral-800 text-xs font-semibold rounded-lg shadow-sm transition-all flex items-center gap-1.5"
-                >
-                  Pending Review ({reviewCount})
-                </Link>
-              )}
-              {pendingSignatureCount > 0 && (
-                <Link
-                  href="/agreements?tab=waiting_for_me"
-                  className="px-4 py-2.5 bg-neutral-900 hover:bg-neutral-800 text-white text-xs font-semibold rounded-lg shadow-sm transition-all flex items-center gap-1.5"
-                >
-                  Pending Signature ({pendingSignatureCount})
-                </Link>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Section Navigation (INK-269) */}
-        <div className="flex items-center justify-between">
-          <WorkspaceNav />
-        </div>
+            </>
+          }
+          subtitle="Manage e-signatures, templates, permissions, and audit logs."
+          actions={
+            reviewCount > 0 || pendingSignatureCount > 0 ? (
+              <div className="flex flex-wrap items-center gap-3">
+                {reviewCount > 0 && (
+                  <Link
+                    href="/agreements?tab=review_required"
+                    className="px-4 py-2.5 bg-white border border-ink-200 hover:bg-ink-50 text-ink-800 text-xs font-semibold rounded-lg shadow-xs transition-all flex items-center gap-1.5"
+                  >
+                    Pending Review ({reviewCount})
+                  </Link>
+                )}
+                {pendingSignatureCount > 0 && (
+                  <Link
+                    href="/agreements?tab=waiting_for_me"
+                    className="px-4 py-2.5 bg-ink-900 hover:bg-ink-800 text-white text-xs font-semibold rounded-lg shadow-xs transition-all flex items-center gap-1.5"
+                  >
+                    Pending Signature ({pendingSignatureCount})
+                  </Link>
+                )}
+              </div>
+            ) : null
+          }
+        />
 
         {/* Quick Search Omnibar (INK-117) */}
         <div className="bg-white border border-neutral-200/80 rounded-2xl p-3 shadow-xs flex items-center gap-3">

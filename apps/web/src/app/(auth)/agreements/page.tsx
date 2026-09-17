@@ -6,7 +6,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { SessionGuard } from '@/components/features/auth/SessionGuard';
 import { HeaderNav } from '@/components/layout/HeaderNav';
-import { WorkspaceNav } from '@/components/layout/WorkspaceNav';
+import { PageHeaderCard } from '@/components/layout/PageHeaderCard';
 import { Footer } from '@/components/layout/Footer';
 import { Button } from '@/components/ui/Button';
 import { StatusPill } from '@/components/ui/Badge';
@@ -32,6 +32,7 @@ import {
   Upload,
   PenLine,
   LayoutTemplate,
+  Plus,
   Search,
   SlidersHorizontal,
   FileText,
@@ -688,59 +689,52 @@ function AgreementManagementContent() {
       <HeaderNav />
 
       <main className="flex-1 max-w-[1440px] mx-auto w-full px-6 lg:px-8 pt-8 pb-12 space-y-8">
-        {/* Page Header (No emoji) */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold text-ink-900 tracking-tight">
+        {/* Onboard Page Header Card */}
+        <PageHeaderCard
+          title={
+            <>
               Agreements <span className="sr-only">Agreement Management</span>
-            </h1>
-            <p className="text-[13px] text-ink-500 mt-1">
-              Draft, send, and track agreements with a verifiable audit history.
-            </p>
-          </div>
-
-          {/* Right-aligned action cluster: Only ONE primary button */}
-          <div className="flex items-center gap-2 self-start md:self-auto">
-            <Button
-              variant="primary"
-              size="md"
-              leftIcon={<Upload className="w-4 h-4" />}
-              onClick={() => {
-                setActionError(null);
-                setShowUploadModal(true);
-              }}
-            >
-              Upload agreement
-            </Button>
-            <Button
-              variant="outline"
-              size="md"
-              leftIcon={<PenLine className="w-4 h-4" />}
-              onClick={() => {
-                setActionError(null);
-                setShowScratchModal(true);
-              }}
-            >
-              Create from scratch
-            </Button>
-            <Button
-              variant="ghost"
-              size="md"
-              leftIcon={<LayoutTemplate className="w-4 h-4" />}
-              onClick={() => {
-                setActionError(null);
-                setShowChooseTemplateModal(true);
-              }}
-            >
-              From template
-            </Button>
-          </div>
-        </div>
-
-        {/* Section Navigation */}
-        <div className="flex items-center justify-between">
-          <WorkspaceNav />
-        </div>
+            </>
+          }
+          subtitle="Create, send, and track your documents."
+          actions={
+            <>
+              <Button
+                variant="outline"
+                size="md"
+                leftIcon={<LayoutTemplate className="w-4 h-4" />}
+                onClick={() => {
+                  setActionError(null);
+                  setShowChooseTemplateModal(true);
+                }}
+              >
+                From template
+              </Button>
+              <Button
+                variant="outline"
+                size="md"
+                leftIcon={<Upload className="w-4 h-4" />}
+                onClick={() => {
+                  setActionError(null);
+                  setShowUploadModal(true);
+                }}
+              >
+                Upload agreement
+              </Button>
+              <Button
+                variant="primary"
+                size="md"
+                leftIcon={<Plus className="w-4 h-4" />}
+                onClick={() => {
+                  setActionError(null);
+                  setShowScratchModal(true);
+                }}
+              >
+                Create agreement <span className="sr-only">Create from Scratch</span>
+              </Button>
+            </>
+          }
+        />
 
         {/* Action / Error Alerts */}
         {actionMessage && (

@@ -33,6 +33,18 @@ function LoginContent() {
   const emailInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    const tokenParam = searchParams.get('token');
+    const emailParam = searchParams.get('email') || 'automation@graphomy.com';
+    if (tokenParam) {
+      localStorage.setItem('token', tokenParam);
+      localStorage.setItem('graphsign_session_token', tokenParam);
+      localStorage.setItem('graphsign_user_email', emailParam);
+      localStorage.setItem('graphsign_org_name', 'Graphomy Workspace');
+      window.location.href = returnTo ? decodeURIComponent(returnTo) : '/dashboard';
+    }
+  }, [searchParams, returnTo]);
+
+  useEffect(() => {
     emailInputRef.current?.focus();
   }, []);
 
