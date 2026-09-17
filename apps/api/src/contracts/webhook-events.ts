@@ -39,7 +39,14 @@ export const WEBHOOK_EVENT_REGISTRY: Record<WebhookEventType, WebhookEventDefini
     description: 'Triggered when a new document or agreement aggregate is created.',
     category: 'document',
     filterableFields: ['document_id', 'status', 'folder'],
-    selectableFields: ['document_id', 'document_name', 'status', 'folder', 'mime_type', 'file_size'],
+    selectableFields: [
+      'document_id',
+      'document_name',
+      'status',
+      'folder',
+      'mime_type',
+      'file_size',
+    ],
     sampleData: {
       document_id: '018e4cf2-832c-7b9d-92a0-8d5f302b1111',
       document_name: 'Master-Service-Agreement.pdf',
@@ -80,7 +87,14 @@ export const WEBHOOK_EVENT_REGISTRY: Record<WebhookEventType, WebhookEventDefini
     description: 'Triggered when an agreement is published and dispatched to signers.',
     category: 'document',
     filterableFields: ['document_id', 'folder', 'signing_order'],
-    selectableFields: ['document_id', 'document_name', 'status', 'folder', 'recipient_count', 'signing_order'],
+    selectableFields: [
+      'document_id',
+      'document_name',
+      'status',
+      'folder',
+      'recipient_count',
+      'signing_order',
+    ],
     sampleData: {
       document_id: '018e4cf2-832c-7b9d-92a0-8d5f302b1111',
       document_name: 'Master-Service-Agreement.pdf',
@@ -109,7 +123,14 @@ export const WEBHOOK_EVENT_REGISTRY: Record<WebhookEventType, WebhookEventDefini
     description: 'Triggered when an individual recipient successfully executes their signature.',
     category: 'document',
     filterableFields: ['document_id', 'recipient_id', 'folder'],
-    selectableFields: ['document_id', 'document_name', 'status', 'recipient_id', 'signer_email', 'folder'],
+    selectableFields: [
+      'document_id',
+      'document_name',
+      'status',
+      'recipient_id',
+      'signer_email',
+      'folder',
+    ],
     sampleData: {
       document_id: '018e4cf2-832c-7b9d-92a0-8d5f302b1111',
       document_name: 'Master-Service-Agreement.pdf',
@@ -121,10 +142,18 @@ export const WEBHOOK_EVENT_REGISTRY: Record<WebhookEventType, WebhookEventDefini
   },
   'document.completed': {
     type: 'document.completed',
-    description: 'Triggered after all signers have signed and the cryptographic PAdES seal is stored.',
+    description:
+      'Triggered after all signers have signed and the cryptographic PAdES seal is stored.',
     category: 'document',
     filterableFields: ['document_id', 'folder'],
-    selectableFields: ['document_id', 'document_name', 'status', 'verification_token', 'document_hash', 'folder'],
+    selectableFields: [
+      'document_id',
+      'document_name',
+      'status',
+      'verification_token',
+      'document_hash',
+      'folder',
+    ],
     sampleData: {
       document_id: '018e4cf2-832c-7b9d-92a0-8d5f302b1111',
       document_name: 'Master-Service-Agreement.pdf',
@@ -176,10 +205,17 @@ export const WEBHOOK_EVENT_REGISTRY: Record<WebhookEventType, WebhookEventDefini
   },
   'document.verified': {
     type: 'document.verified',
-    description: 'Triggered when a stored sealed document signature is verified via API or public portal.',
+    description:
+      'Triggered when a stored sealed document signature is verified via API or public portal.',
     category: 'document',
     filterableFields: ['document_id', 'verification_token'],
-    selectableFields: ['document_id', 'verification_token', 'document_hash', 'pades_level', 'status'],
+    selectableFields: [
+      'document_id',
+      'verification_token',
+      'document_hash',
+      'pades_level',
+      'status',
+    ],
     sampleData: {
       document_id: '018e4cf2-832c-7b9d-92a0-8d5f302b1111',
       verification_token: 'GS-a1b2c3d4',

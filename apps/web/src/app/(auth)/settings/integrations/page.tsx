@@ -5,18 +5,13 @@ import { SessionGuard } from '@/components/features/auth/SessionGuard';
 import { HeaderNav } from '@/components/layout/HeaderNav';
 import { Footer } from '@/components/layout/Footer';
 import { WebhookSubscriptionList } from '@/components/features/integrations/WebhookSubscriptionList';
-import {
-  Webhook,
-  Key,
-  BookOpen,
-  RefreshCw,
-  Activity,
-  ExternalLink,
-} from 'lucide-react';
+import { Webhook, Key, BookOpen, RefreshCw, Activity, ExternalLink } from 'lucide-react';
 import { getApiUrl } from '@/lib/api';
 
 export default function IntegrationsPage() {
-  const [activeTab, setActiveTab] = useState<'webhooks' | 'api-clients' | 'api-logs' | 'docs'>('webhooks');
+  const [activeTab, setActiveTab] = useState<'webhooks' | 'api-clients' | 'api-logs' | 'docs'>(
+    'webhooks',
+  );
 
   return (
     <SessionGuard>
@@ -35,7 +30,9 @@ export default function IntegrationsPage() {
               Integrations & Developer APIs
             </h1>
             <p className="text-sm text-slate-400 mt-1.5 max-w-2xl">
-              Connect external systems with webhook callbacks, register trusted machine OAuth2 client bindings, inspect redacted API request logs, and explore interactive OpenAPI 3.1 contracts.
+              Connect external systems with webhook callbacks, register trusted machine OAuth2
+              client bindings, inspect redacted API request logs, and explore interactive OpenAPI
+              3.1 contracts.
             </p>
           </div>
 
@@ -142,12 +139,16 @@ function ApiClientsTab() {
   useEffect(() => {
     async function loadClients() {
       try {
-        const token = localStorage.getItem('access_token') || sessionStorage.getItem('access_token') || '';
+        const token =
+          localStorage.getItem('access_token') || sessionStorage.getItem('access_token') || '';
         const res = await fetch(`${getApiUrl()}/api/v1/organisations/me/api-clients`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (!res.ok) throw new Error('Failed to load API client bindings');
-        const data = (await res.json()) as { clients?: ApiClientBindingDto[]; data?: ApiClientBindingDto[] };
+        const data = (await res.json()) as {
+          clients?: ApiClientBindingDto[];
+          data?: ApiClientBindingDto[];
+        };
         setClients(data.clients || data.data || []);
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : 'Error loading API clients';
@@ -166,7 +167,8 @@ function ApiClientsTab() {
         <div>
           <h2 className="text-lg font-bold text-slate-100">Machine API Client Bindings</h2>
           <p className="text-xs text-slate-400 mt-1">
-            Trusted OAuth2 client credentials allowed to authenticate without user interactive login.
+            Trusted OAuth2 client credentials allowed to authenticate without user interactive
+            login.
           </p>
         </div>
         <button
@@ -185,19 +187,25 @@ function ApiClientsTab() {
       )}
 
       {isLoading ? (
-        <div className="py-12 text-center text-xs text-slate-500 animate-pulse">Loading client bindings...</div>
+        <div className="py-12 text-center text-xs text-slate-500 animate-pulse">
+          Loading client bindings...
+        </div>
       ) : clients.length === 0 ? (
         <div className="p-10 text-center border border-dashed border-slate-800 rounded-xl bg-slate-950/40 space-y-2">
           <Key className="w-8 h-8 text-slate-500 mx-auto" />
           <p className="text-sm font-semibold text-slate-300">No Machine API Clients Configured</p>
           <p className="text-xs text-slate-500 max-w-md mx-auto">
-            Machine client bindings allow external daemon scripts or services to act on behalf of your workspace using OAuth2 client credentials grant.
+            Machine client bindings allow external daemon scripts or services to act on behalf of
+            your workspace using OAuth2 client credentials grant.
           </p>
         </div>
       ) : (
         <div className="space-y-3">
           {clients.map((c) => (
-            <div key={c.id} className="p-4 bg-slate-900 border border-slate-800 rounded-lg flex items-center justify-between">
+            <div
+              key={c.id}
+              className="p-4 bg-slate-900 border border-slate-800 rounded-lg flex items-center justify-between"
+            >
               <div>
                 <div className="flex items-center space-x-2">
                   <span className="font-bold text-sm text-slate-200">{c.name}</span>
@@ -208,7 +216,10 @@ function ApiClientsTab() {
                 <div className="text-xs font-mono text-slate-400 mt-1">Client ID: {c.clientId}</div>
                 <div className="flex flex-wrap gap-1 mt-2">
                   {c.scopes.map((s: string) => (
-                    <span key={s} className="px-1.5 py-0.5 rounded text-[10px] bg-slate-950 border border-slate-800 text-slate-300 font-mono">
+                    <span
+                      key={s}
+                      className="px-1.5 py-0.5 rounded text-[10px] bg-slate-950 border border-slate-800 text-slate-300 font-mono"
+                    >
                       {s}
                     </span>
                   ))}
@@ -235,7 +246,8 @@ function ApiLogsTab() {
   useEffect(() => {
     async function loadLogs() {
       try {
-        const token = localStorage.getItem('access_token') || sessionStorage.getItem('access_token') || '';
+        const token =
+          localStorage.getItem('access_token') || sessionStorage.getItem('access_token') || '';
         const res = await fetch(`${getApiUrl()}/api/v1/organisations/me/api-logs?limit=30`, {
           headers: { Authorization: `Bearer ${token}` },
         });
@@ -259,7 +271,8 @@ function ApiLogsTab() {
         <div>
           <h2 className="text-lg font-bold text-slate-100">Redacted API Request Logs</h2>
           <p className="text-xs text-slate-400 mt-1">
-            Searchable audit trail of API calls. Secrets and sensitive headers are strictly redacted. Retained for 90 days.
+            Searchable audit trail of API calls. Secrets and sensitive headers are strictly
+            redacted. Retained for 90 days.
           </p>
         </div>
         <button
@@ -278,12 +291,16 @@ function ApiLogsTab() {
       )}
 
       {isLoading ? (
-        <div className="py-12 text-center text-xs text-slate-500 animate-pulse">Loading API logs...</div>
+        <div className="py-12 text-center text-xs text-slate-500 animate-pulse">
+          Loading API logs...
+        </div>
       ) : logs.length === 0 ? (
         <div className="p-10 text-center border border-dashed border-slate-800 rounded-xl bg-slate-950/40 space-y-2">
           <Activity className="w-8 h-8 text-slate-500 mx-auto" />
           <p className="text-sm font-semibold text-slate-300">No API Logs Recorded Yet</p>
-          <p className="text-xs text-slate-500">Inbound requests to /api/v1/* and /api/v2/* will appear here automatically.</p>
+          <p className="text-xs text-slate-500">
+            Inbound requests to /api/v1/* and /api/v2/* will appear here automatically.
+          </p>
         </div>
       ) : (
         <div className="border border-slate-800 rounded-xl overflow-x-auto bg-slate-900">
@@ -345,9 +362,12 @@ function DocsTab() {
           <BookOpen className="w-6 h-6" />
         </div>
         <div>
-          <h2 className="text-lg font-bold text-slate-100">Interactive OpenAPI 3.1 & Scalar Documentation</h2>
+          <h2 className="text-lg font-bold text-slate-100">
+            Interactive OpenAPI 3.1 & Scalar Documentation
+          </h2>
           <p className="text-xs text-slate-400 mt-0.5">
-            Test endpoints interactively with authentication, inspect schemas, and download OpenAPI specifications.
+            Test endpoints interactively with authentication, inspect schemas, and download OpenAPI
+            specifications.
           </p>
         </div>
       </div>
@@ -356,7 +376,8 @@ function DocsTab() {
         <div className="p-4 bg-slate-950 rounded-lg border border-slate-800 space-y-2">
           <div className="text-sm font-bold text-slate-200">Interactive Scalar API Reference</div>
           <p className="text-xs text-slate-400">
-            Explore and execute requests directly from your browser against the development or local API.
+            Explore and execute requests directly from your browser against the development or local
+            API.
           </p>
           <a
             href={docsUrl}
@@ -372,7 +393,8 @@ function DocsTab() {
         <div className="p-4 bg-slate-950 rounded-lg border border-slate-800 space-y-2">
           <div className="text-sm font-bold text-slate-200">Raw OpenAPI 3.1 Specification</div>
           <p className="text-xs text-slate-400">
-            Import the machine-readable OpenAPI specification into Postman, Insomnia, or SDK code generators.
+            Import the machine-readable OpenAPI specification into Postman, Insomnia, or SDK code
+            generators.
           </p>
           <a
             href={openApiUrl}

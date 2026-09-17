@@ -44,7 +44,8 @@ export function WebhookTestDialog({
     setResult(null);
 
     try {
-      const token = localStorage.getItem('access_token') || sessionStorage.getItem('access_token') || '';
+      const token =
+        localStorage.getItem('access_token') || sessionStorage.getItem('access_token') || '';
       const res = await fetch(`${getApiUrl()}/api/v1/webhooks/${subscriptionId}/test`, {
         method: 'POST',
         headers: {
@@ -94,7 +95,8 @@ export function WebhookTestDialog({
           <div>
             <h2 className="text-lg font-bold">Test Webhook Delivery</h2>
             <p className="text-xs text-slate-400 truncate max-w-md">
-              {subscriptionName} &bull; <span className="font-mono text-slate-300">{targetUrl}</span>
+              {subscriptionName} &bull;{' '}
+              <span className="font-mono text-slate-300">{targetUrl}</span>
             </p>
           </div>
         </div>
@@ -121,13 +123,18 @@ export function WebhookTestDialog({
               disabled={isLoading}
               className="inline-flex items-center space-x-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-semibold rounded-lg transition"
             >
-              {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+              {isLoading ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Send className="w-4 h-4" />
+              )}
               <span>{isLoading ? 'Dispatching...' : 'Send Test'}</span>
             </button>
           </div>
           <p className="text-[11px] text-slate-400">
-            A synthetic event payload will be HMAC-signed and sent immediately to your receiver URL with{' '}
-            <code className="bg-slate-800 px-1 py-0.5 rounded text-slate-300">test: true</code>.
+            A synthetic event payload will be HMAC-signed and sent immediately to your receiver URL
+            with <code className="bg-slate-800 px-1 py-0.5 rounded text-slate-300">test: true</code>
+            .
           </p>
         </div>
 
@@ -181,7 +188,9 @@ export function WebhookTestDialog({
 
             {result.responseSnippet && (
               <div className="space-y-1">
-                <div className="text-[11px] font-semibold text-slate-400">Receiver Response Snippet:</div>
+                <div className="text-[11px] font-semibold text-slate-400">
+                  Receiver Response Snippet:
+                </div>
                 <pre className="text-xs font-mono bg-slate-900 p-2.5 rounded text-slate-300 max-h-32 overflow-y-auto whitespace-pre-wrap">
                   {result.responseSnippet}
                 </pre>

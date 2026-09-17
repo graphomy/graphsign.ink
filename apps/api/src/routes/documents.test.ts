@@ -269,7 +269,9 @@ describe('Document REST Routes Integration Tests (INK-147, INK-150, INK-154, FR-
     });
 
     it('returns 404 when document is not found', async () => {
-      mockAgreementService.getAgreementById.mockRejectedValue(new NotFoundError('Document not found'));
+      mockAgreementService.getAgreementById.mockRejectedValue(
+        new NotFoundError('Document not found'),
+      );
 
       const res = await app.request('/api/v1/documents/doc-not-found', {
         headers: { Authorization: `Bearer ${token}` },
@@ -294,7 +296,11 @@ describe('Document REST Routes Integration Tests (INK-147, INK-150, INK-154, FR-
       });
 
       expect(res.status).toBe(204);
-      expect(mockAgreementService.deleteAgreement).toHaveBeenCalledWith('org-123', 'user-123', 'doc-del-1');
+      expect(mockAgreementService.deleteAgreement).toHaveBeenCalledWith(
+        'org-123',
+        'user-123',
+        'doc-del-1',
+      );
       expect(mockEventService.publish).toHaveBeenCalledWith(
         expect.objectContaining({
           eventType: 'document.deleted',

@@ -250,7 +250,15 @@ export class WebhookDeliveryService {
     try {
       const now = new Date();
       // Truncate to current hour bucket
-      const timeBucket = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours(), 0, 0, 0);
+      const timeBucket = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate(),
+        now.getHours(),
+        0,
+        0,
+        0,
+      );
 
       await this.prisma.webhookMetricBucket.upsert({
         where: {

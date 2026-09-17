@@ -40,7 +40,9 @@ describe('Webhook Routes Integration Tests (INK-156 to INK-165, FR-017)', () => 
     };
 
     mockSigningService = {
-      generateSecret: vi.fn().mockReturnValue('test-generated-secret-64chars00000000000000000000000000000000000000'),
+      generateSecret: vi
+        .fn()
+        .mockReturnValue('test-generated-secret-64chars00000000000000000000000000000000000000'),
     };
 
     mockDeliveryService = {
@@ -103,7 +105,9 @@ describe('Webhook Routes Integration Tests (INK-156 to INK-165, FR-017)', () => 
       expect(res.status).toBe(201);
       const body = (await res.json()) as any;
       expect(body.subscription.id).toBe('sub-uuid-1');
-      expect(body.secret).toBe('test-generated-secret-64chars00000000000000000000000000000000000000');
+      expect(body.secret).toBe(
+        'test-generated-secret-64chars00000000000000000000000000000000000000',
+      );
       expect(mockPrisma.webhookSigningKey.create).toHaveBeenCalled();
     });
 
@@ -262,9 +266,12 @@ describe('Webhook Routes Integration Tests (INK-156 to INK-165, FR-017)', () => 
         },
       ]);
 
-      const res = await app.request('/api/v1/webhooks/sub-metrics-1/metrics?period=24h&format=csv', {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await app.request(
+        '/api/v1/webhooks/sub-metrics-1/metrics?period=24h&format=csv',
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
 
       expect(res.status).toBe(200);
       expect(res.headers.get('Content-Type')).toBe('text/csv');

@@ -16,22 +16,74 @@ const AVAILABLE_FIELDS = [
   { id: 'id', label: 'Delivery ID', required: true, description: 'Envelope unique UUID' },
   { id: 'event', label: 'Event Name', required: true, description: 'Event identifier string' },
   { id: 'timestamp', label: 'Timestamp', required: true, description: 'ISO 8601 generation time' },
-  { id: 'organisationId', label: 'Organisation ID', required: false, description: 'Workspace UUID' },
+  {
+    id: 'organisationId',
+    label: 'Organisation ID',
+    required: false,
+    description: 'Workspace UUID',
+  },
   { id: 'sequence', label: 'Sequence Number', required: false, description: 'Monotonic counter' },
-  { id: 'data.document_id', label: 'Document UUID', required: false, description: 'Target document identifier' },
-  { id: 'data.document_name', label: 'Document Title', required: false, description: 'Human-readable title' },
-  { id: 'data.status', label: 'Document Status', required: false, description: 'DRAFT, SENT, COMPLETED, etc.' },
-  { id: 'data.folder', label: 'Document Folder', required: false, description: 'Organizational path' },
-  { id: 'data.recipient_id', label: 'Recipient ID', required: false, description: 'Acting recipient UUID' },
-  { id: 'data.recipient_email', label: 'Recipient Email', required: false, description: 'Signer email address' },
-  { id: 'data.completed_at', label: 'Completed Date', required: false, description: 'Timestamp of completion' },
-  { id: 'data.verification_url', label: 'Verification URL', required: false, description: 'Public PAdES verification link' },
-  { id: 'data.reason', label: 'Decline / Void Reason', required: false, description: 'Optional explanation text' },
+  {
+    id: 'data.document_id',
+    label: 'Document UUID',
+    required: false,
+    description: 'Target document identifier',
+  },
+  {
+    id: 'data.document_name',
+    label: 'Document Title',
+    required: false,
+    description: 'Human-readable title',
+  },
+  {
+    id: 'data.status',
+    label: 'Document Status',
+    required: false,
+    description: 'DRAFT, SENT, COMPLETED, etc.',
+  },
+  {
+    id: 'data.folder',
+    label: 'Document Folder',
+    required: false,
+    description: 'Organizational path',
+  },
+  {
+    id: 'data.recipient_id',
+    label: 'Recipient ID',
+    required: false,
+    description: 'Acting recipient UUID',
+  },
+  {
+    id: 'data.recipient_email',
+    label: 'Recipient Email',
+    required: false,
+    description: 'Signer email address',
+  },
+  {
+    id: 'data.completed_at',
+    label: 'Completed Date',
+    required: false,
+    description: 'Timestamp of completion',
+  },
+  {
+    id: 'data.verification_url',
+    label: 'Verification URL',
+    required: false,
+    description: 'Public PAdES verification link',
+  },
+  {
+    id: 'data.reason',
+    label: 'Decline / Void Reason',
+    required: false,
+    description: 'Optional explanation text',
+  },
 ];
 
 export function WebhookPayloadPicker({ value, onChange }: WebhookPayloadPickerProps) {
   const currentMode = value?.mode || 'ALL';
-  const currentFields = new Set(value?.includeFields || ['id', 'event', 'timestamp', 'data.document_id']);
+  const currentFields = new Set(
+    value?.includeFields || ['id', 'event', 'timestamp', 'data.document_id'],
+  );
 
   const handleModeChange = (mode: 'ALL' | 'CUSTOM') => {
     if (mode === 'ALL') {
@@ -75,7 +127,9 @@ export function WebhookPayloadPicker({ value, onChange }: WebhookPayloadPickerPr
           }`}
         >
           <div className="font-bold">ALL (Full Payload)</div>
-          <div className="text-[11px] opacity-80 mt-0.5">Receive full envelope and standard event metadata</div>
+          <div className="text-[11px] opacity-80 mt-0.5">
+            Receive full envelope and standard event metadata
+          </div>
         </button>
 
         <button
@@ -88,7 +142,9 @@ export function WebhookPayloadPicker({ value, onChange }: WebhookPayloadPickerPr
           }`}
         >
           <div className="font-bold">CUSTOM (Projected Fields)</div>
-          <div className="text-[11px] opacity-80 mt-0.5">Select specific fields to minimize payload size</div>
+          <div className="text-[11px] opacity-80 mt-0.5">
+            Select specific fields to minimize payload size
+          </div>
         </button>
       </div>
 

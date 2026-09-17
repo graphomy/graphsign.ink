@@ -35,7 +35,18 @@ export function createDocsRoutes() {
             id: { type: 'string', format: 'uuid' },
             name: { type: 'string' },
             description: { type: 'string', nullable: true },
-            status: { type: 'string', enum: ['DRAFT', 'SENT', 'IN_PROGRESS', 'COMPLETED', 'DECLINED', 'CANCELLED', 'EXPIRED'] },
+            status: {
+              type: 'string',
+              enum: [
+                'DRAFT',
+                'SENT',
+                'IN_PROGRESS',
+                'COMPLETED',
+                'DECLINED',
+                'CANCELLED',
+                'EXPIRED',
+              ],
+            },
             version: { type: 'string' },
             mimeType: { type: 'string' },
             fileSize: { type: 'integer' },
@@ -66,7 +77,8 @@ export function createDocsRoutes() {
       '/api/v1/documents': {
         get: {
           summary: 'List documents',
-          description: 'Retrieve paginated list of documents with optional status and metadata filters.',
+          description:
+            'Retrieve paginated list of documents with optional status and metadata filters.',
           responses: {
             '200': { description: 'Successful list response' },
             '401': { description: 'Unauthorized' },

@@ -33,9 +33,21 @@ const ALL_EVENT_OPTIONS = [
   { id: 'document.deleted', label: 'document.deleted', desc: 'Document soft-deleted' },
   { id: 'document.sent', label: 'document.sent', desc: 'Agreement sent to participants' },
   { id: 'document.viewed', label: 'document.viewed', desc: 'Recipient viewed document link' },
-  { id: 'document.signed', label: 'document.signed', desc: 'Recipient successfully submitted signature' },
-  { id: 'document.completed', label: 'document.completed', desc: 'All recipients signed and PAdES seal finished' },
-  { id: 'document.declined', label: 'document.declined', desc: 'Recipient formally declined signature' },
+  {
+    id: 'document.signed',
+    label: 'document.signed',
+    desc: 'Recipient successfully submitted signature',
+  },
+  {
+    id: 'document.completed',
+    label: 'document.completed',
+    desc: 'All recipients signed and PAdES seal finished',
+  },
+  {
+    id: 'document.declined',
+    label: 'document.declined',
+    desc: 'Recipient formally declined signature',
+  },
   { id: 'document.voided', label: 'document.voided', desc: 'Agreement cancelled or voided' },
 ];
 
@@ -46,8 +58,12 @@ export function WebhookModal({ subscription, onClose, onSuccess }: WebhookModalP
   const [description, setDescription] = useState(subscription?.description || '');
   const [targetUrl, setTargetUrl] = useState(subscription?.targetUrl || '');
   const [status, setStatus] = useState<'active' | 'disabled'>(subscription?.status || 'active');
-  const [selectedEvents, setSelectedEvents] = useState<string[]>(subscription?.eventTypes || ['document.completed']);
-  const [rateLimitPerMinute, setRateLimitPerMinute] = useState<number>(subscription?.rateLimitPerMinute || 10);
+  const [selectedEvents, setSelectedEvents] = useState<string[]>(
+    subscription?.eventTypes || ['document.completed'],
+  );
+  const [rateLimitPerMinute, setRateLimitPerMinute] = useState<number>(
+    subscription?.rateLimitPerMinute || 10,
+  );
   const [filterRules, setFilterRules] = useState<Record<string, unknown> | undefined>(
     (subscription?.filterRules as Record<string, unknown>) || undefined,
   );
@@ -133,7 +149,8 @@ export function WebhookModal({ subscription, onClose, onSuccess }: WebhookModalP
     };
 
     try {
-      const token = localStorage.getItem('access_token') || sessionStorage.getItem('access_token') || '';
+      const token =
+        localStorage.getItem('access_token') || sessionStorage.getItem('access_token') || '';
       const url = isEditing
         ? `${getApiUrl()}/api/v1/webhooks/${subscription!.id}`
         : `${getApiUrl()}/api/v1/webhooks`;
@@ -171,7 +188,8 @@ export function WebhookModal({ subscription, onClose, onSuccess }: WebhookModalP
               {isEditing ? 'Edit Webhook Subscription' : 'Create Webhook Subscription'}
             </h2>
             <p className="text-xs text-slate-400 mt-0.5">
-              Receive signed, real-time HTTP event notifications with automatic exponential retry and DLQ routing.
+              Receive signed, real-time HTTP event notifications with automatic exponential retry
+              and DLQ routing.
             </p>
           </div>
           <button
@@ -220,8 +238,12 @@ export function WebhookModal({ subscription, onClose, onSuccess }: WebhookModalP
 
           <div className="space-y-1.5">
             <label className="text-xs font-semibold text-slate-200 flex items-center justify-between">
-              <span>Target HTTPS URL <span className="text-rose-400">*</span></span>
-              <span className="text-[11px] text-slate-400 font-normal">Disallows private IP addresses (SSRF protected)</span>
+              <span>
+                Target HTTPS URL <span className="text-rose-400">*</span>
+              </span>
+              <span className="text-[11px] text-slate-400 font-normal">
+                Disallows private IP addresses (SSRF protected)
+              </span>
             </label>
             <div className="relative">
               <Globe className="w-4 h-4 text-slate-500 absolute left-3 top-2.5" />
@@ -281,7 +303,9 @@ export function WebhookModal({ subscription, onClose, onSuccess }: WebhookModalP
                       className="mt-0.5 rounded border-slate-700 text-emerald-600 focus:ring-emerald-500 bg-slate-900"
                     />
                     <div className="flex-1 min-w-0">
-                      <div className="font-mono font-semibold text-[11px] text-emerald-300">{ev.label}</div>
+                      <div className="font-mono font-semibold text-[11px] text-emerald-300">
+                        {ev.label}
+                      </div>
                       <div className="text-[11px] text-slate-400 truncate">{ev.desc}</div>
                     </div>
                   </label>

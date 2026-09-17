@@ -137,7 +137,11 @@ export function createRateLimiter(
     let prisma: PrismaClient | undefined = options?.prisma || (c as any).prisma;
     if (!prisma) {
       const dbUrl = c.env?.DATABASE_URL || process.env.DATABASE_URL;
-      if (dbUrl && typeof dbUrl === 'string' && (dbUrl.startsWith('postgres://') || dbUrl.startsWith('postgresql://'))) {
+      if (
+        dbUrl &&
+        typeof dbUrl === 'string' &&
+        (dbUrl.startsWith('postgres://') || dbUrl.startsWith('postgresql://'))
+      ) {
         try {
           prisma = getLegacyPrisma();
         } catch {
@@ -152,10 +156,7 @@ export function createRateLimiter(
         const whitelistPolicy = await prisma.apiRateLimitPolicy.findFirst({
           where: {
             isWhitelist: true,
-            OR: [
-              ...(principal ? [{ principalId: principal.id }] : []),
-              { ipAddress: ip },
-            ],
+            OR: [...(principal ? [{ principalId: principal.id }] : []), { ipAddress: ip }],
           },
         });
         if (whitelistPolicy) {

@@ -21,7 +21,10 @@ export interface SafeWebhookResponse {
 /**
  * Checks if a hostname or IP is a restricted private/loopback/cloud metadata address.
  */
-export function isPrivateOrReservedHost(hostname: string, allowLocalhost: boolean = false): boolean {
+export function isPrivateOrReservedHost(
+  hostname: string,
+  allowLocalhost: boolean = false,
+): boolean {
   const host = hostname.toLowerCase().trim();
 
   if (allowLocalhost && host === 'localhost') {
@@ -72,13 +75,15 @@ export function isPrivateOrReservedHost(hostname: string, allowLocalhost: boolea
  */
 export function validateWebhookUrl(
   rawUrl: string,
-  allowLocalhost: boolean = process.env.NODE_ENV === 'test' || process.env.NODE_ENV === 'development',
+  allowLocalhost: boolean = process.env.NODE_ENV === 'test' ||
+    process.env.NODE_ENV === 'development',
 ): { valid: boolean; error?: string; reason?: string } {
   try {
     const parsed = new URL(rawUrl);
 
     if (isPrivateOrReservedHost(parsed.hostname, allowLocalhost)) {
-      const msg = 'SSRF protection blocked target URL. Private, loopback, and cloud metadata addresses are restricted.';
+      const msg =
+        'SSRF protection blocked target URL. Private, loopback, and cloud metadata addresses are restricted.';
       return {
         valid: false,
         error: msg,
@@ -87,7 +92,10 @@ export function validateWebhookUrl(
     }
 
     const isLocalhost = parsed.hostname === 'localhost';
-    if (parsed.protocol !== 'https:' && !(allowLocalhost && isLocalhost && parsed.protocol === 'http:')) {
+    if (
+      parsed.protocol !== 'https:' &&
+      !(allowLocalhost && isLocalhost && parsed.protocol === 'http:')
+    ) {
       const msg = 'Webhook URL must use HTTPS protocol.';
       return { valid: false, error: msg, reason: msg };
     }
@@ -110,7 +118,9 @@ export class SafeWebhookTransport {
   async send(options: SafeWebhookRequestOptions): Promise<SafeWebhookResponse> {
     const isDev =
       options.allowLocalhostInDev ??
-      (this.allowLocalhostInDev || process.env.NODE_ENV === 'test' || process.env.NODE_ENV === 'development');
+      (this.allowLocalhostInDev ||
+        process.env.NODE_ENV === 'test' ||
+        process.env.NODE_ENV === 'development');
 
     const validation = validateWebhookUrl(options.url, isDev);
     if (!validation.valid) {

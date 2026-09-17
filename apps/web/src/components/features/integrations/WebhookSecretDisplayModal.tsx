@@ -53,12 +53,17 @@ export function WebhookSecretDisplayModal({
         <div className="bg-amber-950/30 border border-amber-500/30 rounded-lg p-3.5 flex items-start space-x-3 text-xs text-amber-200/90 leading-relaxed">
           <AlertTriangle className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
           <div>
-            <span className="font-semibold text-amber-300">Save this secret immediately.</span> For security reasons, it
-            cannot be viewed again. Use it to verify HMAC-SHA256 signatures on the{' '}
-            <code className="bg-amber-950 px-1 py-0.5 rounded text-amber-200">X-GraphSign-Signature</code> HTTP header.
+            <span className="font-semibold text-amber-300">Save this secret immediately.</span> For
+            security reasons, it cannot be viewed again. Use it to verify HMAC-SHA256 signatures on
+            the{' '}
+            <code className="bg-amber-950 px-1 py-0.5 rounded text-amber-200">
+              X-GraphSign-Signature
+            </code>{' '}
+            HTTP header.
             {isRotated && (
               <p className="mt-1 text-amber-300/80">
-                A 24-hour dual-verification grace period is now active. Both previous and new secrets will sign deliveries.
+                A 24-hour dual-verification grace period is now active. Both previous and new
+                secrets will sign deliveries.
               </p>
             )}
           </div>
@@ -75,19 +80,29 @@ export function WebhookSecretDisplayModal({
               onClick={handleCopy}
               className="inline-flex items-center space-x-1.5 px-3 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-lg transition"
             >
-              {copied ? <Check className="w-4 h-4 text-emerald-200" /> : <Copy className="w-4 h-4" />}
+              {copied ? (
+                <Check className="w-4 h-4 text-emerald-200" />
+              ) : (
+                <Copy className="w-4 h-4" />
+              )}
               <span>{copied ? 'Copied!' : 'Copy'}</span>
             </button>
           </div>
         </div>
 
         <div className="bg-slate-950 p-3 rounded-lg border border-slate-800 text-[11px] font-mono text-slate-400 space-y-1">
-          <div className="text-slate-300 font-sans font-semibold">Node.js Verification Snippet:</div>
+          <div className="text-slate-300 font-sans font-semibold">
+            Node.js Verification Snippet:
+          </div>
           <div className="text-slate-500">const crypto = require(&apos;crypto&apos;);</div>
           <div>
-            const signature = crypto.createHmac(&apos;sha256&apos;, SECRET).update(rawBody).digest(&apos;hex&apos;);
+            const signature = crypto.createHmac(&apos;sha256&apos;,
+            SECRET).update(rawBody).digest(&apos;hex&apos;);
           </div>
-          <div>const isValid = crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(receivedSig));</div>
+          <div>
+            const isValid = crypto.timingSafeEqual(Buffer.from(signature),
+            Buffer.from(receivedSig));
+          </div>
         </div>
 
         <div className="flex justify-end pt-2">

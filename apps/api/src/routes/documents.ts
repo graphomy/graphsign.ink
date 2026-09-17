@@ -270,16 +270,11 @@ export function createDocumentRoutes(deps?: DocumentDeps) {
       throw new ValidationError(`Cannot update a document in ${existing.status} status.`);
     }
 
-    let updated: any = await agreementService.saveDraft(
-      principal.organisationId,
-      authorId,
-      id,
-      {
-        title: input.name,
-        description: input.description,
-        markdownContent: input.content || existing.markdownContent || undefined,
-      },
-    );
+    let updated: any = await agreementService.saveDraft(principal.organisationId, authorId, id, {
+      title: input.name,
+      description: input.description,
+      markdownContent: input.content || existing.markdownContent || undefined,
+    });
 
     if (input.tags || input.metadata) {
       updated = await agreementService.updateMetadataAndTags(
@@ -287,7 +282,8 @@ export function createDocumentRoutes(deps?: DocumentDeps) {
         authorId,
         id,
         {
-          tags: input.tags ?? (Array.isArray(existing.tags) ? (existing.tags as string[]) : undefined),
+          tags:
+            input.tags ?? (Array.isArray(existing.tags) ? (existing.tags as string[]) : undefined),
           metadata: {
             ...((existing.metadata as any) || {}),
             ...input.metadata,
@@ -348,15 +344,10 @@ export function createDocumentRoutes(deps?: DocumentDeps) {
 
     let updated: any = existing;
     if (input.name || input.description) {
-      updated = await agreementService.saveDraft(
-        principal.organisationId,
-        authorId,
-        id,
-        {
-          title: input.name ?? existing.title,
-          description: input.description ?? (existing.description || undefined),
-        },
-      );
+      updated = await agreementService.saveDraft(principal.organisationId, authorId, id, {
+        title: input.name ?? existing.title,
+        description: input.description ?? (existing.description || undefined),
+      });
     }
 
     if (input.tags !== undefined || input.metadata !== undefined) {
@@ -365,8 +356,11 @@ export function createDocumentRoutes(deps?: DocumentDeps) {
         authorId,
         id,
         {
-          tags: input.tags ?? (Array.isArray(existing.tags) ? (existing.tags as string[]) : undefined),
-          metadata: input.metadata ? { ...((existing.metadata as any) || {}), ...input.metadata } : undefined,
+          tags:
+            input.tags ?? (Array.isArray(existing.tags) ? (existing.tags as string[]) : undefined),
+          metadata: input.metadata
+            ? { ...((existing.metadata as any) || {}), ...input.metadata }
+            : undefined,
         },
       );
     }

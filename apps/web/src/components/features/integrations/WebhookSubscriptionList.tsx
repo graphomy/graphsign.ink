@@ -47,7 +47,8 @@ export function WebhookSubscriptionList() {
   useEffect(() => {
     async function loadSubscriptions() {
       try {
-        const token = localStorage.getItem('access_token') || sessionStorage.getItem('access_token') || '';
+        const token =
+          localStorage.getItem('access_token') || sessionStorage.getItem('access_token') || '';
         const res = await fetch(`${getApiUrl()}/api/v1/webhooks`, {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -58,7 +59,10 @@ export function WebhookSubscriptionList() {
           throw new Error('Failed to load webhook subscriptions');
         }
 
-        const data = (await res.json()) as { subscriptions?: WebhookSubscription[]; data?: WebhookSubscription[] };
+        const data = (await res.json()) as {
+          subscriptions?: WebhookSubscription[];
+          data?: WebhookSubscription[];
+        };
         setSubscriptions(data.subscriptions || data.data || []);
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : 'Error loading webhooks';
@@ -85,7 +89,8 @@ export function WebhookSubscriptionList() {
     if (!confirm(`Are you sure you want to delete webhook subscription "${name}"?`)) return;
 
     try {
-      const token = localStorage.getItem('access_token') || sessionStorage.getItem('access_token') || '';
+      const token =
+        localStorage.getItem('access_token') || sessionStorage.getItem('access_token') || '';
       const res = await fetch(`${getApiUrl()}/api/v1/webhooks/${id}`, {
         method: 'DELETE',
         headers: {
@@ -111,7 +116,8 @@ export function WebhookSubscriptionList() {
     }
 
     try {
-      const token = localStorage.getItem('access_token') || sessionStorage.getItem('access_token') || '';
+      const token =
+        localStorage.getItem('access_token') || sessionStorage.getItem('access_token') || '';
       const res = await fetch(`${getApiUrl()}/api/v1/webhooks/${sub.id}/rotate-secret`, {
         method: 'POST',
         headers: {
@@ -156,7 +162,8 @@ export function WebhookSubscriptionList() {
             <span>Webhook Subscriptions</span>
           </h2>
           <p className="text-xs text-slate-400 mt-1">
-            Configure automated HTTPS callbacks with HMAC-SHA256 signatures, AST filters, and delivery telemetry.
+            Configure automated HTTPS callbacks with HMAC-SHA256 signatures, AST filters, and
+            delivery telemetry.
           </p>
         </div>
 
@@ -189,7 +196,9 @@ export function WebhookSubscriptionList() {
       )}
 
       {isLoading ? (
-        <div className="py-16 text-center text-xs text-slate-500 animate-pulse">Loading webhook endpoints...</div>
+        <div className="py-16 text-center text-xs text-slate-500 animate-pulse">
+          Loading webhook endpoints...
+        </div>
       ) : subscriptions.length === 0 ? (
         <div className="p-12 text-center border border-dashed border-slate-800 rounded-xl bg-slate-950/40 space-y-3">
           <div className="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto">
@@ -197,7 +206,8 @@ export function WebhookSubscriptionList() {
           </div>
           <h3 className="text-sm font-bold text-slate-200">No Webhook Subscriptions Yet</h3>
           <p className="text-xs text-slate-400 max-w-md mx-auto">
-            Integrate your external systems, CRM, or document archives with automated event notifications when agreements are sent, viewed, signed, or completed.
+            Integrate your external systems, CRM, or document archives with automated event
+            notifications when agreements are sent, viewed, signed, or completed.
           </p>
           <button
             type="button"
@@ -274,7 +284,11 @@ export function WebhookSubscriptionList() {
                       >
                         <BarChart2 className="w-3.5 h-3.5" />
                         <span>Metrics</span>
-                        {isMetricsOpen ? <ChevronUp className="w-3 h-3 ml-0.5" /> : <ChevronDown className="w-3 h-3 ml-0.5" />}
+                        {isMetricsOpen ? (
+                          <ChevronUp className="w-3 h-3 ml-0.5" />
+                        ) : (
+                          <ChevronDown className="w-3 h-3 ml-0.5" />
+                        )}
                       </button>
 
                       <button

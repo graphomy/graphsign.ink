@@ -23,10 +23,9 @@ const createWebhookSchema = z.object({
   eventTypes: z
     .array(z.string())
     .min(1, 'At least one event type must be selected')
-    .refine(
-      (types) => types.every((t) => t === '*' || WEBHOOK_EVENT_TYPES.includes(t as any)),
-      { message: 'Invalid webhook event type' },
-    ),
+    .refine((types) => types.every((t) => t === '*' || WEBHOOK_EVENT_TYPES.includes(t as any)), {
+      message: 'Invalid webhook event type',
+    }),
   filterRules: z.record(z.string(), z.unknown()).optional(),
   payloadProjection: z
     .object({
@@ -163,9 +162,7 @@ export function createWebhookRoutes(deps?: WebhookDeps) {
       : WebhookSigningService.generateSecret();
     const keyId = `whsec_${crypto.randomUUID().replace(/-/g, '').substring(0, 16)}`;
 
-    const encryptedCustomHeaders = input.customHeaders
-      ? JSON.stringify(input.customHeaders)
-      : null;
+    const encryptedCustomHeaders = input.customHeaders ? JSON.stringify(input.customHeaders) : null;
 
     const subscription = await prisma.webhookSubscription.create({
       data: {

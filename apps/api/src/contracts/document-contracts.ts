@@ -14,9 +14,7 @@ export const createDocumentSchema = z.object({
   name: z.string().min(1, "Field 'name' is required").max(255),
   content: z.string().min(1, "Field 'content' is required"),
   contentEncoding: z.enum(['utf-8', 'base64']).default('utf-8'),
-  mimeType: z
-    .enum(['application/pdf', 'text/markdown', 'text/plain'])
-    .optional(),
+  mimeType: z.enum(['application/pdf', 'text/markdown', 'text/plain']).optional(),
   description: z.string().max(1000).optional(),
   tags: z.array(z.string().max(50)).max(20).optional().default([]),
   metadata: documentMetadataSchema.optional().default({}),
@@ -28,9 +26,7 @@ export const replaceDocumentSchema = z.object({
   name: z.string().min(1, "Field 'name' is required").max(255),
   content: z.string().optional(),
   contentEncoding: z.enum(['utf-8', 'base64']).default('utf-8'),
-  mimeType: z
-    .enum(['application/pdf', 'text/markdown', 'text/plain'])
-    .optional(),
+  mimeType: z.enum(['application/pdf', 'text/markdown', 'text/plain']).optional(),
   description: z.string().max(1000).optional(),
   tags: z.array(z.string().max(50)).max(20).optional().default([]),
   metadata: documentMetadataSchema.optional().default({}),
@@ -64,13 +60,10 @@ export const documentQuerySchema = z
     sort: z.enum(['createdAt', 'updatedAt', 'title', 'name']).default('createdAt'),
     order: z.enum(['asc', 'desc']).default('desc'),
   })
-  .refine(
-    (data) => !(data.page !== undefined && data.cursor !== undefined),
-    {
-      message: 'Cannot combine page-based pagination with cursor-based pagination',
-      path: ['cursor'],
-    },
-  );
+  .refine((data) => !(data.page !== undefined && data.cursor !== undefined), {
+    message: 'Cannot combine page-based pagination with cursor-based pagination',
+    path: ['cursor'],
+  });
 
 export type DocumentQueryInput = z.infer<typeof documentQuerySchema>;
 
@@ -104,9 +97,7 @@ export interface DocumentListResponse {
  */
 export function toDocumentDto(agreement: any): DocumentDto {
   const meta =
-    agreement.metadata && typeof agreement.metadata === 'object'
-      ? { ...agreement.metadata }
-      : {};
+    agreement.metadata && typeof agreement.metadata === 'object' ? { ...agreement.metadata } : {};
 
   // Strip internal fields from public metadata
   delete (meta as any).signedPdfBase64;
@@ -126,7 +117,9 @@ export function toDocumentDto(agreement: any): DocumentDto {
     fileSize: agreement.fileSize || 0,
     tags: Array.isArray(agreement.tags) ? agreement.tags : [],
     metadata: meta,
-    createdAt: agreement.createdAt instanceof Date ? agreement.createdAt.toISOString() : agreement.createdAt,
-    updatedAt: agreement.updatedAt instanceof Date ? agreement.updatedAt.toISOString() : agreement.updatedAt,
+    createdAt:
+      agreement.createdAt instanceof Date ? agreement.createdAt.toISOString() : agreement.createdAt,
+    updatedAt:
+      agreement.updatedAt instanceof Date ? agreement.updatedAt.toISOString() : agreement.updatedAt,
   };
 }

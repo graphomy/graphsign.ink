@@ -40,10 +40,7 @@ export class WebhookDispatchService {
       const eventData = (event.dataSnapshot as Record<string, unknown>) || {};
 
       // Evaluate AST Filter rules (INK-162)
-      const passesFilter = WebhookFilterService.evaluateFilter(
-        sub.filterRules as any,
-        eventData,
-      );
+      const passesFilter = WebhookFilterService.evaluateFilter(sub.filterRules as any, eventData);
       if (!passesFilter) {
         continue;
       }

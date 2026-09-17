@@ -33,11 +33,7 @@ function getScopesForRole(role: string): string[] {
         API_SCOPES.WEBHOOKS_READ,
       ];
     case 'viewer':
-      return [
-        API_SCOPES.DOCUMENTS_READ,
-        API_SCOPES.TEMPLATES_READ,
-        API_SCOPES.WEBHOOKS_READ,
-      ];
+      return [API_SCOPES.DOCUMENTS_READ, API_SCOPES.TEMPLATES_READ, API_SCOPES.WEBHOOKS_READ];
     case 'user':
     default:
       return [
@@ -175,7 +171,11 @@ export function apiAuth(options?: ApiAuthOptions): MiddlewareHandler {
     // Permission / scope enforcement
     if (options?.requiredScopes && options.requiredScopes.length > 0) {
       const hasAllScopes = options.requiredScopes.every((s) => principal.scopes.includes(s));
-      if (!hasAllScopes && !principal.roles.includes('superadmin') && !principal.roles.includes('admin')) {
+      if (
+        !hasAllScopes &&
+        !principal.roles.includes('superadmin') &&
+        !principal.roles.includes('admin')
+      ) {
         throw new ForbiddenError(
           `Insufficient scope. Required: ${options.requiredScopes.join(', ')}`,
         );

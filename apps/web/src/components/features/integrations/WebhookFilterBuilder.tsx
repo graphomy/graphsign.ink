@@ -113,7 +113,8 @@ export function WebhookFilterBuilder({ initialRules, onChange }: WebhookFilterBu
       </div>
 
       <p className="text-xs text-slate-400 leading-relaxed">
-        Only events satisfying ALL rules will be dispatched. Leave empty to receive all matching events.
+        Only events satisfying ALL rules will be dispatched. Leave empty to receive all matching
+        events.
       </p>
 
       {rules.length === 0 ? (
@@ -123,7 +124,10 @@ export function WebhookFilterBuilder({ initialRules, onChange }: WebhookFilterBu
       ) : (
         <div className="space-y-2.5">
           {rules.map((rule) => (
-            <div key={rule.id} className="flex items-center space-x-2 bg-slate-950/60 p-2.5 rounded border border-slate-800/80">
+            <div
+              key={rule.id}
+              className="flex items-center space-x-2 bg-slate-950/60 p-2.5 rounded border border-slate-800/80"
+            >
               <input
                 type="text"
                 list="common-fields"
@@ -142,7 +146,9 @@ export function WebhookFilterBuilder({ initialRules, onChange }: WebhookFilterBu
 
               <select
                 value={rule.operator}
-                onChange={(e) => updateRule(rule.id, { operator: e.target.value as FilterOperator })}
+                onChange={(e) =>
+                  updateRule(rule.id, { operator: e.target.value as FilterOperator })
+                }
                 className="w-1/4 px-2 py-1.5 text-xs bg-slate-900 border border-slate-700 rounded text-slate-200 focus:outline-none focus:border-emerald-500"
               >
                 <option value="eq">Equals (==)</option>

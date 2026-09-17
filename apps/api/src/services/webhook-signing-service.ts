@@ -32,11 +32,7 @@ export class WebhookSigningService {
       ['sign'],
     );
 
-    const signatureBuffer = await crypto.subtle.sign(
-      'HMAC',
-      key,
-      encoder.encode(body),
-    );
+    const signatureBuffer = await crypto.subtle.sign('HMAC', key, encoder.encode(body));
 
     const bytes = new Uint8Array(signatureBuffer);
     return Array.from(bytes)
@@ -66,10 +62,16 @@ export class WebhookSigningService {
   /**
    * Verifies an incoming signature.
    */
-  static async verify(body: string, secret: string, expectedSignatureHeader: string): Promise<boolean> {
+  static async verify(
+    body: string,
+    secret: string,
+    expectedSignatureHeader: string,
+  ): Promise<boolean> {
     const cleanHeader = expectedSignatureHeader.trim();
     const prefix = 'sha256=';
-    const signature = cleanHeader.startsWith(prefix) ? cleanHeader.substring(prefix.length) : cleanHeader;
+    const signature = cleanHeader.startsWith(prefix)
+      ? cleanHeader.substring(prefix.length)
+      : cleanHeader;
 
     const calculated = await this.sign(body, secret);
     return this.constantTimeEqual(calculated, signature);
