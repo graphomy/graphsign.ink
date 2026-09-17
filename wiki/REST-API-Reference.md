@@ -160,3 +160,45 @@ Content-Type: application/json
 - `POST /csc/v2/credentials/authorize` — Issue short-lived Server Authorisation Data (`SAD`) tokens.
 - `POST /csc/v2/signatures/signHash` — Remote signature generation on pre-computed hashes.
 - `POST /csc/v2/signatures/timestamp` — Issue RFC 3161 timestamp tokens.
+
+### 13. Document CRUD & Lifecycle Adapter (`/api/v1/documents`)
+
+- `POST /documents` — Idempotent document creation from UTF-8 Markdown or Base64 PDF/DOCX.
+- `GET /documents` — List documents with cursor/page pagination, status filtering, and search.
+- `GET /documents/:id` — Retrieve document DTO with metadata, audit hashes, and MIME type.
+- `PUT /documents/:id` — Replace editable draft representation with optimistic revision checks.
+- `PATCH /documents/:id` — Partial draft update.
+- `DELETE /documents/:id` — Soft-delete agreement and emit `document.deleted` event.
+- `GET /documents/:id/file` — Stream document binary content.
+- `POST /documents/:id/sign` — Programmatically submit electronic signature and field values.
+
+### 14. Webhooks & Event Delivery (`/api/v1/webhooks`)
+
+- `GET /webhooks/events` — Retrieve canonical event catalogue and schema definitions.
+- `GET /webhooks` — List webhook subscriptions for current organization.
+- `POST /webhooks` — Create webhook subscription with SSRF validation; returns secret once.
+- `GET /webhooks/:id` — Retrieve webhook subscription configuration and key metadata.
+- `PATCH /webhooks/:id` — Update subscription URL, event types, rate limits, or status.
+- `DELETE /webhooks/:id` — Disable and soft-delete webhook subscription.
+- `POST /webhooks/:id/rotate-secret` — Rotate HMAC signing secret with 24-hour grace window.
+- `POST /webhooks/:id/test` — Dispatch synthetic test event to verify receiver connectivity.
+- `GET /webhooks/:id/metrics` — Aggregate delivery metrics (JSON) or download CSV export.
+- `GET /webhooks/:id/dead-letters` — List failed deliveries stored in the 30-day Dead Letter Queue.
+- `POST /webhooks/deliveries/:id/replay` — Replay dead-lettered delivery with new generation ID.
+
+### 15. API Client Bindings & Redacted Logs (`/api/v1/organisations/me`)
+
+- `GET /organisations/me/api-clients` — List trusted OAuth2 machine client bindings and scopes.
+- `POST /organisations/me/api-clients` — Register new OAuth2 client binding (`ApiClientBinding`).
+- `PATCH /organisations/me/api-clients/:id` — Update client binding status or assigned scopes.
+- `DELETE /organisations/me/api-clients/:id` — Revoke client binding.
+- `GET /organisations/me/api-logs` — Search redacted API request logs with filters and pagination.
+
+### 16. Developer Documentation & Health (`/api/v1`)
+
+- `GET /docs` — Interactive Scalar API documentation console.
+- `GET /openapi.json` — Versioned OpenAPI 3.1 specification schema.
+- `GET /health` — Sanitized public readiness probe.
+
+> [!TIP]
+> For a full architecture breakdown, HMAC signature verification code snippets, and retry flowcharts, see the **[Webhooks & REST API Integration Guide](Webhooks-and-REST-API-Integration.md)**.
