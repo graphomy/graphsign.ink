@@ -1,4 +1,5 @@
 import { Resend } from 'resend';
+import { renderEmailLayout } from './email-layout.js';
 import type { PrismaClient } from '@graphsign/db';
 import { generateId } from '../utils/crypto.js';
 
@@ -162,12 +163,31 @@ export class ResendMailerService implements MailerService {
     html: string,
     meta?: EmailTrackingMetadata,
   ): Promise<void> {
+    if (
+      this.prisma &&
+      meta?.organisationId &&
+      meta.eventType === 'COMPLETED' &&
+      this.prisma.notificationLog.findFirst
+    ) {
+      const previous = await this.prisma.notificationLog.findFirst({
+        where: {
+          organisationId: meta.organisationId,
+          agreementId: meta.agreementId,
+          recipientEmail: to,
+          eventType: 'COMPLETED',
+          status: 'SENT',
+        },
+      });
+      if (previous) return;
+    }
+    const branded = renderEmailLayout(subject, html, this.webUrl);
     const { result, attempts, error } = await executeWithRetry(async () => {
       const response = await this.resend.emails.send({
         from: this.from,
         to,
         subject,
-        html,
+        html: branded.html,
+        text: branded.text,
       });
       if ((response as any).error) {
         throw new Error((response as any).error.message || 'Resend delivery failed');

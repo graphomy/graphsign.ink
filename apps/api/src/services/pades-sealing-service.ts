@@ -7,6 +7,8 @@ import { AuditService } from './audit-service.js';
 import { CertificateService } from './certificate-service.js';
 import { PdfAssemblyService } from './pdf-assembly-service.js';
 import { BadRequestError, NotFoundError } from '../utils/errors.js';
+import { SigningClient } from './signing-client.js';
+import { PrismaAuditService } from './audit-service.js';
 
 export interface SealAgreementOptions {
   agreementId: string;
@@ -28,7 +30,7 @@ export interface SealResult {
   padesLevel: string;
   algorithm: string;
   tsaUrl: string;
-  tsaTimestamp: Date;
+  tsaTimestamp: Date | null;
   sealedPdfBase64: string;
   status: 'SUCCESS' | 'FAILED';
 }
@@ -39,13 +41,35 @@ export class PadesSealingService {
     private readonly keyCustodyService: KeyCustodyService,
     private readonly tsaService: TsaService,
     private readonly auditService: AuditService,
+    private readonly signingClient = new SigningClient(),
   ) {}
 
   /**
-   * Seals a completed agreement with PAdES B-T / B-LTA cryptographic signature,
+   * Seals a completed agreement with an embedded CMS cryptographic signature,
    * RFC 3161 timestamp, and QR verification badge.
    */
   async sealAgreement(options: SealAgreementOptions): Promise<SealResult> {
+    if ('$transaction' in this.prisma && '$executeRaw' in this.prisma) {
+      return this.prisma.$transaction(
+        async (transaction) => {
+          await transaction.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${options.agreementId}))`;
+          await transaction.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`signing:${options.organisationId}`}))`;
+          const service = new PadesSealingService(
+            transaction as PrismaClient,
+            this.keyCustodyService,
+            this.tsaService,
+            new PrismaAuditService(transaction as PrismaClient),
+            this.signingClient,
+          );
+          return service.sealAgreementUnlocked(options);
+        },
+        { timeout: 90000 },
+      );
+    }
+    return this.sealAgreementUnlocked(options);
+  }
+
+  private async sealAgreementUnlocked(options: SealAgreementOptions): Promise<SealResult> {
     const { agreementId, organisationId, userId, ipAddress, userAgent } = options;
 
     const agreement = await this.prisma.agreement.findFirst({
@@ -60,6 +84,35 @@ export class PadesSealingService {
       throw new NotFoundError('Agreement not found.');
     }
 
+    const meta = (agreement.metadata as Record<string, unknown>) || {};
+    if (meta.signedPdfBase64 && meta.verificationToken && this.prisma.documentSeal?.findFirst) {
+      const existing = await this.prisma.documentSeal.findFirst({
+        where: { agreementId, organisationId, status: 'SUCCESS' },
+        orderBy: { createdAt: 'desc' },
+      });
+      if (existing)
+        return {
+          sealId: existing.id,
+          agreementId,
+          verificationToken: existing.verificationToken,
+          verificationUrl: `https://graphsign.ink/verify/${existing.verificationToken}`,
+          qrCodeDataUrl: await QRCode.toDataURL(
+            `https://graphsign.ink/verify/${existing.verificationToken}`,
+          ),
+          documentHash: existing.documentHash,
+          padesLevel: existing.padesLevel,
+          algorithm: existing.algorithm,
+          tsaUrl: existing.tsaUrl || '',
+          tsaTimestamp: existing.tsaTimestamp,
+          sealedPdfBase64: meta.signedPdfBase64 as string,
+          status: 'SUCCESS',
+        };
+    }
+
+    if (agreement.status !== 'COMPLETED')
+      throw new BadRequestError(
+        'An agreement can only be digitally sealed after all required recipients have completed signing.',
+      );
     // Resolve signing certificate
     let cert = null;
     if (options.certificateId && this.prisma.signingCertificate?.findFirst) {
@@ -68,6 +121,8 @@ export class PadesSealingService {
       });
     }
 
+    if (options.certificateId && !cert)
+      throw new NotFoundError('Active signing certificate not found for this organisation.');
     if (!cert && this.prisma.signingCertificate?.findFirst) {
       // Find default active cert
       cert = await this.prisma.signingCertificate.findFirst({
@@ -89,11 +144,35 @@ export class PadesSealingService {
         this.prisma,
         this.keyCustodyService,
         this.auditService,
+        this.signingClient,
       );
       const isUuid =
         userId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId);
       const effectiveUserId = isUuid ? userId : agreement.authorId;
       cert = await certService.getOrCreateDefaultCertificate(organisationId, effectiveUserId);
+    }
+
+    // Legacy profiles are preserved for historical verification; renew into a new profile.
+    if (
+      cert.type === 'SELF_SIGNED' &&
+      !Buffer.from(cert.certificatePem.replace(/-----[^-]+-----|\s/g, ''), 'base64')
+        .subarray(0, 1)
+        .equals(Buffer.from([0x30]))
+    ) {
+      if (options.certificateId)
+        throw new BadRequestError(
+          'This legacy certificate must be renewed before digitally signing new documents.',
+        );
+      cert = (
+        await new CertificateService(
+          this.prisma,
+          this.keyCustodyService,
+          this.auditService,
+          this.signingClient,
+        ).generateSelfSigned(organisationId, agreement.authorId, {
+          name: 'Document Signing Certificate',
+        })
+      ).certificate;
     }
 
     // Generate unique verification token (e.g., GS-7f3a9c2e)
@@ -111,7 +190,6 @@ export class PadesSealingService {
       },
     });
 
-    const meta = (agreement.metadata as Record<string, unknown>) || {};
     const envelopeId =
       (meta.envelopeId as string) ||
       (agreement as any).envelopeId ||
@@ -138,42 +216,86 @@ export class PadesSealingService {
         verificationToken,
         verificationUrl,
         documentHash: 'PENDING_SEAL',
-        tsaTimestamp: new Date(),
-        tsaProvider: cert.tsaUrl ? 'Custom TSA' : 'FreeTSA / DigiCert RFC 3161',
+        tsaTimestamp: null,
+        tsaProvider: 'Timestamp evidence is recorded in the final digital signature',
         signerName: cert.name,
         subjectDn: cert.subjectDn,
         issuerDn: cert.issuerDn,
         algorithm: cert.algorithm,
-        padesLevel: cert.padesLevel || 'B_T',
+        padesLevel: 'PENDING',
       },
     });
 
-    // 1. Initial content digest for TSA timestamping & signature
-    const preSealDigest = await sha256(assembledPdfBytes);
+    let sealedPdfBase64: string;
+    let sealedPdfBytes: Uint8Array;
+    let sealAlgorithm = cert.algorithm;
+    let sealPadesLevel = cert.padesLevel || 'B_T';
+    let tsaResult: { tsaUrl: string; timestamp: Date | null; provider: string };
 
-    // Request RFC 3161 Timestamp
-    const tsaResult = await this.tsaService.requestTimestamp(
-      preSealDigest,
-      cert.tsaUrl || undefined,
-    );
+    if (this.signingClient.configured) {
+      const signed = await this.signingClient.sign({
+        pdfBase64: Buffer.from(assembledPdfBytes).toString('base64'),
+        organisationId,
+        certificateId: cert.id,
+        certificatePem: cert.certificatePem,
+        verificationToken,
+        selfSigned: cert.type === 'SELF_SIGNED',
+        tsaUrl: cert.tsaUrl,
+      });
+      sealedPdfBase64 = signed.pdfBase64;
+      sealedPdfBytes = Buffer.from(sealedPdfBase64, 'base64');
+      sealAlgorithm = signed.algorithm;
+      sealPadesLevel = signed.padesLevel;
+      tsaResult = {
+        tsaUrl: cert.tsaUrl || '',
+        timestamp: signed.timestamp ? new Date(signed.timestamp) : null,
+        provider: signed.timestamp ? 'RFC 3161 verified' : 'No trusted timestamp',
+      };
+      if (cert.certificatePem !== signed.certificatePem && this.prisma.signingCertificate?.update) {
+        await this.prisma.signingCertificate.update({
+          where: { id: cert.id },
+          data: {
+            certificatePem: signed.certificatePem,
+            keyFingerprint: await sha256(signed.certificatePem),
+            subjectDn: signed.subjectDn,
+            issuerDn: signed.issuerDn,
+            serialNumber: signed.serialNumber,
+            validFrom: new Date(signed.validFrom),
+            validTo: new Date(signed.validTo),
+            algorithm: signed.algorithm,
+          },
+        });
+      }
+    } else {
+      // In-process sealing fallback for Cloudflare Workers free stack
+      const preSealDigest = await sha256(assembledPdfBytes);
+      const tsa = await this.tsaService.requestTimestamp(preSealDigest, cert.tsaUrl || undefined);
+      tsaResult = {
+        tsaUrl: tsa.tsaUrl || '',
+        timestamp: tsa.timestamp,
+        provider: tsa.provider,
+      };
+      sealPadesLevel = cert.padesLevel || 'B_T';
+      sealAlgorithm = cert.algorithm;
 
-    // Perform cryptographic sign of document digest
-    const dummyKeys = await this.keyCustodyService.generateKeyPair(cert.algorithm as any);
-    const signatureBase64 = await this.keyCustodyService.signHash({
-      keyId: cert.pkcs11KeyId,
-      privateKeyPem: dummyKeys.privateKeyPem,
-      algorithm: cert.algorithm as any,
-      hashBase64: btoa(preSealDigest),
-    });
+      const dummyKeys = await this.keyCustodyService.generateKeyPair(cert.algorithm as any);
+      const signatureBase64 = await this.keyCustodyService.signHash({
+        keyId: cert.pkcs11KeyId,
+        privateKeyPem: dummyKeys.privateKeyPem,
+        algorithm: cert.algorithm as any,
+        hashBase64: btoa(preSealDigest),
+      });
 
-    // Build PAdES sealed container representation
-    const { sealedPdfBase64, sealedPdfBytes } = this.buildPadesContainer(
-      assembledPdfBytes,
-      cert.certificatePem,
-      signatureBase64,
-      tsaResult.tokenBase64,
-      verificationToken,
-    );
+      const container = this.buildPadesContainer(
+        assembledPdfBytes,
+        cert.certificatePem,
+        signatureBase64,
+        tsa.tokenBase64,
+        verificationToken,
+      );
+      sealedPdfBase64 = container.sealedPdfBase64;
+      sealedPdfBytes = container.sealedPdfBytes;
+    }
 
     // Compute document hash over final sealed PDF container bytes for client hash verification
     const documentHash = await sha256(sealedPdfBytes);
@@ -186,8 +308,8 @@ export class PadesSealingService {
       organisationId,
       agreementId,
       certificateId: cert.id,
-      algorithm: cert.algorithm,
-      padesLevel: cert.padesLevel || 'B_T',
+      algorithm: sealAlgorithm,
+      padesLevel: sealPadesLevel,
       tsaUrl: tsaResult.tsaUrl,
       tsaTimestamp: tsaResult.timestamp,
       documentHash,
@@ -201,6 +323,7 @@ export class PadesSealingService {
         tsaProvider: tsaResult.provider,
         qrCodeGenerated: true,
         verificationUrl,
+        signatureFormat: 'PDF_CMS',
       },
     };
 
@@ -224,7 +347,8 @@ export class PadesSealingService {
             envelopeId,
             verificationToken,
             documentHash,
-            padesLevel: cert.padesLevel || 'B_T',
+            padesLevel: sealPadesLevel,
+            sealingStatus: 'READY',
             sealedAt: new Date().toISOString(),
           },
         },
@@ -242,9 +366,9 @@ export class PadesSealingService {
         verificationToken,
         documentHash,
         padesLevel: seal.padesLevel,
-        algorithm: cert.algorithm,
+        algorithm: sealAlgorithm,
         tsaUrl: tsaResult.tsaUrl,
-        tsaTimestamp: tsaResult.timestamp.toISOString(),
+        tsaTimestamp: tsaResult.timestamp?.toISOString(),
       },
       ipAddress,
       userAgent,
@@ -257,8 +381,8 @@ export class PadesSealingService {
       verificationUrl,
       qrCodeDataUrl,
       documentHash,
-      padesLevel: seal.padesLevel,
-      algorithm: cert.algorithm,
+      padesLevel: sealPadesLevel,
+      algorithm: sealAlgorithm,
       tsaUrl: tsaResult.tsaUrl,
       tsaTimestamp: tsaResult.timestamp,
       sealedPdfBase64,
@@ -337,9 +461,6 @@ export class PadesSealingService {
     };
   }
 
-  /**
-   * Constructs the incremental PAdES signature dictionary and CMS structure.
-   */
   private buildPadesContainer(
     originalPdf: string | Uint8Array,
     certificatePem: string,
@@ -347,7 +468,6 @@ export class PadesSealingService {
     tsaTokenBase64: string,
     verificationToken: string,
   ): { sealedPdfBase64: string; sealedPdfBytes: Uint8Array } {
-    // Append standard PDF incremental update structure with signature dictionary
     const trailerMetadata = JSON.stringify({
       sigType: 'PAdES-B-T',
       subFilter: 'ETSI.CAdES.detached',
@@ -373,10 +493,10 @@ export class PadesSealingService {
       baseBytes = Buffer.from(originalPdf);
     }
 
-    const finalBuffer = Buffer.concat([baseBytes, sealBytes]);
+    const combinedBytes = Buffer.concat([baseBytes, sealBytes]);
     return {
-      sealedPdfBase64: finalBuffer.toString('base64'),
-      sealedPdfBytes: new Uint8Array(finalBuffer),
+      sealedPdfBase64: combinedBytes.toString('base64'),
+      sealedPdfBytes: new Uint8Array(combinedBytes),
     };
   }
 }

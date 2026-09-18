@@ -2,7 +2,6 @@ import { Hono } from 'hono';
 import type { PrismaClient } from '@graphsign/db';
 import { createPrismaClient, getLegacyPrisma } from '@graphsign/db';
 import { AgreementService } from '../services/agreement-service.js';
-import { PdfAssemblyService } from '../services/pdf-assembly-service.js';
 import type { AuditService } from '../services/audit-service.js';
 import { PrismaAuditService } from '../services/audit-service.js';
 import { jwtAuth } from '../middleware/jwt-auth.js';
@@ -15,7 +14,7 @@ import {
   queryAgreementsSchema,
 } from '../validators/agreement-validators.js';
 import { saveDocumentFieldsSchema } from '../validators/field-validators.js';
-import { BadRequestError, ForbiddenError } from '../utils/errors.js';
+import { BadRequestError, ForbiddenError, NotFoundError } from '../utils/errors.js';
 import { requirePermission } from '../middleware/rbac-middleware.js';
 import { enforceTenantActiveStatus } from '../middleware/tenant-status-middleware.js';
 import { createRateLimiter } from '../middleware/rate-limiter.js';
@@ -329,32 +328,10 @@ export function createAgreementRoutes(deps?: AgreementDeps) {
         (meta.fileBase64 as string | undefined) ||
         (meta.fileData as string | undefined);
 
-      if (!fileData && agreement.status === 'COMPLETED' && agreement.markdownContent) {
-        try {
-          const pdfAssembly = new PdfAssemblyService();
-          const envelopeId =
-            (meta.envelopeId as string) ||
-            (agreement as any).envelopeId ||
-            `ENV-${agreement.id.replace(/-/g, '').substring(0, 8).toUpperCase()}`;
-          const pdfBytes = await pdfAssembly.assembleCompletedDocument({
-            agreementTitle: agreement.title,
-            envelopeId,
-            markdownContent: agreement.markdownContent,
-            fields: (agreement.fields as any)?.fields || [],
-            recipients: ((agreement as any).recipients as any[]) || [],
-            sealDetails: meta.verificationToken
-              ? {
-                  verificationToken: meta.verificationToken as string,
-                  verificationUrl: `https://graphsign.ink/verify/${meta.verificationToken}`,
-                  documentHash: (meta.documentHash as string) || 'COMPLETED',
-                  tsaTimestamp: new Date(),
-                }
-              : undefined,
-          });
-          fileData = Buffer.from(pdfBytes).toString('base64');
-        } catch (err) {
-          console.warn('[AGREEMENTS] On-the-fly PDF assembly fallback failed:', err);
-        }
+      if (agreement.status === 'COMPLETED' && !meta.signedPdfBase64 && !meta.sealedPdfBase64) {
+        throw new NotFoundError(
+          'The original signed document is unavailable. Retry final sealing instead of regenerating it.',
+        );
       }
 
       if (fileData) {
@@ -377,12 +354,7 @@ export function createAgreementRoutes(deps?: AgreementDeps) {
         });
       }
 
-      // Fallback standard PDF structure if stored without raw binary in metadata
-      const fallbackPdf = `%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n3 0 obj<</Type/Page/MediaBox[0 0 612 792]/Parent 2 0 R/Resources<<>>>>endobj\nxref\n0 4\n0000000000 65535 f\n0000000009 00000 n\n0000000052 00000 n\n0000000101 00000 n\ntrailer<</Size 4/Root 1 0 R>>\nstartxref\n178\n%%EOF`;
-      return c.body(fallbackPdf, 200, {
-        'Content-Type': 'application/pdf',
-        'Content-Disposition': `inline; filename="${agreement.fileName || 'document.pdf'}"`,
-      });
+      throw new NotFoundError('Agreement file is unavailable.');
     },
   );
 

@@ -1,3 +1,4 @@
+import { SigningClient } from '../services/signing-client.js';
 import { Hono } from 'hono';
 import type { PrismaClient } from '@graphsign/db';
 import { createPrismaClient, getLegacyPrisma } from '@graphsign/db';
@@ -12,8 +13,7 @@ import {
   electronicConsentSchema,
   verifyOtpSchema,
 } from '../validators/workflow-validators.js';
-import { BadRequestError, ForbiddenError } from '../utils/errors.js';
-import { PdfAssemblyService } from '../services/pdf-assembly-service.js';
+import { BadRequestError, ForbiddenError, NotFoundError } from '../utils/errors.js';
 import { createRateLimiter } from '../middleware/rate-limiter.js';
 import type { Env } from '../index.js';
 
@@ -60,13 +60,23 @@ export function createSignRoutes(deps?: SignDeps) {
     const audit = deps?.audit || new PrismaAuditService(prisma);
     const mailer =
       deps?.mailer ||
-      createMailerService({
-        RESEND_API_KEY: c.env?.RESEND_API_KEY,
-        EMAIL_FROM: c.env?.EMAIL_FROM,
-        WEB_URL: c.env?.WEB_URL,
-      });
+      createMailerService(
+        {
+          RESEND_API_KEY: c.env?.RESEND_API_KEY,
+          EMAIL_FROM: c.env?.EMAIL_FROM,
+          WEB_URL: c.env?.WEB_URL,
+        },
+        prisma,
+      );
 
-    const service = new WorkflowService(prisma, audit, mailer);
+    const service = new WorkflowService(
+      prisma,
+      audit,
+      mailer,
+      undefined,
+      undefined,
+      new SigningClient(c.env?.SIGNING_SERVICE_URL, c.env?.SIGNING_SERVICE_TOKEN),
+    );
     return { service };
   }
 
@@ -258,28 +268,6 @@ export function createSignRoutes(deps?: SignDeps) {
       );
     }
 
-    if (!file.fileData && file.markdownContent) {
-      try {
-        const pdfAssembly = new PdfAssemblyService();
-        const pdfBytes = await pdfAssembly.assembleCompletedDocument({
-          agreementTitle: file.title || 'Agreement',
-          envelopeId: `ENV-${(file.id || '').replace(/-/g, '').substring(0, 8).toUpperCase()}`,
-          markdownContent: file.markdownContent,
-          sealDetails: (file as any).verificationToken
-            ? {
-                verificationToken: (file as any).verificationToken,
-                verificationUrl: `https://graphsign.ink/verify/${(file as any).verificationToken}`,
-                documentHash: (file as any).documentHash || 'COMPLETED',
-              }
-            : undefined,
-        });
-        file.fileData = Buffer.from(pdfBytes).toString('base64');
-        file.mimeType = 'application/pdf';
-      } catch (err) {
-        console.warn('[SIGN] Failed to compile markdown on download:', err);
-      }
-    }
-
     if (file.fileData) {
       const base64Content = file.fileData.includes(',')
         ? file.fileData.split(',')[1]
@@ -299,12 +287,9 @@ export function createSignRoutes(deps?: SignDeps) {
       return c.body(buffer as any);
     }
 
-    // Never return raw markdown on download of completed agreements
-    const fallbackPdf = `%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n3 0 obj<</Type/Page/MediaBox[0 0 612 792]/Parent 2 0 R/Resources<<>>>>endobj\nxref\n0 4\n0000000000 65535 f\n0000000009 00000 n\n0000000052 00000 n\n0000000101 00000 n\ntrailer<</Size 4/Root 1 0 R>>\nstartxref\n178\n%%EOF`;
-    return c.body(fallbackPdf as any, 200, {
-      'Content-Type': 'application/pdf',
-      'Content-Disposition': `attachment; filename="${(file.fileName || 'signed-document.pdf').replace(/\.md$/i, '.pdf')}"`,
-    });
+    throw new NotFoundError(
+      'The original signed document is unavailable. Please contact the agreement author.',
+    );
   });
 
   return sign;

@@ -1,3 +1,6 @@
+import { SigningClient } from '../services/signing-client.js';
+import { WorkflowService } from '../services/workflow-service.js';
+import { createMailerService } from '../services/mailer-service.js';
 import { Hono } from 'hono';
 import type { PrismaClient } from '@graphsign/db';
 import { createPrismaClient, getLegacyPrisma } from '@graphsign/db';
@@ -50,15 +53,29 @@ export function createSigningRoutes(deps?: SigningDeps) {
         fallback2Url: c.env?.TSA_FALLBACK2_URL || process.env.TSA_FALLBACK2_URL,
       });
 
-    const sealingService = new PadesSealingService(prisma, keyCustody, tsa, audit);
-    const verificationService = new VerificationService(prisma);
+    const sealingService = new PadesSealingService(
+      prisma,
+      keyCustody,
+      tsa,
+      audit,
+      new SigningClient(c.env?.SIGNING_SERVICE_URL, c.env?.SIGNING_SERVICE_TOKEN),
+    );
+    const verificationService = new VerificationService(
+      prisma,
+      keyCustody,
+      undefined,
+      audit,
+      new SigningClient(c.env?.SIGNING_SERVICE_URL, c.env?.SIGNING_SERVICE_TOKEN),
+    );
 
-    return { sealingService, verificationService };
+    const mailer = createMailerService(c.env || {}, prisma);
+    const workflowService = new WorkflowService(prisma, audit, mailer, sealingService);
+    return { sealingService, verificationService, workflowService };
   }
 
   // POST /api/v1/signing/seal/:agreementId (FR-012.004)
   signing.post('/seal/:agreementId', jwtAuth(), requirePermission('signatures:sign'), async (c) => {
-    const { sealingService } = getServices(c);
+    const { sealingService, workflowService } = getServices(c);
     const userPayload = c.get('userPayload') as any;
     const orgId = userPayload?.orgId;
     const userId = userPayload?.sub;
@@ -83,6 +100,7 @@ export function createSigningRoutes(deps?: SigningDeps) {
       userAgent,
     });
 
+    await workflowService.sendCompletionNotifications(agreementId, orgId, result.verificationToken);
     return c.json(result, 200);
   });
 

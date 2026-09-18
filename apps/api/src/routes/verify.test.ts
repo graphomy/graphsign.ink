@@ -77,7 +77,7 @@ describe('Public Verification Routes Integration Tests (INK-17, INK-135, INK-136
     };
 
     const mockKeyCustody = {
-      verifySignature: vi.fn().mockResolvedValue(true),
+      verifySignature: vi.fn().mockResolvedValue(false),
     };
 
     app = new Hono();
@@ -189,6 +189,17 @@ describe('Public Verification Routes Integration Tests (INK-17, INK-135, INK-136
     expect(pdfArrayBuffer.byteLength).toBeGreaterThan(100);
   });
 
+  it('downloads a real audit certificate PDF while keeping JSON reports available', async () => {
+    const response = await app.request('/verify/GS-7f3a9c2e/certificate?format=pdf');
+    expect(response.status).toBe(200);
+    expect(response.headers.get('Content-Type')).toContain('application/pdf');
+    expect(
+      Buffer.from(await response.arrayBuffer())
+        .subarray(0, 5)
+        .toString(),
+    ).toBe('%PDF-');
+  });
+
   it('POST /verify/offline verifies document signature without database access (INK-137)', async () => {
     const meta = Buffer.from(
       JSON.stringify({
@@ -209,8 +220,8 @@ describe('Public Verification Routes Integration Tests (INK-17, INK-135, INK-136
 
     expect(res.status).toBe(200);
     const body = (await res.json()) as any;
-    expect(body.isValid).toBe(true);
-    expect(body.status).toBe('VALID');
+    expect(body.isValid).toBe(false);
+    expect(body.status).toBe('TAMPERED');
     expect(body.signerDetails?.name).toBe('Offline User');
   });
 });

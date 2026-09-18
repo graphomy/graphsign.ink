@@ -1,4 +1,5 @@
 'use client';
+import { agreementReturnUrl } from '@/lib/agreement-navigation';
 
 import React, { useState, useEffect } from 'react';
 import { useEditorDialog } from './useEditorDialog';
@@ -148,6 +149,7 @@ export function AgreementEditModal({
           },
           body: JSON.stringify({
             title: cleanTitle,
+            ...(mode === 'edit' ? { expectedVersion: String(version).replace(/^v/, '') } : {}),
             description: cleanDesc || undefined,
             markdownContent: markdown || '',
             tags: tags || [],
@@ -168,7 +170,14 @@ export function AgreementEditModal({
           : `Agreement draft saved successfully (updated to v${updated.version}).`,
       );
       if (editorTab)
-        editorTab.location.replace('/agreements/edit?id=' + encodeURIComponent(agreementId));
+        editorTab.location.replace(
+          '/agreements/edit?id=' +
+            encodeURIComponent(updated.id || agreementId) +
+            '&returnTo=' +
+            encodeURIComponent(
+              agreementReturnUrl(window.location.pathname + window.location.search),
+            ),
+        );
       if (!fullPage) onClose();
     } catch (err: unknown) {
       editorTab?.close();
@@ -287,7 +296,7 @@ export function AgreementEditModal({
           </div>
 
           <div className="flex items-center gap-2 self-end sm:self-auto">
-            {mode === 'edit' && !fullPage && (
+            {!fullPage && (
               <button
                 type="button"
                 onClick={() => handleSaveDraft(undefined, true)}
@@ -445,6 +454,13 @@ export function AgreementEditModal({
         </fieldset>
 
         {/* Modal Action Footer */}
+        {currentStatus === 'DRAFT' && (
+          <p className="text-sm text-ink-700 mt-4" role="note">
+            Finalizing saves the document as an active agreement ready for signing. It does not send
+            signing invitations. Review the terms before finalizing; further term changes require a
+            draft revision.
+          </p>
+        )}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-5 mt-4 border-t border-neutral-200">
           <div>
             {mode === 'edit' && currentStatus === 'DRAFT' && (
@@ -461,7 +477,8 @@ export function AgreementEditModal({
                   </>
                 ) : (
                   <>
-                    <span>🚀</span> Move to Active (Major Version)
+                    <PenLine className="h-4 w-4" aria-hidden="true" /> Finalize & make ready for
+                    signing
                   </>
                 )}
               </button>

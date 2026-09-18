@@ -23,6 +23,9 @@ packages/db/prisma/*.db
 
 # Test coverage
 coverage/
+.tools/
+services/signing/target/
+*.p12
 
 # Debug
 npm-debug.log*
@@ -51,3 +54,8 @@ prisma/generated/
 .dev.vars
 .dev.vars.*
 *.dev.vars
+
+.tools/
+services/signing/target/
+playwright-report/
+test-results/

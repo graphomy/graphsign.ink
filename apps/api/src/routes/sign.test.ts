@@ -157,7 +157,7 @@ describe('Sign Route Integration Tests (Public Signer Endpoints)', () => {
     expect(err.error?.message).toContain('completed signing');
   });
 
-  it('GET /api/v1/sign/:token/download downloads compiled PDF instead of raw markdown when completed (INK-278)', async () => {
+  it('GET /api/v1/sign/:token/download does not regenerate a completed PDF when its original artifact is missing', async () => {
     mockWorkflowService.getSigningDocumentFile = vi.fn().mockResolvedValue({
       id: 'ag-1',
       title: 'Sales Agreement',
@@ -170,9 +170,8 @@ describe('Sign Route Integration Tests (Public Signer Endpoints)', () => {
       method: 'GET',
     });
 
-    expect(res.status).toBe(200);
-    expect(res.headers.get('Content-Type')).toBe('application/pdf');
-    expect(res.headers.get('Content-Disposition')).toContain('sales-agreement.pdf');
+    expect(res.status).toBe(404);
+    expect(((await res.json()) as any).error.message).toContain('original signed document');
   });
 
   it('GET /api/v1/sign/:token/download streams PDF binary (INK-105)', async () => {

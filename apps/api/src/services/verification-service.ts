@@ -2,6 +2,7 @@ import type { PrismaClient } from '@graphsign/db';
 import { sha256 } from '../utils/crypto.js';
 import { NotFoundError, BadRequestError } from '../utils/errors.js';
 import { DocumentSignatureExtractor } from '../utils/document-signature-extractor.js';
+import { SigningClient } from './signing-client.js';
 import { CrlOcspService } from './crl-ocsp-service.js';
 import type { KeyCustodyService } from './key-custody-service.js';
 import type { AuditService } from './audit-service.js';
@@ -25,6 +26,7 @@ export interface PublicVerificationReport {
   totalSigners: number;
   signedSigners: number;
   signerDetails?: SignerInfo | null;
+  participants?: Array<{ name: string; email: string; status: string; signedAt: string | null }>;
   sealDetails: {
     algorithm: string;
     padesLevel: string;
@@ -71,6 +73,7 @@ export class VerificationService {
     private readonly keyCustodyService?: KeyCustodyService,
     crlOcspService?: CrlOcspService,
     private readonly auditService?: AuditService,
+    private readonly signingClient = new SigningClient(),
   ) {
     this.crlOcspService = crlOcspService || new CrlOcspService(this.prisma);
   }
@@ -329,9 +332,8 @@ export class VerificationService {
       if (seal) {
         const matchesOverallHash =
           computedFileHash.toLowerCase() === seal.documentHash.toLowerCase();
-        const preSealDigest = (seal.metadata as any)?.preSealDigest as string | undefined;
-        const matchesPreSealDigest =
-          preSealDigest && extracted.signedContentDigest === preSealDigest;
+        // The final artifact must match exactly; a matching content prefix is insufficient.
+        const matchesPreSealDigest = false;
 
         // Critical correctness check: If the file hash doesn't match the seal, it's altered!
         if (!matchesOverallHash && !matchesPreSealDigest) {
@@ -421,6 +423,7 @@ export class VerificationService {
     suppliedCertPem?: string,
   ): Promise<PublicVerificationReport> {
     const rawBytes = toBuffer(fileContent);
+    if (rawBytes.includes(Buffer.from('/ByteRange'))) return this.verifyStandardPdf(rawBytes);
 
     const computedHash = await sha256(new Uint8Array(rawBytes));
     const extracted = await DocumentSignatureExtractor.extract(rawBytes);
@@ -482,7 +485,7 @@ export class VerificationService {
     }
 
     // Cryptographically verify signature if KeyCustodyService is provided
-    let isSigValid = true;
+    let isSigValid = false;
     if (
       this.keyCustodyService &&
       extracted.signatureBase64 &&
@@ -528,6 +531,41 @@ export class VerificationService {
     };
   }
 
+  private async verifyStandardPdf(bytes: Buffer): Promise<PublicVerificationReport> {
+    const documentHash = await sha256(new Uint8Array(bytes));
+    let proof;
+    try {
+      proof = await this.signingClient.verify(Buffer.from(bytes).toString('base64'));
+    } catch {
+      proof = null;
+    }
+    return {
+      isValid: proof?.valid === true,
+      status: proof ? (proof.valid ? 'VALID' : 'TAMPERED') : 'UNSUPPORTED',
+      message: proof
+        ? proof.valid
+          ? 'PDF digital signature cryptographically verified. Certificate identity trust must be assessed separately.'
+          : 'The PDF signature is invalid or the document was modified.'
+        : 'Independent PDF signature verification is unavailable. The document has not been reported as valid.',
+      verificationToken: '',
+      documentTitle: 'Signed PDF',
+      documentHash,
+      completedAt: proof?.signingTime || null,
+      totalSigners: 1,
+      signedSigners: proof?.valid ? 1 : 0,
+      signerDetails: { name: proof?.subject || 'Unknown' },
+      sealDetails: {
+        algorithm: 'CMS',
+        padesLevel: proof?.padesLevel || 'UNKNOWN',
+        tsaUrl: null,
+        tsaTimestamp: proof?.timestamp || null,
+        certificateSubject: proof?.subject,
+      },
+      organisationName: 'Independent verification',
+      sealedAt: proof?.signingTime || '',
+    };
+  }
+
   private async buildReport(seal: any): Promise<PublicVerificationReport> {
     const agreement = seal.agreement || {};
     const recipients = agreement.recipients || [];
@@ -567,6 +605,26 @@ export class VerificationService {
     }
 
     const meta = (seal.metadata as any) || {};
+    if (meta.signatureFormat === 'PDF_CMS') {
+      const artifact =
+        seal.agreement?.metadata?.signedPdfBase64 || seal.agreement?.metadata?.sealedPdfBase64;
+      if (!artifact) {
+        status = 'UNSUPPORTED';
+        message = 'The original signed artifact is unavailable.';
+      } else {
+        const proof = await this.verifyStandardPdf(Buffer.from(artifact, 'base64'));
+        if (proof.documentHash !== seal.documentHash) {
+          status = 'TAMPERED';
+          message = 'The stored artifact does not match its seal hash.';
+        } else if (!proof.isValid) {
+          status = proof.status;
+          message = proof.message;
+        }
+      }
+    } else if (status === 'VALID') {
+      message =
+        'Legacy document integrity record found. This does not establish a standards-compliant PDF digital signature or trusted timestamp.';
+    }
 
     // Determine primary signer details
     const firstSignedRecipient = recipients.find((r: any) => r.status === 'SIGNED');
@@ -604,6 +662,12 @@ export class VerificationService {
       totalSigners: totalCount,
       signedSigners: signedCount,
       signerDetails,
+      participants: recipients.map((recipient: any) => ({
+        name: recipient.name || '',
+        email: recipient.email || '',
+        status: recipient.status,
+        signedAt: recipient.signedAt ? new Date(recipient.signedAt).toISOString() : null,
+      })),
       sealDetails: {
         algorithm: seal.algorithm,
         padesLevel: seal.padesLevel,
@@ -670,7 +734,7 @@ export class VerificationService {
       verificationReport: report,
       issuedAt: new Date().toISOString(),
       disclaimer:
-        'This certificate confirms that the referenced document was cryptographically sealed with PAdES standards and timestamped via an RFC 3161 compliant Time Stamp Authority.',
+        'This audit record reflects the verification evidence available. Legacy seals are not proof of a standards-compliant PDF digital signature or trusted timestamp.',
     };
   }
 }

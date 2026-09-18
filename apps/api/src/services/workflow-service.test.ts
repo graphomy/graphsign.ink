@@ -1,3 +1,10 @@
+vi.mock('./pades-sealing-service.js', () => ({
+  PadesSealingService: class {
+    async sealAgreement() {
+      return { verificationToken: 'GS-completed', documentHash: 'test-hash', status: 'SUCCESS' };
+    }
+  },
+}));
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { WorkflowService } from './workflow-service';
 

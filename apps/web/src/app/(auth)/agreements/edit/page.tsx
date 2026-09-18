@@ -1,4 +1,5 @@
 'use client';
+import { agreementReturnUrl } from '@/lib/agreement-navigation';
 
 import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -18,6 +19,7 @@ interface AgreementDetails {
 }
 
 function EditorPageContent() {
+  const returnTo = agreementReturnUrl(useSearchParams().get('returnTo'));
   const id = useSearchParams().get('id');
   const router = useRouter();
   const [agreement, setAgreement] = useState<AgreementDetails | null>(null);
@@ -53,7 +55,7 @@ function EditorPageContent() {
     return (
       <main className="p-8 space-y-4">
         <p role="alert">{error || 'Choose an agreement to edit.'}</p>
-        <Link href="/agreements" className="underline">
+        <Link href={returnTo} className="underline">
           Back to agreements
         </Link>
       </main>
@@ -62,7 +64,7 @@ function EditorPageContent() {
   return (
     <main>
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-ink-200 bg-white px-4 py-3 md:px-8">
-        <Link href="/agreements" className="text-sm font-semibold underline">
+        <Link href={returnTo} className="text-sm font-semibold underline">
           Back to agreements
         </Link>
         <p role="status" className="text-sm text-ink-700">
@@ -79,7 +81,7 @@ function EditorPageContent() {
         initialTags={agreement.tags}
         currentVersion={agreement.version}
         currentStatus={agreement.status}
-        onClose={() => router.push('/agreements')}
+        onClose={() => router.push(returnTo)}
         onSuccess={setMessage}
       />
     </main>

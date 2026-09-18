@@ -1,3 +1,6 @@
+vi.mock('../services/signing-client.js', async () => ({
+  SigningClient: (await import('../services/test-signing-client.js')).TestSigningClient,
+}));
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { createCertificateRoutes } from './certificates.js';
 import { signJwt } from '../utils/jwt.js';

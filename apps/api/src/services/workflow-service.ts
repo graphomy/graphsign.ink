@@ -1,3 +1,4 @@
+import { SigningClient } from './signing-client.js';
 import type { PrismaClient } from '@graphsign/db';
 import {
   SubmitReviewInput,
@@ -12,7 +13,6 @@ import {
 import { AuditService } from './audit-service.js';
 import { MailerService } from './mailer-service.js';
 import { PadesSealingService } from './pades-sealing-service.js';
-import { PdfAssemblyService } from './pdf-assembly-service.js';
 import { KeyCustodyService } from './key-custody-service.js';
 import { TsaService } from './tsa-service.js';
 import {
@@ -44,6 +44,7 @@ export class WorkflowService {
     private readonly mailerService: MailerService,
     sealingService?: PadesSealingService,
     eventService?: DomainEventService,
+    signingClient?: SigningClient,
   ) {
     this.sealingService =
       sealingService ||
@@ -52,10 +53,75 @@ export class WorkflowService {
         new KeyCustodyService(),
         new TsaService(),
         this.auditService,
+        signingClient,
       );
     this.eventService =
       eventService ||
       ((this.prisma as any)?.domainEvent ? new DomainEventService(this.prisma) : undefined);
+  }
+
+  /** Retries completion notifications using the original sealed artifact and stable links. */
+  async sendCompletionNotifications(
+    agreementId: string,
+    organisationId: string,
+    verificationToken: string,
+  ) {
+    const agreement = await this.prisma.agreement.findFirst({
+      where: { id: agreementId, organisationId },
+      include: { author: true, recipients: true },
+    });
+    if (!agreement) throw new NotFoundError('Agreement not found.');
+    const webUrl = (this.mailerService as { webUrl?: string }).webUrl || 'https://graphsign.ink';
+    const verificationUrl = webUrl + '/verify/' + encodeURIComponent(verificationToken);
+    const downloadUrl = verificationUrl;
+    try {
+      await this.eventService?.publish({
+        organisationId,
+        eventType: 'document.completed',
+        resourceType: 'agreement',
+        resourceId: agreementId,
+        actorKind: 'system',
+        actorId: 'pades-seal',
+        dedupeKey: 'document.completed:' + agreementId,
+        data: {
+          document_id: agreementId,
+          document_name: agreement.title,
+          completed_at: agreement.completedAt?.toISOString() || new Date().toISOString(),
+          verification_url: verificationUrl,
+          total_signers: agreement.recipients.filter(
+            (recipient) => recipient.role === 'signer' || recipient.role === 'approver',
+          ).length,
+        },
+      });
+    } catch {
+      console.warn(
+        '[WORKFLOW] Completion event delivery failed; the signed artifact remains saved.',
+      );
+    }
+    const participants = [
+      { email: agreement.author.email, name: agreement.author.name || 'Author', id: undefined },
+      ...agreement.recipients.map((recipient) => ({
+        email: recipient.email,
+        name: recipient.name,
+        id: recipient.id,
+      })),
+    ];
+    for (const participant of participants) {
+      try {
+        await this.mailerService.sendAgreementCompletedEmail(
+          participant.email,
+          participant.name,
+          agreement.title,
+          downloadUrl,
+          verificationUrl,
+          { organisationId, agreementId, recipientId: participant.id, eventType: 'COMPLETED' },
+        );
+      } catch {
+        console.warn(
+          '[WORKFLOW] Completion email delivery failed; recipient signatures and signed artifact remain saved.',
+        );
+      }
+    }
   }
 
   private static readonly otpStore = new Map<
@@ -1032,85 +1098,12 @@ export class WorkflowService {
         })
       : null;
 
-    const envelopeId =
-      (meta.envelopeId as string) ||
-      (agreement as any).envelopeId ||
-      `ENV-${agreement.id.replace(/-/g, '').substring(0, 8).toUpperCase()}`;
-
-    // If agreement is completed or sealed, but we don't have signedPdfBase64 yet:
     if (!fileData && (agreement.status === 'COMPLETED' || seal)) {
-      try {
-        const pdfAssembly = new PdfAssemblyService();
-        const existingPdfBase64 =
-          (meta.fileData as string | undefined) ||
-          (meta.fileBase64 as string | undefined) ||
-          (agreement as any).fileData;
-
-        const pdfBytes = await pdfAssembly.assembleCompletedDocument({
-          agreementTitle: agreement.title,
-          envelopeId,
-          markdownContent: agreement.markdownContent,
-          existingPdfBase64,
-          fields: (agreement.fields as any)?.fields || [],
-          recipients: (agreement.recipients as any[]) || [],
-          sealDetails: seal
-            ? {
-                verificationToken: seal.verificationToken,
-                verificationUrl: `https://graphsign.ink/verify/${seal.verificationToken}`,
-                documentHash: seal.documentHash,
-                tsaTimestamp: seal.tsaTimestamp,
-                tsaProvider: (seal.metadata as any)?.tsaProvider,
-                signerName: (seal.metadata as any)?.signerName,
-                subjectDn: (seal.metadata as any)?.subjectDn,
-                issuerDn: (seal.metadata as any)?.issuerDn,
-                algorithm: seal.algorithm,
-                padesLevel: seal.padesLevel,
-              }
-            : {
-                verificationToken:
-                  (meta.verificationToken as string) ||
-                  `GS-${agreement.id.replace(/-/g, '').substring(0, 8).toLowerCase()}`,
-                verificationUrl: `https://graphsign.ink/verify/${(meta.verificationToken as string) || `GS-${agreement.id.replace(/-/g, '').substring(0, 8).toLowerCase()}`}`,
-                documentHash: (meta.documentHash as string) || 'COMPLETED',
-                tsaTimestamp: new Date(),
-                tsaProvider: 'FreeTSA / DigiCert RFC 3161',
-                signerName: 'GraphSign Tenant Signing Authority',
-                algorithm: 'RSA-2048',
-                padesLevel: 'B_T',
-              },
-        });
-
-        fileData = Buffer.from(pdfBytes).toString('base64');
-
-        // Persist generated signed PDF container to agreement metadata
-        if (this.prisma.agreement?.update) {
-          await this.prisma.agreement
-            .update({
-              where: { id: agreement.id },
-              data: {
-                mimeType: 'application/pdf',
-                metadata: {
-                  ...meta,
-                  signedPdfBase64: fileData,
-                  sealedPdfBase64: fileData,
-                  envelopeId,
-                },
-              },
-            })
-            .catch(() => {});
-        }
-      } catch (err) {
-        console.warn('[WORKFLOW] PDF assembly fallback in getSigningDocumentFile failed:', err);
-      }
+      throw new NotFoundError(
+        'The original signed document is unavailable. It cannot be regenerated without invalidating its verification.',
+      );
     }
-
-    // For uncompleted agreements in progress (or fallback)
-    if (!fileData) {
-      fileData =
-        (meta.fileBase64 as string | undefined) ||
-        (meta.fileData as string | undefined) ||
-        (agreement as any).fileData;
-    }
+    if (!fileData) fileData = (meta.fileBase64 as string) || (meta.fileData as string);
 
     let markdownContent = agreement.markdownContent;
     if (fileData) {
@@ -1325,12 +1318,33 @@ export class WorkflowService {
           userAgent,
         });
       } catch (sealErr) {
-        console.warn(
-          '[WORKFLOW] Automatic sealing failed on completion:',
-          (sealErr as Error).message,
-        );
+        console.warn('[WORKFLOW] Automatic sealing failed on completion:', (sealErr as Error).name);
       }
 
+      if (!sealResult) {
+        await this.prisma.agreement.update({
+          where: { id: agreement.id },
+          data: {
+            metadata: {
+              ...((agreement.metadata as Record<string, unknown>) || {}),
+              sealingStatus: 'FAILED',
+            },
+          },
+        });
+        await this.auditService.log({
+          organisationId: agreement.organisationId,
+          action: 'DOCUMENT_SEAL_FAILED',
+          resourceType: 'agreement',
+          resourceId: agreement.id,
+        });
+        return {
+          success: true,
+          isCompleted: true,
+          sealingStatus: 'FAILED',
+          message:
+            'Signatures saved. Final digital sealing is pending. Contact the agreement author to retry sealing.',
+        };
+      }
       await this.auditService.log({
         organisationId: agreement.organisationId,
         action: 'AGREEMENT_COMPLETED',
@@ -1344,64 +1358,11 @@ export class WorkflowService {
         userAgent,
       });
 
-      // Send completion confirmation emails to author and all participants (INK-109, INK-113)
-      const tokenForLink =
-        sealResult?.verificationToken ||
-        `GS-${agreement.id.replace(/-/g, '').substring(0, 8).toUpperCase()}`;
-      const webUrl = (this.mailerService as any).webUrl || 'https://graphsign.ink';
-      const downloadPdfUrl = `${webUrl}/api/v1/sign/${tokenForLink}/download`;
-      const verificationUrl = `${webUrl}/verify/${tokenForLink}`;
-
-      try {
-        await this.eventService?.publish({
-          organisationId: agreement.organisationId,
-          eventType: 'document.completed',
-          resourceType: 'agreement',
-          resourceId: agreement.id,
-          actorKind: 'system',
-          actorId: 'pades-seal',
-          dedupeKey: `document.completed:${agreement.id}`,
-          data: {
-            document_id: agreement.id,
-            document_name: agreement.title,
-            completed_at: new Date().toISOString(),
-            verification_url: verificationUrl,
-            total_signers: activeSigners.length,
-          },
-        });
-      } catch (e) {
-        console.warn('Failed to publish document.completed event', e);
-      }
-
-      await this.mailerService.sendAgreementCompletedEmail(
-        agreement.author.email,
-        agreement.author.name || 'Author',
-        agreement.title,
-        downloadPdfUrl,
-        verificationUrl,
-        {
-          organisationId: agreement.organisationId,
-          agreementId: agreement.id,
-          eventType: 'COMPLETED',
-        },
+      await this.sendCompletionNotifications(
+        agreement.id,
+        agreement.organisationId,
+        sealResult.verificationToken,
       );
-
-      for (const r of allRecipients) {
-        await this.mailerService.sendAgreementCompletedEmail(
-          r.email,
-          r.name,
-          agreement.title,
-          downloadPdfUrl,
-          verificationUrl,
-          {
-            organisationId: agreement.organisationId,
-            agreementId: agreement.id,
-            recipientId: r.id,
-            recipientName: r.name,
-            eventType: 'COMPLETED',
-          },
-        );
-      }
     } else if (agreement.signingOrder === 'SEQUENTIAL') {
       // Advance to next sequential tier if current tier is finished
       const currentTierSigners = activeSigners.filter(

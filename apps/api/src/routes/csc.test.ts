@@ -1,3 +1,13 @@
+vi.mock('../services/signing-client.js', async () => ({
+  SigningClient: (await import('../services/test-signing-client.js')).TestSigningClient,
+}));
+vi.mock('../services/tsa-service.js', () => ({
+  TsaService: class {
+    async requestTimestamp() {
+      return { tokenBase64: 'EXTERNAL_TSA_FIXTURE', timestamp: new Date(), provider: 'Test TSA' };
+    }
+  },
+}));
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { createCscRoutes } from './csc.js';
 import { signJwt } from '../utils/jwt.js';

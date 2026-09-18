@@ -1,10 +1,12 @@
 import type { PrismaClient } from '@graphsign/db';
+import { draftMetadata } from '../utils/draft-metadata.js';
 import { generateId, generateToken, hashToken } from '../utils/crypto.js';
 import {
   NotFoundError,
   ForbiddenError,
   BadRequestError,
   ValidationError,
+  ConflictError,
 } from '../utils/errors.js';
 import type { AuditService } from './audit-service.js';
 import { incrementMinorVersion, bumpToMajorVersion } from '../utils/version-utils.js';
@@ -319,9 +321,17 @@ export class AgreementService {
     }
 
     const nextVersion = incrementMinorVersion(existing.version);
+    if (
+      input.expectedVersion &&
+      String(existing.version) !== input.expectedVersion.replace(/^v/, '')
+    ) {
+      throw new ConflictError(
+        'This draft was changed in another tab. Reload the latest draft before saving.',
+      );
+    }
 
     const updated = await this.prisma.agreement.update({
-      where: { id: agreementId },
+      where: { id: agreementId, ...(input.expectedVersion ? { version: existing.version } : {}) },
       data: {
         title: input.title ?? existing.title,
         description: input.description ?? existing.description,
@@ -742,7 +752,7 @@ export class AgreementService {
         mimeType: existing.mimeType,
         markdownContent: existing.markdownContent,
         tags: existing.tags ? (existing.tags as any) : [],
-        metadata: existing.metadata ? (existing.metadata as any) : {},
+        metadata: draftMetadata(existing.metadata) as any,
         version: '0.1',
         versions: {
           create: {

@@ -366,7 +366,7 @@ export default function TokenVerifyPage() {
                 <ArrowLeft className="w-3 h-3" /> Verify Another
               </Link>
               <a
-                href={`${getApiUrl()}/verify/${report.verificationToken}/certificate`}
+                href={`${getApiUrl()}/api/v1/verify/${report.verificationToken}/certificate?format=pdf`}
                 target="_blank"
                 rel="noreferrer"
                 className="py-2.5 px-5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs sm:text-sm transition-all shadow-sm flex items-center gap-2"

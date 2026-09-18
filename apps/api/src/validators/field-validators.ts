@@ -60,10 +60,30 @@ export const documentFieldSchema = z.object({
   dateFormat: z.string().max(50).optional(),
 });
 
-export const saveDocumentFieldsSchema = z.object({
-  fields: z.array(documentFieldSchema),
-  recipients: z.array(recipientSchema).default([]),
-});
+export const saveDocumentFieldsSchema = z
+  .object({
+    fields: z.array(documentFieldSchema),
+    recipients: z.array(recipientSchema).default([]),
+  })
+  .superRefine((data, context) => {
+    const recipients = new Set(data.recipients.map((recipient) => recipient.id));
+    const fields = new Set<string>();
+    data.fields.forEach((field, index) => {
+      if (!recipients.has(field.recipientId))
+        context.addIssue({
+          code: 'custom',
+          path: ['fields', index, 'recipientId'],
+          message: 'Assign this field to an existing recipient.',
+        });
+      if (fields.has(field.id))
+        context.addIssue({
+          code: 'custom',
+          path: ['fields', index, 'id'],
+          message: 'Field identifiers must be unique.',
+        });
+      fields.add(field.id);
+    });
+  });
 
 export type DocumentField = z.infer<typeof documentFieldSchema>;
 export type Recipient = z.infer<typeof recipientSchema>;

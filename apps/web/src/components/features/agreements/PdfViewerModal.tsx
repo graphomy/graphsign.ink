@@ -3,6 +3,9 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { renderMarkdownToHtml } from './MarkdownEditor';
 import { getApiUrl } from '@/lib/api';
+import { loadPdfDocument } from '@/lib/pdf-document';
+import { PdfPageCanvas } from './PdfPageCanvas';
+import type { PDFDocumentProxy } from 'pdfjs-dist';
 import { StatusPill } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import {
@@ -56,17 +59,29 @@ function getToken(): string {
 export function PdfViewerModal({ agreement, onClose, onOpenEditor }: PdfViewerModalProps) {
   const [zoomLevel, setZoomLevel] = useState<number>(100);
   const [currentPage, setCurrentPage] = useState<number>(1);
-  const [totalPages] = useState<number>(1);
+  const [totalPages, setTotalPages] = useState<number>(1);
+  const [pdfDocument, setPdfDocument] = useState<PDFDocumentProxy | null>(null);
   const [fetchedBlobUrl, setFetchedBlobUrl] = useState<string | null>(null);
   const [isLoadingFile, setIsLoadingFile] = useState<boolean>(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const showThumbnails = true;
+  const [retryingSeal, setRetryingSeal] = useState(false);
   const printableAreaRef = useRef<HTMLDivElement>(null);
 
   const meta = (agreement.metadata as Record<string, unknown>) || {};
   const [showIndicators, setShowIndicators] = useState<boolean>(true);
   const [signatureInfo, setSignatureInfo] = useState<{
-    status: 'VALID' | 'INVALID' | 'TAMPERED' | 'REVOKED' | 'EXPIRED' | 'UNSIGNED';
+    status:
+      | 'VALID'
+      | 'INVALID'
+      | 'TAMPERED'
+      | 'REVOKED'
+      | 'EXPIRED'
+      | 'UNSIGNED'
+      | 'UNVERIFIED'
+      | 'LEGACY'
+      | 'UNSUPPORTED'
+      | 'NOT_FOUND';
     signerName?: string;
     signerEmail?: string;
     signedAt?: string;
@@ -74,7 +89,7 @@ export function PdfViewerModal({ agreement, onClose, onOpenEditor }: PdfViewerMo
   }>(() => {
     if (agreement.status === 'COMPLETED' || meta.sealedAt || meta.sealedPdfBase64) {
       return {
-        status: 'VALID',
+        status: 'UNVERIFIED',
         signerName:
           (meta.signerName as string) ||
           agreement.author?.name ||
@@ -101,11 +116,14 @@ export function PdfViewerModal({ agreement, onClose, onOpenEditor }: PdfViewerMo
         const res = await fetch(`${getApiUrl()}/api/v1/verify/${token}`);
         if (!res.ok) return;
         const data = await res.json();
-        if (!isMounted || !data?.data) return;
+        if (!isMounted) return;
 
-        const info = data.data;
+        const info = data.data || data;
         setSignatureInfo({
-          status: info.status || (info.isValid ? 'VALID' : 'INVALID'),
+          status:
+            info.isValid && info.message?.startsWith('Legacy')
+              ? 'LEGACY'
+              : info.status || (info.isValid ? 'VALID' : 'INVALID'),
           signerName:
             info.signer?.name ||
             ((info.seal?.metadata as Record<string, unknown>)?.signerName as string) ||
@@ -130,8 +148,9 @@ export function PdfViewerModal({ agreement, onClose, onOpenEditor }: PdfViewerMo
   const rawFileData =
     (meta.signedPdfBase64 as string | undefined) ||
     (meta.sealedPdfBase64 as string | undefined) ||
-    (meta.fileData as string | undefined) ||
-    (meta.fileBase64 as string | undefined);
+    (agreement.status !== 'COMPLETED'
+      ? (meta.fileData as string | undefined) || (meta.fileBase64 as string | undefined)
+      : undefined);
   const hasFileData = !!rawFileData;
 
   const isPdf =
@@ -140,7 +159,8 @@ export function PdfViewerModal({ agreement, onClose, onOpenEditor }: PdfViewerMo
     agreement.fileName?.toLowerCase().endsWith('.pdf') ||
     (!agreement.markdownContent && !!agreement.fileUrl);
 
-  const isMarkdown = !!agreement.markdownContent && !hasFileData;
+  const isMarkdown =
+    agreement.status !== 'COMPLETED' && !!agreement.markdownContent && !hasFileData;
 
   const versionDisplay = String(agreement.version).startsWith('v')
     ? agreement.version
@@ -266,9 +286,58 @@ export function PdfViewerModal({ agreement, onClose, onOpenEditor }: PdfViewerMo
   }, [inlineBlobUrl]);
 
   const effectivePdfUrl = inlineBlobUrl || fetchedBlobUrl;
+  useEffect(() => {
+    if (!effectivePdfUrl) return;
+    let cancelled = false;
+    let document: PDFDocumentProxy | undefined;
+    void loadPdfDocument(effectivePdfUrl)
+      .then((loaded) => {
+        document = loaded;
+        if (cancelled) {
+          void loaded.destroy();
+          return;
+        }
+        setPdfDocument(loaded);
+        setTotalPages(loaded.numPages);
+        setCurrentPage(1);
+      })
+      .catch(() => {
+        if (!cancelled)
+          setFetchError(
+            'Unable to read PDF pages. Please download the original document or retry.',
+          );
+      });
+    return () => {
+      cancelled = true;
+      if (document) void document.destroy();
+    };
+  }, [effectivePdfUrl]);
   const embeddedPdfUrl = effectivePdfUrl
     ? `${effectivePdfUrl}#page=${currentPage}&toolbar=0&navpanes=0`
     : null;
+
+  async function retryDigitalSeal() {
+    setRetryingSeal(true);
+    try {
+      const response = await fetch(
+        getApiUrl() + '/api/v1/signing/seal/' + encodeURIComponent(agreement.id),
+        {
+          method: 'POST',
+          headers: { Authorization: 'Bearer ' + getToken(), 'Content-Type': 'application/json' },
+          body: '{}',
+        },
+      );
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error?.error?.message || 'Digital sealing could not be completed.');
+      }
+      window.location.reload();
+    } catch (error) {
+      setFetchError((error as Error).message);
+    } finally {
+      setRetryingSeal(false);
+    }
+  }
 
   function handlePrint() {
     if (isPdf && effectivePdfUrl) {
@@ -282,6 +351,7 @@ export function PdfViewerModal({ agreement, onClose, onOpenEditor }: PdfViewerMo
   }
 
   function handleDownload() {
+    if (agreement.status === 'COMPLETED' && !effectivePdfUrl) return;
     const cleanTitle = agreement.title.replace(/[^a-z0-9]/gi, '_').toLowerCase();
     const fileName =
       agreement.fileName ||
@@ -444,6 +514,7 @@ export function PdfViewerModal({ agreement, onClose, onOpenEditor }: PdfViewerMo
               size="sm"
               leftIcon={<Download className="w-3.5 h-3.5" />}
               onClick={handleDownload}
+              disabled={agreement.status === 'COMPLETED' && !effectivePdfUrl}
             >
               Download
             </Button>
@@ -469,22 +540,35 @@ export function PdfViewerModal({ agreement, onClose, onOpenEditor }: PdfViewerMo
                 <span className="text-[11px] font-bold text-ink-500 uppercase tracking-wider">
                   Pages
                 </span>
-                <span className="text-[11px] font-mono text-ink-400">1/1</span>
+                <span className="text-[11px] font-mono text-ink-400">
+                  {currentPage}/{totalPages}
+                </span>
               </div>
-              <button
-                type="button"
-                onClick={() => setCurrentPage(1)}
-                className={`p-2 rounded-md border text-center transition-all bg-white shadow-xs ${
-                  currentPage === 1
-                    ? 'border-brand-600 ring-2 ring-brand-600/20'
-                    : 'border-ink-200 hover:border-ink-400'
-                }`}
-              >
-                <div className="h-28 bg-ink-50 rounded border border-dashed border-ink-200 flex items-center justify-center text-ink-400">
-                  <FileText className="w-6 h-6" />
-                </div>
-                <span className="text-[11px] font-medium text-ink-700 mt-1.5 block">Page 1</span>
-              </button>
+              {Array.from({ length: totalPages }, (_, index) => index + 1).map((page) => (
+                <button
+                  key={page}
+                  type="button"
+                  aria-label={`Go to page ${page}`}
+                  aria-current={currentPage === page ? 'page' : undefined}
+                  onClick={() => setCurrentPage(page)}
+                  className={`p-2 rounded-md border text-center transition-all bg-white shadow-xs ${
+                    currentPage === page
+                      ? 'border-brand-600 ring-2 ring-brand-600/20'
+                      : 'border-ink-200 hover:border-ink-400'
+                  }`}
+                >
+                  <div className="h-28 bg-ink-50 rounded border border-dashed border-ink-200 flex items-center justify-center text-ink-400">
+                    {pdfDocument ? (
+                      <PdfPageCanvas document={pdfDocument} pageNumber={page} width={120} />
+                    ) : (
+                      <FileText className="w-6 h-6" />
+                    )}
+                  </div>
+                  <span className="text-[11px] font-medium text-ink-700 mt-1.5 block">
+                    Page {page}
+                  </span>
+                </button>
+              ))}
             </aside>
           )}
 
@@ -493,7 +577,18 @@ export function PdfViewerModal({ agreement, onClose, onOpenEditor }: PdfViewerMo
             {/* Visual Signature Indicator Banner (INK-138) */}
             {showIndicators && (
               <div className="w-full max-w-4xl mb-2.5 shrink-0 z-20 transition-all duration-200">
-                {signatureInfo.status === 'VALID' ? (
+                {['UNVERIFIED', 'LEGACY', 'UNSUPPORTED', 'NOT_FOUND'].includes(
+                  signatureInfo.status,
+                ) ? (
+                  <div
+                    data-testid="indicator-unverified"
+                    className="px-3.5 py-2 rounded-lg bg-ink-50 border border-ink-200 text-ink-700 text-xs"
+                  >
+                    {signatureInfo.status === 'LEGACY'
+                      ? 'Legacy integrity record. A standard PDF digital signature has not been established.'
+                      : 'Digital signature verification is unavailable or pending. This document has not been reported as verified.'}
+                  </div>
+                ) : signatureInfo.status === 'VALID' ? (
                   <div
                     data-testid="indicator-valid"
                     className="flex items-center justify-between gap-3 px-3.5 py-2 rounded-lg bg-emerald-50 border border-emerald-300 shadow-xs text-emerald-950"
@@ -573,6 +668,9 @@ export function PdfViewerModal({ agreement, onClose, onOpenEditor }: PdfViewerMo
             {/* Invalid signature watermark overlay (INK-138) */}
             {showIndicators &&
               signatureInfo.status !== 'VALID' &&
+              !['UNVERIFIED', 'LEGACY', 'UNSUPPORTED', 'NOT_FOUND'].includes(
+                signatureInfo.status,
+              ) &&
               signatureInfo.status !== 'UNSIGNED' && (
                 <div
                   data-testid="invalid-signature-watermark"
@@ -592,6 +690,11 @@ export function PdfViewerModal({ agreement, onClose, onOpenEditor }: PdfViewerMo
             ) : fetchError ? (
               <div className="bg-white border border-brand-200 rounded-xl p-8 max-w-md text-center text-ink-900 space-y-3 shadow-md my-auto">
                 <h3 className="text-sm font-bold">Unable to load document</h3>
+                {agreement.status === 'COMPLETED' && meta.sealingStatus === 'FAILED' && (
+                  <Button size="sm" disabled={retryingSeal} onClick={retryDigitalSeal}>
+                    {retryingSeal ? 'Sealing document…' : 'Retry digital sealing'}
+                  </Button>
+                )}
                 <p className="text-xs text-ink-500">{fetchError}</p>
                 <Button variant="outline" size="sm" onClick={() => window.location.reload()}>
                   Retry
@@ -605,11 +708,17 @@ export function PdfViewerModal({ agreement, onClose, onOpenEditor }: PdfViewerMo
                 }}
                 className="w-full h-full bg-white rounded-md shadow-lg border border-ink-200 overflow-hidden flex flex-col"
               >
-                <iframe
-                  src={`${embeddedPdfUrl}`}
-                  className="w-full h-full flex-1 border-0 bg-white"
-                  title={agreement.title}
-                />
+                {pdfDocument ? (
+                  <div className="overflow-auto h-full w-full flex justify-center">
+                    <PdfPageCanvas
+                      document={pdfDocument}
+                      pageNumber={currentPage}
+                      width={(800 * zoomLevel) / 100}
+                    />
+                  </div>
+                ) : (
+                  <p role="status">Loading document pages...</p>
+                )}
               </div>
             ) : isMarkdown ? (
               <div className="overflow-y-auto w-full h-full flex justify-center p-4">

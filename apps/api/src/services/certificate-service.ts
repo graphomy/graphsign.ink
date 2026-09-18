@@ -1,8 +1,9 @@
+import { SigningClient } from './signing-client.js';
 import type { PrismaClient } from '@graphsign/db';
 import { generateId, sha256 } from '../utils/crypto.js';
 import { KeyCustodyService, KeyAlgorithm } from './key-custody-service.js';
 import { AuditService } from './audit-service.js';
-import { BadRequestError, NotFoundError } from '../utils/errors.js';
+import { NotFoundError } from '../utils/errors.js';
 
 export interface GenerateSelfSignedInput {
   name: string;
@@ -31,7 +32,28 @@ export class CertificateService {
     private readonly prisma: PrismaClient,
     private readonly keyCustodyService: KeyCustodyService,
     private readonly auditService: AuditService,
+    private readonly signingClient = new SigningClient(),
   ) {}
+
+  /** Finds a tenant certificate or provisions a durable default in the signing boundary. */
+  async getOrCreateDefaultCertificate(organisationId: string, userId: string) {
+    const defaultCertificate = await this.prisma.signingCertificate.findFirst({
+      where: { organisationId, isDefault: true, deletedAt: null, status: 'ACTIVE' },
+    });
+    if (defaultCertificate) return defaultCertificate;
+    const certificate = await this.prisma.signingCertificate.findFirst({
+      where: { organisationId, deletedAt: null, status: 'ACTIVE' },
+      orderBy: { createdAt: 'desc' },
+    });
+    return (
+      certificate ||
+      (
+        await this.generateSelfSigned(organisationId, userId, {
+          name: 'Default Signing Certificate',
+        })
+      ).certificate
+    );
+  }
 
   /**
    * Generates a new self-signed X.509 certificate for an organisation (FR-012.002).
@@ -47,97 +69,114 @@ export class CertificateService {
       where: { id: organisationId },
       select: { id: true, name: true },
     });
+    if (!org) throw new NotFoundError('Organisation not found.');
+    const id = generateId();
 
-    if (!org) {
-      throw new NotFoundError('Organisation not found.');
+    let algorithm = input.algorithm || 'RSA_2048';
+    let certificatePem: string;
+    let serialNumber: string;
+    let subjectDn: string;
+    let issuerDn: string;
+    let validFrom: Date;
+    let validTo: Date;
+    let pkcs11KeyId = id;
+    const padesLevel = 'B_B';
+
+    if (this.signingClient.configured) {
+      const material = await this.signingClient.certificate({
+        organisationId,
+        certificateId: id,
+        selfSigned: true,
+        algorithm: input.algorithm,
+        commonName: input.commonName || input.name,
+        validityDays: input.validityDays,
+        organization: input.organization || org.name,
+        organizationUnit: input.organizationUnit,
+        country: input.country,
+        state: input.state,
+        locality: input.locality,
+        email: input.email,
+      });
+      algorithm = material.algorithm as KeyAlgorithm;
+      certificatePem = material.certificatePem;
+      serialNumber = material.serialNumber;
+      subjectDn = material.subjectDn;
+      issuerDn = material.issuerDn;
+      validFrom = new Date(material.validFrom);
+      validTo = new Date(material.validTo);
+    } else {
+      const validityDays = input.validityDays || 365;
+      const keyPair = await this.keyCustodyService.generateKeyPair(algorithm);
+      pkcs11KeyId = keyPair.keyId;
+      validFrom = new Date();
+      validTo = new Date(validFrom.getTime() + validityDays * 24 * 60 * 60 * 1000);
+      serialNumber = `0x${generateId().replace(/-/g, '').substring(0, 16)}`;
+
+      const dnParts: string[] = [];
+      const cn = input.commonName?.trim() || input.name?.trim() || `${org.name} Document Signing`;
+      dnParts.push(`CN=${cn}`);
+      const o = input.organization?.trim() || org.name;
+      if (o) dnParts.push(`O=${o}`);
+      if (input.organizationUnit?.trim()) dnParts.push(`OU=${input.organizationUnit.trim()}`);
+      if (input.locality?.trim()) dnParts.push(`L=${input.locality.trim()}`);
+      if (input.state?.trim()) dnParts.push(`ST=${input.state.trim()}`);
+      dnParts.push(`C=${input.country?.trim() || 'US'}`);
+      if (input.email?.trim()) dnParts.push(`EMAIL=${input.email.trim()}`);
+
+      subjectDn = dnParts.join(', ');
+      issuerDn = subjectDn;
+      certificatePem = this.createSelfSignedCertificatePem(
+        subjectDn,
+        issuerDn,
+        keyPair.publicKeyPem,
+        serialNumber,
+        validFrom,
+        validTo,
+      );
     }
 
-    const algorithm = input.algorithm || 'RSA_2048';
-    const validityDays = input.validityDays || 730; // 2 years default
-
-    // Generate keys in custody boundary
-    const keyPair = await this.keyCustodyService.generateKeyPair(algorithm);
-
-    const now = new Date();
-    const validTo = new Date(now.getTime() + validityDays * 24 * 60 * 60 * 1000);
-    const serialNumber = `0x${generateId().replace(/-/g, '').substring(0, 16)}`;
-
-    // Build standard X.509 Subject DN with user custom credentials
-    const dnParts: string[] = [];
-    const cn = input.commonName?.trim() || input.name?.trim() || `${org.name} Document Signing`;
-    dnParts.push(`CN=${cn}`);
-    const o = input.organization?.trim() || org.name;
-    if (o) dnParts.push(`O=${o}`);
-    if (input.organizationUnit?.trim()) dnParts.push(`OU=${input.organizationUnit.trim()}`);
-    if (input.locality?.trim()) dnParts.push(`L=${input.locality.trim()}`);
-    if (input.state?.trim()) dnParts.push(`ST=${input.state.trim()}`);
-    dnParts.push(`C=${input.country?.trim() || 'US'}`);
-    if (input.email?.trim()) dnParts.push(`EMAIL=${input.email.trim()}`);
-
-    const subjectDn = dnParts.join(', ');
-    const issuerDn = subjectDn; // Self-signed
-
-    // Build self-signed certificate wrapper
-    const certificatePem = this.createSelfSignedCertificatePem(
-      subjectDn,
-      issuerDn,
-      keyPair.publicKeyPem,
-      serialNumber,
-      now,
-      validTo,
-    );
-
-    // Check if org has any existing default cert
-    const existingCount = await this.prisma.signingCertificate.count({
+    const count = await this.prisma.signingCertificate.count({
       where: { organisationId, deletedAt: null },
     });
-
-    const isDefault = existingCount === 0;
-
-    const cert = await this.prisma.signingCertificate.create({
+    const certificate = await this.prisma.signingCertificate.create({
       data: {
-        id: generateId(),
+        id,
         organisationId,
         name: input.name.trim(),
         type: 'SELF_SIGNED',
         algorithm,
         certificatePem,
         chainPem: null,
-        pkcs11KeyId: keyPair.keyId,
-        keyFingerprint: keyPair.fingerprint,
+        pkcs11KeyId,
+        keyFingerprint: await sha256(certificatePem),
         serialNumber,
         subjectDn,
         issuerDn,
-        validFrom: now,
+        validFrom,
         validTo,
-        isDefault,
+        isDefault: count === 0,
         status: 'ACTIVE',
-        padesLevel: 'B_T',
+        padesLevel,
         createdBy: userId,
       },
     });
-
     await this.auditService.log({
       organisationId,
       userId,
       action: 'CERTIFICATE_GENERATED',
       resourceType: 'signing_certificate',
-      resourceId: cert.id,
-      metadata: {
-        certificateId: cert.id,
-        name: cert.name,
-        type: 'SELF_SIGNED',
-        algorithm,
-        fingerprint: cert.keyFingerprint,
-      },
+      resourceId: id,
       ipAddress,
       userAgent,
+      metadata: {
+        certificateId: id,
+        name: certificate.name,
+        type: 'SELF_SIGNED',
+        fingerprint: certificate.keyFingerprint,
+      },
     });
-
-    return {
-      certificate: cert,
-      keyPair, // Private key returned once upon generation for secure custody backup
-    };
+    // Custody never exports private keys into API responses.
+    return { certificate };
   }
 
   /**
@@ -150,75 +189,56 @@ export class CertificateService {
     ipAddress?: string,
     userAgent?: string,
   ) {
-    if (!input.certificatePem.includes('BEGIN CERTIFICATE')) {
-      throw new BadRequestError('Invalid certificate PEM format.');
-    }
-
-    const org = await this.prisma.organisation.findUnique({
-      where: { id: organisationId },
-      select: { id: true, name: true },
+    const id = generateId();
+    const material = await this.signingClient.certificate({
+      organisationId,
+      certificateId: id,
+      selfSigned: false,
+      privateKeyPem: input.privateKeyPem,
+      certificatePem: input.certificatePem,
+      chainPem: input.chainPem,
     });
-
-    if (!org) {
-      throw new NotFoundError('Organisation not found.');
-    }
-
-    const algorithm = input.algorithm || 'RSA_2048';
-    const now = new Date();
-    const validTo = new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000); // 1 year fallback
-    const fingerprint = await sha256(input.certificatePem);
-    const serialNumber = `0x${generateId().replace(/-/g, '').substring(0, 16)}`;
-    const subjectDn = `CN=${input.name}, O=${org.name}`;
-    const issuerDn = `CN=${input.name} Issuer CA`;
-
-    const pkcs11KeyId = `byo_${generateId()}`;
-
-    const existingCount = await this.prisma.signingCertificate.count({
+    const count = await this.prisma.signingCertificate.count({
       where: { organisationId, deletedAt: null },
     });
-
-    const isDefault = existingCount === 0;
-
     const cert = await this.prisma.signingCertificate.create({
       data: {
-        id: generateId(),
+        id,
         organisationId,
         name: input.name.trim(),
         type: 'BYO',
-        algorithm,
-        certificatePem: input.certificatePem.trim(),
-        chainPem: input.chainPem ? input.chainPem.trim() : null,
-        pkcs11KeyId,
-        keyFingerprint: fingerprint,
-        serialNumber,
-        subjectDn,
-        issuerDn,
-        validFrom: now,
-        validTo,
-        isDefault,
+        algorithm: material.algorithm,
+        certificatePem: material.certificatePem,
+        chainPem: input.chainPem || null,
+        pkcs11KeyId: id,
+        keyFingerprint: await sha256(material.certificatePem),
+        serialNumber: material.serialNumber,
+        subjectDn: material.subjectDn,
+        issuerDn: material.issuerDn,
+        validFrom: new Date(material.validFrom),
+        validTo: new Date(material.validTo),
+        isDefault: count === 0,
         status: 'ACTIVE',
+        padesLevel: input.tsaUrl ? 'B_T' : 'B_B',
         tsaUrl: input.tsaUrl || null,
-        padesLevel: input.chainPem ? 'B_LTA' : 'B_T',
         createdBy: userId,
       },
     });
-
     await this.auditService.log({
       organisationId,
       userId,
       action: 'CERTIFICATE_UPLOADED',
       resourceType: 'signing_certificate',
-      resourceId: cert.id,
+      resourceId: id,
       metadata: {
-        certificateId: cert.id,
+        certificateId: id,
         name: cert.name,
         type: 'BYO',
-        fingerprint,
+        fingerprint: cert.keyFingerprint,
       },
       ipAddress,
       userAgent,
     });
-
     return cert;
   }
 
@@ -332,66 +352,6 @@ export class CertificateService {
     return { success: true };
   }
 
-  /**
-   * Retrieves the active default certificate for an organisation, or auto-provisions one if none exists.
-   */
-  async getOrCreateDefaultCertificate(organisationId: string, userId: string) {
-    let cert = null;
-    if (this.prisma.signingCertificate?.findFirst) {
-      cert = await this.prisma.signingCertificate.findFirst({
-        where: { organisationId, isDefault: true, deletedAt: null, status: 'ACTIVE' },
-      });
-
-      if (!cert) {
-        // Find any active cert
-        cert = await this.prisma.signingCertificate.findFirst({
-          where: { organisationId, deletedAt: null, status: 'ACTIVE' },
-          orderBy: { createdAt: 'desc' },
-        });
-      }
-    }
-
-    if (!cert && (this.prisma as any).signingCertificate?.create) {
-      try {
-        // Auto-generate self-signed default
-        const res = await this.generateSelfSigned(organisationId, userId, {
-          name: 'Default Signing Certificate',
-          algorithm: 'RSA_2048',
-        });
-        cert = res.certificate;
-      } catch (err) {
-        console.warn('[CERTIFICATE] Failed to auto-generate certificate:', (err as Error).message);
-      }
-    }
-
-    if (!cert) {
-      // Fallback in-memory certificate representation if table not accessible
-      cert = {
-        id: 'cert-default',
-        organisationId,
-        name: 'Default Signing Authority',
-        type: 'SELF_SIGNED',
-        algorithm: 'RSA_2048',
-        certificatePem: '-----BEGIN CERTIFICATE-----\nMIIB...Default...\n-----END CERTIFICATE-----',
-        chainPem: null,
-        pkcs11KeyId: 'pkcs11-default',
-        keyFingerprint: 'sha256-default',
-        serialNumber: '0x01',
-        subjectDn: 'CN=GraphSign Document Signing',
-        issuerDn: 'CN=GraphSign Document Signing',
-        validFrom: new Date(),
-        validTo: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
-        isDefault: true,
-        status: 'ACTIVE',
-        padesLevel: 'B_T',
-        createdBy: userId,
-        tsaUrl: null,
-      } as any;
-    }
-
-    return cert;
-  }
-
   private createSelfSignedCertificatePem(
     _subjectDn: string,
     _issuerDn: string,
@@ -405,8 +365,15 @@ export class CertificateService {
       .replace(/-----END [^-]+-----/g, '')
       .replace(/\s+/g, '');
 
-    // Formatted X.509 representation
-    const lines = cleanPub.match(/.{1,64}/g) || [cleanPub];
+    let der = Buffer.from(cleanPub, 'base64');
+    if (der.length > 0 && der[0] !== 0x30) {
+      der = Buffer.concat([
+        Buffer.from([0x30, 0x82, (der.length >> 8) & 0xff, der.length & 0xff]),
+        der,
+      ]);
+    }
+    const b64 = der.toString('base64');
+    const lines = b64.match(/.{1,64}/g) || [b64];
     return `-----BEGIN CERTIFICATE-----\n${lines.join('\n')}\n-----END CERTIFICATE-----`;
   }
 }
