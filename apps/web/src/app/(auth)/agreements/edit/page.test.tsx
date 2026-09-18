@@ -49,7 +49,7 @@ describe('Full-page agreement route', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Unable to load');
     expect(screen.getByRole('link', { name: 'Back to agreements' })).toHaveAttribute(
       'href',
-      '/agreements',
+      '/agreements?tab=active',
     );
     expect(screen.queryByRole('button', { name: /Save Draft/ })).not.toBeInTheDocument();
   });

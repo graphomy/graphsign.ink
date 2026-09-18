@@ -53,6 +53,7 @@ export const createScratchAgreementSchema = z.object({
 });
 
 export const updateDraftSchema = z.object({
+  expectedVersion: z.string().max(20).optional(),
   title: z.string().min(2).max(255).optional(),
   description: z.string().max(1000).optional(),
   markdownContent: z

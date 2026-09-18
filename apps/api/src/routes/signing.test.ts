@@ -1,3 +1,6 @@
+vi.mock('../services/signing-client.js', async () => ({
+  SigningClient: (await import('../services/test-signing-client.js')).TestSigningClient,
+}));
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { createSigningRoutes } from './signing.js';
 import { signJwt } from '../utils/jwt.js';
@@ -22,6 +25,7 @@ describe('Signing Routes Integration Tests (FR-012.004, FR-012.005, INK-132)', (
           id: 'agr-1',
           organisationId: 'org-123',
           title: 'Agreement to Seal',
+          status: 'COMPLETED',
           markdownContent: '# Content',
           recipients: [],
           author: { name: 'Alice', email: 'alice@acme.com' },

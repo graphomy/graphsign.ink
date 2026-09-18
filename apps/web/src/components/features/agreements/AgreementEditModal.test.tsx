@@ -67,7 +67,9 @@ describe('Agreement editor creation and full-page handoff', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: /Save & open in new tab/ }));
     await waitFor(() =>
-      expect(tab.location.replace).toHaveBeenCalledWith('/agreements/edit?id=ag-1'),
+      expect(tab.location.replace).toHaveBeenCalledWith(
+        expect.stringMatching(/^\/agreements\/edit\?id=ag-1&returnTo=/),
+      ),
     );
     expect(tab.opener).toBeNull();
     expect(fetch).toHaveBeenCalledWith(

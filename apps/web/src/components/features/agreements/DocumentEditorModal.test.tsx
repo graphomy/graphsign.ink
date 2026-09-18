@@ -1,3 +1,11 @@
+vi.mock('@/lib/pdf-document', () => ({
+  loadPdfDocument: vi.fn().mockResolvedValue({ numPages: 3, destroy: vi.fn() }),
+}));
+vi.mock('./PdfPageCanvas', () => ({
+  PdfPageCanvas: ({ pageNumber }: { pageNumber: number }) => (
+    <div title="Document PDF Preview">PDF page {pageNumber}</div>
+  ),
+}));
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import React from 'react';
@@ -165,7 +173,7 @@ describe('DocumentEditorModal Component Tests (INK-78 to INK-85, INK-270)', () =
     });
   });
 
-  it('renders PDF preview iframe when agreement is a PDF document', async () => {
+  it('renders a parsed multi-page PDF with actual page navigation', async () => {
     const pdfAgreement = {
       id: 'ag-pdf-1',
       title: 'Vendor Master Agreement.pdf',
@@ -178,10 +186,14 @@ describe('DocumentEditorModal Component Tests (INK-78 to INK-85, INK-270)', () =
 
     render(<DocumentEditorModal agreement={pdfAgreement} onClose={vi.fn()} onSuccess={vi.fn()} />);
 
-    await waitFor(() => {
-      expect(screen.getByTitle('Document PDF Preview')).toBeInTheDocument();
-      expect(screen.getByText('In Review')).toBeInTheDocument();
-    });
+    await waitFor(
+      () => {
+        expect(screen.getByTitle('Document PDF Preview')).toBeInTheDocument();
+        expect(screen.getByText('Page 1/3')).toBeInTheDocument();
+        expect(screen.getByText('In Review')).toBeInTheDocument();
+      },
+      { timeout: 5000 },
+    );
   });
 
   it('supplies fallback color when recipient color is missing from agreement and saves successfully (INK-284)', async () => {

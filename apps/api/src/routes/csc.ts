@@ -1,3 +1,4 @@
+import { SigningClient } from '../services/signing-client.js';
 import { Hono } from 'hono';
 import type { PrismaClient } from '@graphsign/db';
 import { createPrismaClient, getLegacyPrisma } from '@graphsign/db';
@@ -37,13 +38,21 @@ export function createCscRoutes(deps?: CscDeps) {
     const keyCustody = deps?.keyCustody || new KeyCustodyService();
     const tsa =
       deps?.tsa ||
-      new TsaService({
-        primaryUrl: c.env?.TSA_PRIMARY_URL || process.env.TSA_PRIMARY_URL,
-        fallbackUrl: c.env?.TSA_FALLBACK_URL || process.env.TSA_FALLBACK_URL,
-        fallback2Url: c.env?.TSA_FALLBACK2_URL || process.env.TSA_FALLBACK2_URL,
-      });
+      new TsaService(
+        {
+          primaryUrl: c.env?.TSA_PRIMARY_URL || process.env.TSA_PRIMARY_URL,
+          fallbackUrl: c.env?.TSA_FALLBACK_URL || process.env.TSA_FALLBACK_URL,
+          fallback2Url: c.env?.TSA_FALLBACK2_URL || process.env.TSA_FALLBACK2_URL,
+        },
+        new SigningClient(c.env?.SIGNING_SERVICE_URL, c.env?.SIGNING_SERVICE_TOKEN),
+      );
 
-    const cscService = new CscService(prisma, keyCustody, tsa);
+    const cscService = new CscService(
+      prisma,
+      keyCustody,
+      tsa,
+      new SigningClient(c.env?.SIGNING_SERVICE_URL, c.env?.SIGNING_SERVICE_TOKEN),
+    );
     return { cscService };
   }
 

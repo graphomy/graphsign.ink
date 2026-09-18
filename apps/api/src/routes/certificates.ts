@@ -1,3 +1,4 @@
+import { SigningClient } from '../services/signing-client.js';
 import { Hono } from 'hono';
 import type { PrismaClient } from '@graphsign/db';
 import { createPrismaClient, getLegacyPrisma } from '@graphsign/db';
@@ -42,7 +43,12 @@ export function createCertificateRoutes(deps?: CertificateDeps) {
 
     const audit = deps?.audit || new PrismaAuditService(prisma);
     const keyCustody = deps?.keyCustody || new KeyCustodyService();
-    const certService = new CertificateService(prisma, keyCustody, audit);
+    const certService = new CertificateService(
+      prisma,
+      keyCustody,
+      audit,
+      new SigningClient(c.env?.SIGNING_SERVICE_URL, c.env?.SIGNING_SERVICE_TOKEN),
+    );
     return { prisma, certService };
   }
 

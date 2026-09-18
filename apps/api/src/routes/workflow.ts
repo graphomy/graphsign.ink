@@ -1,3 +1,4 @@
+import { SigningClient } from '../services/signing-client.js';
 import { Hono } from 'hono';
 import type { PrismaClient } from '@graphsign/db';
 import { createPrismaClient, getLegacyPrisma } from '@graphsign/db';
@@ -62,7 +63,14 @@ export function createWorkflowRoutes(deps?: WorkflowDeps) {
         prisma,
       );
 
-    const service = new WorkflowService(prisma, audit, mailer);
+    const service = new WorkflowService(
+      prisma,
+      audit,
+      mailer,
+      undefined,
+      undefined,
+      new SigningClient(c.env?.SIGNING_SERVICE_URL, c.env?.SIGNING_SERVICE_TOKEN),
+    );
     return { service };
   }
 

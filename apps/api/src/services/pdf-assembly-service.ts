@@ -1,5 +1,6 @@
 import { PDFDocument, rgb, StandardFonts, PageSizes } from 'pdf-lib';
 import QRCode from 'qrcode';
+import { BadRequestError } from '../utils/errors.js';
 
 export interface AssemblePdfField {
   id: string;
@@ -71,6 +72,18 @@ export class PdfAssemblyService {
       sealDetails,
     } = options;
 
+    const source =
+      existingPdfBytes ||
+      (existingPdfBase64
+        ? Buffer.from(
+            existingPdfBase64.includes(',') ? existingPdfBase64.split(',')[1]! : existingPdfBase64,
+            'base64',
+          )
+        : null);
+    if (source && Buffer.from(source).includes(Buffer.from('/ByteRange')))
+      throw new BadRequestError(
+        'This PDF already contains a digital signature. Create an unsigned draft source before adding fields; rewriting it would invalidate the existing signature.',
+      );
     let pdfDoc: PDFDocument;
 
     // 1. Initialize Document Base
@@ -415,7 +428,7 @@ export class PdfAssemblyService {
     });
 
     certPage.drawText(
-      'Document Execution Audit Trail • ETSI EN 319 142 PAdES Baseline-T • RFC 3161 Timestamped',
+      'Document execution record. Digital signature evidence is stored in the final PDF signature.',
       {
         x: marginX + 12,
         y: y - 34,
@@ -433,10 +446,13 @@ export class PdfAssemblyService {
         .replace(/[^a-z0-9]/gi, '')
         .substring(0, 8)
         .toLowerCase()}`;
-    const hash = sealDetails?.documentHash || 'pending';
+    const hash =
+      sealDetails?.documentHash === 'PENDING_SEAL'
+        ? 'Final artifact digest is available from the verification portal'
+        : sealDetails?.documentHash || 'Not recorded';
     const ts = sealDetails?.tsaTimestamp
       ? new Date(sealDetails.tsaTimestamp).toISOString()
-      : new Date().toISOString();
+      : 'See the final PDF digital signature for timestamp evidence';
     const verifyUrl = sealDetails?.verificationUrl || `https://graphsign.ink/verify/${token}`;
 
     const gridBoxY = y - 106;
@@ -456,7 +472,7 @@ export class PdfAssemblyService {
       { label: 'Verification Token', value: token },
       { label: 'Execution Status', value: 'Digitally Signed & Cryptographically Sealed' },
       { label: 'Document SHA-256 Digest', value: hash },
-      { label: 'RFC 3161 Timestamp', value: ts },
+      { label: 'Timestamp evidence', value: ts },
       { label: 'Public Verification Link', value: verifyUrl },
     ];
 
@@ -625,11 +641,11 @@ export class PdfAssemblyService {
       },
       {
         label: 'Cryptographic Suite',
-        value: `${sealDetails?.algorithm || 'RSA-2048'} / SHA-256 / PAdES B-T`,
+        value: `${sealDetails?.algorithm || 'Configured signing profile'} / SHA-256`,
       },
       {
         label: 'TSA Authority',
-        value: sealDetails?.tsaProvider || 'FreeTSA / DigiCert RFC 3161 Qualified Service',
+        value: sealDetails?.tsaProvider || 'No trusted timestamp recorded',
       },
     ];
 
@@ -682,11 +698,11 @@ export class PdfAssemblyService {
     }
 
     const legalLines = [
-      'LEGAL STATEMENT & COMPLIANCE:',
-      'This document has been executed using electronic records and electronic signatures in full compliance with',
-      'the Electronic Signatures in Global and National Commerce Act (ESIGN, 15 U.S.C. § 7001 et seq.), the Uniform Electronic',
-      'Transactions Act (UETA), and Regulation (EU) No 910/2014 (eIDAS). The cryptographic seal binds the document hash,',
-      'signatures, and RFC 3161 timestamp. Any subsequent tampering or alteration irrevocably invalidates this certificate.',
+      'DOCUMENT EXECUTION RECORD:',
+      'This page records the electronic signing workflow and participant actions.',
+      'The final PDF digital signature provides cryptographic integrity evidence.',
+      'Certificate identity trust and trusted timestamp evidence must be assessed separately from the recorded',
+      'execution events. Verify the final PDF signature to assess document integrity and timestamp evidence.',
       'Public independent verification is available at any time via the link or QR code above.',
     ];
 

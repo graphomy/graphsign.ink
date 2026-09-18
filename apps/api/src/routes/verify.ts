@@ -1,3 +1,4 @@
+import { SigningClient } from '../services/signing-client.js';
 import { Hono } from 'hono';
 import type { PrismaClient } from '@graphsign/db';
 import { createPrismaClient, getLegacyPrisma } from '@graphsign/db';
@@ -9,6 +10,7 @@ import { PrismaAuditService, type AuditService } from '../services/audit-service
 import { verifyHashSchema } from '../validators/certificate-validators.js';
 import { BadRequestError } from '../utils/errors.js';
 import type { Env } from '../index.js';
+import { createAuditCertificatePdf } from '../services/audit-certificate-pdf.js';
 
 export interface VerifyDeps {
   prisma?: PrismaClient;
@@ -44,7 +46,14 @@ export function createPublicVerifyRoutes(deps?: VerifyDeps) {
     const audit = deps?.auditService || new PrismaAuditService(prisma);
 
     const verificationService =
-      deps?.verificationService || new VerificationService(prisma, keyCustody, crlOcsp, audit);
+      deps?.verificationService ||
+      new VerificationService(
+        prisma,
+        keyCustody,
+        crlOcsp,
+        audit,
+        new SigningClient(c.env?.SIGNING_SERVICE_URL, c.env?.SIGNING_SERVICE_TOKEN),
+      );
     const batchService =
       deps?.batchService || new BatchVerificationService(verificationService, audit);
 
@@ -162,6 +171,15 @@ export function createPublicVerifyRoutes(deps?: VerifyDeps) {
   verify.get('/:token/certificate', async (c) => {
     const { verificationService } = getServices(c);
     const token = c.req.param('token');
+    if (c.req.query('format') === 'pdf') {
+      const report = await verificationService.verifyByToken(token);
+      const bytes = await createAuditCertificatePdf(report);
+      return c.body(new Uint8Array(bytes), 200, {
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': 'attachment; filename="graphsign-audit-certificate.pdf"',
+        'Cache-Control': 'no-store',
+      });
+    }
     const cert = await verificationService.generateVerificationCertificate(token);
     return c.json(cert, 200);
   });

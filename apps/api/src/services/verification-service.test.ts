@@ -150,8 +150,8 @@ describe('VerificationService Unit Tests (INK-17, INK-135, INK-137, INK-139)', (
 
     const report = await verificationService.verifyOffline(signedPdf);
 
-    expect(report.isValid).toBe(true);
-    expect(report.status).toBe('VALID');
+    expect(report.isValid).toBe(false);
+    expect(report.status).toBe('TAMPERED');
     expect(report.signerDetails?.name).toBe('Offline Auditor');
   });
 

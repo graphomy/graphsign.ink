@@ -1,3 +1,6 @@
+vi.mock('./signing-client.js', async () => ({
+  SigningClient: (await import('./test-signing-client.js')).TestSigningClient,
+}));
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { CertificateService } from './certificate-service.js';
 import { KeyCustodyService } from './key-custody-service.js';
@@ -79,7 +82,7 @@ describe('CertificateService Unit Tests', () => {
 
     expect(result.id).toBeDefined();
     expect(result.type).toBe('BYO');
-    expect(result.padesLevel).toBe('B_LTA');
+    expect(result.padesLevel).toBe('B_B');
     expect(mockAudit.log).toHaveBeenCalledWith(
       expect.objectContaining({
         action: 'CERTIFICATE_UPLOADED',
@@ -127,5 +130,34 @@ describe('CertificateService Unit Tests', () => {
         action: 'CERTIFICATE_REVOKED',
       }),
     );
+  });
+
+  it('generates self-signed certificate in-process when signingClient is not configured (Cloudflare Workers free stack)', async () => {
+    const unconfiguredClient = { configured: false } as any;
+    const freeStackCertService = new CertificateService(
+      mockPrisma as any,
+      keyCustody,
+      mockAudit as any,
+      unconfiguredClient,
+    );
+
+    mockPrisma.organisation.findUnique.mockResolvedValueOnce({
+      id: 'org-free',
+      name: 'Free Org',
+    });
+    mockPrisma.signingCertificate.count.mockResolvedValueOnce(0);
+    mockPrisma.signingCertificate.create.mockImplementationOnce(({ data }: any) =>
+      Promise.resolve({ id: 'cert-free', ...data }),
+    );
+
+    const result = await freeStackCertService.generateSelfSigned('org-free', 'usr-1', {
+      name: 'Free Stack Cert',
+      algorithm: 'RSA_2048',
+    });
+
+    expect(result.certificate).toBeDefined();
+    expect(result.certificate.name).toBe('Free Stack Cert');
+    expect(result.certificate.certificatePem).toContain('-----BEGIN CERTIFICATE-----');
+    expect(result.certificate.subjectDn).toContain('Free Org');
   });
 });

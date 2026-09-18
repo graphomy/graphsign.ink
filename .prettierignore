@@ -3,3 +3,8 @@ dist/
 node_modules/
 *.d.ts
 next-env.d.ts
+
+.tools/
+services/signing/target/
+playwright-report/
+test-results/

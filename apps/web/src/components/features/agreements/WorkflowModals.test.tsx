@@ -202,7 +202,7 @@ describe('Workflow Modals Unit Tests (INK-87 to INK-95, INK-268)', () => {
       expect(screen.getByTestId('indicator-unsigned')).toBeDefined();
     });
 
-    it('displays Valid Signature indicator for completed agreement with seal metadata', () => {
+    it('does not assume a valid signature from completed status or seal metadata', () => {
       const mockAg = {
         id: 'ag-completed',
         title: 'Signed Employment Contract',
@@ -221,9 +221,8 @@ describe('Workflow Modals Unit Tests (INK-87 to INK-95, INK-268)', () => {
 
       render(<PdfViewerModal agreement={mockAg} onClose={vi.fn()} />);
 
-      expect(screen.getByTestId('indicator-valid')).toBeDefined();
-      expect(screen.getByText(/Valid Signature/i)).toBeDefined();
-      expect(screen.getByText(/Jane Doe/i)).toBeDefined();
+      expect(screen.queryByTestId('indicator-valid')).toBeNull();
+      expect(screen.getByTestId('indicator-unverified')).toBeDefined();
     });
 
     it('displays Invalid Signature watermark and badge for voided agreement', () => {

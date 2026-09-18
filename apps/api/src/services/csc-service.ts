@@ -1,3 +1,4 @@
+import { SigningClient } from './signing-client.js';
 import type { PrismaClient } from '@graphsign/db';
 import { KeyCustodyService } from './key-custody-service.js';
 import { TsaService } from './tsa-service.js';
@@ -64,6 +65,7 @@ export class CscService {
     private readonly prisma: PrismaClient,
     private readonly keyCustodyService: KeyCustodyService,
     private readonly tsaService: TsaService,
+    private readonly signingClient = new SigningClient(),
   ) {}
 
   /**
@@ -168,7 +170,7 @@ export class CscService {
    */
   async authorizeCredential(organisationId: string, input: CscAuthorizeInput) {
     const cert = await this.prisma.signingCertificate.findFirst({
-      where: { id: input.credentialID, organisationId, deletedAt: null },
+      where: { id: input.credentialID, organisationId, deletedAt: null, status: 'ACTIVE' },
     });
 
     if (!cert) {
@@ -202,7 +204,12 @@ export class CscService {
     // Validate SAD if present
     if (input.SAD) {
       const entry = CscService.sadStore.get(input.SAD);
-      if (!entry || entry.expiresAt < Date.now() || entry.credentialId !== input.credentialID) {
+      if (
+        !entry ||
+        entry.expiresAt < Date.now() ||
+        entry.credentialId !== input.credentialID ||
+        entry.organisationId !== organisationId
+      ) {
         throw new UnauthorizedError('Invalid or expired Server Authorisation Data (SAD).');
       }
     }
@@ -219,16 +226,23 @@ export class CscService {
 
     // Execute signing for each hash in batch
     for (const hashBase64 of input.hash) {
-      // In production, the key is signed via keyCustodyService using pkcs11KeyId / privateKey
-      // For software custody, we execute the signature using the algorithm
-      const dummyPrivateKey = await this.keyCustodyService.generateKeyPair(cert.algorithm as any);
-
-      const sigBase64 = await this.keyCustodyService.signHash({
-        keyId: cert.pkcs11KeyId,
-        privateKeyPem: dummyPrivateKey.privateKeyPem,
-        algorithm: cert.algorithm as any,
-        hashBase64,
-      });
+      let sigBase64: string;
+      if (this.signingClient.configured) {
+        const signed = await this.signingClient.signHash({
+          organisationId,
+          certificateId: cert.id,
+          hashBase64,
+        });
+        sigBase64 = signed.signature;
+      } else {
+        const dummyPrivateKey = await this.keyCustodyService.generateKeyPair(cert.algorithm as any);
+        sigBase64 = await this.keyCustodyService.signHash({
+          keyId: cert.pkcs11KeyId,
+          privateKeyPem: dummyPrivateKey.privateKeyPem,
+          algorithm: cert.algorithm as any,
+          hashBase64,
+        });
+      }
 
       signatures.push(sigBase64);
     }

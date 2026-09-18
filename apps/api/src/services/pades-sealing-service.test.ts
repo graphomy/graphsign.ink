@@ -1,3 +1,6 @@
+vi.mock('./signing-client.js', async () => ({
+  SigningClient: (await import('./test-signing-client.js')).TestSigningClient,
+}));
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { PadesSealingService } from './pades-sealing-service.js';
 import { KeyCustodyService } from './key-custody-service.js';
@@ -46,6 +49,7 @@ describe('PadesSealingService Unit Tests', () => {
       id: 'agr-1',
       organisationId: 'org-1',
       title: 'Master Services Agreement',
+      status: 'COMPLETED',
       markdownContent: '# Contract Content',
       recipients: [
         { id: 'rec-1', role: 'signer', status: 'SIGNED' },
@@ -82,10 +86,10 @@ describe('PadesSealingService Unit Tests', () => {
     expect(result.verificationUrl).toContain(result.verificationToken);
     expect(result.qrCodeDataUrl).toContain('data:image/png;base64');
     expect(result.documentHash).toBeDefined();
-    expect(result.padesLevel).toBe('B_T');
+    expect(result.padesLevel).toBe('B_B');
     expect(result.sealedPdfBase64).toBeDefined();
     const decodedContainer = Buffer.from(result.sealedPdfBase64, 'base64').toString('utf-8');
-    expect(decodedContainer).toContain('%PAdES-B-T-SEAL:');
+    expect(decodedContainer.startsWith('%PDF-')).toBe(true);
     expect(mockAudit.log).toHaveBeenCalledWith(
       expect.objectContaining({
         action: 'DOCUMENT_SEALED',
@@ -98,6 +102,7 @@ describe('PadesSealingService Unit Tests', () => {
       id: 'agr-batch',
       organisationId: 'org-1',
       title: 'Batch Doc',
+      status: 'COMPLETED',
       recipients: [],
       author: { name: 'Alice', email: 'alice@acme.com' },
     });
@@ -122,5 +127,57 @@ describe('PadesSealingService Unit Tests', () => {
     expect(batchRes.successfulCount).toBe(2);
     expect(batchRes.failedCount).toBe(0);
     expect(batchRes.results).toHaveLength(2);
+  });
+
+  it('seals in-process when signingClient is not configured (Cloudflare Workers free stack)', async () => {
+    const unconfiguredClient = { configured: false } as any;
+    const freeStackTsaService = new TsaService({}, unconfiguredClient);
+    const freeStackSealingService = new PadesSealingService(
+      mockPrisma as any,
+      keyCustody,
+      freeStackTsaService,
+      mockAudit as any,
+      unconfiguredClient,
+    );
+
+    mockPrisma.agreement.findFirst.mockResolvedValueOnce({
+      id: 'agr-free',
+      organisationId: 'org-free',
+      title: 'Free Stack Agreement',
+      status: 'COMPLETED',
+      markdownContent: '# Free Stack Agreement Content',
+      recipients: [{ id: 'rec-1', role: 'signer', status: 'SIGNED' }],
+      author: { name: 'Bob', email: 'bob@acme.com' },
+    });
+
+    mockPrisma.signingCertificate.findFirst.mockResolvedValueOnce({
+      id: 'cert-free',
+      organisationId: 'org-free',
+      name: 'Default Cert',
+      algorithm: 'RSA_2048',
+      certificatePem: '-----BEGIN CERTIFICATE-----\nMIIB...\n-----END CERTIFICATE-----',
+      pkcs11KeyId: 'key_123',
+      subjectDn: 'CN=Acme Sign',
+      issuerDn: 'CN=Acme Sign',
+      padesLevel: 'B_T',
+      tsaUrl: null,
+    });
+
+    mockPrisma.documentSeal.create.mockImplementationOnce(({ data }: any) =>
+      Promise.resolve({ id: 'seal-free', ...data }),
+    );
+
+    const result = await freeStackSealingService.sealAgreement({
+      agreementId: 'agr-free',
+      organisationId: 'org-free',
+      userId: 'usr-1',
+    });
+
+    expect(result.status).toBe('SUCCESS');
+    expect(result.verificationToken).toMatch(/^GS-[0-9a-f]{8}$/);
+    expect(result.padesLevel).toBe('B_T');
+    expect(result.sealedPdfBase64).toBeDefined();
+    const decoded = Buffer.from(result.sealedPdfBase64, 'base64').toString('utf-8');
+    expect(decoded).toContain('%PAdES-B-T-SEAL');
   });
 });

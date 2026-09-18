@@ -1,4 +1,5 @@
 import { BadRequestError } from '../utils/errors.js';
+import { SigningClient } from './signing-client.js';
 
 export interface TimestampResult {
   tsaUrl: string;
@@ -11,6 +12,7 @@ export interface TimestampResult {
 }
 
 export interface TsaConfig {
+  allowMockTimestamp?: boolean;
   primaryUrl?: string;
   fallbackUrl?: string;
   fallback2Url?: string;
@@ -30,7 +32,10 @@ export class TsaService {
     { provider: 'FreeTSA', url: 'https://freetsa.org/tsr' },
   ];
 
-  constructor(private readonly config: TsaConfig = {}) {}
+  constructor(
+    private readonly config: TsaConfig = {},
+    private readonly signingClient = new SigningClient(),
+  ) {}
 
   /**
    * Validates custom TSA URL to prevent Server-Side Request Forgery (SSRF) (SEC-04).
@@ -94,6 +99,18 @@ export class TsaService {
     }
 
     const digestBytes = this.normalizeDigest(digestHexOrBase64);
+    if (this.signingClient?.configured && typeof this.signingClient.timestamp === 'function') {
+      const proof = await this.signingClient.timestamp(
+        this.bytesToBase64(digestBytes),
+        overrideUrl || this.config.primaryUrl,
+      );
+      return {
+        ...proof,
+        timestamp: new Date(proof.timestamp),
+        provider: 'RFC 3161 verified',
+        tokenBytes: this.base64ToBytes(proof.tokenBase64),
+      };
+    }
     const endpoints = overrideUrl
       ? [{ provider: 'Custom', url: overrideUrl }]
       : this.getEndpoints();

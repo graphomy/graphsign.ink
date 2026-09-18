@@ -1,8 +1,8 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { TsaService } from './tsa-service.js';
 
 describe('TsaService (RFC 3161 Timestamping)', () => {
-  const tsaService = new TsaService();
+  const tsaService = new TsaService({ allowMockTimestamp: true });
 
   it('builds a valid DER-encoded ASN.1 TimeStampReq structure', () => {
     const dummyDigest = new Uint8Array(32).fill(0xab);
@@ -17,7 +17,12 @@ describe('TsaService (RFC 3161 Timestamping)', () => {
   it('requests timestamp token with automatic failover and offline resilience', async () => {
     const digestHex = 'a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90';
 
-    const result = await tsaService.requestTimestamp(digestHex);
+    const request = vi
+      .spyOn(globalThis, 'fetch')
+      .mockRejectedValue(new Error('Offline test fixture'));
+    const result = await tsaService
+      .requestTimestamp(digestHex)
+      .finally(() => request.mockRestore());
 
     expect(result).toBeDefined();
     expect(result.tokenBase64).toBeDefined();

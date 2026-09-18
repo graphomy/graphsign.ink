@@ -434,10 +434,10 @@ function AgreementManagementContent() {
       await res.json();
       if (isMd) {
         setActionMessage('Markdown agreement uploaded successfully as Draft (v0.1).');
-        setActiveTab('active');
+        handleTabChange('active');
       } else {
         setActionMessage('Agreement uploaded and converted to active PDF (v1.0).');
-        setActiveTab('active');
+        handleTabChange('active');
       }
 
       setShowUploadModal(false);
@@ -465,7 +465,7 @@ function AgreementManagementContent() {
 
       if (!res.ok) throw new Error('Failed to clone agreement.');
       setActionMessage('Agreement cloned successfully into a new draft (v0.1).');
-      setActiveTab('active');
+      handleTabChange('active');
       setCurrentPage(1);
       setRefreshTrigger((prev) => prev + 1);
     } catch (err: unknown) {
@@ -1512,6 +1512,7 @@ function AgreementManagementContent() {
           currentVersion="v0.1"
           currentStatus="DRAFT"
           onSuccess={(msg) => {
+            handleTabChange('active');
             setActionMessage(msg || 'Draft created successfully');
             setShowScratchModal(false);
             setRefreshTrigger((p) => p + 1);

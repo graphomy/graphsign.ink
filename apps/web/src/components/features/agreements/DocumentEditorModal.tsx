@@ -1,4 +1,7 @@
 'use client';
+import { loadPdfDocument } from '@/lib/pdf-document';
+import { PdfPageCanvas } from './PdfPageCanvas';
+import type { PDFDocumentProxy } from 'pdfjs-dist';
 
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { getApiUrl } from '@/lib/api';
@@ -137,11 +140,13 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
   const [selectedFieldId, setSelectedFieldId] = useState<string | null>(null);
   const [zoomLevel, setZoomLevel] = useState<number>(100);
   const [currentPage, setCurrentPage] = useState<number>(1);
+  const [pdfDocument, setPdfDocument] = useState<PDFDocumentProxy | null>(null);
   const totalPages = useMemo(() => {
+    if (pdfDocument) return pdfDocument.numPages;
     if (!fields || fields.length === 0) return 1;
     const maxPage = Math.max(...fields.map((f) => f.pageNumber || 1));
     return Math.max(1, maxPage);
-  }, [fields]);
+  }, [fields, pdfDocument]);
   const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -270,6 +275,29 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
   }, [agreement.id, inlinePdfUrl, isMarkdown]);
 
   const effectivePdfUrl = inlinePdfUrl || fetchedBlobUrl;
+  useEffect(() => {
+    if (!effectivePdfUrl) return;
+    let cancelled = false;
+    let document: PDFDocumentProxy | undefined;
+    void loadPdfDocument(effectivePdfUrl)
+      .then((loaded) => {
+        document = loaded;
+        if (cancelled) {
+          void loaded.destroy();
+          return;
+        }
+        setPdfDocument(loaded);
+        setCurrentPage(1);
+      })
+      .catch(() => {
+        if (!cancelled)
+          setErrorMessage('Unable to read PDF pages. Please retry loading the document.');
+      });
+    return () => {
+      cancelled = true;
+      if (document) void document.destroy();
+    };
+  }, [effectivePdfUrl]);
 
   // Load existing fields on mount from server if not populated
   useEffect(() => {
@@ -443,7 +471,7 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
   // Click-to-place button from palette
   function handlePaletteItemClick(type: FieldType) {
     // Default place in center of active viewport
-    createFieldAt(type, 35, 40, 1);
+    createFieldAt(type, 35, 40, currentPage);
   }
 
   // Drag-and-drop start from toolbar
@@ -472,7 +500,7 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
     const xPct = ((clientX - rect.left) / rect.width) * 100;
     const yPct = ((clientY - rect.top) / rect.height) * 100;
 
-    createFieldAt(type, xPct, yPct, 1);
+    createFieldAt(type, xPct, yPct, currentPage);
     dragItemTypeRef.current = null;
   }
 
@@ -629,6 +657,18 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
     setErrorMessage(null);
 
     try {
+      const invalidRecipient = recipients.find((r) => !r.id || !r.name?.trim());
+      if (invalidRecipient)
+        throw new Error(
+          'Each recipient needs an identifier and a name. Please update the recipient details.',
+        );
+      const invalidField = fields.find(
+        (f) => !f.id || !f.recipientId || !recipients.some((r) => r.id === f.recipientId),
+      );
+      if (invalidField)
+        throw new Error(
+          `Assign ${invalidField.label || 'each field'} to an existing recipient before saving.`,
+        );
       const res = await fetch(`${getApiUrl()}/api/v1/agreements/${agreement.id}/fields`, {
         method: 'PUT',
         headers: {
@@ -1040,8 +1080,8 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
             style={{
               transform: `scale(${zoomLevel / 100})`,
               transformOrigin: 'top center',
-              width: '800px',
-              minHeight: '1100px',
+              width: '850px',
+              minHeight: pdfDocument ? 'auto' : '1100px',
             }}
             className="bg-white shadow-2xl rounded-sm relative transition-transform duration-100 flex flex-col mb-auto select-none overflow-hidden"
           >
@@ -1054,11 +1094,11 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
                 }}
               />
             ) : effectivePdfUrl ? (
-              <iframe
-                src={`${effectivePdfUrl}#page=${currentPage}&toolbar=0&navpanes=0&scrollbar=0`}
-                className="w-full h-full min-h-[1100px] border-none pointer-events-none flex-1 overflow-hidden"
-                title="Document PDF Preview"
-              />
+              pdfDocument ? (
+                <PdfPageCanvas document={pdfDocument} pageNumber={currentPage} width={850} />
+              ) : (
+                <p role="status">Loading document pages...</p>
+              )
             ) : isLoadingPdf ? (
               <div className="p-16 text-center text-neutral-400 flex flex-col items-center justify-center min-h-[600px] space-y-3">
                 <div className="w-8 h-8 border-3 border-neutral-300 border-t-neutral-800 rounded-full animate-spin" />
@@ -1077,225 +1117,229 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
 
             {/* Field Overlay Layer */}
             <div className="absolute inset-0 pointer-events-auto">
-              {fields.map((field) => {
-                const assignedRecip = recipients.find((r) => r.id === field.recipientId);
-                const recipColor = assignedRecip?.color || '#2563EB';
-                const isSelected = selectedFieldId === field.id && activeMode === 'editor';
+              {fields
+                .filter((field) => (field.pageNumber || 1) === currentPage)
+                .map((field) => {
+                  const assignedRecip = recipients.find((r) => r.id === field.recipientId);
+                  const recipColor = assignedRecip?.color || '#2563EB';
+                  const isSelected = selectedFieldId === field.id && activeMode === 'editor';
 
-                // In Preview Mode (INK-85): only fields assigned to active preview recipient are interactable
-                const isCurrentRecipientInPreview =
-                  activeMode === 'preview' && field.recipientId === effectivePreviewRecipientId;
+                  // In Preview Mode (INK-85): only fields assigned to active preview recipient are interactable
+                  const isCurrentRecipientInPreview =
+                    activeMode === 'preview' && field.recipientId === effectivePreviewRecipientId;
 
-                const fieldValue = previewValues[field.id];
-                const fieldError = previewErrors[field.id];
+                  const fieldValue = previewValues[field.id];
+                  const fieldError = previewErrors[field.id];
 
-                return (
-                  <div
-                    key={field.id}
-                    onMouseDown={(e) => handleFieldMouseDown(e, field)}
-                    onClick={(e) => {
-                      if (activeMode === 'editor') {
-                        e.stopPropagation();
-                        setSelectedFieldId(field.id);
-                      }
-                    }}
-                    style={{
-                      left: `${field.x}%`,
-                      top: `${field.y}%`,
-                      width: `${field.width}%`,
-                      height: `${field.height}%`,
-                      borderColor: recipColor,
-                    }}
-                    className={`absolute rounded transition-shadow flex flex-col justify-between overflow-visible ${
-                      activeMode === 'editor'
-                        ? 'cursor-move border-2 shadow-xs'
-                        : isCurrentRecipientInPreview
-                          ? 'border-2 border-dashed bg-white/90 shadow-md cursor-pointer'
-                          : 'opacity-40 border border-neutral-300 pointer-events-none'
-                    } ${isSelected ? 'ring-2 ring-offset-1 ring-blue-500 z-30' : 'z-10'}`}
-                  >
-                    {/* Header Badge */}
+                  return (
                     <div
-                      style={{ backgroundColor: recipColor }}
-                      className="px-1.5 py-0.5 text-white text-[9px] font-bold flex items-center justify-between shrink-0 leading-tight"
+                      key={field.id}
+                      onMouseDown={(e) => handleFieldMouseDown(e, field)}
+                      onClick={(e) => {
+                        if (activeMode === 'editor') {
+                          e.stopPropagation();
+                          setSelectedFieldId(field.id);
+                        }
+                      }}
+                      style={{
+                        left: `${field.x}%`,
+                        top: `${field.y}%`,
+                        width: `${field.width}%`,
+                        height: `${field.height}%`,
+                        borderColor: recipColor,
+                      }}
+                      className={`absolute rounded transition-shadow flex flex-col justify-between overflow-visible ${
+                        activeMode === 'editor'
+                          ? 'cursor-move border-2 shadow-xs'
+                          : isCurrentRecipientInPreview
+                            ? 'border-2 border-dashed bg-white/90 shadow-md cursor-pointer'
+                            : 'opacity-40 border border-neutral-300 pointer-events-none'
+                      } ${isSelected ? 'ring-2 ring-offset-1 ring-blue-500 z-30' : 'z-10'}`}
                     >
-                      <div className="flex items-center gap-1 truncate">
-                        <span className="truncate">
-                          {field.label} •{' '}
-                          {recipients.find((r) => r.id === field.recipientId)?.name || 'Signer'}
-                        </span>
-                        {field.isRequired && (
-                          <span className="text-red-300 font-extrabold text-xs" title="Required">
-                            *
+                      {/* Header Badge */}
+                      <div
+                        style={{ backgroundColor: recipColor }}
+                        className="px-1.5 py-0.5 text-white text-[9px] font-bold flex items-center justify-between shrink-0 leading-tight"
+                      >
+                        <div className="flex items-center gap-1 truncate">
+                          <span className="truncate">
+                            {field.label} •{' '}
+                            {recipients.find((r) => r.id === field.recipientId)?.name || 'Signer'}
                           </span>
-                        )}
-                      </div>
-                      {activeMode === 'editor' && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDeleteField(field.id);
-                          }}
-                          className="hover:text-red-200 text-[10px] ml-1 font-bold"
-                          title="Delete field"
-                        >
-                          ×
-                        </button>
-                      )}
-                    </div>
-
-                    {/* Field Content / Preview Inputs (INK-85) */}
-                    <div className="flex-1 bg-white/80 p-1 flex items-center justify-center text-center overflow-hidden">
-                      {activeMode === 'preview' ? (
-                        <div className="w-full h-full flex flex-col justify-center">
-                          {field.type === 'SIGNATURE' && (
-                            <div className="border border-neutral-300 bg-neutral-50 rounded p-1 text-center text-xs font-semibold text-neutral-600 hover:bg-neutral-100">
-                              {fieldValue ? (
-                                <span className="font-serif italic text-sm text-blue-900">
-                                  {fieldValue}
-                                </span>
-                              ) : (
-                                <span>✍️ Click to Sign</span>
-                              )}
-                            </div>
-                          )}
-
-                          {field.type === 'INITIALS' && (
-                            <div className="border border-neutral-300 bg-neutral-50 rounded p-1 text-center text-xs font-bold text-neutral-700">
-                              {fieldValue || 'Initials'}
-                            </div>
-                          )}
-
-                          {field.type === 'TEXT' && (
-                            <input
-                              type="text"
-                              placeholder={field.placeholder || 'Enter text...'}
-                              value={typeof fieldValue === 'string' ? fieldValue : ''}
-                              onChange={(e) => handlePreviewInputChange(field, e.target.value)}
-                              className="w-full bg-white border border-neutral-300 rounded px-1.5 py-0.5 text-xs text-neutral-900 focus:outline-none focus:border-blue-500"
-                            />
-                          )}
-
-                          {field.type === 'DATE' && (
-                            <input
-                              type="date"
-                              value={typeof fieldValue === 'string' ? fieldValue : ''}
-                              onChange={(e) => handlePreviewInputChange(field, e.target.value)}
-                              className="w-full bg-white border border-neutral-300 rounded px-1.5 py-0.5 text-xs text-neutral-900 focus:outline-none focus:border-blue-500"
-                            />
-                          )}
-
-                          {field.type === 'EMAIL' && (
-                            <input
-                              type="email"
-                              placeholder="signer@example.com"
-                              value={typeof fieldValue === 'string' ? fieldValue : ''}
-                              onChange={(e) => handlePreviewInputChange(field, e.target.value)}
-                              className="w-full bg-white border border-neutral-300 rounded px-1.5 py-0.5 text-xs text-neutral-900 focus:outline-none focus:border-blue-500"
-                            />
-                          )}
-
-                          {field.type === 'COMPANY' && (
-                            <input
-                              type="text"
-                              placeholder="Company name..."
-                              value={typeof fieldValue === 'string' ? fieldValue : ''}
-                              onChange={(e) => handlePreviewInputChange(field, e.target.value)}
-                              className="w-full bg-white border border-neutral-300 rounded px-1.5 py-0.5 text-xs text-neutral-900 focus:outline-none focus:border-blue-500"
-                            />
-                          )}
-
-                          {field.type === 'CHECKBOX' && (
-                            <label className="flex items-center gap-1.5 justify-center cursor-pointer text-xs">
-                              <input
-                                type="checkbox"
-                                checked={!!fieldValue}
-                                onChange={(e) => handlePreviewInputChange(field, e.target.checked)}
-                                className="w-3.5 h-3.5 text-blue-600 rounded"
-                              />
-                              <span className="text-[10px] text-neutral-700">{field.label}</span>
-                            </label>
-                          )}
-
-                          {field.type === 'RADIO' && (
-                            <div className="flex flex-col gap-1 text-left text-[10px]">
-                              {field.options?.map((opt) => (
-                                <label
-                                  key={opt.value}
-                                  className="flex items-center gap-1 cursor-pointer"
-                                >
-                                  <input
-                                    type="radio"
-                                    name={field.groupName || field.id}
-                                    value={opt.value}
-                                    checked={fieldValue === opt.value}
-                                    onChange={(e) =>
-                                      handlePreviewInputChange(field, e.target.value)
-                                    }
-                                  />
-                                  <span>{opt.label}</span>
-                                </label>
-                              ))}
-                            </div>
-                          )}
-
-                          {field.type === 'DROPDOWN' && (
-                            <select
-                              value={typeof fieldValue === 'string' ? fieldValue : ''}
-                              onChange={(e) => handlePreviewInputChange(field, e.target.value)}
-                              className="w-full bg-white border border-neutral-300 rounded px-1 py-0.5 text-[11px]"
-                            >
-                              <option value="">Select option...</option>
-                              {field.options?.map((opt) => (
-                                <option key={opt.value} value={opt.value}>
-                                  {opt.label}
-                                </option>
-                              ))}
-                            </select>
-                          )}
-
-                          {fieldError && (
-                            <span className="text-[9px] font-bold text-red-600 mt-0.5 block">
-                              {fieldError}
+                          {field.isRequired && (
+                            <span className="text-red-300 font-extrabold text-xs" title="Required">
+                              *
                             </span>
                           )}
                         </div>
-                      ) : (
-                        /* Editor Static Placeholder Display */
-                        <div className="text-center truncate text-[11px] font-medium text-neutral-600">
-                          {field.type === 'SIGNATURE' && <span>✍️ Signature</span>}
-                          {field.type === 'INITIALS' && <span>✒️ Initials</span>}
-                          {field.type === 'TEXT' && (
-                            <span>{field.placeholder || 'Text field'}</span>
-                          )}
-                          {field.type === 'DATE' && (
-                            <span>📅 {field.dateFormat || 'YYYY-MM-DD'}</span>
-                          )}
-                          {field.type === 'EMAIL' && <span>✉️ Email</span>}
-                          {field.type === 'COMPANY' && <span>🏢 Company</span>}
-                          {field.type === 'CHECKBOX' && <span>☑️ Checkbox</span>}
-                          {field.type === 'RADIO' && (
-                            <span>🔘 Radio ({field.options?.length || 2} options)</span>
-                          )}
-                          {field.type === 'DROPDOWN' && (
-                            <span>▼ Dropdown ({field.options?.length || 2} options)</span>
-                          )}
-                        </div>
+                        {activeMode === 'editor' && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteField(field.id);
+                            }}
+                            className="hover:text-red-200 text-[10px] ml-1 font-bold"
+                            title="Delete field"
+                          >
+                            ×
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Field Content / Preview Inputs (INK-85) */}
+                      <div className="flex-1 bg-white/80 p-1 flex items-center justify-center text-center overflow-hidden">
+                        {activeMode === 'preview' ? (
+                          <div className="w-full h-full flex flex-col justify-center">
+                            {field.type === 'SIGNATURE' && (
+                              <div className="border border-neutral-300 bg-neutral-50 rounded p-1 text-center text-xs font-semibold text-neutral-600 hover:bg-neutral-100">
+                                {fieldValue ? (
+                                  <span className="font-serif italic text-sm text-blue-900">
+                                    {fieldValue}
+                                  </span>
+                                ) : (
+                                  <span>✍️ Click to Sign</span>
+                                )}
+                              </div>
+                            )}
+
+                            {field.type === 'INITIALS' && (
+                              <div className="border border-neutral-300 bg-neutral-50 rounded p-1 text-center text-xs font-bold text-neutral-700">
+                                {fieldValue || 'Initials'}
+                              </div>
+                            )}
+
+                            {field.type === 'TEXT' && (
+                              <input
+                                type="text"
+                                placeholder={field.placeholder || 'Enter text...'}
+                                value={typeof fieldValue === 'string' ? fieldValue : ''}
+                                onChange={(e) => handlePreviewInputChange(field, e.target.value)}
+                                className="w-full bg-white border border-neutral-300 rounded px-1.5 py-0.5 text-xs text-neutral-900 focus:outline-none focus:border-blue-500"
+                              />
+                            )}
+
+                            {field.type === 'DATE' && (
+                              <input
+                                type="date"
+                                value={typeof fieldValue === 'string' ? fieldValue : ''}
+                                onChange={(e) => handlePreviewInputChange(field, e.target.value)}
+                                className="w-full bg-white border border-neutral-300 rounded px-1.5 py-0.5 text-xs text-neutral-900 focus:outline-none focus:border-blue-500"
+                              />
+                            )}
+
+                            {field.type === 'EMAIL' && (
+                              <input
+                                type="email"
+                                placeholder="signer@example.com"
+                                value={typeof fieldValue === 'string' ? fieldValue : ''}
+                                onChange={(e) => handlePreviewInputChange(field, e.target.value)}
+                                className="w-full bg-white border border-neutral-300 rounded px-1.5 py-0.5 text-xs text-neutral-900 focus:outline-none focus:border-blue-500"
+                              />
+                            )}
+
+                            {field.type === 'COMPANY' && (
+                              <input
+                                type="text"
+                                placeholder="Company name..."
+                                value={typeof fieldValue === 'string' ? fieldValue : ''}
+                                onChange={(e) => handlePreviewInputChange(field, e.target.value)}
+                                className="w-full bg-white border border-neutral-300 rounded px-1.5 py-0.5 text-xs text-neutral-900 focus:outline-none focus:border-blue-500"
+                              />
+                            )}
+
+                            {field.type === 'CHECKBOX' && (
+                              <label className="flex items-center gap-1.5 justify-center cursor-pointer text-xs">
+                                <input
+                                  type="checkbox"
+                                  checked={!!fieldValue}
+                                  onChange={(e) =>
+                                    handlePreviewInputChange(field, e.target.checked)
+                                  }
+                                  className="w-3.5 h-3.5 text-blue-600 rounded"
+                                />
+                                <span className="text-[10px] text-neutral-700">{field.label}</span>
+                              </label>
+                            )}
+
+                            {field.type === 'RADIO' && (
+                              <div className="flex flex-col gap-1 text-left text-[10px]">
+                                {field.options?.map((opt) => (
+                                  <label
+                                    key={opt.value}
+                                    className="flex items-center gap-1 cursor-pointer"
+                                  >
+                                    <input
+                                      type="radio"
+                                      name={field.groupName || field.id}
+                                      value={opt.value}
+                                      checked={fieldValue === opt.value}
+                                      onChange={(e) =>
+                                        handlePreviewInputChange(field, e.target.value)
+                                      }
+                                    />
+                                    <span>{opt.label}</span>
+                                  </label>
+                                ))}
+                              </div>
+                            )}
+
+                            {field.type === 'DROPDOWN' && (
+                              <select
+                                value={typeof fieldValue === 'string' ? fieldValue : ''}
+                                onChange={(e) => handlePreviewInputChange(field, e.target.value)}
+                                className="w-full bg-white border border-neutral-300 rounded px-1 py-0.5 text-[11px]"
+                              >
+                                <option value="">Select option...</option>
+                                {field.options?.map((opt) => (
+                                  <option key={opt.value} value={opt.value}>
+                                    {opt.label}
+                                  </option>
+                                ))}
+                              </select>
+                            )}
+
+                            {fieldError && (
+                              <span className="text-[9px] font-bold text-red-600 mt-0.5 block">
+                                {fieldError}
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          /* Editor Static Placeholder Display */
+                          <div className="text-center truncate text-[11px] font-medium text-neutral-600">
+                            {field.type === 'SIGNATURE' && <span>✍️ Signature</span>}
+                            {field.type === 'INITIALS' && <span>✒️ Initials</span>}
+                            {field.type === 'TEXT' && (
+                              <span>{field.placeholder || 'Text field'}</span>
+                            )}
+                            {field.type === 'DATE' && (
+                              <span>📅 {field.dateFormat || 'YYYY-MM-DD'}</span>
+                            )}
+                            {field.type === 'EMAIL' && <span>✉️ Email</span>}
+                            {field.type === 'COMPANY' && <span>🏢 Company</span>}
+                            {field.type === 'CHECKBOX' && <span>☑️ Checkbox</span>}
+                            {field.type === 'RADIO' && (
+                              <span>🔘 Radio ({field.options?.length || 2} options)</span>
+                            )}
+                            {field.type === 'DROPDOWN' && (
+                              <span>▼ Dropdown ({field.options?.length || 2} options)</span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Resizing Handle (Bottom-Right) - INK-84 */}
+                      {activeMode === 'editor' && (
+                        <div
+                          onMouseDown={(e) => handleResizeMouseDown(e, field)}
+                          style={{ backgroundColor: recipColor }}
+                          className="absolute bottom-0 right-0 w-3 h-3 cursor-se-resize rounded-tl-xs shadow-xs"
+                          title="Drag to resize"
+                        />
                       )}
                     </div>
-
-                    {/* Resizing Handle (Bottom-Right) - INK-84 */}
-                    {activeMode === 'editor' && (
-                      <div
-                        onMouseDown={(e) => handleResizeMouseDown(e, field)}
-                        style={{ backgroundColor: recipColor }}
-                        className="absolute bottom-0 right-0 w-3 h-3 cursor-se-resize rounded-tl-xs shadow-xs"
-                        title="Drag to resize"
-                      />
-                    )}
-                  </div>
-                );
-              })}
+                  );
+                })}
             </div>
           </div>
         </main>

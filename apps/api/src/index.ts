@@ -37,6 +37,8 @@ export type Env = {
   API_URL: string;
   NODE_ENV: string;
   SUPERADMIN_ID: string;
+  SIGNING_SERVICE_URL?: string;
+  SIGNING_SERVICE_TOKEN?: string;
   TSA_PRIMARY_URL?: string;
   TSA_FALLBACK_URL?: string;
   TSA_FALLBACK2_URL?: string;

@@ -16,6 +16,9 @@ const eslintConfig = defineConfig([
   globalIgnores([
     // Default ignores of eslint-config-next:
     '.next/**',
+    'public/pdf.worker.min.mjs',
+    'test-results/**',
+    'playwright-report/**',
     'out/**',
     'build/**',
     'next-env.d.ts',
