@@ -5,6 +5,7 @@ import type { PDFDocumentProxy } from 'pdfjs-dist';
 
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { getApiUrl } from '@/lib/api';
+import { fetchRead } from '@/lib/fetch-read';
 import { formatStatus } from '@/lib/date-utils';
 import { renderMarkdownToHtml } from './MarkdownEditor';
 import { SendAgreementModal } from './SendAgreementModal';
@@ -301,15 +302,16 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
 
   // Load existing fields on mount from server if not populated
   useEffect(() => {
-    let ignore = false;
+    const controller = new AbortController();
     async function loadFields() {
       try {
-        const res = await fetch(`${getApiUrl()}/api/v1/agreements/${agreement.id}/fields`, {
+        const res = await fetchRead(`${getApiUrl()}/api/v1/agreements/${agreement.id}/fields`, {
           headers: { Authorization: `Bearer ${getToken()}` },
+          signal: controller.signal,
         });
         if (res.ok) {
           const data = await res.json();
-          if (!ignore && data) {
+          if (!controller.signal.aborted && data) {
             if (Array.isArray(data.fields) && data.fields.length > 0) {
               setFields(data.fields);
             }
@@ -319,13 +321,14 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
             }
           }
         }
-      } catch (err) {
-        console.error('Failed to load fields from API:', err);
+      } catch (err: unknown) {
+        if ((err as { name?: string })?.name === 'AbortError') return;
+        console.warn('Unable to load document fields from API (using fallback state):', err);
       }
     }
     loadFields();
     return () => {
-      ignore = true;
+      controller.abort();
     };
   }, [agreement.id]);
 

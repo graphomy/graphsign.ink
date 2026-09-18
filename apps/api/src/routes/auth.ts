@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import type { PrismaClient } from '@graphsign/db';
-import { createPrismaClient } from '@graphsign/db';
+import { getDbClient } from '../utils/db.js';
 import {
   registerRequestSchema,
   loginRequestSchema,
@@ -23,7 +23,7 @@ import type { MailerService } from '../services/mailer-service.js';
 import { createMailerService } from '../services/mailer-service.js';
 import type { AuditService } from '../services/audit-service.js';
 import { PrismaAuditService } from '../services/audit-service.js';
-import { AppError, ValidationError, UnauthorizedError } from '../utils/errors.js';
+import { ValidationError, UnauthorizedError } from '../utils/errors.js';
 import { createRateLimiter } from '../middleware/rate-limiter.js';
 import { jwtAuth } from '../middleware/jwt-auth.js';
 import { decodeJwt, signJwt } from '../utils/jwt.js';
@@ -47,26 +47,7 @@ export function createAuthRoutes(deps?: AuthDeps) {
   auth.use('/*', createRateLimiter(10, 60_000));
 
   function getAuthService(c: any): AuthService {
-    let db = deps?.prisma;
-    if (!db) {
-      const dbUrl = c.env?.DATABASE_URL || process.env.DATABASE_URL;
-      const isValidUrl =
-        dbUrl &&
-        typeof dbUrl === 'string' &&
-        dbUrl.trim() !== '' &&
-        (dbUrl.startsWith('postgres://') || dbUrl.startsWith('postgresql://'));
-
-      if (isValidUrl) {
-        db = createPrismaClient(dbUrl);
-      } else {
-        const preview = dbUrl ? `${String(dbUrl).substring(0, 10)}...` : 'undefined';
-        throw new AppError(
-          'INTERNAL_SERVER_ERROR',
-          `Database connection string (DATABASE_URL) is missing or invalid in Worker secrets/bindings. Received: "${preview}". Please configure a valid postgresql:// URL in Cloudflare Worker secrets.`,
-          500,
-        );
-      }
-    }
+    const db = getDbClient(c, deps?.prisma);
 
     let mailer = deps?.mailer;
     if (!mailer) {
@@ -805,13 +786,7 @@ export function createAuthRoutes(deps?: AuthDeps) {
     }
 
     const tokenHash = await sha256(refreshToken.trim());
-    let db = deps?.prisma;
-    if (!db) {
-      const dbUrl = c.env?.DATABASE_URL || process.env.DATABASE_URL;
-      if (dbUrl && (dbUrl.startsWith('postgres://') || dbUrl.startsWith('postgresql://'))) {
-        db = createPrismaClient(dbUrl);
-      }
-    }
+    const db = getDbClient(c, deps?.prisma);
 
     if (!db?.refreshSession) {
       throw new UnauthorizedError('Session refresh store unavailable.');

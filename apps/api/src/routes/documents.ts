@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import type { PrismaClient } from '@graphsign/db';
-import { createPrismaClient, getLegacyPrisma } from '@graphsign/db';
+import { getDbClient } from '../utils/db.js';
 import { AgreementService } from '../services/agreement-service.js';
 import { PrismaAuditService, type AuditService } from '../services/audit-service.js';
 import { DomainEventService } from '../services/domain-event-service.js';
@@ -26,24 +26,9 @@ export interface DocumentDeps {
 
 export function createDocumentRoutes(deps?: DocumentDeps) {
   const router = new Hono<{ Bindings: Env }>();
-  let cachedPrisma: PrismaClient | undefined;
 
   function getServices(c: any) {
-    let prisma = deps?.prisma;
-    if (!prisma) {
-      if (cachedPrisma) {
-        prisma = cachedPrisma;
-      } else {
-        const dbUrl = c.env?.DATABASE_URL || process.env.DATABASE_URL;
-        const isValidUrl =
-          dbUrl &&
-          typeof dbUrl === 'string' &&
-          dbUrl.trim() !== '' &&
-          (dbUrl.startsWith('postgres://') || dbUrl.startsWith('postgresql://'));
-        prisma = isValidUrl ? createPrismaClient(dbUrl) : getLegacyPrisma();
-        cachedPrisma = prisma;
-      }
-    }
+    const prisma = getDbClient(c, deps?.prisma);
 
     const audit = deps?.audit || new PrismaAuditService(prisma);
     const agreementService = deps?.agreementService || new AgreementService(prisma, audit);

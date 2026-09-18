@@ -7,6 +7,7 @@ import { HeaderNav } from '@/components/layout/HeaderNav';
 import { PageHeaderCard } from '@/components/layout/PageHeaderCard';
 import { Footer } from '@/components/layout/Footer';
 import { getApiUrl } from '@/lib/api';
+import { fetchRead } from '@/lib/fetch-read';
 import { formatDate, formatStatus } from '@/lib/date-utils';
 
 interface AgreementRecipient {
@@ -54,22 +55,24 @@ function DashboardContent() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    let ignore = false;
+    const controller = new AbortController();
     async function loadDashboardData() {
       setLoading(true);
       setError(null);
       try {
         const token = getToken();
         const [agreementsRes, certsRes] = await Promise.all([
-          fetch(`${getApiUrl()}/api/v1/agreements?limit=100`, {
+          fetchRead(`${getApiUrl()}/api/v1/agreements?limit=100`, {
             headers: { Authorization: `Bearer ${token}` },
+            signal: controller.signal,
           }),
-          fetch(`${getApiUrl()}/api/v1/certificates`, {
+          fetchRead(`${getApiUrl()}/api/v1/certificates`, {
             headers: {
               Authorization: `Bearer ${token}`,
               'x-user-id': localStorage.getItem('graphsign_user_id') ?? '',
               'x-organisation-id': localStorage.getItem('graphsign_org_id') ?? '',
             },
+            signal: controller.signal,
           }).catch(() => null),
         ]);
 
@@ -83,39 +86,43 @@ function DashboardContent() {
           return;
         }
 
-        if (!agreementsRes.ok) {
+        if (agreementsRes.ok) {
+          const data = await agreementsRes.json();
+          if (!controller.signal.aborted) {
+            setAgreements(Array.isArray(data) ? data : (data.items ?? data.agreements ?? []));
+          }
+        } else {
           const errData = await agreementsRes.json().catch(() => null);
-          throw new Error(
+          const errMsg =
             errData?.error?.message ||
-              errData?.message ||
-              'Failed to load dashboard workspace data.',
-          );
-        }
-
-        const data = await agreementsRes.json();
-        if (!ignore) {
-          setAgreements(data.items || []);
+            errData?.message ||
+            'Failed to load dashboard workspace data.';
+          if (!controller.signal.aborted) {
+            setError(errMsg);
+          }
         }
 
         if (certsRes && certsRes.ok) {
-          const certsData = await certsRes.json().catch(() => []);
-          if (!ignore) {
-            setHasNoCertificate(Array.isArray(certsData) && certsData.length === 0);
+          const certs = await certsRes.json().catch(() => []);
+          if (!controller.signal.aborted) {
+            setHasNoCertificate(Array.isArray(certs) && certs.length === 0);
           }
         }
       } catch (err: unknown) {
-        if (!ignore) {
-          setError((err as Error).message);
+        if ((err as { name?: string })?.name === 'AbortError') return;
+        if (!controller.signal.aborted) {
+          setError(err instanceof Error ? err.message : 'Network error loading dashboard');
         }
       } finally {
-        if (!ignore) {
+        if (!controller.signal.aborted) {
           setLoading(false);
         }
       }
     }
+
     loadDashboardData();
     return () => {
-      ignore = true;
+      controller.abort();
     };
   }, []);
 

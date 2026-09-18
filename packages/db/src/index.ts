@@ -25,6 +25,19 @@ export function createPrismaClient(databaseUrl: string): PrismaClient {
   return new PrismaClient({ adapter } as any);
 }
 
+// Global cache for PrismaClient instances keyed by databaseUrl
+const clientPool = new Map<string, PrismaClient>();
+
+export function getOrCreatePrismaClient(databaseUrl: string): PrismaClient {
+  const existing = clientPool.get(databaseUrl);
+  if (existing) {
+    return existing;
+  }
+  const client = createPrismaClient(databaseUrl);
+  clientPool.set(databaseUrl, client);
+  return client;
+}
+
 // ── Legacy singleton for backward compatibility (local dev, tests) ──
 
 const globalForPrisma = globalThis as unknown as {
@@ -42,7 +55,9 @@ export function getLegacyPrisma(): PrismaClient {
         'DATABASE_URL environment variable is not set. Cannot initialize PrismaClient.',
       );
     }
+    const adapter = new PrismaNeon({ connectionString: process.env.DATABASE_URL });
     globalForPrisma.prisma = new PrismaClient({
+      adapter: adapter as any,
       log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
     });
   }

@@ -1,24 +1,15 @@
 import { Hono } from 'hono';
 import type { PrismaClient } from '@graphsign/db';
-import { createPrismaClient, getLegacyPrisma } from '@graphsign/db';
+import { getDbClient } from '../utils/db.js';
 import { PlatformHealthService } from '../services/health-service.js';
 import { apiAuth } from '../middleware/api-auth.js';
 import type { Env } from '../index.js';
 
 export function createHealthAndMetricsRoutes(deps?: { prisma?: PrismaClient }) {
   const router = new Hono<{ Bindings: Env }>();
-  let cachedPrisma: PrismaClient | undefined;
 
   function getPrisma(c: any): PrismaClient {
-    if (deps?.prisma) return deps.prisma;
-    if (cachedPrisma) return cachedPrisma;
-    const dbUrl = c.env?.DATABASE_URL || process.env.DATABASE_URL;
-    const prisma =
-      dbUrl && (dbUrl.startsWith('postgres://') || dbUrl.startsWith('postgresql://'))
-        ? createPrismaClient(dbUrl)
-        : getLegacyPrisma();
-    cachedPrisma = prisma;
-    return prisma;
+    return getDbClient(c, deps?.prisma);
   }
 
   /**

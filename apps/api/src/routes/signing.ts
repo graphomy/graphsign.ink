@@ -3,7 +3,7 @@ import { WorkflowService } from '../services/workflow-service.js';
 import { createMailerService } from '../services/mailer-service.js';
 import { Hono } from 'hono';
 import type { PrismaClient } from '@graphsign/db';
-import { createPrismaClient, getLegacyPrisma } from '@graphsign/db';
+import { getDbClient } from '../utils/db.js';
 import { PadesSealingService } from '../services/pades-sealing-service.js';
 import { KeyCustodyService } from '../services/key-custody-service.js';
 import { TsaService } from '../services/tsa-service.js';
@@ -27,21 +27,7 @@ export function createSigningRoutes(deps?: SigningDeps) {
   const signing = new Hono<{ Bindings: Env }>();
 
   function getServices(c: any) {
-    let prisma = deps?.prisma;
-    if (!prisma) {
-      const dbUrl = c.env?.DATABASE_URL || process.env.DATABASE_URL;
-      const isValidUrl =
-        dbUrl &&
-        typeof dbUrl === 'string' &&
-        dbUrl.trim() !== '' &&
-        (dbUrl.startsWith('postgres://') || dbUrl.startsWith('postgresql://'));
-
-      if (isValidUrl) {
-        prisma = createPrismaClient(dbUrl);
-      } else {
-        prisma = getLegacyPrisma();
-      }
-    }
+    const prisma = getDbClient(c, deps?.prisma);
 
     const audit = deps?.audit || new PrismaAuditService(prisma);
     const keyCustody = deps?.keyCustody || new KeyCustodyService();

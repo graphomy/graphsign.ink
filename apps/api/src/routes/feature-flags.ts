@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import type { PrismaClient } from '@graphsign/db';
-import { createPrismaClient, getLegacyPrisma } from '@graphsign/db';
+import { getDbClient } from '../utils/db.js';
 import { FeatureFlagService } from '../services/feature-flag-service.js';
 import { jwtAuth } from '../middleware/jwt-auth.js';
 import type { Env } from '../index.js';
@@ -18,21 +18,7 @@ export function createFeatureFlagRoutes(deps?: FeatureFlagRouteDeps) {
       return { service: deps.featureFlagService };
     }
 
-    let prisma = deps?.prisma;
-    if (!prisma) {
-      const dbUrl = c.env?.DATABASE_URL || process.env.DATABASE_URL;
-      const isValidUrl =
-        dbUrl &&
-        typeof dbUrl === 'string' &&
-        dbUrl.trim() !== '' &&
-        (dbUrl.startsWith('postgres://') || dbUrl.startsWith('postgresql://'));
-
-      if (isValidUrl) {
-        prisma = createPrismaClient(dbUrl);
-      } else {
-        prisma = getLegacyPrisma();
-      }
-    }
+    const prisma = getDbClient(c, deps?.prisma);
     const service = new FeatureFlagService(prisma);
     return { service };
   }
