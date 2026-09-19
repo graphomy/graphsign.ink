@@ -360,7 +360,9 @@ export function PdfViewerModal({ agreement, onClose, onOpenEditor }: PdfViewerMo
     if (effectivePdfUrl) {
       const a = document.createElement('a');
       a.href = effectivePdfUrl;
-      a.download = isPdf ? pdfFileName : (agreement.fileName || `${cleanTitle}_v${agreement.version}.md`);
+      a.download = isPdf
+        ? pdfFileName
+        : agreement.fileName || `${cleanTitle}_v${agreement.version}.md`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -370,9 +372,12 @@ export function PdfViewerModal({ agreement, onClose, onOpenEditor }: PdfViewerMo
     if (isPdf) {
       try {
         const token = getToken();
-        const res = await fetch(`${getApiUrl()}/api/v1/agreements/${agreement.id}/file?format=pdf`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const res = await fetch(
+          `${getApiUrl()}/api/v1/agreements/${agreement.id}/file?format=pdf`,
+          {
+            headers: { Authorization: `Bearer ${token}` },
+          },
+        );
         if (res.ok) {
           const blob = await res.blob();
           const url = URL.createObjectURL(blob);

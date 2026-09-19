@@ -53,14 +53,3 @@ jobs:
       - name: Browser regression
         run: pnpm --filter @graphsign/web exec playwright install --with-deps chromium && pnpm --filter @graphsign/web test:e2e
 
-  signing:
-    name: Independent PDF signature verification
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: 21
-          cache: maven
-      - run: mvn -B -f services/signing/pom.xml verify

@@ -1085,7 +1085,13 @@ export default function PublicVerifyPage() {
                             : 'bg-red-600'
                   }`}
                 >
-                  {report.isValid ? '✓' : report.status === 'UNSIGNED' ? '—' : report.status === 'UNSUPPORTED' ? 'ℹ' : '!'}
+                  {report.isValid
+                    ? '✓'
+                    : report.status === 'UNSIGNED'
+                      ? '—'
+                      : report.status === 'UNSUPPORTED'
+                        ? 'ℹ'
+                        : '!'}
                 </div>
                 <div>
                   <h3 className="font-bold text-base text-slate-900">
