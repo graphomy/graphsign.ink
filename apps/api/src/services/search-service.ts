@@ -125,12 +125,37 @@ export class SearchService {
         };
       } else if (query.status === 'WAITING_FOR_ME' || query.status === 'NEEDS_SIGNATURE') {
         where.status = { in: ['SENT', 'PARTIALLY_SIGNED'] };
-        where.recipients = {
-          some: {
-            email: { equals: ctx.userEmail, mode: 'insensitive' },
-            status: { in: ['PENDING', 'INVITED'] },
+        const pendingSigConditions: any[] = [
+          {
+            recipients: {
+              some: {
+                email: { equals: ctx.userEmail, mode: 'insensitive' },
+                status: { in: ['PENDING', 'INVITED'] },
+              },
+            },
           },
-        };
+        ];
+
+        if (ctx.userId && ctx.userId !== 'unknown') {
+          pendingSigConditions.push({
+            authorId: ctx.userId,
+            recipients: {
+              some: {
+                status: { in: ['PENDING', 'INVITED'] },
+              },
+            },
+          });
+        }
+
+        const pendingSigClause = { OR: pendingSigConditions };
+        if (where.AND) {
+          (where.AND as any[]).push(pendingSigClause);
+        } else if (where.OR) {
+          where.AND = [{ OR: where.OR }, pendingSigClause];
+          delete where.OR;
+        } else {
+          where.OR = pendingSigConditions;
+        }
       } else if (query.status === 'DRAFT') {
         where.status = { in: ['DRAFT', 'IN_REVIEW', 'REJECTED', 'CANCELLED'] };
       } else {

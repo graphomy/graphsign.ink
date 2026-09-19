@@ -244,6 +244,33 @@ describe('Agreement Routes Integration Tests (Epic INK-8)', () => {
     expect(text).toContain('# Terms of Service');
   });
 
+  it('GET /api/v1/agreements/:id/file - dynamically assembles PDF when markdown agreement is requested as PDF', async () => {
+    mockAgreementService.getAgreementById.mockResolvedValue({
+      id: 'ag-md-pdf',
+      title: 'Active Contract',
+      fileName: 'contract.pdf',
+      mimeType: 'application/pdf',
+      markdownContent: '# Active Contract\n\n- Clause 1\n- Clause 2',
+      metadata: {},
+      fields: [],
+      recipients: [],
+      status: 'SENT',
+    });
+
+    const res = await app.request('/api/v1/agreements/ag-md-pdf/file?format=pdf', {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get('Content-Type')).toBe('application/pdf');
+    expect(res.headers.get('Content-Disposition')).toContain('contract.pdf');
+    const bytes = await res.arrayBuffer();
+    const header = Buffer.from(bytes.slice(0, 5)).toString('utf8');
+    expect(header).toBe('%PDF-');
+  });
+
   it('GET /api/v1/agreements/:id/file - streams file when token is passed in query parameter', async () => {
     mockAgreementService.getAgreementById.mockResolvedValue({
       id: 'ag-query-token',

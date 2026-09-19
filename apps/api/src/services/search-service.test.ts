@@ -270,6 +270,39 @@ describe('SearchService Unit Tests (INK-117 to INK-122)', () => {
       });
     });
 
+    it('applies status filter for WAITING_FOR_ME matching recipient or author with pending signers', async () => {
+      await service.searchAgreements(mockMemberCtx, { status: 'WAITING_FOR_ME' });
+      const callArgs = mockPrisma.agreement.findMany.mock.calls[0][0];
+      expect(callArgs.where.status).toEqual({
+        in: ['SENT', 'PARTIALLY_SIGNED'],
+      });
+      // Should contain OR condition matching recipient email or author with pending signers
+      const pendingClause = callArgs.where.AND
+        ? callArgs.where.AND.find((c: any) =>
+            c.OR?.some((o: any) => o.recipients?.some?.status?.in?.includes('PENDING')),
+          )
+        : callArgs.where;
+      const orConditions = pendingClause?.OR;
+      expect(orConditions).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            recipients: expect.objectContaining({
+              some: expect.objectContaining({
+                email: expect.objectContaining({ equals: mockMemberCtx.userEmail }),
+                status: { in: ['PENDING', 'INVITED'] },
+              }),
+            }),
+          }),
+          expect.objectContaining({
+            authorId: mockMemberCtx.userId,
+            recipients: expect.objectContaining({
+              some: { status: { in: ['PENDING', 'INVITED'] } },
+            }),
+          }),
+        ]),
+      );
+    });
+
     it('applies datePreset filter (last_7_days)', async () => {
       await service.searchAgreements(mockAdminCtx, { datePreset: 'last_7_days' });
       const callArgs = mockPrisma.agreement.findMany.mock.calls[0][0];

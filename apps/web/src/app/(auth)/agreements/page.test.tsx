@@ -226,13 +226,13 @@ describe('AgreementManagementPage Unit Tests (Epic INK-8)', () => {
 
     const activeRow = within(screen.getByText('Active NDA Contract').closest('tr')!);
 
-    // Version and status badges in row
-    expect(screen.getByText('v1.0')).toBeInTheDocument();
+    // Status badge in row
     expect(screen.getByText('ACTIVE')).toBeInTheDocument();
 
-    // Table header columns
+    // Table header columns (Version column removed per user request)
     expect(screen.getByText('Document Details')).toBeInTheDocument();
     expect(screen.getByText('Last Modified')).toBeInTheDocument();
+    expect(screen.queryByRole('columnheader', { name: /Version/i })).not.toBeInTheDocument();
 
     // Edit button MUST NOT be present in Active tab for active agreements
     expect(activeRow.queryByRole('button', { name: /Edit/i })).not.toBeInTheDocument();

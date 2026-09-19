@@ -50,17 +50,25 @@ export interface AssemblePdfOptions {
   fields?: AssemblePdfField[];
   recipients?: AssemblePdfRecipient[];
   sealDetails?: AssemblePdfSealDetails;
+  includeCertificate?: boolean;
 }
 
 export class PdfAssemblyService {
   /**
-   * Assembles a finalized PDF document:
+   * Assembles a finalized PDF document with certificate page.
+   */
+  async assembleCompletedDocument(options: AssemblePdfOptions): Promise<Uint8Array> {
+    return this.assembleDocument({ ...options, includeCertificate: true });
+  }
+
+  /**
+   * Assembles a PDF document (draft, in-flight, or completed):
    * 1. Renders Markdown text or loads existing PDF bytes.
    * 2. Stamps the Envelope ID on the top-left of every page.
    * 3. Flattens signature images, initials, and field input values.
-   * 4. Appends a standalone Cryptographic Execution & Integrity Certificate page.
+   * 4. Optionally appends the Cryptographic Execution & Integrity Certificate page.
    */
-  async assembleCompletedDocument(options: AssemblePdfOptions): Promise<Uint8Array> {
+  async assembleDocument(options: AssemblePdfOptions): Promise<Uint8Array> {
     const {
       agreementTitle,
       envelopeId,
@@ -70,6 +78,7 @@ export class PdfAssemblyService {
       fields = [],
       recipients = [],
       sealDetails,
+      includeCertificate = false,
     } = options;
 
     const source =
@@ -118,16 +127,18 @@ export class PdfAssemblyService {
     // 3. Flatten fields & signatures onto the document pages
     await this.flattenFields(pdfDoc, fields, recipients, helvetica, helveticaBold);
 
-    // 4. Append the Cryptographic Execution & Integrity Certificate page
-    await this.appendCertificatePage(
-      pdfDoc,
-      agreementTitle,
-      envelopeId,
-      recipients,
-      sealDetails,
-      helvetica,
-      helveticaBold,
-    );
+    // 4. Append the Cryptographic Execution & Integrity Certificate page if requested
+    if (includeCertificate) {
+      await this.appendCertificatePage(
+        pdfDoc,
+        agreementTitle,
+        envelopeId,
+        recipients,
+        sealDetails,
+        helvetica,
+        helveticaBold,
+      );
+    }
 
     return await pdfDoc.save();
   }

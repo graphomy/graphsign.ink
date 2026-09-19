@@ -279,7 +279,7 @@ function DashboardContent() {
             <div className="flex items-baseline justify-between">
               <span className="text-3xl font-extrabold text-neutral-900">{pendingCount}</span>
               <span className="text-xs font-medium text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
-                Requires Signature
+                Drafts & In Progress
               </span>
             </div>
           </div>
