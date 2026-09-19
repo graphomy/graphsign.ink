@@ -175,7 +175,7 @@ export function ChooseTemplateModal({ onClose, onSuccess }: ChooseTemplateModalP
                   : 'text-neutral-600 hover:text-neutral-900'
               }`}
             >
-              Organization Library
+              Library
             </button>
             <button
               type="button"
@@ -201,7 +201,7 @@ export function ChooseTemplateModal({ onClose, onSuccess }: ChooseTemplateModalP
           </div>
         </div>
 
-        {/* Template List Grid */}
+        {/* Template List Rows */}
         <div className="flex-1 overflow-y-auto pr-1 py-1 space-y-3">
           {loading || loadError ? (
             <RecordListState
@@ -216,71 +216,63 @@ export function ChooseTemplateModal({ onClose, onSuccess }: ChooseTemplateModalP
               <p className="text-xs font-semibold text-neutral-700">No templates found.</p>
               <p className="text-[11px] text-neutral-500 max-w-xs mx-auto">
                 {activeTab === 'library'
-                  ? 'No published organization templates available. Publish a template from your library to make it available.'
+                  ? 'No published templates available in the library.'
                   : 'You have not created any templates yet. Go to Templates to create one.'}
               </p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="divide-y divide-neutral-200 border border-neutral-200 rounded-xl overflow-hidden bg-white">
               {templates.map((tpl) => (
                 <div
                   key={tpl.id}
-                  className="bg-neutral-50/70 border border-neutral-200 rounded-xl p-4 flex flex-col justify-between hover:border-neutral-300 transition-all"
+                  className="p-3.5 sm:px-4 flex items-center justify-between gap-4 hover:bg-neutral-50 transition-colors"
                 >
-                  <div>
-                    <div className="flex items-center justify-between gap-2 mb-2">
-                      <span
-                        className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider ${
-                          tpl.isPublished
-                            ? 'bg-blue-100 text-blue-800 border border-blue-200'
-                            : 'bg-neutral-200 text-neutral-700'
-                        }`}
-                      >
-                        {tpl.isPublished ? 'Published' : 'Draft'}
-                      </span>
-                      <span className="text-[10px] font-semibold text-neutral-500 bg-white px-2 py-0.5 rounded border border-neutral-200">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      <h3 className="text-xs sm:text-sm font-bold text-neutral-900 truncate">
+                        {tpl.title}
+                      </h3>
+                      <span className="text-[10px] font-semibold text-neutral-500 bg-neutral-100 px-1.5 py-0.5 rounded border border-neutral-200 shrink-0">
                         v{tpl.version}.0
                       </span>
+                      {tpl.isPublished && (
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider bg-blue-100 text-blue-800 border border-blue-200 shrink-0">
+                          Published
+                        </span>
+                      )}
                     </div>
 
-                    <h3 className="text-xs font-bold text-neutral-900 mb-1 line-clamp-1">
-                      {tpl.title}
-                    </h3>
-                    <p className="text-[11px] text-neutral-600 mb-3 line-clamp-2">
-                      {tpl.description || 'No description provided.'}
-                    </p>
-
-                    {tpl.tags && tpl.tags.length > 0 && (
-                      <div className="flex flex-wrap gap-1 mb-3">
-                        {tpl.tags.map((t, idx) => (
-                          <span
-                            key={idx}
-                            className="text-[9px] font-semibold bg-white text-neutral-600 px-1.5 py-0.5 rounded border border-neutral-200"
-                          >
-                            #{t}
-                          </span>
-                        ))}
-                      </div>
+                    {tpl.description && (
+                      <p className="text-[11px] text-neutral-600 line-clamp-1 mb-1.5">
+                        {tpl.description}
+                      </p>
                     )}
+
+                    <div className="flex items-center gap-3 text-[10px] text-neutral-500 flex-wrap">
+                      <span>By {tpl.author?.name || tpl.author?.email || 'Author'}</span>
+                      {tpl.tags && tpl.tags.length > 0 && (
+                        <div className="flex items-center gap-1 flex-wrap">
+                          {tpl.tags.map((t, idx) => (
+                            <span
+                              key={idx}
+                              className="text-[9px] font-semibold bg-neutral-100 text-neutral-600 px-1.5 py-0.5 rounded border border-neutral-200"
+                            >
+                              #{t}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
 
-                  <div className="pt-2 border-t border-neutral-200 flex items-center justify-between">
-                    <span className="text-[10px] text-neutral-500">
-                      {tpl.author?.name || tpl.author?.email || 'Author'}
-                    </span>
+                  <div className="shrink-0">
                     <button
                       type="button"
                       disabled={instantiatingId === tpl.id}
                       onClick={() => handleInstantiate(tpl)}
-                      className="px-3 py-1.5 bg-[#ba0000] hover:bg-red-700 disabled:opacity-50 text-white text-xs font-semibold rounded-lg shadow-2xs transition-all flex items-center gap-1"
+                      className="px-3.5 py-1.5 bg-[#ba0000] hover:bg-red-700 disabled:opacity-50 text-white text-xs font-semibold rounded-lg shadow-xs transition-all flex items-center gap-1 cursor-pointer"
                     >
-                      {instantiatingId === tpl.id ? (
-                        'Creating Draft...'
-                      ) : (
-                        <>
-                          <span>✨</span> Use Template
-                        </>
-                      )}
+                      {instantiatingId === tpl.id ? 'Creating Draft...' : 'Use Template'}
                     </button>
                   </div>
                 </div>

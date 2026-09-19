@@ -750,7 +750,7 @@ export class WorkflowService {
         },
         envelopeId:
           ((agreement.metadata as any)?.envelopeId as string) ||
-          `ENV-${agreement.id.replace(/-/g, '').substring(0, 8).toUpperCase()}`,
+          `ENV-${agreement.id.replace(/-/g, '').toUpperCase()}`,
         verificationToken: ((agreement.metadata as any)?.verificationToken as string) || undefined,
         documentHash: ((agreement.metadata as any)?.documentHash as string) || undefined,
       },

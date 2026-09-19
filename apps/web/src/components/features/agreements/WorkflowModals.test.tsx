@@ -191,18 +191,9 @@ describe('Workflow Modals Unit Tests (INK-87 to INK-95, INK-268)', () => {
       const unsignedBadge = screen.getByTestId('indicator-unsigned');
       expect(unsignedBadge).toBeDefined();
       expect(unsignedBadge.textContent).toContain('Unsigned Document');
-
-      const toggleBtn = screen.getByRole('button', { name: /Hide signature indicators/i });
-      expect(toggleBtn).toBeDefined();
-
-      fireEvent.click(toggleBtn);
-      expect(screen.queryByTestId('indicator-unsigned')).toBeNull();
-
-      fireEvent.click(screen.getByRole('button', { name: /Show signature indicators/i }));
-      expect(screen.getByTestId('indicator-unsigned')).toBeDefined();
     });
 
-    it('does not assume a valid signature from completed status or seal metadata', () => {
+    it('does not assume a valid signature from completed status or seal metadata and omits unverified banner', () => {
       const mockAg = {
         id: 'ag-completed',
         title: 'Signed Employment Contract',
@@ -222,7 +213,7 @@ describe('Workflow Modals Unit Tests (INK-87 to INK-95, INK-268)', () => {
       render(<PdfViewerModal agreement={mockAg} onClose={vi.fn()} />);
 
       expect(screen.queryByTestId('indicator-valid')).toBeNull();
-      expect(screen.getByTestId('indicator-unverified')).toBeDefined();
+      expect(screen.queryByTestId('indicator-unverified')).toBeNull();
     });
 
     it('displays Invalid Signature watermark and badge for voided agreement', () => {

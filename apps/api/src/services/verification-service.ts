@@ -4,8 +4,10 @@ import { NotFoundError, BadRequestError } from '../utils/errors.js';
 import { DocumentSignatureExtractor } from '../utils/document-signature-extractor.js';
 import { SigningClient } from './signing-client.js';
 import { CrlOcspService } from './crl-ocsp-service.js';
-import type { KeyCustodyService } from './key-custody-service.js';
-import type { AuditService } from './audit-service.js';
+import { KeyCustodyService } from './key-custody-service.js';
+import { PrismaAuditService, type AuditService } from './audit-service.js';
+import { PadesSealingService } from './pades-sealing-service.js';
+import { TsaService } from './tsa-service.js';
 import forge from 'node-forge';
 import crypto from 'crypto';
 
@@ -200,7 +202,38 @@ export class VerificationService {
             ...agreement.documentSeals[0],
             agreement,
           } as any;
-        } else {
+        } else if (agreement.status === 'COMPLETED') {
+          // Self-heal: Agreement is completed but sealing was interrupted or failed previously.
+          try {
+            const keyCustody = this.keyCustodyService || new KeyCustodyService();
+            const tsa = new TsaService();
+            const audit = this.auditService || new PrismaAuditService(this.prisma);
+            const sealingService = new PadesSealingService(
+              this.prisma,
+              keyCustody,
+              tsa,
+              audit,
+              this.signingClient,
+            );
+            const sealResult = await sealingService.sealAgreement({
+              agreementId: agreement.id,
+              organisationId: agreement.organisationId,
+            });
+            if (sealResult.status === 'SUCCESS' && this.prisma.documentSeal?.findFirst) {
+              const healedSeal = await this.prisma.documentSeal.findFirst({
+                where: { id: sealResult.sealId },
+                include: { agreement: { include: { recipients: true, organisation: true } } },
+              });
+              if (healedSeal) {
+                seal = healedSeal as any;
+              }
+            }
+          } catch (healErr) {
+            console.warn('[VERIFICATION] Self-healing seal attempt failed:', healErr);
+          }
+        }
+
+        if (!seal) {
           // Critical correctness fix: Agreement completed but NOT sealed in documentSeals.
           // Do NOT synthesize a fake valid seal! Return explicit unsigned status.
           const unsealedReport: PublicVerificationReport = {

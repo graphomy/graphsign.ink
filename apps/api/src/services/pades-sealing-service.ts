@@ -97,7 +97,7 @@ export class PadesSealingService {
           agreementId,
           verificationToken: existing.verificationToken,
           verificationUrl: `https://graphsign.ink/verify/${existing.verificationToken}`,
-          qrCodeDataUrl: await QRCode.toDataURL(
+          qrCodeDataUrl: await this.generateQrDataUrl(
             `https://graphsign.ink/verify/${existing.verificationToken}`,
           ),
           documentHash: existing.documentHash,
@@ -182,19 +182,12 @@ export class PadesSealingService {
     const verificationUrl = `https://graphsign.ink/verify/${verificationToken}`;
 
     // Generate QR Code data URL
-    const qrCodeDataUrl = await QRCode.toDataURL(verificationUrl, {
-      width: 160,
-      margin: 1,
-      color: {
-        dark: '#000000',
-        light: '#ffffff',
-      },
-    });
+    const qrCodeDataUrl = await this.generateQrDataUrl(verificationUrl);
 
     const envelopeId =
       (meta.envelopeId as string) ||
       (agreement as any).envelopeId ||
-      `ENV-${agreement.id.replace(/-/g, '').substring(0, 8).toUpperCase()}`;
+      `ENV-${agreement.id.replace(/-/g, '').toUpperCase()}`;
 
     // Assemble the complete PDF with Envelope ID on every page, flattened fields, and Certificate page
     const pdfAssembly = new PdfAssemblyService();
@@ -457,5 +450,25 @@ export class PadesSealingService {
       failedCount: agreementIds.length - successfulCount,
       results,
     };
+  }
+
+  /**
+   * Safely generate QR code data URL with pure SVG fallback for canvas-free environments (like Cloudflare Workers)
+   */
+  private async generateQrDataUrl(text: string): Promise<string> {
+    try {
+      return await QRCode.toDataURL(text, {
+        width: 160,
+        margin: 1,
+        color: { dark: '#000000', light: '#ffffff' },
+      });
+    } catch {
+      try {
+        const svg = await QRCode.toString(text, { type: 'svg', margin: 1 });
+        return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+      } catch {
+        return '';
+      }
+    }
   }
 }

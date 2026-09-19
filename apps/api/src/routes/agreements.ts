@@ -24,6 +24,10 @@ import {
   type AssemblePdfField,
   type AssemblePdfRecipient,
 } from '../services/pdf-assembly-service.js';
+import { KeyCustodyService } from '../services/key-custody-service.js';
+import { TsaService } from '../services/tsa-service.js';
+import { PadesSealingService } from '../services/pades-sealing-service.js';
+import { SigningClient } from '../services/signing-client.js';
 import type { Env } from '../index.js';
 
 export interface AgreementDeps {
@@ -78,12 +82,14 @@ export function createAgreementRoutes(deps?: AgreementDeps) {
   agreements.use('/*', createRateLimiter(100, 60_000));
 
   function getServices(c: any) {
-    if (deps?.agreementService) return { service: deps.agreementService };
+    if (deps?.agreementService && !deps?.prisma) {
+      return { service: deps.agreementService, prisma: undefined, audit: deps?.audit };
+    }
 
     const prisma = getDbClient(c, deps?.prisma);
     const audit = deps?.audit || new PrismaAuditService(prisma);
-    const service = new AgreementService(prisma, audit);
-    return { service };
+    const service = deps?.agreementService || new AgreementService(prisma, audit);
+    return { service, prisma, audit };
   }
 
   // GET /api/v1/agreements (List & Search - INK-248 scoped for privacy)
@@ -279,12 +285,20 @@ export function createAgreementRoutes(deps?: AgreementDeps) {
       const userPayload = c.get('userPayload') as any;
       const orgId = userPayload?.orgId || 'default-org-id';
       const userEmail = userPayload?.email;
+      const userId = userPayload?.sub;
+      const userRole = userPayload?.role;
 
       if (!userEmail) {
         throw new BadRequestError('User email is required to initiate signing session.');
       }
 
-      const session = await service.createSignerSession(orgId, agreementId, userEmail);
+      const session = await service.createSignerSession(
+        orgId,
+        agreementId,
+        userEmail,
+        userId,
+        userRole,
+      );
       return c.json({ success: true, data: session }, 200);
     },
   );
@@ -296,7 +310,7 @@ export function createAgreementRoutes(deps?: AgreementDeps) {
     enforceTenantActiveStatus(),
     requirePermission('documents:read'),
     async (c) => {
-      const { service } = getServices(c);
+      const { service, prisma, audit } = getServices(c);
       const agreementId = c.req.param('id');
       const userPayload = c.get('userPayload') as any;
       const userEmail = userPayload?.email;
@@ -320,9 +334,39 @@ export function createAgreementRoutes(deps?: AgreementDeps) {
         (meta.fileData as string | undefined);
 
       if (agreement.status === 'COMPLETED' && !meta.signedPdfBase64 && !meta.sealedPdfBase64) {
-        throw new NotFoundError(
-          'The original signed document is unavailable. Retry final sealing instead of regenerating it.',
-        );
+        // Self-heal: Agreement completed but sealed PDF was not saved. Attempt sealing now!
+        if (prisma) {
+          try {
+            const keyCustody = new KeyCustodyService();
+            const tsa = new TsaService({
+              primaryUrl: c.env?.TSA_PRIMARY_URL || process.env.TSA_PRIMARY_URL,
+              fallbackUrl: c.env?.TSA_FALLBACK_URL || process.env.TSA_FALLBACK_URL,
+              fallback2Url: c.env?.TSA_FALLBACK2_URL || process.env.TSA_FALLBACK2_URL,
+            });
+            const sealingService = new PadesSealingService(
+              prisma,
+              keyCustody,
+              tsa,
+              audit,
+              new SigningClient(c.env?.SIGNING_SERVICE_URL, c.env?.SIGNING_SERVICE_TOKEN),
+            );
+            const sealResult = await sealingService.sealAgreement({
+              agreementId: agreement.id,
+              organisationId: agreement.organisationId,
+            });
+            if (sealResult.status === 'SUCCESS' && sealResult.sealedPdfBase64) {
+              fileData = sealResult.sealedPdfBase64;
+            }
+          } catch (sealErr) {
+            console.warn('[AGREEMENTS_FILE] Self-healing seal attempt failed:', sealErr);
+          }
+        }
+
+        if (!fileData) {
+          throw new NotFoundError(
+            'The original signed document is unavailable. Retry final sealing instead of regenerating it.',
+          );
+        }
       }
 
       const formatQuery = c.req.query('format')?.toLowerCase();
@@ -362,7 +406,7 @@ export function createAgreementRoutes(deps?: AgreementDeps) {
               : []) as unknown as AssemblePdfRecipient[];
           const pdfBytes = await pdfAssembly.assembleDocument({
             agreementTitle: agreement.title,
-            envelopeId: agreement.id,
+            envelopeId: `ENV-${agreement.id.replace(/-/g, '').toUpperCase()}`,
             markdownContent: agreement.markdownContent,
             fields: agreementFields,
             recipients: agreementRecipients,
