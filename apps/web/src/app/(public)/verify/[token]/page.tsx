@@ -19,7 +19,16 @@ import {
 
 interface VerificationReport {
   isValid: boolean;
-  status: 'VALID' | 'TAMPERED' | 'NOT_FOUND' | 'REVOKED';
+  status:
+    | 'VALID'
+    | 'TAMPERED'
+    | 'NOT_FOUND'
+    | 'REVOKED'
+    | 'EXPIRED'
+    | 'UNSIGNED'
+    | 'INVALID'
+    | 'UNSUPPORTED';
+  message?: string;
   verificationToken: string;
   verificationUrl?: string;
   qrCodeDataUrl?: string;
@@ -214,27 +223,44 @@ export default function TokenVerifyPage() {
               className={`p-4 rounded-xl border flex items-center justify-between ${
                 report.isValid
                   ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
-                  : 'bg-red-50 border-red-200 text-red-800'
+                  : report.status === 'UNSUPPORTED'
+                    ? 'bg-amber-50 border-amber-200 text-amber-800'
+                    : 'bg-red-50 border-red-200 text-red-800'
               }`}
             >
               <div className="flex items-center gap-3">
                 <div
                   className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg text-white shadow-sm ${
-                    report.isValid ? 'bg-emerald-600' : 'bg-red-600'
+                    report.isValid
+                      ? 'bg-emerald-600'
+                      : report.status === 'UNSUPPORTED'
+                        ? 'bg-amber-500'
+                        : 'bg-red-600'
                   }`}
                 >
-                  {report.isValid ? '✓' : '✕'}
+                  {report.isValid ? '✓' : report.status === 'UNSUPPORTED' ? 'ℹ' : '✕'}
                 </div>
                 <div>
                   <h3 className="font-bold text-base text-slate-900">
                     {report.isValid
                       ? 'Cryptographically Sealed & Authentic'
-                      : 'Tamper Detected / Invalid Seal'}
+                      : report.status === 'EXPIRED'
+                        ? 'Signature Expired'
+                        : report.status === 'REVOKED'
+                          ? 'Certificate Revoked'
+                          : report.status === 'UNSIGNED'
+                            ? 'Unsigned Document'
+                            : report.status === 'UNSUPPORTED'
+                              ? 'Verification Unsupported'
+                              : 'Tamper Detected / Invalid Seal'}
                   </h3>
                   <p className="text-xs text-slate-600">
-                    {report.isValid
-                      ? 'Document integrity verified via PAdES digital signature & RFC 3161 timestamp.'
-                      : 'Document has been altered since sealing, or certificate is invalid.'}
+                    {report.message ||
+                      (report.isValid
+                        ? 'Document integrity verified via PAdES digital signature & RFC 3161 timestamp.'
+                        : report.status === 'UNSUPPORTED'
+                          ? 'Independent signature verification is unavailable.'
+                          : 'Document has been altered since sealing, or certificate is invalid.')}
                   </p>
                 </div>
               </div>

@@ -50,17 +50,25 @@ export interface AssemblePdfOptions {
   fields?: AssemblePdfField[];
   recipients?: AssemblePdfRecipient[];
   sealDetails?: AssemblePdfSealDetails;
+  includeCertificate?: boolean;
 }
 
 export class PdfAssemblyService {
   /**
-   * Assembles a finalized PDF document:
+   * Assembles a finalized PDF document with certificate page.
+   */
+  async assembleCompletedDocument(options: AssemblePdfOptions): Promise<Uint8Array> {
+    return this.assembleDocument({ ...options, includeCertificate: true });
+  }
+
+  /**
+   * Assembles a PDF document (draft, in-flight, or completed):
    * 1. Renders Markdown text or loads existing PDF bytes.
    * 2. Stamps the Envelope ID on the top-left of every page.
    * 3. Flattens signature images, initials, and field input values.
-   * 4. Appends a standalone Cryptographic Execution & Integrity Certificate page.
+   * 4. Optionally appends the Cryptographic Execution & Integrity Certificate page.
    */
-  async assembleCompletedDocument(options: AssemblePdfOptions): Promise<Uint8Array> {
+  async assembleDocument(options: AssemblePdfOptions): Promise<Uint8Array> {
     const {
       agreementTitle,
       envelopeId,
@@ -70,6 +78,7 @@ export class PdfAssemblyService {
       fields = [],
       recipients = [],
       sealDetails,
+      includeCertificate = false,
     } = options;
 
     const source =
@@ -118,16 +127,18 @@ export class PdfAssemblyService {
     // 3. Flatten fields & signatures onto the document pages
     await this.flattenFields(pdfDoc, fields, recipients, helvetica, helveticaBold);
 
-    // 4. Append the Cryptographic Execution & Integrity Certificate page
-    await this.appendCertificatePage(
-      pdfDoc,
-      agreementTitle,
-      envelopeId,
-      recipients,
-      sealDetails,
-      helvetica,
-      helveticaBold,
-    );
+    // 4. Append the Cryptographic Execution & Integrity Certificate page if requested
+    if (includeCertificate) {
+      await this.appendCertificatePage(
+        pdfDoc,
+        agreementTitle,
+        envelopeId,
+        recipients,
+        sealDetails,
+        helvetica,
+        helveticaBold,
+      );
+    }
 
     return await pdfDoc.save();
   }
@@ -338,6 +349,7 @@ export class PdfAssemblyService {
               width: boxW,
               height: boxH,
             });
+            this.drawTrustSealBadge(page, boxX, boxY, boxW, boxH, helveticaBold);
             continue;
           } catch (err) {
             console.warn('[PDF_ASSEMBLY] Failed to embed signature image:', (err as Error).message);
@@ -359,6 +371,7 @@ export class PdfAssemblyService {
           font: helveticaBold,
           color: rgb(0.08, 0.12, 0.28),
         });
+        this.drawTrustSealBadge(page, boxX, boxY, boxW, boxH, helveticaBold);
       } else if (field.type === 'CHECKBOX') {
         const isChecked = value === true || value === 'true';
         page.drawText(isChecked ? '[X]' : '[ ]', {
@@ -378,6 +391,82 @@ export class PdfAssemblyService {
         });
       }
     }
+  }
+
+  /**
+   * Draws a sleek blue cryptographic trust seal badge near the signature.
+   */
+  private drawTrustSealBadge(
+    page: any,
+    boxX: number,
+    boxY: number,
+    boxW: number,
+    boxH: number,
+    fontBold: any,
+  ) {
+    const sealRadius = 7.5;
+    const sealCenterX = boxX + boxW - sealRadius - 2;
+    const sealCenterY = boxY + boxH - sealRadius - 2;
+
+    // Outer royal blue ring
+    page.drawCircle({
+      x: sealCenterX,
+      y: sealCenterY,
+      size: sealRadius,
+      color: rgb(0.12, 0.44, 0.95),
+      borderColor: rgb(0.25, 0.55, 1.0),
+      borderWidth: 1,
+    });
+
+    // Inner deep royal blue circle
+    page.drawCircle({
+      x: sealCenterX,
+      y: sealCenterY,
+      size: sealRadius - 2,
+      color: rgb(0.08, 0.35, 0.85),
+      borderColor: rgb(0.9, 0.95, 1.0),
+      borderWidth: 0.6,
+    });
+
+    // Clean checkmark glyph inside the seal
+    page.drawText('v', {
+      x: sealCenterX - 2.5,
+      y: sealCenterY - 2.5,
+      size: 6.5,
+      font: fontBold,
+      color: rgb(1, 1, 1),
+    });
+
+    // Small trust ribbon badge underneath/alongside
+    const badgeW = 68;
+    const badgeH = 11;
+    const badgeX = boxX + boxW - badgeW - 1;
+    const badgeY = Math.max(2, boxY - badgeH - 2);
+
+    page.drawRectangle({
+      x: badgeX,
+      y: badgeY,
+      width: badgeW,
+      height: badgeH,
+      color: rgb(0.93, 0.96, 1.0),
+      borderColor: rgb(0.72, 0.84, 0.98),
+      borderWidth: 0.6,
+    });
+
+    page.drawCircle({
+      x: badgeX + 5,
+      y: badgeY + badgeH / 2,
+      size: 2,
+      color: rgb(0.15, 0.45, 0.95),
+    });
+
+    page.drawText('VERIFIED SEAL', {
+      x: badgeX + 10,
+      y: badgeY + 2.8,
+      size: 5.5,
+      font: fontBold,
+      color: rgb(0.1, 0.35, 0.85),
+    });
   }
 
   /**

@@ -350,21 +350,49 @@ export function PdfViewerModal({ agreement, onClose, onOpenEditor }: PdfViewerMo
     window.print();
   }
 
-  function handleDownload() {
+  async function handleDownload() {
     if (agreement.status === 'COMPLETED' && !effectivePdfUrl) return;
     const cleanTitle = agreement.title.replace(/[^a-z0-9]/gi, '_').toLowerCase();
-    const fileName =
-      agreement.fileName ||
-      (isPdf ? `${cleanTitle}.pdf` : `${cleanTitle}_v${agreement.version}.md`);
+    const pdfFileName = agreement.fileName?.toLowerCase().endsWith('.pdf')
+      ? agreement.fileName
+      : `${cleanTitle}.pdf`;
 
     if (effectivePdfUrl) {
       const a = document.createElement('a');
       a.href = effectivePdfUrl;
-      a.download = fileName;
+      a.download = isPdf
+        ? pdfFileName
+        : agreement.fileName || `${cleanTitle}_v${agreement.version}.md`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       return;
+    }
+
+    if (isPdf) {
+      try {
+        const token = getToken();
+        const res = await fetch(
+          `${getApiUrl()}/api/v1/agreements/${agreement.id}/file?format=pdf`,
+          {
+            headers: { Authorization: `Bearer ${token}` },
+          },
+        );
+        if (res.ok) {
+          const blob = await res.blob();
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = pdfFileName;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+          return;
+        }
+      } catch (err) {
+        console.error('Error downloading PDF:', err);
+      }
     }
 
     // Markdown file download
@@ -375,7 +403,9 @@ export function PdfViewerModal({ agreement, onClose, onOpenEditor }: PdfViewerMo
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = isPdf ? `${cleanTitle}.pdf` : `${cleanTitle}_v${agreement.version}.md`;
+    a.download = agreement.fileName?.toLowerCase().endsWith('.md')
+      ? agreement.fileName
+      : `${cleanTitle}_v${agreement.version}.md`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);

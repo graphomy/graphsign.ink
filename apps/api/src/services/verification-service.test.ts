@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { VerificationService } from './verification-service.js';
+import { PDFDocument } from 'pdf-lib';
+import { PdfSignerEngine } from './pdf-signer-engine.js';
 
 describe('VerificationService Unit Tests (INK-17, INK-135, INK-137, INK-139)', () => {
   let verificationService: VerificationService;
@@ -169,5 +171,33 @@ describe('VerificationService Unit Tests (INK-17, INK-135, INK-137, INK-139)', (
     await expect(verificationService.verifyOffline(signedPdf)).rejects.toThrow(
       'Error: Public key required for offline verification.',
     );
+  });
+
+  it('verifies native PDF with /ByteRange and CMS signature in-process and detects tampering', async () => {
+    const doc = await PDFDocument.create();
+    const page = doc.addPage([600, 400]);
+    page.drawText('Sample Legal Agreement Content', { x: 50, y: 350 });
+    const baseBytes = await doc.save();
+
+    const signed = await PdfSignerEngine.signPdf({
+      pdfBytes: baseBytes,
+      certificatePem: '',
+      privateKeyPem: '',
+      reason: 'Cryptographic Test Signature',
+    });
+
+    const report = await verificationService.verifyOffline(signed.signedPdfBytes);
+    expect(report.isValid).toBe(true);
+    expect(report.status).toBe('VALID');
+    expect(report.sealDetails.algorithm).toBe('CMS');
+    expect(report.sealDetails.certificateSubject).toBe('Cryptographic Test Signature');
+
+    // Tamper: modify byte in first range (outside signature contents)
+    const tamperedBytes = Buffer.from(signed.signedPdfBytes);
+    tamperedBytes[10] = tamperedBytes[10] ^ 0xff;
+
+    const tamperedReport = await verificationService.verifyOffline(tamperedBytes);
+    expect(tamperedReport.isValid).toBe(false);
+    expect(tamperedReport.status).toBe('TAMPERED');
   });
 });

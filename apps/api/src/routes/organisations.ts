@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import type { PrismaClient } from '@graphsign/db';
-import { createPrismaClient } from '@graphsign/db';
+import { getDbClient } from '../utils/db.js';
 import {
   createOrganisationSchema,
   inviteMemberSchema,
@@ -55,26 +55,7 @@ export function createOrganisationRoutes(deps?: OrganisationDeps) {
       return deps.organisationService;
     }
 
-    let db = deps?.prisma;
-    if (!db) {
-      const dbUrl = c.env?.DATABASE_URL || process.env.DATABASE_URL;
-      const isValidUrl =
-        dbUrl &&
-        typeof dbUrl === 'string' &&
-        dbUrl.trim() !== '' &&
-        (dbUrl.startsWith('postgres://') || dbUrl.startsWith('postgresql://'));
-
-      if (isValidUrl) {
-        db = createPrismaClient(dbUrl);
-      } else {
-        const preview = dbUrl ? `${String(dbUrl).substring(0, 10)}...` : 'undefined';
-        throw new AppError(
-          'INTERNAL_SERVER_ERROR',
-          `Database connection string (DATABASE_URL) is missing or invalid. Received: "${preview}".`,
-          500,
-        );
-      }
-    }
+    let db = getDbClient(c, deps?.prisma);
 
     let mailer = deps?.mailer;
     if (!mailer) {

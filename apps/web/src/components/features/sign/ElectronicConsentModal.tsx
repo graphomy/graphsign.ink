@@ -263,14 +263,14 @@ Upon completing execution, a cryptographically sealed PDF copy of the executed d
             ref={scrollRef}
             onScroll={handleScroll}
             tabIndex={0}
-            className="flex-1 overflow-y-auto p-5 text-[15px] leading-[1.65] text-ink-700 max-w-[62ch] space-y-4 font-sans focus:outline-none"
+            className="flex-1 overflow-y-auto p-5 text-[15px] leading-[1.65] text-ink-700 w-full space-y-4 font-sans focus:outline-none"
             data-testid="ersd-disclosure-content"
           >
             <p>
               Please read this Electronic Record and Signature Disclosure (&quot;Disclosure&quot;)
-              carefully. By checking the consent box below and clicking &quot;I consent —
-              continue&quot;, you consent to receive electronic records and use electronic
-              signatures in lieu of paper documents for this transaction.
+              carefully. By checking the consent box below and clicking &quot;Accept&quot;, you
+              consent to receive electronic records and use electronic signatures in lieu of paper
+              documents for this transaction.
             </p>
 
             <h3 className="font-bold text-ink-900 text-base mt-5">
@@ -413,7 +413,7 @@ Upon completing execution, a cryptographically sealed PDF copy of the executed d
             onClick={handleConfirm}
             data-testid="ersd-accept-button"
           >
-            I consent — continue
+            Accept
           </Button>
         </div>
       </div>

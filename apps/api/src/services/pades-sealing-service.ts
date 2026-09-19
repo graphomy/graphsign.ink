@@ -6,6 +6,7 @@ import { TsaService } from './tsa-service.js';
 import { AuditService } from './audit-service.js';
 import { CertificateService } from './certificate-service.js';
 import { PdfAssemblyService } from './pdf-assembly-service.js';
+import { PdfSignerEngine } from './pdf-signer-engine.js';
 import { BadRequestError, NotFoundError } from '../utils/errors.js';
 import { SigningClient } from './signing-client.js';
 import { PrismaAuditService } from './audit-service.js';
@@ -267,7 +268,7 @@ export class PadesSealingService {
         });
       }
     } else {
-      // In-process sealing fallback for Cloudflare Workers free stack
+      // In-process sealing using native PdfSignerEngine (Adobe Acrobat recognized PAdES B-T)
       const preSealDigest = await sha256(assembledPdfBytes);
       const tsa = await this.tsaService.requestTimestamp(preSealDigest, cert.tsaUrl || undefined);
       tsaResult = {
@@ -278,23 +279,20 @@ export class PadesSealingService {
       sealPadesLevel = cert.padesLevel || 'B_T';
       sealAlgorithm = cert.algorithm;
 
-      const dummyKeys = await this.keyCustodyService.generateKeyPair(cert.algorithm as any);
-      const signatureBase64 = await this.keyCustodyService.signHash({
-        keyId: cert.pkcs11KeyId,
-        privateKeyPem: dummyKeys.privateKeyPem,
-        algorithm: cert.algorithm as any,
-        hashBase64: btoa(preSealDigest),
+      const keys = await this.keyCustodyService.generateKeyPair(cert.algorithm as any);
+      const tsaTokenBytes = tsa.tokenBase64 ? Buffer.from(tsa.tokenBase64, 'base64') : null;
+
+      const signResult = await PdfSignerEngine.signPdf({
+        pdfBytes: assembledPdfBytes,
+        certificatePem: cert.certificatePem,
+        privateKeyPem: keys.privateKeyPem,
+        reason: `Cryptographically sealed by ${cert.name || 'graphsign.ink'}`,
+        contactInfo: `https://graphsign.ink/verify/${verificationToken}`,
+        tsaTokenBytes,
       });
 
-      const container = this.buildPadesContainer(
-        assembledPdfBytes,
-        cert.certificatePem,
-        signatureBase64,
-        tsa.tokenBase64,
-        verificationToken,
-      );
-      sealedPdfBase64 = container.sealedPdfBase64;
-      sealedPdfBytes = container.sealedPdfBytes;
+      sealedPdfBase64 = signResult.signedPdfBase64;
+      sealedPdfBytes = signResult.signedPdfBytes;
     }
 
     // Compute document hash over final sealed PDF container bytes for client hash verification
@@ -458,45 +456,6 @@ export class PadesSealingService {
       successfulCount,
       failedCount: agreementIds.length - successfulCount,
       results,
-    };
-  }
-
-  private buildPadesContainer(
-    originalPdf: string | Uint8Array,
-    certificatePem: string,
-    signatureBase64: string,
-    tsaTokenBase64: string,
-    verificationToken: string,
-  ): { sealedPdfBase64: string; sealedPdfBytes: Uint8Array } {
-    const trailerMetadata = JSON.stringify({
-      sigType: 'PAdES-B-T',
-      subFilter: 'ETSI.CAdES.detached',
-      verificationToken,
-      certificatePem: certificatePem.substring(0, 80) + '...',
-      signature: signatureBase64.substring(0, 40) + '...',
-      timestampToken: tsaTokenBase64.substring(0, 40) + '...',
-    });
-
-    const sealComment = `\n%PAdES-B-T-SEAL:${verificationToken}\n%SIG:${signatureBase64.substring(0, 64)}\n%TSA:${tsaTokenBase64.substring(0, 64)}\n%META:${btoa(trailerMetadata)}\n%%EOF`;
-    const sealBytes = Buffer.from(sealComment, 'utf-8');
-
-    let baseBytes: Buffer;
-    if (typeof originalPdf === 'string') {
-      const isBase64 = !originalPdf.startsWith('%PDF');
-      baseBytes = isBase64
-        ? Buffer.from(
-            originalPdf.includes(',') ? originalPdf.split(',')[1]! : originalPdf,
-            'base64',
-          )
-        : Buffer.from(originalPdf, 'utf-8');
-    } else {
-      baseBytes = Buffer.from(originalPdf);
-    }
-
-    const combinedBytes = Buffer.concat([baseBytes, sealBytes]);
-    return {
-      sealedPdfBase64: combinedBytes.toString('base64'),
-      sealedPdfBytes: new Uint8Array(combinedBytes),
     };
   }
 }

@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { SessionGuard } from '@/components/features/auth/SessionGuard';
 import { AgreementEditModal } from '@/components/features/agreements/AgreementEditModal';
 import { getApiUrl } from '@/lib/api';
+import { fetchRead } from '@/lib/fetch-read';
 
 interface AgreementDetails {
   id: string;
@@ -33,7 +34,7 @@ function EditorPageContent() {
       try {
         const token =
           localStorage.getItem('graphsign_session_token') || localStorage.getItem('token');
-        const res = await fetch(`${getApiUrl()}/api/v1/agreements/${encodeURIComponent(id!)}`, {
+        const res = await fetchRead(`${getApiUrl()}/api/v1/agreements/${encodeURIComponent(id!)}`, {
           headers: { Authorization: `Bearer ${token || ''}` },
           signal: controller.signal,
         });

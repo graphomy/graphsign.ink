@@ -532,7 +532,7 @@ function AgreementManagementContent() {
 
   async function handleDownloadAgreement(agreement: AgreementItem) {
     try {
-      const res = await fetch(`${getApiUrl()}/api/v1/agreements/${agreement.id}/file`, {
+      const res = await fetch(`${getApiUrl()}/api/v1/agreements/${agreement.id}/file?format=pdf`, {
         headers: { Authorization: `Bearer ${getToken()}` },
       });
       if (!res.ok) throw new Error('Failed to download document');
@@ -677,11 +677,6 @@ function AgreementManagementContent() {
     } finally {
       setIsSavingTags(false);
     }
-  }
-
-  function formatVersion(ver: string | number) {
-    const s = String(ver);
-    return s.startsWith('v') || s.startsWith('V') ? s : `v${s}`;
   }
 
   const startItem = pagination.total === 0 ? 0 : (currentPage - 1) * pageSize + 1;
@@ -969,7 +964,6 @@ function AgreementManagementContent() {
                 <thead>
                   <tr className="bg-ink-50 h-11 border-b border-ink-200 text-ink-500 font-bold uppercase tracking-wider text-[11px]">
                     <th className="py-2.5 px-4 font-semibold">Document Details</th>
-                    <th className="py-2.5 px-3 font-semibold w-[100px]">Version</th>
                     <th className="py-2.5 px-3 font-semibold w-[140px]">Status</th>
                     <th className="py-2.5 px-3 font-semibold w-[120px]">Recipients</th>
                     <th className="py-2.5 px-3 font-semibold w-[160px]">Last Modified</th>
@@ -1029,13 +1023,6 @@ function AgreementManagementContent() {
                               )}
                             </div>
                           </div>
-                        </td>
-
-                        {/* Version chip */}
-                        <td className="py-2.5 px-3 whitespace-nowrap">
-                          <span className="text-[13px] font-mono font-medium text-ink-700 bg-ink-100 px-2 py-0.5 rounded-sm tabular-nums">
-                            {formatVersion(agreement.version)}
-                          </span>
                         </td>
 
                         {/* Status pill */}

@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import type { PrismaClient } from '@graphsign/db';
-import { createPrismaClient, getLegacyPrisma } from '@graphsign/db';
+import { getDbClient } from '../utils/db.js';
 import { TemplateService } from '../services/template-service.js';
 import type { AuditService } from '../services/audit-service.js';
 import { PrismaAuditService } from '../services/audit-service.js';
@@ -35,21 +35,7 @@ export function createTemplateRoutes(deps?: TemplateDeps) {
   function getServices(c: any) {
     if (deps?.templateService) return { service: deps.templateService };
 
-    let prisma = deps?.prisma;
-    if (!prisma) {
-      const dbUrl = c.env?.DATABASE_URL || process.env.DATABASE_URL;
-      const isValidUrl =
-        dbUrl &&
-        typeof dbUrl === 'string' &&
-        dbUrl.trim() !== '' &&
-        (dbUrl.startsWith('postgres://') || dbUrl.startsWith('postgresql://'));
-
-      if (isValidUrl) {
-        prisma = createPrismaClient(dbUrl);
-      } else {
-        prisma = getLegacyPrisma();
-      }
-    }
+    const prisma = getDbClient(c, deps?.prisma);
     const audit = deps?.audit || new PrismaAuditService(prisma);
     const service = new TemplateService(prisma, audit);
     return { service };

@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import type { PrismaClient } from '@graphsign/db';
-import { createPrismaClient, getLegacyPrisma } from '@graphsign/db';
+import { getDbClient } from '../utils/db.js';
 import { apiAuth, requireScopes } from '../middleware/api-auth.js';
 import { API_SCOPES } from '../types/principal.js';
 import { BadRequestError, NotFoundError } from '../utils/errors.js';
@@ -27,11 +27,7 @@ export function createApiClientRoutes(deps?: { prisma?: PrismaClient }) {
   const router = new Hono<{ Bindings: Env }>();
 
   function getPrisma(c: any): PrismaClient {
-    if (deps?.prisma) return deps.prisma;
-    const dbUrl = c.env?.DATABASE_URL || process.env.DATABASE_URL;
-    return dbUrl && (dbUrl.startsWith('postgres://') || dbUrl.startsWith('postgresql://'))
-      ? createPrismaClient(dbUrl)
-      : getLegacyPrisma();
+    return getDbClient(c, deps?.prisma);
   }
 
   router.use('/*', async (c, next) => {

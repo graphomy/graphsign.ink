@@ -1099,9 +1099,26 @@ export class WorkflowService {
       : null;
 
     if (!fileData && (agreement.status === 'COMPLETED' || seal)) {
-      throw new NotFoundError(
-        'The original signed document is unavailable. It cannot be regenerated without invalidating its verification.',
-      );
+      if (this.sealingService) {
+        try {
+          const recovered = await this.sealingService.sealAgreement({
+            agreementId: agreement.id,
+            organisationId: agreement.organisationId,
+            userId: agreement.authorId,
+          });
+          if (recovered?.sealedPdfBase64) {
+            fileData = recovered.sealedPdfBase64;
+          }
+        } catch (healErr) {
+          console.warn('[WORKFLOW] Self-healing seal attempt failed:', (healErr as Error).message);
+        }
+      }
+
+      if (!fileData) {
+        throw new NotFoundError(
+          'The original signed document is unavailable. It cannot be regenerated without invalidating its verification.',
+        );
+      }
     }
     if (!fileData) fileData = (meta.fileBase64 as string) || (meta.fileData as string);
 
@@ -1318,7 +1335,11 @@ export class WorkflowService {
           userAgent,
         });
       } catch (sealErr) {
-        console.warn('[WORKFLOW] Automatic sealing failed on completion:', (sealErr as Error).name);
+        console.warn(
+          '[WORKFLOW] Automatic sealing failed on completion:',
+          (sealErr as Error).message,
+          (sealErr as Error).stack,
+        );
       }
 
       if (!sealResult) {

@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import type { PrismaClient } from '@graphsign/db';
-import { createPrismaClient, getLegacyPrisma } from '@graphsign/db';
+import { getDbClient } from '../utils/db.js';
 import { TsaTrustService } from '../services/tsa-trust-service.js';
 import { TsaService } from '../services/tsa-service.js';
 import { jwtAuth } from '../middleware/jwt-auth.js';
@@ -18,21 +18,7 @@ export function createTrustStoreRoutes(deps?: TrustStoreDeps) {
   const trustStore = new Hono<{ Bindings: Env }>();
 
   function getServices(c: any) {
-    let prisma = deps?.prisma;
-    if (!prisma) {
-      const dbUrl = c.env?.DATABASE_URL || process.env.DATABASE_URL;
-      const isValidUrl =
-        dbUrl &&
-        typeof dbUrl === 'string' &&
-        dbUrl.trim() !== '' &&
-        (dbUrl.startsWith('postgres://') || dbUrl.startsWith('postgresql://'));
-
-      if (isValidUrl) {
-        prisma = createPrismaClient(dbUrl);
-      } else {
-        prisma = getLegacyPrisma();
-      }
-    }
+    const prisma = getDbClient(c, deps?.prisma);
 
     const tsa =
       deps?.tsa ||

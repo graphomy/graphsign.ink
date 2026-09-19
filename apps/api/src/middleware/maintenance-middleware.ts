@@ -1,6 +1,6 @@
 import type { MiddlewareHandler } from 'hono';
 import type { PrismaClient } from '@graphsign/db';
-import { createPrismaClient, getLegacyPrisma } from '@graphsign/db';
+import { getDbClient } from '../utils/db.js';
 import { PlatformMaintenanceService } from '../services/maintenance-service.js';
 
 export interface MaintenanceMiddlewareOptions {
@@ -32,20 +32,10 @@ export function maintenanceMiddleware(options?: MaintenanceMiddlewareOptions): M
     if (!service) {
       let prisma = options?.prisma || (c as any).get('prisma');
       if (!prisma) {
-        const dbUrl = c.env?.DATABASE_URL || process.env.DATABASE_URL;
-        const isValidUrl =
-          dbUrl &&
-          (dbUrl.startsWith('postgres://') ||
-            dbUrl.startsWith('postgresql://') ||
-            dbUrl.startsWith('prisma://'));
-        if (isValidUrl) {
-          prisma = createPrismaClient(dbUrl);
-        } else if (process.env.NODE_ENV !== 'test') {
-          try {
-            prisma = getLegacyPrisma();
-          } catch {
-            // DB not available
-          }
+        try {
+          prisma = getDbClient(c);
+        } catch {
+          // DB not available
         }
       }
       if (prisma) {

@@ -1,7 +1,7 @@
 import { SigningClient } from '../services/signing-client.js';
 import { Hono } from 'hono';
 import type { PrismaClient } from '@graphsign/db';
-import { createPrismaClient, getLegacyPrisma } from '@graphsign/db';
+import { getDbClient } from '../utils/db.js';
 import { WorkflowService } from '../services/workflow-service.js';
 import type { AuditService } from '../services/audit-service.js';
 import { PrismaAuditService } from '../services/audit-service.js';
@@ -41,21 +41,7 @@ export function createSignRoutes(deps?: SignDeps) {
   function getServices(c: any) {
     if (deps?.workflowService) return { service: deps.workflowService };
 
-    let prisma = deps?.prisma;
-    if (!prisma) {
-      const dbUrl = c.env?.DATABASE_URL || process.env.DATABASE_URL;
-      const isValidUrl =
-        dbUrl &&
-        typeof dbUrl === 'string' &&
-        dbUrl.trim() !== '' &&
-        (dbUrl.startsWith('postgres://') || dbUrl.startsWith('postgresql://'));
-
-      if (isValidUrl) {
-        prisma = createPrismaClient(dbUrl);
-      } else {
-        prisma = getLegacyPrisma();
-      }
-    }
+    const prisma = getDbClient(c, deps?.prisma);
 
     const audit = deps?.audit || new PrismaAuditService(prisma);
     const mailer =

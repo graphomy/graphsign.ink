@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import type { PrismaClient } from '@graphsign/db';
-import { createPrismaClient, getLegacyPrisma } from '@graphsign/db';
+import { getDbClient } from '../utils/db.js';
 import { AgreementService } from '../services/agreement-service.js';
 import type { AuditService } from '../services/audit-service.js';
 import { PrismaAuditService } from '../services/audit-service.js';
@@ -19,6 +19,11 @@ import { requirePermission } from '../middleware/rbac-middleware.js';
 import { enforceTenantActiveStatus } from '../middleware/tenant-status-middleware.js';
 import { createRateLimiter } from '../middleware/rate-limiter.js';
 import { isSuperAdmin } from '../config/roles.js';
+import {
+  PdfAssemblyService,
+  type AssemblePdfField,
+  type AssemblePdfRecipient,
+} from '../services/pdf-assembly-service.js';
 import type { Env } from '../index.js';
 
 export interface AgreementDeps {
@@ -75,21 +80,7 @@ export function createAgreementRoutes(deps?: AgreementDeps) {
   function getServices(c: any) {
     if (deps?.agreementService) return { service: deps.agreementService };
 
-    let prisma = deps?.prisma;
-    if (!prisma) {
-      const dbUrl = c.env?.DATABASE_URL || process.env.DATABASE_URL;
-      const isValidUrl =
-        dbUrl &&
-        typeof dbUrl === 'string' &&
-        dbUrl.trim() !== '' &&
-        (dbUrl.startsWith('postgres://') || dbUrl.startsWith('postgresql://'));
-
-      if (isValidUrl) {
-        prisma = createPrismaClient(dbUrl);
-      } else {
-        prisma = getLegacyPrisma();
-      }
-    }
+    const prisma = getDbClient(c, deps?.prisma);
     const audit = deps?.audit || new PrismaAuditService(prisma);
     const service = new AgreementService(prisma, audit);
     return { service };
@@ -334,6 +325,14 @@ export function createAgreementRoutes(deps?: AgreementDeps) {
         );
       }
 
+      const formatQuery = c.req.query('format')?.toLowerCase();
+      const isPdfRequested =
+        formatQuery === 'pdf' ||
+        (!formatQuery &&
+          (agreement.mimeType === 'application/pdf' ||
+            agreement.fileName?.toLowerCase().endsWith('.pdf') ||
+            !agreement.fileName));
+
       if (fileData) {
         const base64Content = fileData.includes(',') ? fileData.split(',')[1] : fileData;
         const binaryBuffer = Buffer.from(base64Content || '', 'base64');
@@ -348,6 +347,37 @@ export function createAgreementRoutes(deps?: AgreementDeps) {
       }
 
       if (agreement.markdownContent && agreement.status !== 'COMPLETED') {
+        if (isPdfRequested) {
+          const pdfAssembly = new PdfAssemblyService();
+          const rawFields = agreement.fields as Record<string, unknown> | null;
+          const agreementFields = (Array.isArray(rawFields?.fields)
+            ? rawFields.fields
+            : Array.isArray(agreement.fields)
+              ? agreement.fields
+              : []) as unknown as AssemblePdfField[];
+          const agreementRecipients = (Array.isArray((agreement as any).recipients)
+            ? (agreement as any).recipients
+            : Array.isArray(rawFields?.recipients)
+              ? rawFields.recipients
+              : []) as unknown as AssemblePdfRecipient[];
+          const pdfBytes = await pdfAssembly.assembleDocument({
+            agreementTitle: agreement.title,
+            envelopeId: agreement.id,
+            markdownContent: agreement.markdownContent,
+            fields: agreementFields,
+            recipients: agreementRecipients,
+            includeCertificate: false,
+          });
+          const pdfFileName = (agreement.fileName || `${agreement.title}.pdf`).replace(
+            /\.md$/i,
+            '.pdf',
+          );
+          return c.body(Buffer.from(pdfBytes), 200, {
+            'Content-Type': 'application/pdf',
+            'Content-Disposition': `inline; filename="${pdfFileName}"`,
+          });
+        }
+
         return c.text(agreement.markdownContent, 200, {
           'Content-Type': 'text/markdown; charset=utf-8',
           'Content-Disposition': `inline; filename="${agreement.fileName || 'agreement.md'}"`,
