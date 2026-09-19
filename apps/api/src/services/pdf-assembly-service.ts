@@ -1,6 +1,7 @@
 import { PDFDocument, rgb, StandardFonts, PageSizes } from 'pdf-lib';
 import QRCode from 'qrcode';
 import { BadRequestError } from '../utils/errors.js';
+import { SIGNATURE_FRAME_PNG_BASE64 } from './signature-frame-asset.js';
 
 export interface AssemblePdfField {
   id: string;
@@ -55,18 +56,21 @@ export interface AssemblePdfOptions {
 
 export class PdfAssemblyService {
   /**
-   * Assembles a finalized PDF document with certificate page.
+   * Assembles a final, completed document:
+   * 1. Renders Markdown pages or loads existing PDF.
+   * 2. Stamps the Graphsign.ink Envelope ID on the top-left of every page.
+   * 3. Flattens all recipient field values (signatures, initials, dates, inputs).
+   * 4. Appends an authoritative Cryptographic Execution & Integrity Certificate page.
    */
   async assembleCompletedDocument(options: AssemblePdfOptions): Promise<Uint8Array> {
-    return this.assembleDocument({ ...options, includeCertificate: true });
+    return this.assembleDocument({
+      ...options,
+      includeCertificate: true,
+    });
   }
 
   /**
-   * Assembles a PDF document (draft, in-flight, or completed):
-   * 1. Renders Markdown text or loads existing PDF bytes.
-   * 2. Stamps the Envelope ID on the top-left of every page.
-   * 3. Flattens signature images, initials, and field input values.
-   * 4. Optionally appends the Cryptographic Execution & Integrity Certificate page.
+   * Core assembler allowing optional certificate appending.
    */
   async assembleDocument(options: AssemblePdfOptions): Promise<Uint8Array> {
     const {
@@ -95,7 +99,7 @@ export class PdfAssemblyService {
       );
     let pdfDoc: PDFDocument;
 
-    // 1. Initialize Document Base
+    // 1. Load existing PDF bytes or render Markdown content
     if (existingPdfBytes && existingPdfBytes.length > 0) {
       pdfDoc = await PDFDocument.load(existingPdfBytes);
     } else if (existingPdfBase64) {
@@ -111,11 +115,11 @@ export class PdfAssemblyService {
     const helvetica = await pdfDoc.embedFont(StandardFonts.Helvetica);
     const helveticaBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
-    // 2. Stamp Envelope ID on top-left of every existing page
+    // 2. Stamp Graphsign.ink Envelope ID on top-left of every existing page
     const existingPages = pdfDoc.getPages();
     for (const page of existingPages) {
       const { height } = page.getSize();
-      page.drawText(`Envelope ID: ${envelopeId}`, {
+      page.drawText(`Graphsign.ink Envelope ID: ${envelopeId}`, {
         x: 36,
         y: height - 22,
         size: 8,
@@ -169,14 +173,20 @@ export class PdfAssemblyService {
 
     // Render Document Title Header
     checkPageBreak(40);
-    currentPage.drawText(title, {
-      x: marginX,
-      y: cursorY,
-      size: 18,
-      font: helveticaBold,
-      color: rgb(0.06, 0.09, 0.16),
-    });
-    cursorY -= 26;
+    const cleanedTitle = this.cleanWinAnsi(title);
+    const wrappedTitle = this.wrapText(cleanedTitle, contentWidth, 18, helveticaBold);
+    for (const tLine of wrappedTitle) {
+      checkPageBreak(24);
+      currentPage.drawText(tLine, {
+        x: marginX,
+        y: cursorY,
+        size: 18,
+        font: helveticaBold,
+        color: rgb(0.06, 0.09, 0.16),
+      });
+      cursorY -= 24;
+    }
+    cursorY -= 6;
 
     // Draw thin accent separator
     currentPage.drawLine({
@@ -187,65 +197,142 @@ export class PdfAssemblyService {
     });
     cursorY -= 20;
 
+    let inCodeBlock = false;
+
     // Process lines of markdown
-    const lines = markdown.split('\n');
+    const lines = (markdown || '').split('\n');
     for (const rawLine of lines) {
       const line = rawLine.trim();
 
-      if (!line) {
-        cursorY -= 10;
+      if (line.startsWith('```')) {
+        inCodeBlock = !inCodeBlock;
+        cursorY -= 6;
         continue;
       }
 
+      if (inCodeBlock) {
+        const text = this.cleanWinAnsi(rawLine);
+        const wrapped = this.wrapText(text, contentWidth - 20, 9, helvetica);
+        for (const w of wrapped) {
+          checkPageBreak(13);
+          currentPage.drawText(w, {
+            x: marginX + 12,
+            y: cursorY,
+            size: 9,
+            font: helvetica,
+            color: rgb(0.2, 0.25, 0.35),
+          });
+          cursorY -= 12;
+        }
+        continue;
+      }
+
+      if (!line) {
+        cursorY -= 8;
+        continue;
+      }
+
+      // Horizontal rules
+      if (line === '---' || line === '***' || line === '___') {
+        checkPageBreak(16);
+        cursorY -= 6;
+        currentPage.drawLine({
+          start: { x: marginX, y: cursorY },
+          end: { x: marginX + contentWidth, y: cursorY },
+          thickness: 0.5,
+          color: rgb(0.85, 0.88, 0.92),
+        });
+        cursorY -= 12;
+        continue;
+      }
+
+      // Headings
       if (line.startsWith('# ')) {
-        const text = line.replace(/^#\s+/, '');
-        checkPageBreak(30);
-        currentPage.drawText(text, {
-          x: marginX,
-          y: cursorY,
-          size: 14,
-          font: helveticaBold,
-          color: rgb(0.08, 0.12, 0.22),
-        });
-        cursorY -= 22;
+        const text = this.cleanWinAnsi(line.replace(/^#\s+/, ''));
+        const wrapped = this.wrapText(text, contentWidth, 14, helveticaBold);
+        for (const w of wrapped) {
+          checkPageBreak(22);
+          currentPage.drawText(w, {
+            x: marginX,
+            y: cursorY,
+            size: 14,
+            font: helveticaBold,
+            color: rgb(0.08, 0.12, 0.22),
+          });
+          cursorY -= 20;
+        }
+        cursorY -= 4;
       } else if (line.startsWith('## ')) {
-        const text = line.replace(/^##\s+/, '');
-        checkPageBreak(26);
-        currentPage.drawText(text, {
-          x: marginX,
-          y: cursorY,
-          size: 12,
-          font: helveticaBold,
-          color: rgb(0.12, 0.16, 0.26),
-        });
-        cursorY -= 18;
+        const text = this.cleanWinAnsi(line.replace(/^##\s+/, ''));
+        const wrapped = this.wrapText(text, contentWidth, 12, helveticaBold);
+        for (const w of wrapped) {
+          checkPageBreak(18);
+          currentPage.drawText(w, {
+            x: marginX,
+            y: cursorY,
+            size: 12,
+            font: helveticaBold,
+            color: rgb(0.12, 0.16, 0.26),
+          });
+          cursorY -= 16;
+        }
+        cursorY -= 4;
       } else if (line.startsWith('### ')) {
-        const text = line.replace(/^###\s+/, '');
-        checkPageBreak(22);
-        currentPage.drawText(text, {
-          x: marginX,
-          y: cursorY,
-          size: 11,
-          font: helveticaBold,
-          color: rgb(0.18, 0.22, 0.32),
-        });
-        cursorY -= 16;
-      } else if (line.startsWith('- ') || line.startsWith('* ')) {
-        const text = line.replace(/^[-*]\s+/, '');
-        const wrapped = this.wrapText(text, contentWidth - 16, 10, helvetica);
+        const text = this.cleanWinAnsi(line.replace(/^###\s+/, ''));
+        const wrapped = this.wrapText(text, contentWidth, 11, helveticaBold);
+        for (const w of wrapped) {
+          checkPageBreak(16);
+          currentPage.drawText(w, {
+            x: marginX,
+            y: cursorY,
+            size: 11,
+            font: helveticaBold,
+            color: rgb(0.18, 0.22, 0.32),
+          });
+          cursorY -= 14;
+        }
+        cursorY -= 4;
+      } else if (line.startsWith('> ') || line.startsWith('>')) {
+        // Blockquote
+        const text = this.cleanWinAnsi(line.replace(/^>\s*/, ''));
+        const wrapped = this.wrapText(text, contentWidth - 20, 10, helvetica);
+        for (let i = 0; i < wrapped.length; i++) {
+          checkPageBreak(14);
+          currentPage.drawLine({
+            start: { x: marginX + 4, y: cursorY - 2 },
+            end: { x: marginX + 4, y: cursorY + 10 },
+            thickness: 2,
+            color: rgb(0.75, 0.8, 0.88),
+          });
+          currentPage.drawText(wrapped[i]!, {
+            x: marginX + 16,
+            y: cursorY,
+            size: 10,
+            font: helvetica,
+            color: rgb(0.3, 0.35, 0.45),
+          });
+          cursorY -= 14;
+        }
+        cursorY -= 2;
+      } else if (line.startsWith('- ') || line.startsWith('* ') || /^\d+\.\s+/.test(line)) {
+        // Lists
+        const isNumbered = /^\d+\.\s+/.test(line);
+        const prefix = isNumbered ? line.match(/^\d+\./)?.[0] || '1.' : '•';
+        const text = this.cleanWinAnsi(line.replace(/^([-*]|\d+\.)\s+/, ''));
+        const wrapped = this.wrapText(text, contentWidth - 20, 10, helvetica);
         for (let i = 0; i < wrapped.length; i++) {
           checkPageBreak(14);
           if (i === 0) {
-            currentPage.drawText('•', {
+            currentPage.drawText(prefix, {
               x: marginX + 4,
               y: cursorY,
-              size: 10,
+              size: isNumbered ? 9 : 10,
               font: helveticaBold,
               color: rgb(0.3, 0.35, 0.45),
             });
           }
           currentPage.drawText(wrapped[i]!, {
-            x: marginX + 16,
+            x: marginX + 18,
             y: cursorY,
             size: 10,
             font: helvetica,
@@ -253,9 +340,34 @@ export class PdfAssemblyService {
           });
           cursorY -= 14;
         }
+      } else if (line.startsWith('|') && line.endsWith('|')) {
+        // Markdown table row
+        const cells = line
+          .split('|')
+          .map((c) => c.trim())
+          .filter((_, idx, arr) => idx > 0 && idx < arr.length - 1);
+        if (cells.length > 0 && !cells.every((c) => /^[-:]+$/.test(c))) {
+          const colWidth = contentWidth / cells.length;
+          checkPageBreak(16);
+          for (let cIdx = 0; cIdx < cells.length; cIdx++) {
+            const cellText = this.cleanWinAnsi(cells[cIdx] || '');
+            const wrapped = this.wrapText(cellText, colWidth - 8, 9, helvetica);
+            if (wrapped[0]) {
+              currentPage.drawText(wrapped[0], {
+                x: marginX + cIdx * colWidth + 4,
+                y: cursorY,
+                size: 9,
+                font: helvetica,
+                color: rgb(0.15, 0.2, 0.3),
+              });
+            }
+          }
+          cursorY -= 14;
+        }
       } else {
         // Regular paragraph text
-        const wrapped = this.wrapText(line, contentWidth, 10, helvetica);
+        const cleanedText = this.cleanWinAnsi(line);
+        const wrapped = this.wrapText(cleanedText, contentWidth, 10, helvetica);
         for (const wrappedLine of wrapped) {
           checkPageBreak(14);
           currentPage.drawText(wrappedLine, {
@@ -285,6 +397,7 @@ export class PdfAssemblyService {
     helveticaBold: any,
   ) {
     const pageCount = pdfDoc.getPageCount();
+    let signatureFrameImg: any = null;
 
     for (const field of fields) {
       const pageIndex = Math.max(0, Math.min((field.pageNumber || 1) - 1, pageCount - 1));
@@ -328,7 +441,80 @@ export class PdfAssemblyService {
 
       if (!value) continue;
 
-      if (field.type === 'SIGNATURE' || field.type === 'INITIALS') {
+      if (field.type === 'SIGNATURE') {
+        // Embed the signature frame PNG asset once
+        if (!signatureFrameImg) {
+          try {
+            signatureFrameImg = await pdfDoc.embedPng(
+              Buffer.from(SIGNATURE_FRAME_PNG_BASE64, 'base64'),
+            );
+          } catch (err) {
+            console.warn(
+              '[PDF_ASSEMBLY] Failed to embed signature frame PNG:',
+              (err as Error).message,
+            );
+          }
+        }
+
+        // Draw the signature frame over the field bounding box
+        if (signatureFrameImg) {
+          page.drawImage(signatureFrameImg, {
+            x: boxX,
+            y: boxY,
+            width: boxW,
+            height: boxH,
+          });
+        }
+
+        // Compute inner area positioned within the 2 blue lines (x ~ 26% to 94%, y ~ 16% to 84%)
+        const sigX = boxX + boxW * 0.26;
+        const sigW = boxW * 0.68;
+        const sigY = boxY + boxH * 0.16;
+        const sigH = boxH * 0.68;
+
+        if (
+          typeof value === 'string' &&
+          value.startsWith('data:image/') &&
+          !value.includes('image/svg')
+        ) {
+          try {
+            const commaIndex = value.indexOf(',');
+            const base64Data = commaIndex !== -1 ? value.substring(commaIndex + 1) : value;
+            const imgBuffer = Buffer.from(base64Data, 'base64');
+            const embeddedImg =
+              value.includes('image/jpeg') || value.includes('image/jpg')
+                ? await pdfDoc.embedJpg(imgBuffer)
+                : await pdfDoc.embedPng(imgBuffer);
+
+            page.drawImage(embeddedImg, {
+              x: sigX,
+              y: sigY,
+              width: sigW,
+              height: sigH,
+            });
+            continue;
+          } catch (err) {
+            console.warn('[PDF_ASSEMBLY] Failed to embed signature image:', (err as Error).message);
+          }
+        }
+
+        // Fallback: draw bold stylized signature text inside the two blue lines
+        let textToDraw = String(value);
+        if (textToDraw.includes('<svg') || textToDraw.startsWith('data:image/svg+xml')) {
+          const svgMatch = textToDraw.match(/<text[^>]*>(.*?)<\/text>/i);
+          textToDraw = svgMatch ? decodeURIComponent(svgMatch[1]!) : matchedRecip.name || 'Signed';
+        }
+        const cleanText = textToDraw.replace(/[^\x20-\x7E]/g, '') || matchedRecip.name || 'Signed';
+
+        page.drawText(cleanText, {
+          x: sigX + 4,
+          y: sigY + Math.max(4, sigH / 2 - 5),
+          size: Math.min(13, sigH * 0.55),
+          font: helveticaBold,
+          color: rgb(0.08, 0.12, 0.28),
+        });
+      } else if (field.type === 'INITIALS') {
+        // Initials: drawn directly into bounding box without signature frame or badge
         if (
           typeof value === 'string' &&
           value.startsWith('data:image/') &&
@@ -349,20 +535,21 @@ export class PdfAssemblyService {
               width: boxW,
               height: boxH,
             });
-            this.drawTrustSealBadge(page, boxX, boxY, boxW, boxH, helveticaBold);
             continue;
           } catch (err) {
-            console.warn('[PDF_ASSEMBLY] Failed to embed signature image:', (err as Error).message);
+            console.warn('[PDF_ASSEMBLY] Failed to embed initials image:', (err as Error).message);
           }
         }
 
-        // Fallback: draw bold stylized signature text (handling SVG and text gracefully)
         let textToDraw = String(value);
         if (textToDraw.includes('<svg') || textToDraw.startsWith('data:image/svg+xml')) {
           const svgMatch = textToDraw.match(/<text[^>]*>(.*?)<\/text>/i);
-          textToDraw = svgMatch ? decodeURIComponent(svgMatch[1]!) : matchedRecip.name || 'Signed';
+          textToDraw = svgMatch
+            ? decodeURIComponent(svgMatch[1]!)
+            : matchedRecip.name || 'Initials';
         }
-        const cleanText = textToDraw.replace(/[^\x20-\x7E]/g, '') || matchedRecip.name || 'Signed';
+        const cleanText =
+          textToDraw.replace(/[^\x20-\x7E]/g, '') || matchedRecip.name || 'Initials';
 
         page.drawText(cleanText, {
           x: boxX + 4,
@@ -371,7 +558,6 @@ export class PdfAssemblyService {
           font: helveticaBold,
           color: rgb(0.08, 0.12, 0.28),
         });
-        this.drawTrustSealBadge(page, boxX, boxY, boxW, boxH, helveticaBold);
       } else if (field.type === 'CHECKBOX') {
         const isChecked = value === true || value === 'true';
         page.drawText(isChecked ? '[X]' : '[ ]', {
@@ -382,7 +568,7 @@ export class PdfAssemblyService {
           color: rgb(0.1, 0.14, 0.24),
         });
       } else {
-        page.drawText(String(value), {
+        page.drawText(this.cleanWinAnsi(String(value)), {
           x: boxX + 4,
           y: boxY + Math.max(2, boxH / 2 - 4),
           size: Math.min(10, boxH * 0.5),
@@ -391,82 +577,6 @@ export class PdfAssemblyService {
         });
       }
     }
-  }
-
-  /**
-   * Draws a sleek blue cryptographic trust seal badge near the signature.
-   */
-  private drawTrustSealBadge(
-    page: any,
-    boxX: number,
-    boxY: number,
-    boxW: number,
-    boxH: number,
-    fontBold: any,
-  ) {
-    const sealRadius = 7.5;
-    const sealCenterX = boxX + boxW - sealRadius - 2;
-    const sealCenterY = boxY + boxH - sealRadius - 2;
-
-    // Outer royal blue ring
-    page.drawCircle({
-      x: sealCenterX,
-      y: sealCenterY,
-      size: sealRadius,
-      color: rgb(0.12, 0.44, 0.95),
-      borderColor: rgb(0.25, 0.55, 1.0),
-      borderWidth: 1,
-    });
-
-    // Inner deep royal blue circle
-    page.drawCircle({
-      x: sealCenterX,
-      y: sealCenterY,
-      size: sealRadius - 2,
-      color: rgb(0.08, 0.35, 0.85),
-      borderColor: rgb(0.9, 0.95, 1.0),
-      borderWidth: 0.6,
-    });
-
-    // Clean checkmark glyph inside the seal
-    page.drawText('v', {
-      x: sealCenterX - 2.5,
-      y: sealCenterY - 2.5,
-      size: 6.5,
-      font: fontBold,
-      color: rgb(1, 1, 1),
-    });
-
-    // Small trust ribbon badge underneath/alongside
-    const badgeW = 68;
-    const badgeH = 11;
-    const badgeX = boxX + boxW - badgeW - 1;
-    const badgeY = Math.max(2, boxY - badgeH - 2);
-
-    page.drawRectangle({
-      x: badgeX,
-      y: badgeY,
-      width: badgeW,
-      height: badgeH,
-      color: rgb(0.93, 0.96, 1.0),
-      borderColor: rgb(0.72, 0.84, 0.98),
-      borderWidth: 0.6,
-    });
-
-    page.drawCircle({
-      x: badgeX + 5,
-      y: badgeY + badgeH / 2,
-      size: 2,
-      color: rgb(0.15, 0.45, 0.95),
-    });
-
-    page.drawText('VERIFIED SEAL', {
-      x: badgeX + 10,
-      y: badgeY + 2.8,
-      size: 5.5,
-      font: fontBold,
-      color: rgb(0.1, 0.35, 0.85),
-    });
   }
 
   /**
@@ -488,7 +598,7 @@ export class PdfAssemblyService {
     let y = pageHeight - 24;
 
     // 1. Top Envelope ID Header
-    certPage.drawText(`Envelope ID: ${envelopeId}`, {
+    certPage.drawText(`Graphsign.ink Envelope ID: ${envelopeId}`, {
       x: 36,
       y,
       size: 8,
@@ -557,7 +667,7 @@ export class PdfAssemblyService {
 
     const metaRows = [
       { label: 'Document Title', value: agreementTitle },
-      { label: 'Envelope Identifier', value: envelopeId },
+      { label: 'Graphsign.ink Envelope ID', value: envelopeId },
       { label: 'Verification Token', value: token },
       { label: 'Execution Status', value: 'Digitally Signed & Cryptographically Sealed' },
       { label: 'Document SHA-256 Digest', value: hash },
@@ -575,7 +685,7 @@ export class PdfAssemblyService {
         color: rgb(0.3, 0.35, 0.45),
       });
 
-      certPage.drawText(r.value, {
+      certPage.drawText(this.cleanWinAnsi(r.value), {
         x: marginX + 130,
         y: rowY,
         size: 8,
@@ -619,7 +729,7 @@ export class PdfAssemblyService {
       const recipRole = (recip.role || 'signer').toUpperCase();
       const recipStatus = (recip.status || 'PENDING').toUpperCase();
 
-      certPage.drawText(`${recipName} ${recipEmail}`.trim(), {
+      certPage.drawText(this.cleanWinAnsi(`${recipName} ${recipEmail}`.trim()), {
         x: marginX + 12,
         y: signerY,
         size: 8.5,
@@ -627,7 +737,7 @@ export class PdfAssemblyService {
         color: rgb(0.06, 0.09, 0.16),
       });
 
-      certPage.drawText(`Status: ${recipStatus} • Role: ${recipRole}`, {
+      certPage.drawText(this.cleanWinAnsi(`Status: ${recipStatus} • Role: ${recipRole}`), {
         x: marginX + 12,
         y: signerY - 11,
         size: 7.5,
@@ -645,7 +755,7 @@ export class PdfAssemblyService {
 
       const ipInfo = recip.ipAddress ? `IP: ${recip.ipAddress}` : 'IP: Verified Web Session';
       const uaInfo = recip.userAgent ? recip.userAgent.substring(0, 48) : 'Web Client';
-      certPage.drawText(`${ipInfo} • ${uaInfo}`, {
+      certPage.drawText(this.cleanWinAnsi(`${ipInfo} • ${uaInfo}`), {
         x: marginX + 12,
         y: signerY - 30,
         size: 7,
@@ -665,7 +775,7 @@ export class PdfAssemblyService {
             height: 32,
           });
         } catch {
-          certPage.drawText(recipName, {
+          certPage.drawText(this.cleanWinAnsi(recipName), {
             x: marginX + contentWidth - 96,
             y: signerY - 14,
             size: 9,
@@ -674,7 +784,7 @@ export class PdfAssemblyService {
           });
         }
       } else {
-        certPage.drawText(recipName, {
+        certPage.drawText(this.cleanWinAnsi(recipName), {
           x: marginX + contentWidth - 96,
           y: signerY - 14,
           size: 9,
@@ -747,7 +857,7 @@ export class PdfAssemblyService {
         font: helveticaBold,
         color: rgb(0.3, 0.35, 0.45),
       });
-      certPage.drawText(cr.value, {
+      certPage.drawText(this.cleanWinAnsi(cr.value), {
         x: marginX + 120,
         y: certRowY,
         size: 7.5,
@@ -809,14 +919,63 @@ export class PdfAssemblyService {
   }
 
   /**
+   * Cleans text to only WinAnsi encodable characters supported by standard PDF Helvetica.
+   * Replaces common unicode symbols with ASCII/WinAnsi equivalents and strips unencodables.
+   */
+  public cleanWinAnsi(text: string): string {
+    if (!text) return '';
+    return (
+      text
+        .replace(/[\u2318]/g, 'Cmd') // ⌘
+        .replace(/[\u21E7]/g, 'Shift') // ⇧
+        .replace(/[\u2325]/g, 'Option') // ⌥
+        .replace(/[\u2303]/g, 'Ctrl') // ⌃
+        .replace(/[\u2013\u2014]/g, '-') // – —
+        .replace(/[\u2018\u2019]/g, "'") // ‘ ’
+        .replace(/[\u201C\u201D]/g, '"') // “ ”
+        .replace(/[\u2022\u2023\u25E6\u2043\u2219]/g, '*') // bullet variants
+        .replace(/[\u2026]/g, '...') // …
+        .replace(/[\u00A0]/g, ' ') // non-breaking space
+        // Replace any remaining character outside WinAnsi / ASCII printable range
+        .replace(/[^\x20-\x7E\xA0-\xFF\n\r\t]/g, '?')
+    );
+  }
+
+  /**
    * Helper to wrap text according to maximum pixel width.
+   * Splits words if single word exceeds maxWidth.
    */
   private wrapText(text: string, maxWidth: number, fontSize: number, font: any): string[] {
-    const words = text.split(' ');
+    const cleaned = this.cleanWinAnsi(text);
+    const words = cleaned.split(' ');
     const lines: string[] = [];
     let currentLine = '';
 
-    for (const word of words) {
+    for (const rawWord of words) {
+      let word = rawWord;
+      // If a single word is wider than maxWidth, split it
+      if (font.widthOfTextAtSize(word, fontSize) > maxWidth) {
+        while (font.widthOfTextAtSize(word, fontSize) > maxWidth && word.length > 1) {
+          let splitIdx = Math.floor(
+            word.length * (maxWidth / font.widthOfTextAtSize(word, fontSize)),
+          );
+          if (splitIdx < 1) splitIdx = 1;
+          while (
+            splitIdx > 1 &&
+            font.widthOfTextAtSize(word.substring(0, splitIdx), fontSize) > maxWidth
+          ) {
+            splitIdx--;
+          }
+          const chunk = word.substring(0, splitIdx);
+          if (currentLine) {
+            lines.push(currentLine);
+            currentLine = '';
+          }
+          lines.push(chunk);
+          word = word.substring(splitIdx);
+        }
+      }
+
       const testLine = currentLine ? `${currentLine} ${word}` : word;
       const width = font.widthOfTextAtSize(testLine, fontSize);
       if (width <= maxWidth) {

@@ -1234,7 +1234,13 @@ export class AgreementService {
   /**
    * INK-278: Generate in-app signing session for authenticated recipient
    */
-  async createSignerSession(orgId: string, agreementId: string, userEmail: string) {
+  async createSignerSession(
+    orgId: string,
+    agreementId: string,
+    userEmail: string,
+    userId?: string,
+    userRole?: string,
+  ) {
     const agreement = await this.prisma.agreement.findFirst({
       where: {
         id: agreementId,
@@ -1255,9 +1261,26 @@ export class AgreementService {
     }
 
     const normalizedEmail = userEmail.trim().toLowerCase();
-    const recipient = agreement.recipients.find(
+    let recipient = agreement.recipients.find(
       (r) => r.email.trim().toLowerCase() === normalizedEmail,
     );
+
+    if (!recipient) {
+      const isPrivileged =
+        agreement.authorId === userId || ['admin', 'owner', 'super_admin'].includes(userRole || '');
+      if (isPrivileged) {
+        const pendingRecipients = agreement.recipients.filter(
+          (r) => r.status !== 'SIGNED' && r.status !== 'DECLINED',
+        );
+        if (agreement.signingOrder === 'SEQUENTIAL') {
+          recipient =
+            pendingRecipients.find((r) => r.routingOrder === agreement.currentStep) ||
+            pendingRecipients.sort((a, b) => a.routingOrder - b.routingOrder)[0];
+        } else {
+          recipient = pendingRecipients[0];
+        }
+      }
+    }
 
     if (!recipient) {
       throw new ForbiddenError('You are not designated as a participant on this document.');

@@ -144,7 +144,7 @@ function AgreementManagementContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<AgreementTab>(() => {
-    return resolveAgreementTab(searchParams?.get('tab')) ?? 'signed';
+    return resolveAgreementTab(searchParams?.get('tab')) ?? 'active';
   });
   const [isSigningId, setIsSigningId] = useState<string | null>(null);
   const [agreements, setAgreements] = useState<AgreementItem[]>([]);
@@ -190,7 +190,9 @@ function AgreementManagementContent() {
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploadTags, setUploadTags] = useState<string[]>([]);
   const [uploadTagInput, setUploadTagInput] = useState('');
-  const [currentUser] = useState<{ userId: string; userEmail: string }>(() => getCurrentUserInfo());
+  const [currentUser, setCurrentUser] = useState<{ userId: string; userEmail: string }>(() =>
+    getCurrentUserInfo(),
+  );
 
   const [tagInput, setTagInput] = useState('');
   const [tagsList, setTagsList] = useState<string[]>([]);
@@ -818,7 +820,10 @@ function AgreementManagementContent() {
                   >
                     <span>{tab.label}</span>
                     {isActive && pagination.total > 0 && (
-                      <span className="h-4 min-w-4 px-1 rounded-full bg-ink-200 text-ink-600 text-[10px] flex items-center justify-center font-bold">
+                      <span
+                        aria-hidden="true"
+                        className="h-4 min-w-4 px-1 rounded-full bg-ink-200 text-ink-600 text-[10px] flex items-center justify-center font-bold"
+                      >
                         {pagination.total}
                       </span>
                     )}
@@ -983,14 +988,19 @@ function AgreementManagementContent() {
                     );
                     const isPendingSigner = Boolean(
                       (agreement.status === 'SENT' || agreement.status === 'PARTIALLY_SIGNED') &&
-                      currentUser.userEmail &&
-                      agreement.recipients?.some(
-                        (r) =>
-                          r.email?.toLowerCase() === currentUser.userEmail.toLowerCase() &&
-                          (r.status === 'PENDING' || r.status === 'INVITED') &&
-                          r.role?.toLowerCase() !== 'cc' &&
-                          r.role?.toLowerCase() !== 'viewer',
-                      ),
+                      (activeTab === 'waiting_for_me' ||
+                        (currentUser.userEmail &&
+                          agreement.recipients?.some(
+                            (r) =>
+                              r.email?.toLowerCase() === currentUser.userEmail.toLowerCase() &&
+                              (r.status === 'PENDING' || r.status === 'INVITED') &&
+                              r.role?.toLowerCase() !== 'cc' &&
+                              r.role?.toLowerCase() !== 'viewer',
+                          )) ||
+                        (currentUser.userEmail &&
+                          agreement.author?.email?.toLowerCase() ===
+                            currentUser.userEmail.toLowerCase()) ||
+                        (currentUser.userId && agreement.authorId === currentUser.userId)),
                     );
 
                     return (
@@ -1140,22 +1150,24 @@ function AgreementManagementContent() {
                                 </button>
                               )}
 
-                            {/* In-App Sign Action for Assigned Signer (INK-278) */}
-                            {isPendingSigner && (
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleInitiateInAppSign(agreement);
-                                }}
-                                disabled={isSigningId === agreement.id}
-                                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-white bg-brand-600 hover:bg-brand-700 active:bg-brand-800 rounded-md transition-colors shadow-xs shrink-0"
-                                title="Review & Sign this document now"
-                              >
-                                <PenLine className="w-3.5 h-3.5" />
-                                <span>{isSigningId === agreement.id ? 'Loading…' : 'Sign'}</span>
-                              </button>
-                            )}
+                            {/* In-App Sign Action for Assigned Signer or Pending Signature Tab (INK-278) */}
+                            {(isPendingSigner || activeTab === 'waiting_for_me') &&
+                              (agreement.status === 'SENT' ||
+                                agreement.status === 'PARTIALLY_SIGNED') && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleInitiateInAppSign(agreement);
+                                  }}
+                                  disabled={isSigningId === agreement.id}
+                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-brand-600 hover:bg-brand-700 active:bg-brand-800 rounded-md transition-colors shadow-xs shrink-0 cursor-pointer"
+                                  title="Open document for signature"
+                                >
+                                  <PenLine className="w-3.5 h-3.5" />
+                                  <span>{isSigningId === agreement.id ? 'Loading…' : 'Sign'}</span>
+                                </button>
+                              )}
 
                             {/* View PDF */}
                             <button
@@ -1514,6 +1526,7 @@ function AgreementManagementContent() {
           onClose={() => setShowChooseTemplateModal(false)}
           onSuccess={() => {
             setShowChooseTemplateModal(false);
+            setActiveTab('active');
             setRefreshTrigger((p) => p + 1);
           }}
         />
