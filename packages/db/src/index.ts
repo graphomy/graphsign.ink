@@ -25,17 +25,10 @@ export function createPrismaClient(databaseUrl: string): PrismaClient {
   return new PrismaClient({ adapter } as any);
 }
 
-// Global cache for PrismaClient instances keyed by databaseUrl
-const clientPool = new Map<string, PrismaClient>();
-
+// In Cloudflare Workers, each request lifecycle must instantiate its own adapter/client
+// to avoid cross-request I/O collisions (Cannot perform I/O on behalf of a different request).
 export function getOrCreatePrismaClient(databaseUrl: string): PrismaClient {
-  const existing = clientPool.get(databaseUrl);
-  if (existing) {
-    return existing;
-  }
-  const client = createPrismaClient(databaseUrl);
-  clientPool.set(databaseUrl, client);
-  return client;
+  return createPrismaClient(databaseUrl);
 }
 
 // ── Legacy singleton for backward compatibility (local dev, tests) ──
