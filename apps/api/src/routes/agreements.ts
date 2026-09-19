@@ -328,11 +328,10 @@ export function createAgreementRoutes(deps?: AgreementDeps) {
       const formatQuery = c.req.query('format')?.toLowerCase();
       const isPdfRequested =
         formatQuery === 'pdf' ||
-        (!formatQuery && (
-          agreement.mimeType === 'application/pdf' ||
-          agreement.fileName?.toLowerCase().endsWith('.pdf') ||
-          !agreement.fileName
-        ));
+        (!formatQuery &&
+          (agreement.mimeType === 'application/pdf' ||
+            agreement.fileName?.toLowerCase().endsWith('.pdf') ||
+            !agreement.fileName));
 
       if (fileData) {
         const base64Content = fileData.includes(',') ? fileData.split(',')[1] : fileData;

@@ -280,9 +280,7 @@ export class PadesSealingService {
       sealAlgorithm = cert.algorithm;
 
       const keys = await this.keyCustodyService.generateKeyPair(cert.algorithm as any);
-      const tsaTokenBytes = tsa.tokenBase64
-        ? Buffer.from(tsa.tokenBase64, 'base64')
-        : null;
+      const tsaTokenBytes = tsa.tokenBase64 ? Buffer.from(tsa.tokenBase64, 'base64') : null;
 
       const signResult = await PdfSignerEngine.signPdf({
         pdfBytes: assembledPdfBytes,

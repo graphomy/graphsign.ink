@@ -1,9 +1,4 @@
-import {
-  PDFDocument,
-  PDFName,
-  PDFHexString,
-  PDFString,
-} from 'pdf-lib';
+import { PDFDocument, PDFName, PDFHexString, PDFString } from 'pdf-lib';
 import forge from 'node-forge';
 import crypto from 'crypto';
 
@@ -93,7 +88,11 @@ export class PdfSignerEngine {
     certificatePem: string,
     privateKeyPem: string,
     subjectName: string = 'graphsign.ink Document Signing',
-  ): { certificatePem: string; forgeCert: forge.pki.Certificate; forgeKey: forge.pki.rsa.PrivateKey } {
+  ): {
+    certificatePem: string;
+    forgeCert: forge.pki.Certificate;
+    forgeKey: forge.pki.rsa.PrivateKey;
+  } {
     let forgeKey: forge.pki.rsa.PrivateKey;
     if (privateKeyPem && privateKeyPem.trim()) {
       try {
@@ -314,7 +313,9 @@ export class PdfSignerEngine {
     (rawBuffer as any).write(paddedHex, hexStart, 'latin1');
 
     const finalBytes = new Uint8Array(rawBuffer);
-    const finalDocumentHash = (crypto.createHash('sha256').update(rawBuffer).digest() as any).toString('hex');
+    const finalDocumentHash = (
+      crypto.createHash('sha256').update(rawBuffer).digest() as any
+    ).toString('hex');
 
     return {
       signedPdfBytes: finalBytes,
