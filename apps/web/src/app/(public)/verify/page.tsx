@@ -23,7 +23,16 @@ import {
 
 interface VerificationReport {
   isValid: boolean;
-  status: 'VALID' | 'TAMPERED' | 'NOT_FOUND' | 'REVOKED' | 'EXPIRED' | 'UNSIGNED' | 'INVALID';
+  status:
+    | 'VALID'
+    | 'TAMPERED'
+    | 'NOT_FOUND'
+    | 'REVOKED'
+    | 'EXPIRED'
+    | 'UNSIGNED'
+    | 'INVALID'
+    | 'UNSUPPORTED';
+  message?: string;
   verificationToken: string;
   verificationUrl?: string;
   qrCodeDataUrl?: string;
@@ -1071,10 +1080,12 @@ export default function PublicVerifyPage() {
                         ? 'bg-amber-600'
                         : report.status === 'UNSIGNED'
                           ? 'bg-slate-500'
-                          : 'bg-red-600'
+                          : report.status === 'UNSUPPORTED'
+                            ? 'bg-amber-500'
+                            : 'bg-red-600'
                   }`}
                 >
-                  {report.isValid ? '✓' : report.status === 'UNSIGNED' ? '—' : '!'}
+                  {report.isValid ? '✓' : report.status === 'UNSIGNED' ? '—' : report.status === 'UNSUPPORTED' ? 'ℹ' : '!'}
                 </div>
                 <div>
                   <h3 className="font-bold text-base text-slate-900">
@@ -1086,18 +1097,23 @@ export default function PublicVerifyPage() {
                           ? 'Certificate Revoked'
                           : report.status === 'UNSIGNED'
                             ? 'Unsigned Document'
-                            : 'Tamper Detected / Invalid Seal'}
+                            : report.status === 'UNSUPPORTED'
+                              ? 'Verification Unsupported'
+                              : 'Tamper Detected / Invalid Seal'}
                   </h3>
                   <p className="text-xs text-slate-600">
-                    {report.isValid
-                      ? 'Document integrity verified via digital signature & RFC 3161 timestamp.'
-                      : report.status === 'EXPIRED'
-                        ? 'The digital signature or certificate is outside its valid lifecycle dates.'
-                        : report.status === 'REVOKED'
-                          ? 'The signing certificate has been revoked via CRL/OCSP.'
-                          : report.status === 'UNSIGNED'
-                            ? 'No cryptographic seal or digital signature found in this document.'
-                            : 'Document has been altered since sealing, or certificate is invalid.'}
+                    {report.message ||
+                      (report.isValid
+                        ? 'Document integrity verified via digital signature & RFC 3161 timestamp.'
+                        : report.status === 'EXPIRED'
+                          ? 'The digital signature or certificate is outside its valid lifecycle dates.'
+                          : report.status === 'REVOKED'
+                            ? 'The signing certificate has been revoked via CRL/OCSP.'
+                            : report.status === 'UNSIGNED'
+                              ? 'No cryptographic seal or digital signature found in this document.'
+                              : report.status === 'UNSUPPORTED'
+                                ? 'Independent signature verification is unavailable.'
+                                : 'Document has been altered since sealing, or certificate is invalid.')}
                   </p>
                 </div>
               </div>
