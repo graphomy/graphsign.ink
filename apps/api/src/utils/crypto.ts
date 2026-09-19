@@ -1,5 +1,6 @@
 import { v7 as uuidv7 } from 'uuid';
-import { scrypt as scryptAsync } from 'scrypt-js';
+import scryptJs from 'scrypt-js';
+const scryptAsync = (scryptJs as any).scrypt || scryptJs;
 
 /**
  * Scrypt parameters — OWASP-recommended for password hashing.

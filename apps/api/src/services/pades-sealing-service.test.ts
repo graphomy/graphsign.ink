@@ -177,7 +177,8 @@ describe('PadesSealingService Unit Tests', () => {
     expect(result.verificationToken).toMatch(/^GS-[0-9a-f]{8}$/);
     expect(result.padesLevel).toBe('B_T');
     expect(result.sealedPdfBase64).toBeDefined();
-    const decoded = Buffer.from(result.sealedPdfBase64, 'base64').toString('utf-8');
-    expect(decoded).toContain('%PAdES-B-T-SEAL');
+    const decoded = Buffer.from(result.sealedPdfBase64, 'base64').toString('latin1');
+    expect(decoded).toContain('/ByteRange');
+    expect(decoded).toContain('/Type /Sig');
   });
 });

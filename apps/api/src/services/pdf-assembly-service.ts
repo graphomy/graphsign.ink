@@ -349,6 +349,7 @@ export class PdfAssemblyService {
               width: boxW,
               height: boxH,
             });
+            this.drawTrustSealBadge(page, boxX, boxY, boxW, boxH, helveticaBold);
             continue;
           } catch (err) {
             console.warn('[PDF_ASSEMBLY] Failed to embed signature image:', (err as Error).message);
@@ -370,6 +371,7 @@ export class PdfAssemblyService {
           font: helveticaBold,
           color: rgb(0.08, 0.12, 0.28),
         });
+        this.drawTrustSealBadge(page, boxX, boxY, boxW, boxH, helveticaBold);
       } else if (field.type === 'CHECKBOX') {
         const isChecked = value === true || value === 'true';
         page.drawText(isChecked ? '[X]' : '[ ]', {
@@ -389,6 +391,82 @@ export class PdfAssemblyService {
         });
       }
     }
+  }
+
+  /**
+   * Draws a sleek blue cryptographic trust seal badge near the signature.
+   */
+  private drawTrustSealBadge(
+    page: any,
+    boxX: number,
+    boxY: number,
+    boxW: number,
+    boxH: number,
+    fontBold: any,
+  ) {
+    const sealRadius = 7.5;
+    const sealCenterX = boxX + boxW - sealRadius - 2;
+    const sealCenterY = boxY + boxH - sealRadius - 2;
+
+    // Outer royal blue ring
+    page.drawCircle({
+      x: sealCenterX,
+      y: sealCenterY,
+      size: sealRadius,
+      color: rgb(0.12, 0.44, 0.95),
+      borderColor: rgb(0.25, 0.55, 1.0),
+      borderWidth: 1,
+    });
+
+    // Inner deep royal blue circle
+    page.drawCircle({
+      x: sealCenterX,
+      y: sealCenterY,
+      size: sealRadius - 2,
+      color: rgb(0.08, 0.35, 0.85),
+      borderColor: rgb(0.9, 0.95, 1.0),
+      borderWidth: 0.6,
+    });
+
+    // Clean checkmark glyph inside the seal
+    page.drawText('v', {
+      x: sealCenterX - 2.5,
+      y: sealCenterY - 2.5,
+      size: 6.5,
+      font: fontBold,
+      color: rgb(1, 1, 1),
+    });
+
+    // Small trust ribbon badge underneath/alongside
+    const badgeW = 68;
+    const badgeH = 11;
+    const badgeX = boxX + boxW - badgeW - 1;
+    const badgeY = Math.max(2, boxY - badgeH - 2);
+
+    page.drawRectangle({
+      x: badgeX,
+      y: badgeY,
+      width: badgeW,
+      height: badgeH,
+      color: rgb(0.93, 0.96, 1.0),
+      borderColor: rgb(0.72, 0.84, 0.98),
+      borderWidth: 0.6,
+    });
+
+    page.drawCircle({
+      x: badgeX + 5,
+      y: badgeY + badgeH / 2,
+      size: 2,
+      color: rgb(0.15, 0.45, 0.95),
+    });
+
+    page.drawText('VERIFIED SEAL', {
+      x: badgeX + 10,
+      y: badgeY + 2.8,
+      size: 5.5,
+      font: fontBold,
+      color: rgb(0.1, 0.35, 0.85),
+    });
   }
 
   /**

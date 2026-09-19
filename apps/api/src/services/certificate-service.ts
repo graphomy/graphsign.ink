@@ -4,6 +4,7 @@ import { generateId, sha256 } from '../utils/crypto.js';
 import { KeyCustodyService, KeyAlgorithm } from './key-custody-service.js';
 import { AuditService } from './audit-service.js';
 import { NotFoundError } from '../utils/errors.js';
+import forge from 'node-forge';
 
 export interface GenerateSelfSignedInput {
   name: string;
@@ -132,6 +133,7 @@ export class CertificateService {
         serialNumber,
         validFrom,
         validTo,
+        keyPair.privateKeyPem,
       );
     }
 
@@ -353,13 +355,70 @@ export class CertificateService {
   }
 
   private createSelfSignedCertificatePem(
-    _subjectDn: string,
+    subjectDn: string,
     _issuerDn: string,
     publicKeyPem: string,
-    _serialNumber: string,
-    _validFrom: Date,
-    _validTo: Date,
+    serialNumber: string,
+    validFrom: Date,
+    validTo: Date,
+    privateKeyPem?: string,
   ): string {
+    if (privateKeyPem) {
+      try {
+        const forgeKey = forge.pki.privateKeyFromPem(privateKeyPem);
+        const cert = forge.pki.createCertificate();
+        cert.publicKey = forge.pki.setRsaPublicKey(forgeKey.n, forgeKey.e);
+        cert.serialNumber = serialNumber.replace(/^0x/, '');
+        cert.validity.notBefore = validFrom;
+        cert.validity.notAfter = validTo;
+
+        const dnAttrs = subjectDn.split(', ').map((part) => {
+          const [name, ...valParts] = part.split('=');
+          const val = valParts.join('=');
+          const shortName =
+            name === 'CN'
+              ? 'commonName'
+              : name === 'O'
+                ? 'organizationName'
+                : name === 'OU'
+                  ? 'organizationalUnitName'
+                  : name === 'C'
+                    ? 'countryName'
+                    : name === 'L'
+                      ? 'localityName'
+                      : name === 'ST'
+                        ? 'stateOrProvinceName'
+                        : name;
+          return { name: shortName, value: val };
+        });
+
+        cert.setSubject(dnAttrs);
+        cert.setIssuer(dnAttrs);
+        cert.setExtensions([
+          { name: 'basicConstraints', cA: true },
+          {
+            name: 'keyUsage',
+            keyCertSign: true,
+            digitalSignature: true,
+            nonRepudiation: true,
+          },
+          {
+            name: 'extKeyUsage',
+            emailProtection: true,
+            timeStamping: true,
+          },
+        ]);
+
+        cert.sign(forgeKey, forge.md.sha256.create());
+        return forge.pki.certificateToPem(cert);
+      } catch (err) {
+        console.warn(
+          '[CERT_SERVICE] Failed to build forge certificate, falling back:',
+          (err as Error).message,
+        );
+      }
+    }
+
     const cleanPub = publicKeyPem
       .replace(/-----BEGIN [^-]+-----/g, '')
       .replace(/-----END [^-]+-----/g, '')

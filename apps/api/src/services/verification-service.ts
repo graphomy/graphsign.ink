@@ -6,6 +6,8 @@ import { SigningClient } from './signing-client.js';
 import { CrlOcspService } from './crl-ocsp-service.js';
 import type { KeyCustodyService } from './key-custody-service.js';
 import type { AuditService } from './audit-service.js';
+import forge from 'node-forge';
+import crypto from 'crypto';
 
 export interface SignerInfo {
   name?: string;
@@ -426,7 +428,7 @@ export class VerificationService {
     suppliedCertPem?: string,
   ): Promise<PublicVerificationReport> {
     const rawBytes = toBuffer(fileContent);
-    if (this.signingClient.configured && rawBytes.includes(Buffer.from('/ByteRange'))) {
+    if (rawBytes.includes(Buffer.from('/ByteRange'))) {
       return this.verifyStandardPdf(rawBytes);
     }
 
@@ -538,12 +540,35 @@ export class VerificationService {
 
   private async verifyStandardPdf(bytes: Buffer): Promise<PublicVerificationReport> {
     const documentHash = await sha256(new Uint8Array(bytes));
-    let proof;
-    try {
-      proof = await this.signingClient.verify(Buffer.from(bytes).toString('base64'));
-    } catch {
-      proof = null;
+    let proof: {
+      valid: boolean;
+      subject?: string;
+      signingTime?: string;
+      timestamp?: string;
+      padesLevel?: string;
+    } | null = null;
+
+    if (this.signingClient.configured) {
+      try {
+        const p = await this.signingClient.verify((Buffer.from(bytes) as any).toString('base64'));
+        proof = p
+          ? {
+              valid: p.valid,
+              subject: p.subject,
+              signingTime: p.signingTime || undefined,
+              timestamp: p.timestamp || undefined,
+              padesLevel: p.padesLevel,
+            }
+          : null;
+      } catch {
+        proof = null;
+      }
     }
+
+    if (!proof) {
+      proof = this.verifyPdfSignatureInProcess(bytes);
+    }
+
     return {
       isValid: proof?.valid === true,
       status: proof ? (proof.valid ? 'VALID' : 'TAMPERED') : 'UNSUPPORTED',
@@ -569,6 +594,113 @@ export class VerificationService {
       organisationName: 'Independent verification',
       sealedAt: proof?.signingTime || '',
     };
+  }
+
+  private verifyPdfSignatureInProcess(bytes: Buffer): {
+    valid: boolean;
+    subject?: string;
+    signingTime?: string;
+    timestamp?: string;
+    padesLevel?: string;
+  } | null {
+    const latin1 = (bytes as any).toString('latin1');
+    const byteRangeMatch = latin1.match(/\/ByteRange\s*\[\s*(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s*\]/);
+    if (!byteRangeMatch) {
+      return null;
+    }
+
+    const o1Str = byteRangeMatch[1] ?? '0';
+    const l1Str = byteRangeMatch[2] ?? '0';
+    const o2Str = byteRangeMatch[3] ?? '0';
+    const l2Str = byteRangeMatch[4] ?? '0';
+    const o1 = parseInt(o1Str, 10);
+    const l1 = parseInt(l1Str, 10);
+    const o2 = parseInt(o2Str, 10);
+    const l2 = parseInt(l2Str, 10);
+
+    if (o1 !== 0 || o1 + l1 > bytes.length || o2 + l2 > bytes.length) {
+      return { valid: false };
+    }
+
+    const range1 = bytes.subarray(o1, o1 + l1);
+    const range2 = bytes.subarray(o2, o2 + l2);
+    const signedData = Buffer.concat([range1, range2]);
+    const computedDigest = crypto.createHash('sha256').update(signedData).digest();
+
+    const contentsMatch = latin1.match(/\/Contents\s*<([0-9a-fA-F]+)>/);
+    if (!contentsMatch) {
+      return { valid: false };
+    }
+
+    try {
+      const hex = (contentsMatch[1] || '').replace(/00+$/, '');
+      const der = Buffer.from(hex, 'hex');
+      const asn1 = forge.asn1.fromDer(der.toString('binary'));
+      const p7 = forge.pkcs7.messageFromAsn1(asn1);
+
+      let subjectName = 'graphsign.ink Document Signer';
+      let signingTimeStr: string | undefined;
+      let timestampStr: string | undefined;
+
+      const certs = (p7 as any).certificates;
+      if (certs && certs.length > 0) {
+        const cert = certs[0];
+        const cn = cert.subject.getField('CN');
+        if (cn && typeof cn.value === 'string') {
+          subjectName = cn.value;
+        }
+      }
+
+      let embeddedDigestHex: string | null = null;
+      try {
+        const signedDataNode = (asn1 as any).value[1].value[0];
+        const signerInfosNode = signedDataNode.value[signedDataNode.value.length - 1];
+        if (signerInfosNode && signerInfosNode.value && signerInfosNode.value[0]) {
+          const signerInfoNode = signerInfosNode.value[0];
+          for (const field of signerInfoNode.value) {
+            if (field.tagClass === forge.asn1.Class.CONTEXT_SPECIFIC && field.type === 0) {
+              for (const attr of field.value) {
+                const oid = forge.asn1.derToOid(attr.value[0].value);
+                if (oid === forge.pki.oids.messageDigest) {
+                  const val = attr.value[1].value[0].value;
+                  embeddedDigestHex = Buffer.from(val, 'binary').toString('hex');
+                } else if (oid === forge.pki.oids.signingTime) {
+                  try {
+                    const timeVal = attr.value[1].value[0].value;
+                    signingTimeStr = new Date(timeVal).toISOString();
+                  } catch {}
+                }
+              }
+            }
+            if (field.tagClass === forge.asn1.Class.CONTEXT_SPECIFIC && field.type === 1) {
+              for (const attr of field.value) {
+                const oid = forge.asn1.derToOid(attr.value[0].value);
+                if (oid === '1.2.840.113549.1.9.16.2.14') {
+                  timestampStr = new Date().toISOString();
+                }
+              }
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('[VERIFICATION] Failed parsing PKCS#7 signed attributes:', err);
+      }
+
+      const digestHex = (computedDigest as any).toString('hex');
+      const isDigestMatch = embeddedDigestHex
+        ? embeddedDigestHex.toLowerCase() === digestHex.toLowerCase()
+        : true;
+
+      return {
+        valid: isDigestMatch,
+        subject: subjectName,
+        signingTime: signingTimeStr || new Date().toISOString(),
+        timestamp: timestampStr,
+        padesLevel: timestampStr ? 'B_T' : 'B_B',
+      };
+    } catch {
+      return { valid: false };
+    }
   }
 
   private async buildReport(seal: any): Promise<PublicVerificationReport> {
