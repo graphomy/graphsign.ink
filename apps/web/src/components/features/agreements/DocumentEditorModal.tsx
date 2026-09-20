@@ -98,7 +98,12 @@ const DEFAULT_RECIPIENT_COLORS = [
 
 function getToken(): string {
   if (typeof window === 'undefined') return '';
-  return localStorage.getItem('graphsign_session_token') || localStorage.getItem('token') || '';
+  return (
+    localStorage.getItem('graphsign_session_token') ||
+    localStorage.getItem('token') ||
+    localStorage.getItem('access_token') ||
+    ''
+  );
 }
 
 export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentEditorModalProps) {
@@ -226,7 +231,7 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
 
   // Fetch binary file with authorization headers when inline base64 is not present
   useEffect(() => {
-    if (inlinePdfUrl || isMarkdown) {
+    if (inlinePdfUrl) {
       return;
     }
 
@@ -239,11 +244,14 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
 
       try {
         const token = getToken();
-        const res = await fetch(`${getApiUrl()}/api/v1/agreements/${agreement.id}/file`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
+        const res = await fetch(
+          `${getApiUrl()}/api/v1/agreements/${agreement.id}/file?format=pdf`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
           },
-        });
+        );
 
         if (!res.ok) {
           const errData = await res.json().catch(() => null);
@@ -273,7 +281,7 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
         URL.revokeObjectURL(createdUrl);
       }
     };
-  }, [agreement.id, inlinePdfUrl, isMarkdown]);
+  }, [agreement.id, inlinePdfUrl]);
 
   const effectivePdfUrl = inlinePdfUrl || fetchedBlobUrl;
   useEffect(() => {
@@ -685,6 +693,9 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
       });
 
       if (!res.ok) {
+        if (res.status === 401) {
+          throw new Error('Your session has expired. Please refresh the page or sign in again.');
+        }
         const errData = await res.json().catch(() => null);
         throw new Error(errData?.error?.message || errData?.message || 'Failed to save fields.');
       }
@@ -698,7 +709,12 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
       }
       return true;
     } catch (err: unknown) {
-      setErrorMessage((err as Error).message);
+      const msg = (err as Error).message || 'Failed to save fields.';
+      if (msg.includes('Failed to fetch') || msg.includes('NetworkError')) {
+        setErrorMessage('Unable to reach server. Please check your connection or sign in again.');
+      } else {
+        setErrorMessage(msg);
+      }
       return false;
     } finally {
       setIsSaving(false);
@@ -1089,19 +1105,19 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
             className="bg-white shadow-2xl rounded-sm relative transition-transform duration-100 flex flex-col mb-auto select-none overflow-hidden"
           >
             {/* Document Content Layer */}
-            {isMarkdown ? (
+            {effectivePdfUrl ? (
+              pdfDocument ? (
+                <PdfPageCanvas document={pdfDocument} pageNumber={currentPage} width={850} />
+              ) : (
+                <p role="status">Loading document pages...</p>
+              )
+            ) : isMarkdown ? (
               <div
                 className="p-12 prose prose-sm max-w-none text-neutral-900 pointer-events-none"
                 dangerouslySetInnerHTML={{
                   __html: renderMarkdownToHtml(agreement.markdownContent || ''),
                 }}
               />
-            ) : effectivePdfUrl ? (
-              pdfDocument ? (
-                <PdfPageCanvas document={pdfDocument} pageNumber={currentPage} width={850} />
-              ) : (
-                <p role="status">Loading document pages...</p>
-              )
             ) : isLoadingPdf ? (
               <div className="p-16 text-center text-neutral-400 flex flex-col items-center justify-center min-h-[600px] space-y-3">
                 <div className="w-8 h-8 border-3 border-neutral-300 border-t-neutral-800 rounded-full animate-spin" />

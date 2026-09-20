@@ -51,7 +51,12 @@ interface PdfViewerModalProps {
 
 function getToken(): string {
   if (typeof window === 'undefined') return '';
-  return localStorage.getItem('graphsign_session_token') || localStorage.getItem('token') || '';
+  return (
+    localStorage.getItem('graphsign_session_token') ||
+    localStorage.getItem('token') ||
+    localStorage.getItem('access_token') ||
+    ''
+  );
 }
 
 export function PdfViewerModal({ agreement, onClose, onOpenEditor }: PdfViewerModalProps) {
@@ -154,7 +159,8 @@ export function PdfViewerModal({ agreement, onClose, onOpenEditor }: PdfViewerMo
     hasFileData ||
     agreement.mimeType === 'application/pdf' ||
     agreement.fileName?.toLowerCase().endsWith('.pdf') ||
-    (!agreement.markdownContent && !!agreement.fileUrl);
+    (!agreement.markdownContent && !!agreement.fileUrl) ||
+    !!agreement.markdownContent;
 
   const isMarkdown =
     agreement.status !== 'COMPLETED' && !!agreement.markdownContent && !hasFileData;
@@ -221,7 +227,7 @@ export function PdfViewerModal({ agreement, onClose, onOpenEditor }: PdfViewerMo
 
   // Fetch binary file with authorization headers when inline base64 is not present
   useEffect(() => {
-    if (inlineBlobUrl || isMarkdown) {
+    if (inlineBlobUrl) {
       return;
     }
 
@@ -234,11 +240,14 @@ export function PdfViewerModal({ agreement, onClose, onOpenEditor }: PdfViewerMo
 
       try {
         const token = getToken();
-        const res = await fetch(`${getApiUrl()}/api/v1/agreements/${agreement.id}/file`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
+        const res = await fetch(
+          `${getApiUrl()}/api/v1/agreements/${agreement.id}/file?format=pdf`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
           },
-        });
+        );
 
         if (!res.ok) {
           const errData = await res.json().catch(() => null);
@@ -271,7 +280,7 @@ export function PdfViewerModal({ agreement, onClose, onOpenEditor }: PdfViewerMo
         URL.revokeObjectURL(createdUrl);
       }
     };
-  }, [agreement.id, inlineBlobUrl, isMarkdown]);
+  }, [agreement.id, inlineBlobUrl]);
 
   // Clean up inline object URL on unmount
   useEffect(() => {
@@ -648,22 +657,7 @@ export function PdfViewerModal({ agreement, onClose, onOpenEditor }: PdfViewerMo
                   </div>
                 </div>
               </div>
-            ) : signatureInfo.status === 'UNSIGNED' ? (
-              <div className="w-full max-w-4xl mb-2.5 shrink-0 z-20 transition-all duration-200">
-                <div
-                  data-testid="indicator-unsigned"
-                  className="flex items-center justify-between gap-3 px-3.5 py-2 rounded-lg bg-ink-100 border border-ink-300 shadow-xs text-ink-700"
-                >
-                  <div className="flex items-center gap-2 min-w-0">
-                    <FileText className="w-4 h-4 text-ink-500 shrink-0" />
-                    <span className="text-xs font-semibold text-ink-800">Unsigned Document</span>
-                    <span className="text-[11px] text-ink-500 hidden sm:inline">
-                      — No cryptographic seal or digital signature found.
-                    </span>
-                  </div>
-                </div>
-              </div>
-            ) : !['UNVERIFIED', 'LEGACY', 'UNSUPPORTED', 'NOT_FOUND'].includes(
+            ) : !['UNVERIFIED', 'LEGACY', 'UNSUPPORTED', 'NOT_FOUND', 'UNSIGNED'].includes(
                 signatureInfo.status,
               ) ? (
               <div className="w-full max-w-4xl mb-2.5 shrink-0 z-20 transition-all duration-200">

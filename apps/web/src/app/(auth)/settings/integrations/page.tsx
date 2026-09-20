@@ -48,7 +48,7 @@ export default function IntegrationsPage() {
               }`}
             >
               <Webhook className="w-4 h-4" />
-              <span>Webhooks (FR-017)</span>
+              <span>Webhooks</span>
             </button>
 
             <button
@@ -126,6 +126,17 @@ interface ApiRequestLogDto {
   createdAt: string;
 }
 
+function getToken(): string {
+  if (typeof window === 'undefined') return '';
+  return (
+    localStorage.getItem('graphsign_session_token') ||
+    localStorage.getItem('token') ||
+    localStorage.getItem('access_token') ||
+    sessionStorage.getItem('access_token') ||
+    ''
+  );
+}
+
 /**
  * API Clients Tab (INK-148, FR-016.006)
  */
@@ -139,8 +150,7 @@ function ApiClientsTab() {
   useEffect(() => {
     async function loadClients() {
       try {
-        const token =
-          localStorage.getItem('access_token') || sessionStorage.getItem('access_token') || '';
+        const token = getToken();
         const res = await fetch(`${getApiUrl()}/api/v1/organisations/me/api-clients`, {
           headers: { Authorization: `Bearer ${token}` },
         });
@@ -160,6 +170,68 @@ function ApiClientsTab() {
 
     void loadClients();
   }, [refreshKey]);
+
+  // Modals state
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editingClient, setEditingClient] = useState<ApiClientBindingDto | null>(null);
+  const [createdSecret, setCreatedSecret] = useState<{
+    clientId: string;
+    clientSecret: string;
+    name: string;
+  } | null>(null);
+
+  const handleCreateNew = () => {
+    setEditingClient(null);
+    setModalOpen(true);
+  };
+
+  const handleEdit = (client: ApiClientBindingDto) => {
+    setEditingClient(client);
+    setModalOpen(true);
+  };
+
+  const handleRevoke = async (id: string, name: string) => {
+    if (!confirm(`Are you sure you want to revoke API client binding "${name}"?`)) return;
+
+    try {
+      const token = getToken();
+      const res = await fetch(`${getApiUrl()}/api/v1/organisations/me/api-clients/${id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error('Failed to revoke API client');
+      reloadClients();
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Error revoking API client');
+    }
+  };
+
+  const handleRotate = async (id: string, name: string) => {
+    if (
+      !confirm(
+        `Are you sure you want to rotate secrets for "${name}"? Existing active tokens will remain valid during grace period.`,
+      )
+    )
+      return;
+
+    try {
+      const token = getToken();
+      const res = await fetch(`${getApiUrl()}/api/v1/organisations/me/api-clients/${id}/rotate`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error('Failed to rotate API client secret');
+      const data = (await res.json()) as { clientSecret: string; clientId: string };
+      setCreatedSecret({
+        clientId: data.clientId,
+        clientSecret: data.clientSecret,
+        name,
+      });
+      reloadClients();
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Error rotating API client secret');
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -246,8 +318,7 @@ function ApiLogsTab() {
   useEffect(() => {
     async function loadLogs() {
       try {
-        const token =
-          localStorage.getItem('access_token') || sessionStorage.getItem('access_token') || '';
+        const token = getToken();
         const res = await fetch(`${getApiUrl()}/api/v1/organisations/me/api-logs?limit=30`, {
           headers: { Authorization: `Bearer ${token}` },
         });
