@@ -19,6 +19,17 @@ import { WebhookTestDialog } from './WebhookTestDialog';
 import { WebhookMetricsChart } from './WebhookMetricsChart';
 import { getApiUrl } from '@/lib/api';
 
+function getToken(): string {
+  if (typeof window === 'undefined') return '';
+  return (
+    localStorage.getItem('graphsign_session_token') ||
+    localStorage.getItem('token') ||
+    localStorage.getItem('access_token') ||
+    sessionStorage.getItem('access_token') ||
+    ''
+  );
+}
+
 export function WebhookSubscriptionList() {
   const [subscriptions, setSubscriptions] = useState<WebhookSubscription[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -47,8 +58,7 @@ export function WebhookSubscriptionList() {
   useEffect(() => {
     async function loadSubscriptions() {
       try {
-        const token =
-          localStorage.getItem('access_token') || sessionStorage.getItem('access_token') || '';
+        const token = getToken();
         const res = await fetch(`${getApiUrl()}/api/v1/webhooks`, {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -89,8 +99,7 @@ export function WebhookSubscriptionList() {
     if (!confirm(`Are you sure you want to delete webhook subscription "${name}"?`)) return;
 
     try {
-      const token =
-        localStorage.getItem('access_token') || sessionStorage.getItem('access_token') || '';
+      const token = getToken();
       const res = await fetch(`${getApiUrl()}/api/v1/webhooks/${id}`, {
         method: 'DELETE',
         headers: {
@@ -116,8 +125,7 @@ export function WebhookSubscriptionList() {
     }
 
     try {
-      const token =
-        localStorage.getItem('access_token') || sessionStorage.getItem('access_token') || '';
+      const token = getToken();
       const res = await fetch(`${getApiUrl()}/api/v1/webhooks/${sub.id}/rotate-secret`, {
         method: 'POST',
         headers: {

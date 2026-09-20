@@ -43,6 +43,13 @@ function buildErrorBody(
  * Never exposes internal implementation details (security.md).
  */
 export const errorHandler: ErrorHandler = (err: Error, c: Context) => {
+  const origin = c.req.header('Origin');
+  if (origin) {
+    c.header('Access-Control-Allow-Origin', origin);
+    c.header('Access-Control-Allow-Credentials', 'true');
+    c.header('Vary', 'Origin');
+  }
+
   if (err instanceof AppError) {
     const body = buildErrorBody(c, err.code, err.message, err.details);
     return c.json(body, err.statusCode as 400 | 401 | 403 | 404 | 409 | 422 | 429 | 500);

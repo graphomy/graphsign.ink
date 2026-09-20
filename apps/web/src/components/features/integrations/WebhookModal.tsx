@@ -150,7 +150,11 @@ export function WebhookModal({ subscription, onClose, onSuccess }: WebhookModalP
 
     try {
       const token =
-        localStorage.getItem('access_token') || sessionStorage.getItem('access_token') || '';
+        localStorage.getItem('graphsign_session_token') ||
+        localStorage.getItem('token') ||
+        localStorage.getItem('access_token') ||
+        sessionStorage.getItem('access_token') ||
+        '';
       const url = isEditing
         ? `${getApiUrl()}/api/v1/webhooks/${subscription!.id}`
         : `${getApiUrl()}/api/v1/webhooks`;

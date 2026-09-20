@@ -175,7 +175,7 @@ describe('Workflow Modals Unit Tests (INK-87 to INK-95, INK-268)', () => {
   });
 
   describe('Signature Validity Indicators (INK-138)', () => {
-    it('displays Unsigned indicator for draft unsigned agreement and toggles indicators', () => {
+    it('does not display Unsigned indicator for draft unsigned agreement (INK-296)', () => {
       const mockAg = {
         id: 'ag-unsigned',
         title: 'Unsigned Draft Document',
@@ -188,9 +188,7 @@ describe('Workflow Modals Unit Tests (INK-87 to INK-95, INK-268)', () => {
 
       render(<PdfViewerModal agreement={mockAg} onClose={vi.fn()} />);
 
-      const unsignedBadge = screen.getByTestId('indicator-unsigned');
-      expect(unsignedBadge).toBeDefined();
-      expect(unsignedBadge.textContent).toContain('Unsigned Document');
+      expect(screen.queryByTestId('indicator-unsigned')).toBeNull();
     });
 
     it('does not assume a valid signature from completed status or seal metadata and omits unverified banner', () => {

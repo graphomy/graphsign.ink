@@ -41,7 +41,13 @@ export function WebhookMetricsChart({
     async function loadMetrics() {
       try {
         const token =
-          localStorage.getItem('access_token') || sessionStorage.getItem('access_token') || '';
+          localStorage.getItem('graphsign_session_token') ||
+          localStorage.getItem('token') ||
+          localStorage.getItem('access_token') ||
+          sessionStorage.getItem('graphsign_session_token') ||
+          sessionStorage.getItem('token') ||
+          sessionStorage.getItem('access_token') ||
+          '';
         const res = await fetch(
           `${getApiUrl()}/api/v1/webhooks/${subscriptionId}/metrics?period=${period}`,
           {
@@ -71,7 +77,13 @@ export function WebhookMetricsChart({
   const handleExportCsv = async () => {
     try {
       const token =
-        localStorage.getItem('access_token') || sessionStorage.getItem('access_token') || '';
+        localStorage.getItem('graphsign_session_token') ||
+        localStorage.getItem('token') ||
+        localStorage.getItem('access_token') ||
+        sessionStorage.getItem('graphsign_session_token') ||
+        sessionStorage.getItem('token') ||
+        sessionStorage.getItem('access_token') ||
+        '';
       const res = await fetch(
         `${getApiUrl()}/api/v1/webhooks/${subscriptionId}/metrics?period=${period}&format=csv`,
         {

@@ -45,7 +45,11 @@ export function WebhookTestDialog({
 
     try {
       const token =
-        localStorage.getItem('access_token') || sessionStorage.getItem('access_token') || '';
+        localStorage.getItem('graphsign_session_token') ||
+        localStorage.getItem('token') ||
+        localStorage.getItem('access_token') ||
+        sessionStorage.getItem('access_token') ||
+        '';
       const res = await fetch(`${getApiUrl()}/api/v1/webhooks/${subscriptionId}/test`, {
         method: 'POST',
         headers: {
