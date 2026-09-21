@@ -1155,6 +1155,7 @@ export class WorkflowService {
     input: RecipientSignInput,
     ip?: string,
     userAgent?: string,
+    backgroundRunner?: (task: Promise<unknown>) => void,
   ) {
     const tokenHash = await hashToken(rawToken);
     const recipient = await this.prisma.agreementRecipient.findUnique({
@@ -1379,11 +1380,19 @@ export class WorkflowService {
         userAgent,
       });
 
-      await this.sendCompletionNotifications(
+      const notifyPromise = this.sendCompletionNotifications(
         agreement.id,
         agreement.organisationId,
         sealResult.verificationToken,
-      );
+      ).catch((err) => {
+        console.warn('[WORKFLOW] Completion notification error:', (err as Error).message);
+      });
+
+      if (backgroundRunner) {
+        backgroundRunner(notifyPromise);
+      } else {
+        await notifyPromise;
+      }
     } else if (agreement.signingOrder === 'SEQUENTIAL') {
       // Advance to next sequential tier if current tier is finished
       const currentTierSigners = activeSigners.filter(

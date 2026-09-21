@@ -152,6 +152,7 @@ export default function SignDocumentPage({
   const [isSubmittedPartial, setIsSubmittedPartial] = useState(false);
   const [completedVerificationToken, setCompletedVerificationToken] = useState<string | null>(null);
   const [completedDocumentHash, setCompletedDocumentHash] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   // Decline State
   const [showDeclineModal, setShowDeclineModal] = useState(false);
@@ -563,6 +564,7 @@ export default function SignDocumentPage({
 
   // Submit Final Signature
   async function handleSubmit() {
+    setSubmitError(null);
     if (!validateForm()) {
       handleNavigateNextField();
       return;
@@ -582,7 +584,11 @@ export default function SignDocumentPage({
         }
         setShowOtpModal(true);
       } catch (err: unknown) {
-        alert((err as Error).message);
+        setSubmitError(
+          (err as Error)?.message === 'Failed to fetch'
+            ? 'Unable to connect to verification server. Please check your internet connection and try again.'
+            : (err as Error)?.message || 'Failed to dispatch verification code.',
+        );
       } finally {
         setIsSubmitting(false);
       }
@@ -594,6 +600,7 @@ export default function SignDocumentPage({
 
   async function finalizeSubmission(otpCode?: string) {
     setIsSubmitting(true);
+    setSubmitError(null);
 
     try {
       const primarySigVal = Object.entries(fieldValues).find(([k]) => {
@@ -642,7 +649,33 @@ export default function SignDocumentPage({
       }
       setShowOtpModal(false);
     } catch (err: unknown) {
-      alert((err as Error).message);
+      // If network error occurred, verify if submission actually succeeded on server before showing error
+      try {
+        const verifyRes = await fetch(`${getApiUrl()}/api/v1/sign/${rawToken}`);
+        if (verifyRes.ok) {
+          const verifyData = await verifyRes.json();
+          if (verifyData.data?.recipient?.status === 'SIGNED') {
+            if (verifyData.data?.agreement?.status === 'COMPLETED') {
+              if (verifyData.data?.agreement?.verificationToken) {
+                setCompletedVerificationToken(verifyData.data.agreement.verificationToken);
+              }
+              setIsCompleted(true);
+            } else {
+              setIsSubmittedPartial(true);
+            }
+            setShowOtpModal(false);
+            return;
+          }
+        }
+      } catch {
+        // Fallback to error banner below
+      }
+
+      setSubmitError(
+        (err as Error)?.message === 'Failed to fetch'
+          ? 'Network request timed out or connection was interrupted. Please check your connection and try again.'
+          : (err as Error)?.message || 'Failed to submit signature.',
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -652,6 +685,7 @@ export default function SignDocumentPage({
   async function handleDecline() {
     if (!declineReason.trim()) return;
     setIsDeclining(true);
+    setSubmitError(null);
 
     try {
       const res = await fetch(`${getApiUrl()}/api/v1/sign/${rawToken}/decline`, {
@@ -668,7 +702,11 @@ export default function SignDocumentPage({
       setIsDeclined(true);
       setShowDeclineModal(false);
     } catch (err: unknown) {
-      alert((err as Error).message);
+      setSubmitError(
+        (err as Error)?.message === 'Failed to fetch'
+          ? 'Unable to connect to server. Please check your internet connection and try again.'
+          : (err as Error)?.message || 'Failed to decline document.',
+      );
     } finally {
       setIsDeclining(false);
     }
@@ -1143,6 +1181,35 @@ export default function SignDocumentPage({
         <div className="bg-brand-50 border-b border-brand-200 text-brand-700 text-xs font-medium py-2 px-4 text-center shrink-0 flex items-center justify-center gap-1.5">
           <AlertCircle className="w-4 h-4" />
           <span>Please complete all required fields highlighted in red to proceed.</span>
+        </div>
+      )}
+
+      {/* Submission Error Banner */}
+      {submitError && (
+        <div
+          data-testid="submit-error-banner"
+          className="bg-rose-50 border-b border-rose-200 text-rose-800 text-xs font-medium py-2.5 px-4 text-center shrink-0 flex items-center justify-center gap-2"
+        >
+          <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+          <span>{submitError}</span>
+          <button
+            type="button"
+            onClick={() => {
+              setSubmitError(null);
+              handleSubmit();
+            }}
+            className="underline font-semibold text-rose-900 hover:text-rose-950 ml-1"
+          >
+            Retry
+          </button>
+          <button
+            type="button"
+            onClick={() => setSubmitError(null)}
+            className="text-rose-500 hover:text-rose-700 ml-2 font-bold"
+            aria-label="Dismiss"
+          >
+            ✕
+          </button>
         </div>
       )}
 

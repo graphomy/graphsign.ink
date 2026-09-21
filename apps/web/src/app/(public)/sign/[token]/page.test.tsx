@@ -493,4 +493,232 @@ describe('SignDocumentPage Component Tests (FR-007 Workflow Engine)', () => {
       expect(screen.getByText("You're All Set!")).toBeDefined();
     });
   });
+
+  it('displays user-friendly error banner with retry option when submission encounters network failure', async () => {
+    localStorage.setItem('graphsign_session_token', 'test-valid-token');
+    global.fetch = vi.fn().mockImplementation((url) => {
+      const urlStr = String(url);
+      if (urlStr.includes('/api/v1/sign/token-123/view')) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ success: true }) });
+      }
+      if (urlStr.includes('/api/v1/sign/token-123/consent')) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ success: true }) });
+      }
+      if (urlStr.includes('/api/v1/sign/token-123/complete')) {
+        return Promise.reject(new Error('Failed to fetch'));
+      }
+      return Promise.resolve({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            success: true,
+            data: {
+              agreement: {
+                id: 'ag-1',
+                title: 'Vendor Master Agreement',
+                status: 'SENT',
+                signingOrder: 'PARALLEL',
+                currentStep: 1,
+                senderName: 'Acme Legal',
+                organisationName: 'Acme Corp',
+                fields: {
+                  fields: [
+                    {
+                      id: 'f-sig',
+                      type: 'SIGNATURE',
+                      label: 'Signature',
+                      isRequired: true,
+                      recipientId: 'recip-1',
+                    },
+                  ],
+                  recipients: [
+                    {
+                      id: 'recip-1',
+                      name: 'Jane Signer',
+                      email: 'jane@example.com',
+                      role: 'signer',
+                      routingOrder: 1,
+                      status: 'INVITED',
+                    },
+                  ],
+                },
+              },
+              recipient: {
+                id: 'recip-1',
+                name: 'Jane Signer',
+                email: 'jane@example.com',
+                role: 'signer',
+                status: 'INVITED',
+              },
+              allRecipients: [],
+              isTurn: true,
+            },
+          }),
+      });
+    });
+
+    render(
+      <Suspense fallback={<div>Loading test...</div>}>
+        <SignDocumentPage params={{ token: 'token-123' }} />
+      </Suspense>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('ersd-modal-overlay')).toBeDefined();
+    });
+    fireEvent.click(screen.getByTestId('ersd-checkbox'));
+    fireEvent.click(screen.getByTestId('ersd-accept-button'));
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('electronic-consent-modal')).toBeNull();
+    });
+
+    // Click signature field to adopt signature
+    const sigField = await screen.findByTestId('click-to-sign-f-sig');
+    fireEvent.click(sigField);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('signature-modal-overlay')).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByTestId('tab-type-signature'));
+    fireEvent.change(screen.getByTestId('typed-signature-input'), {
+      target: { value: 'Jane Signer' },
+    });
+    fireEvent.click(screen.getByTestId('adopt-signature-button'));
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('signature-modal-overlay')).toBeNull();
+    });
+
+    // Submit
+    const finishBtn = await screen.findByTestId('guide-finish-button');
+    fireEvent.click(finishBtn);
+
+    // Verify error banner is shown with retry option
+    await waitFor(() => {
+      expect(screen.getByTestId('submit-error-banner')).toBeDefined();
+      expect(
+        screen.getByText(/Network request timed out or connection was interrupted/i),
+      ).toBeDefined();
+      expect(screen.getByText('Retry')).toBeDefined();
+    });
+  });
+
+  it('recovers seamlessly if server completed signing despite network error (idempotent recovery)', async () => {
+    localStorage.setItem('graphsign_session_token', 'test-valid-token');
+    let completeAttempted = false;
+    global.fetch = vi.fn().mockImplementation((url) => {
+      const urlStr = String(url);
+      if (urlStr.includes('/api/v1/sign/token-123/view')) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ success: true }) });
+      }
+      if (urlStr.includes('/api/v1/sign/token-123/consent')) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ success: true }) });
+      }
+      if (urlStr.includes('/api/v1/sign/token-123/complete')) {
+        completeAttempted = true;
+        return Promise.reject(new Error('Failed to fetch'));
+      }
+      if (
+        urlStr.includes('/api/v1/sign/token-123') &&
+        !urlStr.includes('/view') &&
+        !urlStr.includes('/consent') &&
+        !urlStr.includes('/complete') &&
+        !urlStr.includes('/file')
+      ) {
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              success: true,
+              data: {
+                agreement: {
+                  id: 'ag-1',
+                  title: 'Vendor Master Agreement',
+                  status: completeAttempted ? 'COMPLETED' : 'SENT',
+                  signingOrder: 'PARALLEL',
+                  currentStep: 1,
+                  senderName: 'Acme Legal',
+                  organisationName: 'Acme Corp',
+                  verificationToken: 'GS-recovered123',
+                  fields: {
+                    fields: [
+                      {
+                        id: 'f-sig',
+                        type: 'SIGNATURE',
+                        label: 'Signature',
+                        isRequired: true,
+                        recipientId: 'recip-1',
+                      },
+                    ],
+                    recipients: [
+                      {
+                        id: 'recip-1',
+                        name: 'Jane Signer',
+                        email: 'jane@example.com',
+                        role: 'signer',
+                        routingOrder: 1,
+                        status: completeAttempted ? 'SIGNED' : 'INVITED',
+                      },
+                    ],
+                  },
+                },
+                recipient: {
+                  id: 'recip-1',
+                  name: 'Jane Signer',
+                  email: 'jane@example.com',
+                  role: 'signer',
+                  status: completeAttempted ? 'SIGNED' : 'INVITED',
+                },
+                allRecipients: [],
+                isTurn: true,
+              },
+            }),
+        });
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ success: true }) });
+    });
+
+    render(
+      <Suspense fallback={<div>Loading test...</div>}>
+        <SignDocumentPage params={{ token: 'token-123' }} />
+      </Suspense>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('ersd-modal-overlay')).toBeDefined();
+    });
+    fireEvent.click(screen.getByTestId('ersd-checkbox'));
+    fireEvent.click(screen.getByTestId('ersd-accept-button'));
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('electronic-consent-modal')).toBeNull();
+    });
+
+    const sigField = await screen.findByTestId('click-to-sign-f-sig');
+    fireEvent.click(sigField);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('signature-modal-overlay')).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByTestId('tab-type-signature'));
+    fireEvent.change(screen.getByTestId('typed-signature-input'), {
+      target: { value: 'Jane Signer' },
+    });
+    fireEvent.click(screen.getByTestId('adopt-signature-button'));
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('signature-modal-overlay')).toBeNull();
+    });
+
+    const finishBtn = await screen.findByTestId('guide-finish-button');
+    fireEvent.click(finishBtn);
+
+    // Since server already marked SIGNED on recovery check, user sees completed view
+    await waitFor(() => {
+      expect(screen.getByText("You're All Set!")).toBeDefined();
+    });
+  });
 });

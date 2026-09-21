@@ -165,11 +165,18 @@ export function createSignRoutes(deps?: SignDeps) {
     const userAgent = c.req.header('user-agent');
     const { service } = getServices(c);
 
+    const backgroundRunner = (task: Promise<unknown>) => {
+      if (c.executionCtx && typeof (c.executionCtx as any).waitUntil === 'function') {
+        (c.executionCtx as any).waitUntil(task);
+      }
+    };
+
     const result = await service.submitRecipientSignature(
       rawToken,
       parseResult.data,
       ip,
       userAgent,
+      backgroundRunner,
     );
 
     return c.json({ success: true, data: result });
