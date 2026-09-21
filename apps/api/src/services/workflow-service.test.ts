@@ -296,6 +296,37 @@ describe('WorkflowService Unit Tests (INK-86 to INK-116)', () => {
     expect(mockMailer.sendAgreementCompletedEmail).toHaveBeenCalled();
   });
 
+  it('returns idempotent success if recipient has already signed (INK-297)', async () => {
+    mockPrisma.agreementRecipient.findUnique.mockResolvedValueOnce({
+      id: 'recip-1',
+      agreementId: 'ag-1',
+      email: 's1@example.com',
+      name: 'Signer 1',
+      status: 'SIGNED',
+      agreement: {
+        id: 'ag-1',
+        title: 'Consulting Contract',
+        organisationId: 'org-1',
+        status: 'COMPLETED',
+        metadata: { verificationToken: 'GS-abcd1234' },
+      },
+    });
+
+    const res = await service.submitRecipientSignature(
+      'raw-token-1',
+      {
+        fieldsData: { 'field-1': 'Jane Doe' },
+        signatureData: { type: 'DRAWN', data: 'data:image/png;base64,sig', consentGiven: true },
+      },
+      '1.2.3.4',
+      'Mozilla/5.0',
+    );
+
+    expect(res.success).toBe(true);
+    expect(res.isCompleted).toBe(true);
+    expect(res.verificationToken).toBe('GS-abcd1234');
+  });
+
   it('declines signature and notifies author with reason (INK-111)', async () => {
     mockPrisma.agreementRecipient.findUnique.mockResolvedValueOnce({
       id: 'recip-1',

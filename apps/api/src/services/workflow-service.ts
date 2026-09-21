@@ -1181,7 +1181,22 @@ export class WorkflowService {
     }
 
     if (recipient.status === 'SIGNED') {
-      throw new ValidationError('You have already signed this document.');
+      const seal = this.prisma.documentSeal?.findFirst
+        ? await this.prisma.documentSeal.findFirst({
+            where: { agreementId: agreement.id },
+            orderBy: { createdAt: 'desc' },
+          })
+        : null;
+      const meta = (agreement.metadata as Record<string, unknown>) || {};
+      return {
+        success: true,
+        isCompleted: agreement.status === 'COMPLETED',
+        currentStep: agreement.currentStep,
+        verificationToken:
+          seal?.verificationToken || (meta.verificationToken as string) || undefined,
+        documentHash: seal?.documentHash || (meta.documentHash as string) || undefined,
+        message: 'You have already signed this document.',
+      };
     }
 
     // Verify OTP if signed as guest or if OTP was initiated
@@ -1317,56 +1332,23 @@ export class WorkflowService {
     let sealResult: any = null;
 
     if (allFinished) {
+      const meta = (agreement.metadata as Record<string, unknown>) || {};
+      const verificationToken =
+        (meta.verificationToken as string) || `GS-${generateToken(4).toLowerCase()}`;
+
       // Mark workflow COMPLETED (INK-94, INK-109)
       await this.prisma.agreement.update({
         where: { id: agreement.id },
         data: {
           status: 'COMPLETED',
           completedAt: new Date(),
+          metadata: {
+            ...meta,
+            verificationToken,
+          },
         },
       });
 
-      // Automatically apply Cryptographic PAdES Seal & RFC 3161 Timestamp (INK-18)
-      try {
-        sealResult = await this.sealingService.sealAgreement({
-          agreementId: agreement.id,
-          organisationId: agreement.organisationId,
-          userId: agreement.authorId,
-          ipAddress: ip,
-          userAgent,
-        });
-      } catch (sealErr) {
-        console.warn(
-          '[WORKFLOW] Automatic sealing failed on completion:',
-          (sealErr as Error).message,
-          (sealErr as Error).stack,
-        );
-      }
-
-      if (!sealResult) {
-        await this.prisma.agreement.update({
-          where: { id: agreement.id },
-          data: {
-            metadata: {
-              ...((agreement.metadata as Record<string, unknown>) || {}),
-              sealingStatus: 'FAILED',
-            },
-          },
-        });
-        await this.auditService.log({
-          organisationId: agreement.organisationId,
-          action: 'DOCUMENT_SEAL_FAILED',
-          resourceType: 'agreement',
-          resourceId: agreement.id,
-        });
-        return {
-          success: true,
-          isCompleted: true,
-          sealingStatus: 'FAILED',
-          message:
-            'Signatures saved. Final digital sealing is pending. Contact the agreement author to retry sealing.',
-        };
-      }
       await this.auditService.log({
         organisationId: agreement.organisationId,
         action: 'AGREEMENT_COMPLETED',
@@ -1380,18 +1362,50 @@ export class WorkflowService {
         userAgent,
       });
 
-      const notifyPromise = this.sendCompletionNotifications(
-        agreement.id,
-        agreement.organisationId,
-        sealResult.verificationToken,
-      ).catch((err) => {
-        console.warn('[WORKFLOW] Completion notification error:', (err as Error).message);
-      });
+      const backgroundSealingAndNotify = async () => {
+        try {
+          sealResult = await this.sealingService.sealAgreement({
+            agreementId: agreement.id,
+            organisationId: agreement.organisationId,
+            userId: agreement.authorId,
+            ipAddress: ip,
+            userAgent,
+          });
+        } catch (sealErr) {
+          console.warn(
+            '[WORKFLOW] Automatic sealing failed on completion:',
+            (sealErr as Error).message,
+            (sealErr as Error).stack,
+          );
+        }
+
+        const finalToken = sealResult?.verificationToken || verificationToken;
+        await this.sendCompletionNotifications(
+          agreement.id,
+          agreement.organisationId,
+          finalToken,
+        ).catch((err) => {
+          console.warn('[WORKFLOW] Completion notification error:', (err as Error).message);
+        });
+      };
 
       if (backgroundRunner) {
-        backgroundRunner(notifyPromise);
+        backgroundRunner(backgroundSealingAndNotify());
+        return {
+          success: true,
+          isCompleted: true,
+          currentStep: agreement.currentStep,
+          verificationToken,
+        };
       } else {
-        await notifyPromise;
+        await backgroundSealingAndNotify();
+        return {
+          success: true,
+          isCompleted: true,
+          currentStep: agreement.currentStep,
+          verificationToken: sealResult?.verificationToken || verificationToken,
+          documentHash: sealResult?.documentHash,
+        };
       }
     } else if (agreement.signingOrder === 'SEQUENTIAL') {
       // Advance to next sequential tier if current tier is finished

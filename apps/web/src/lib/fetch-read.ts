@@ -23,7 +23,7 @@ export async function fetchRead(url: string, init: Omit<RequestInit, 'method' | 
     const controller = new AbortController();
     const onAbort = () => controller.abort(init.signal?.reason);
     init.signal?.addEventListener('abort', onAbort, { once: true });
-    const timer = setTimeout(() => controller.abort(), 15_000);
+    const timer = setTimeout(() => controller.abort(), 8_000);
     try {
       const response = await fetch(url, { ...init, method: 'GET', signal: controller.signal });
       if (!RETRYABLE_STATUSES.has(response.status)) return response;
@@ -35,7 +35,7 @@ export async function fetchRead(url: string, init: Omit<RequestInit, 'method' | 
       clearTimeout(timer);
       init.signal?.removeEventListener('abort', onAbort);
     }
-    if (attempt < 2) await waitForRetry(1000 * (attempt + 1), init.signal);
+    if (attempt < 2) await waitForRetry(500 * (attempt + 1), init.signal);
   }
   throw new Error(UNAVAILABLE_MESSAGE);
 }
