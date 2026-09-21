@@ -633,7 +633,19 @@ export default function SignDocumentPage({
 
       const data = await res.json();
       if (!res.ok || !data.success) {
-        throw new Error(data.error?.message || data.message || 'Failed to submit signature.');
+        const errorText = String(data?.error?.message || data?.message || '');
+        if (errorText.toLowerCase().includes('already signed')) {
+          if (data?.data?.verificationToken) {
+            setCompletedVerificationToken(data.data.verificationToken);
+          }
+          if (data?.data?.documentHash) {
+            setCompletedDocumentHash(data.data.documentHash);
+          }
+          setIsCompleted(true);
+          setShowOtpModal(false);
+          return;
+        }
+        throw new Error(errorText || 'Failed to submit signature.');
       }
 
       if (data.data?.isCompleted) {
@@ -651,20 +663,31 @@ export default function SignDocumentPage({
     } catch (err: unknown) {
       // If network error occurred, verify if submission actually succeeded on server before showing error
       try {
-        const verifyRes = await fetch(`${getApiUrl()}/api/v1/sign/${rawToken}`);
-        if (verifyRes.ok) {
-          const verifyData = await verifyRes.json();
-          if (verifyData.data?.recipient?.status === 'SIGNED') {
-            if (verifyData.data?.agreement?.status === 'COMPLETED') {
+        for (let attempt = 0; attempt < 2; attempt++) {
+          const verifyRes = await fetch(`${getApiUrl()}/api/v1/sign/${rawToken}`);
+          if (verifyRes.ok) {
+            const verifyData = await verifyRes.json();
+            if (
+              verifyData.data?.recipient?.status === 'SIGNED' ||
+              verifyData.data?.agreement?.status === 'COMPLETED'
+            ) {
               if (verifyData.data?.agreement?.verificationToken) {
                 setCompletedVerificationToken(verifyData.data.agreement.verificationToken);
               }
-              setIsCompleted(true);
-            } else {
-              setIsSubmittedPartial(true);
+              if (verifyData.data?.agreement?.documentHash) {
+                setCompletedDocumentHash(verifyData.data.agreement.documentHash);
+              }
+              if (verifyData.data?.agreement?.status === 'COMPLETED') {
+                setIsCompleted(true);
+              } else {
+                setIsSubmittedPartial(true);
+              }
+              setShowOtpModal(false);
+              return;
             }
-            setShowOtpModal(false);
-            return;
+          }
+          if (attempt === 0) {
+            await new Promise((resolve) => setTimeout(resolve, 600));
           }
         }
       } catch {
