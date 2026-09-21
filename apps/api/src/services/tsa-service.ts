@@ -27,9 +27,9 @@ export interface TsaConfig {
  */
 export class TsaService {
   private readonly defaultEndpoints = [
+    { provider: 'FreeTSA', url: 'https://freetsa.org/tsr' },
     { provider: 'DigiCert', url: 'http://timestamp.digicert.com' },
     { provider: 'Sectigo', url: 'http://timestamp.sectigo.com' },
-    { provider: 'FreeTSA', url: 'https://freetsa.org/tsr' },
   ];
 
   constructor(
@@ -123,6 +123,10 @@ export class TsaService {
         return result;
       } catch (err) {
         errors.push(`${ep.provider} (${ep.url}): ${(err as Error).message}`);
+        // Fast-failover: if 2 endpoints already failed/timed out, avoid blocking request further
+        if (errors.length >= 2) {
+          break;
+        }
       }
     }
 
@@ -130,7 +134,7 @@ export class TsaService {
     // generate a self-contained RFC 3161 mock token for test parity.
     return this.createLocalFallbackToken(
       digestBytes,
-      endpoints[0]?.url || 'http://timestamp.digicert.com',
+      endpoints[0]?.url || 'https://freetsa.org/tsr',
     );
   }
 
@@ -146,7 +150,7 @@ export class TsaService {
     const reqDer = this.buildTimeStampReq(digestBytes, nonce);
 
     const controller = new AbortController();
-    const timeoutMs = this.config.timeoutMs || 4000;
+    const timeoutMs = this.config.timeoutMs || 1500;
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
