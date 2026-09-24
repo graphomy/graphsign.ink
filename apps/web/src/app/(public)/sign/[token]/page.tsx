@@ -1465,10 +1465,7 @@ export default function SignDocumentPage({
             {/* Field Overlay Layer */}
             <div className="absolute inset-0 pointer-events-auto">
               {evaluatedFields
-                .filter(
-                  (f) =>
-                    f.computedVisible && (f.pageNumber || 1) === currentPage,
-                )
+                .filter((f) => f.computedVisible && (f.pageNumber || 1) === currentPage)
                 .map((field) => {
                   const isAssignedToMe = isFieldAssignedToMe(field.recipientId);
                   const value = fieldValues[field.id];
