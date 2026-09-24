@@ -109,7 +109,9 @@ export class SearchService {
         where.status = 'IN_REVIEW';
         where.reviewerId = ctx.userId;
       } else if (query.status === 'ACTIVE_AND_DRAFT') {
-        where.status = { notIn: ['COMPLETED', 'SEALED', 'SIGNED', 'VOIDED'] };
+        where.status = {
+          notIn: ['COMPLETED', 'SEALED', 'SIGNED', 'VOIDED', 'SENT', 'PARTIALLY_SIGNED'],
+        };
       } else if (query.status === 'ACTIVE') {
         where.status = {
           notIn: [

@@ -555,7 +555,7 @@ export class PdfAssemblyService {
         page.drawText(cleanText, {
           x: boxX + 4,
           y: boxY + Math.max(4, boxH / 2 - 5),
-          size: Math.min(13, boxH * 0.55),
+          size: 12,
           font: helveticaBold,
           color: rgb(0.08, 0.12, 0.28),
         });

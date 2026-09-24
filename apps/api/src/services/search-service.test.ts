@@ -214,7 +214,9 @@ describe('SearchService Unit Tests (INK-117 to INK-122)', () => {
       expect(args.where).toMatchObject({
         organisationId: 'org-1',
         isArchived: false,
-        status: { notIn: ['COMPLETED', 'SEALED', 'SIGNED', 'VOIDED'] },
+        status: {
+          notIn: ['COMPLETED', 'SEALED', 'SIGNED', 'VOIDED', 'SENT', 'PARTIALLY_SIGNED'],
+        },
       });
       expect(args.skip).toBe(10);
       expect(args.take).toBe(10);

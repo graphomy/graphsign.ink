@@ -581,7 +581,10 @@ export class WorkflowService {
 
     const updatedAgreement =
       typeof this.prisma.$transaction === 'function'
-        ? await this.prisma.$transaction(executeDbOps)
+        ? await this.prisma.$transaction(executeDbOps, {
+            maxWait: 15000,
+            timeout: 60000,
+          })
         : await executeDbOps(this.prisma);
 
     await this.auditService.log({

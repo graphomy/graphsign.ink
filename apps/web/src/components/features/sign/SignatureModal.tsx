@@ -197,7 +197,11 @@ export function SignatureModal({
     }
   }
 
-  function generateTypedDataUrl(text: string, font: { name: string; family: string }) {
+  function generateTypedDataUrl(
+    text: string,
+    font: { name: string; family: string },
+    isInitials = false,
+  ) {
     if (typeof window === 'undefined') return '';
     try {
       const canvas = document.createElement('canvas');
@@ -205,15 +209,16 @@ export function SignatureModal({
       canvas.height = 200;
       const ctx = canvas.getContext('2d');
       if (ctx) {
-        ctx.font = `48px ${font.family}, cursive`;
+        ctx.font = isInitials ? 'bold 48px Arial, sans-serif' : `48px ${font.family}, cursive`;
         ctx.fillStyle = inkColor;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText(text || 'Signature', 300, 100);
+        ctx.fillText(text || (isInitials ? 'Initials' : 'Signature'), 300, 100);
         return canvas.toDataURL('image/png');
       }
     } catch {}
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="200"><text x="50%" y="50%" font-family="${font.name}" font-size="48" fill="${inkColor}" text-anchor="middle" dominant-baseline="central">${text || 'Signature'}</text></svg>`;
+    const fontName = isInitials ? 'Arial, sans-serif' : font.name;
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="200"><text x="50%" y="50%" font-family="${fontName}" font-size="48" font-weight="${isInitials ? 'bold' : 'normal'}" fill="${inkColor}" text-anchor="middle" dominant-baseline="central">${text || (isInitials ? 'Initials' : 'Signature')}</text></svg>`;
     return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
   }
 
@@ -263,19 +268,19 @@ export function SignatureModal({
         rawText = effectiveInitials;
       } else {
         finalDataUrl = drawnData;
-        initialsDataUrl = generateTypedDataUrl(effectiveInitials, selectedFont);
+        initialsDataUrl = generateTypedDataUrl(effectiveInitials, selectedFont, true);
         rawText = typedName.trim() || defaultSignerName || 'Signed';
       }
     } else if (activeTab === 'type') {
       const text = typedName.trim() || defaultSignerName || 'Signature';
       finalType = 'TYPED';
       fontFamily = selectedFont.name;
-      initialsDataUrl = generateTypedDataUrl(effectiveInitials, selectedFont);
+      initialsDataUrl = generateTypedDataUrl(effectiveInitials, selectedFont, true);
       if (fieldType === 'INITIALS') {
         finalDataUrl = initialsDataUrl;
         rawText = effectiveInitials;
       } else {
-        finalDataUrl = generateTypedDataUrl(text, selectedFont);
+        finalDataUrl = generateTypedDataUrl(text, selectedFont, false);
         rawText = text;
       }
     } else if (activeTab === 'upload') {
@@ -287,7 +292,7 @@ export function SignatureModal({
         rawText = effectiveInitials;
       } else {
         finalDataUrl = uploadedImage;
-        initialsDataUrl = generateTypedDataUrl(effectiveInitials, selectedFont);
+        initialsDataUrl = generateTypedDataUrl(effectiveInitials, selectedFont, true);
       }
     }
 
