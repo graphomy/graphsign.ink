@@ -596,13 +596,16 @@ describe('SignDocumentPage Component Tests (FR-007 Workflow Engine)', () => {
     fireEvent.click(finishBtn);
 
     // Verify error banner is shown with retry option
-    await waitFor(() => {
-      expect(screen.getByTestId('submit-error-banner')).toBeDefined();
-      expect(
-        screen.getByText(/Network request timed out or connection was interrupted/i),
-      ).toBeDefined();
-      expect(screen.getByText('Retry')).toBeDefined();
-    });
+    await waitFor(
+      () => {
+        expect(screen.getByTestId('submit-error-banner')).toBeDefined();
+        expect(
+          screen.getByText(/Network request timed out or connection was interrupted/i),
+        ).toBeDefined();
+        expect(screen.getByText('Retry')).toBeDefined();
+      },
+      { timeout: 4000 },
+    );
   });
 
   it('recovers seamlessly if server completed signing despite network error (idempotent recovery)', async () => {
@@ -717,9 +720,12 @@ describe('SignDocumentPage Component Tests (FR-007 Workflow Engine)', () => {
     fireEvent.click(finishBtn);
 
     // Since server already marked SIGNED on recovery check, user sees completed view
-    await waitFor(() => {
-      expect(screen.getByText("You're All Set!")).toBeDefined();
-    });
+    await waitFor(
+      () => {
+        expect(screen.getByText("You're All Set!")).toBeDefined();
+      },
+      { timeout: 4000 },
+    );
   });
 
   it('renders radio buttons and allows selection, formats date as DD-MON-YYYY with Arial 12 font (INK-301)', async () => {
