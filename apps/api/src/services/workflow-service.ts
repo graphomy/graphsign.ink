@@ -73,7 +73,7 @@ export class WorkflowService {
     if (!agreement) throw new NotFoundError('Agreement not found.');
     const webUrl = (this.mailerService as { webUrl?: string }).webUrl || 'https://graphsign.ink';
     const verificationUrl = webUrl + '/verify/' + encodeURIComponent(verificationToken);
-    const downloadUrl = verificationUrl;
+    const downloadUrl = `${webUrl}/api/v1/sign/${encodeURIComponent(verificationToken)}/download`;
     try {
       await this.eventService?.publish({
         organisationId,
@@ -581,7 +581,10 @@ export class WorkflowService {
 
     const updatedAgreement =
       typeof this.prisma.$transaction === 'function'
-        ? await this.prisma.$transaction(executeDbOps)
+        ? await this.prisma.$transaction(executeDbOps, {
+            maxWait: 15000,
+            timeout: 60000,
+          })
         : await executeDbOps(this.prisma);
 
     await this.auditService.log({
@@ -1027,20 +1030,20 @@ export class WorkflowService {
         cleanId,
       );
 
+      const tokenVariations: string[] = Array.from(
+        new Set([
+          cleanId,
+          cleanId.toUpperCase(),
+          cleanId.toLowerCase(),
+          cleanId.startsWith('GS-') ? cleanId.substring(3) : `GS-${cleanId}`,
+          cleanId.startsWith('gs-') ? cleanId.substring(3) : `GS-${cleanId.toUpperCase()}`,
+          `GS-${cleanId.toLowerCase()}`,
+          ...(isUuid ? [cleanId] : []),
+        ]),
+      );
+
       // 2. Try verification token in documentSeal
       if (this.prisma.documentSeal?.findFirst) {
-        const tokenVariations = Array.from(
-          new Set([
-            cleanId,
-            cleanId.toUpperCase(),
-            cleanId.toLowerCase(),
-            cleanId.startsWith('GS-') ? cleanId.substring(3) : `GS-${cleanId}`,
-            cleanId.startsWith('gs-') ? cleanId.substring(3) : `GS-${cleanId.toUpperCase()}`,
-            `GS-${cleanId.toLowerCase()}`,
-            ...(isUuid ? [cleanId] : []),
-          ]),
-        );
-
         const seal = await this.prisma.documentSeal.findFirst({
           where: {
             OR: [
@@ -1064,15 +1067,17 @@ export class WorkflowService {
         }
       }
 
-      // 3. Try lookup directly on agreement by UUID or envelopeId
+      // 3. Try lookup directly on agreement by UUID, envelopeId, or verificationToken
       if (!agreement && this.prisma.agreement?.findFirst) {
         agreement = await this.prisma.agreement.findFirst({
           where: {
             deletedAt: null,
             OR: [
               ...(isUuid ? [{ id: cleanId }] : []),
-              { metadata: { path: ['envelopeId'], equals: cleanId } },
-              { metadata: { path: ['verificationToken'], equals: cleanId } },
+              ...tokenVariations.map((t) => ({ metadata: { path: ['envelopeId'], equals: t } })),
+              ...tokenVariations.map((t) => ({
+                metadata: { path: ['verificationToken'], equals: t },
+              })),
             ],
           },
           include: {
@@ -1080,6 +1085,37 @@ export class WorkflowService {
             organisation: { select: { name: true } },
           },
         });
+      }
+
+      // 4. Fallback search for recently completed agreements matching token or envelopeId in metadata
+      if (!agreement && this.prisma.agreement?.findMany) {
+        const recentCompleted = await this.prisma.agreement.findMany({
+          where: {
+            deletedAt: null,
+            status: 'COMPLETED',
+          },
+          include: {
+            recipients: true,
+            organisation: { select: { name: true } },
+          },
+          orderBy: { completedAt: 'desc' },
+          take: 50,
+        });
+
+        const targetLower = cleanId.toLowerCase();
+        agreement =
+          recentCompleted.find((ag) => {
+            const m = (ag.metadata as Record<string, unknown>) || {};
+            const vToken =
+              typeof m.verificationToken === 'string' ? m.verificationToken.toLowerCase() : '';
+            const eId = typeof m.envelopeId === 'string' ? m.envelopeId.toLowerCase() : '';
+            return (
+              vToken === targetLower ||
+              vToken.replace('gs-', '') === targetLower.replace('gs-', '') ||
+              eId === targetLower ||
+              ag.id === cleanId
+            );
+          }) || null;
       }
     }
 
@@ -1368,6 +1404,7 @@ export class WorkflowService {
             agreementId: agreement.id,
             organisationId: agreement.organisationId,
             userId: agreement.authorId,
+            verificationToken,
             ipAddress: ip,
             userAgent,
           });

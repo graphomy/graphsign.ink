@@ -158,6 +158,10 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [showSendModal, setShowSendModal] = useState(false);
 
+  // Sidebar Collapse States (INK-302)
+  const [leftSidebarCollapsed, setLeftSidebarCollapsed] = useState(false);
+  const [rightSidebarCollapsed, setRightSidebarCollapsed] = useState(false);
+
   // Mobile Drawer Tab
   const [mobileTab, setMobileTab] = useState<'palette' | 'properties' | 'recipients'>('palette');
 
@@ -412,7 +416,7 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
         case 'DATE':
           defaultW = 20;
           defaultH = 6;
-          label = 'Date';
+          label = 'Date Field';
           break;
         case 'COMPANY':
           defaultW = 25;
@@ -724,16 +728,16 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
   return (
     <div className="fixed inset-0 z-50 bg-neutral-900/90 backdrop-blur-md flex flex-col h-screen w-screen overflow-hidden text-neutral-900 select-none">
       {/* Top Navigation Bar */}
-      <header className="h-14 bg-white border-b border-neutral-200 px-4 flex items-center justify-between gap-3 shrink-0 shadow-sm">
+      <header className="h-16 bg-white border-b border-neutral-200 px-4 flex items-center justify-between gap-3 shrink-0 shadow-sm">
         {/* Left: Document Info & Back */}
         <div className="flex items-center gap-3 min-w-0">
           <button
             onClick={onClose}
-            className="p-1.5 text-neutral-500 hover:text-neutral-900 hover:bg-neutral-100 rounded-lg transition-colors text-xs font-semibold flex items-center gap-1"
+            className="h-10 px-3.5 text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100 rounded-lg transition-colors text-xs font-semibold flex items-center gap-1.5 border border-neutral-200"
           >
             <span>←</span> Back
           </button>
-          <div className="h-4 w-px bg-neutral-200" />
+          <div className="h-5 w-px bg-neutral-200" />
           <div className="truncate">
             <h1 className="text-sm font-bold text-neutral-900 truncate flex items-center gap-2">
               <span>{agreement.title}</span>
@@ -747,51 +751,86 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
           </div>
         </div>
 
-        {/* Center: Mode Switcher (Editor vs Preview) - INK-85 */}
-        <div className="flex items-center bg-neutral-100 p-0.5 rounded-lg border border-neutral-200">
-          <button
-            onClick={() => setActiveMode('editor')}
-            className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all flex items-center gap-1.5 ${
-              activeMode === 'editor'
-                ? 'bg-white text-neutral-900 shadow-sm'
-                : 'text-neutral-500 hover:text-neutral-900'
-            }`}
-          >
-            <span>✏️</span> Edit Fields
-          </button>
-          <button
-            onClick={() => setActiveMode('preview')}
-            className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all flex items-center gap-1.5 ${
-              activeMode === 'preview'
-                ? 'bg-[#ba0000] text-white shadow-sm'
-                : 'text-neutral-500 hover:text-neutral-900'
-            }`}
-          >
-            <span>👁️</span> Preview as Signer
-          </button>
+        {/* Center: Mode Switcher & Sidebar Toggles - INK-85 / INK-302 */}
+        <div className="flex items-center gap-2">
+          {activeMode === 'editor' && (
+            <div className="hidden lg:flex items-center gap-1 bg-neutral-100 p-0.5 rounded-lg border border-neutral-200">
+              <button
+                type="button"
+                onClick={() => setLeftSidebarCollapsed((v) => !v)}
+                className={`h-9 px-2.5 rounded-md text-xs font-medium transition-all flex items-center gap-1.5 ${
+                  leftSidebarCollapsed
+                    ? 'bg-neutral-200 text-neutral-700'
+                    : 'bg-white text-neutral-900 shadow-2xs font-bold'
+                }`}
+                title={leftSidebarCollapsed ? 'Expand Field Palette' : 'Collapse Field Palette'}
+              >
+                <span>{leftSidebarCollapsed ? '▶' : '◀'}</span>
+                <span>Fields</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setRightSidebarCollapsed((v) => !v)}
+                className={`h-9 px-2.5 rounded-md text-xs font-medium transition-all flex items-center gap-1.5 ${
+                  rightSidebarCollapsed
+                    ? 'bg-neutral-200 text-neutral-700'
+                    : 'bg-white text-neutral-900 shadow-2xs font-bold'
+                }`}
+                title={
+                  rightSidebarCollapsed ? 'Expand Properties Panel' : 'Collapse Properties Panel'
+                }
+              >
+                <span>Properties</span>
+                <span>{rightSidebarCollapsed ? '◀' : '▶'}</span>
+              </button>
+            </div>
+          )}
+
+          <div className="flex items-center bg-neutral-100 p-0.5 rounded-lg border border-neutral-200">
+            <button
+              onClick={() => setActiveMode('editor')}
+              className={`h-9 px-3.5 rounded-md text-xs font-bold transition-all flex items-center gap-1.5 ${
+                activeMode === 'editor'
+                  ? 'bg-white text-neutral-900 shadow-sm'
+                  : 'text-neutral-500 hover:text-neutral-900'
+              }`}
+            >
+              <span>✏️</span> Edit Fields
+            </button>
+            <button
+              onClick={() => setActiveMode('preview')}
+              className={`h-9 px-3.5 rounded-md text-xs font-bold transition-all flex items-center gap-1.5 ${
+                activeMode === 'preview'
+                  ? 'bg-[#ba0000] text-white shadow-sm'
+                  : 'text-neutral-500 hover:text-neutral-900'
+              }`}
+            >
+              <span>👁️</span> Preview as Signer
+            </button>
+          </div>
         </div>
 
         {/* Right: Zoom & Save Action Buttons */}
         <div className="flex items-center gap-2">
           {/* Page Navigation Controls */}
-          <div className="flex items-center gap-1 bg-neutral-50 border border-neutral-200 px-1.5 py-1 rounded-lg text-xs">
+          <div className="flex items-center gap-1 bg-neutral-50 border border-neutral-200 px-2 h-10 rounded-lg text-xs">
             <button
               type="button"
               onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
               disabled={currentPage <= 1}
-              className="text-neutral-600 hover:text-neutral-900 px-1 font-bold disabled:opacity-40"
+              className="text-neutral-600 hover:text-neutral-900 w-7 h-7 flex items-center justify-center font-bold disabled:opacity-40 rounded hover:bg-neutral-200 transition-colors"
               title="Previous page"
             >
               ←
             </button>
-            <span className="font-mono text-[11px] font-semibold text-neutral-700 min-w-[56px] text-center">
+            <span className="font-mono text-xs font-semibold text-neutral-700 min-w-[64px] text-center">
               Page {currentPage}/{totalPages}
             </span>
             <button
               type="button"
               onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
               disabled={currentPage >= totalPages}
-              className="text-neutral-600 hover:text-neutral-900 px-1 font-bold disabled:opacity-40"
+              className="text-neutral-600 hover:text-neutral-900 w-7 h-7 flex items-center justify-center font-bold disabled:opacity-40 rounded hover:bg-neutral-200 transition-colors"
               title="Next page"
             >
               →
@@ -799,22 +838,22 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
           </div>
 
           {/* Zoom controls */}
-          <div className="hidden sm:flex items-center gap-1 bg-neutral-50 border border-neutral-200 px-2 py-1 rounded-lg text-xs">
+          <div className="hidden sm:flex items-center gap-1 bg-neutral-50 border border-neutral-200 px-2 h-10 rounded-lg text-xs">
             <button
               type="button"
               onClick={() => setZoomLevel((z) => Math.max(50, z - 15))}
-              className="text-neutral-600 hover:text-neutral-900 px-1 font-bold"
+              className="text-neutral-600 hover:text-neutral-900 w-7 h-7 flex items-center justify-center font-bold rounded hover:bg-neutral-200 transition-colors"
               title="Zoom out"
             >
               −
             </button>
-            <span className="font-mono text-[11px] font-semibold text-neutral-700 min-w-[36px] text-center">
+            <span className="font-mono text-xs font-semibold text-neutral-700 min-w-[40px] text-center">
               {zoomLevel}%
             </span>
             <button
               type="button"
               onClick={() => setZoomLevel((z) => Math.min(175, z + 15))}
-              className="text-neutral-600 hover:text-neutral-900 px-1 font-bold"
+              className="text-neutral-600 hover:text-neutral-900 w-7 h-7 flex items-center justify-center font-bold rounded hover:bg-neutral-200 transition-colors"
               title="Zoom in"
             >
               +
@@ -822,7 +861,7 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
             <button
               type="button"
               onClick={() => setZoomLevel(100)}
-              className="text-[10px] text-neutral-500 hover:text-neutral-900 pl-1 border-l border-neutral-300 font-medium"
+              className="text-xs text-neutral-500 hover:text-neutral-900 px-2 h-7 flex items-center border-l border-neutral-300 font-medium rounded hover:bg-neutral-200 transition-colors"
             >
               Fit
             </button>
@@ -831,7 +870,7 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
           <button
             onClick={() => handleSaveFields(false)}
             disabled={isSaving}
-            className="px-3.5 py-1.5 bg-white border border-neutral-300 hover:bg-neutral-50 text-neutral-800 text-xs font-semibold rounded-lg shadow-sm transition-all disabled:opacity-50 flex items-center gap-1.5"
+            className="h-10 px-4 bg-white border border-neutral-300 hover:bg-neutral-50 text-neutral-800 text-xs font-semibold rounded-lg shadow-sm transition-all disabled:opacity-50 flex items-center gap-1.5"
           >
             {isSaving ? <span className="animate-spin text-neutral-700">⏳</span> : <span>💾</span>}
             Save Draft
@@ -846,7 +885,7 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
               }
             }}
             disabled={isSaving}
-            className="px-4 py-1.5 bg-[#ba0000] hover:bg-red-700 text-white text-xs font-bold rounded-lg shadow-sm transition-all disabled:opacity-50 flex items-center gap-1.5 whitespace-nowrap shrink-0"
+            className="h-10 px-5 bg-[#ba0000] hover:bg-red-700 text-white text-xs font-bold rounded-lg shadow-sm transition-all disabled:opacity-50 flex items-center gap-2 whitespace-nowrap shrink-0"
           >
             <span aria-hidden="true">✓</span> Send for Signature
           </button>
@@ -879,28 +918,38 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
         {/* ========================================================================= */}
         {/* LEFT SIDEBAR: FIELD PALETTE & RECIPIENTS (Editor Mode Only) */}
         {/* ========================================================================= */}
-        {activeMode === 'editor' && (
-          <aside className="w-64 bg-white border-r border-neutral-200 flex flex-col shrink-0 overflow-y-auto hidden md:flex">
+        {activeMode === 'editor' && !leftSidebarCollapsed && (
+          <aside className="w-64 bg-white border-r border-neutral-200 flex flex-col shrink-0 overflow-y-auto hidden md:flex relative">
             {/* Recipient Manager Section (INK-79 / INK-270) */}
             <div className="p-3.5 border-b border-neutral-200 bg-neutral-50/70 space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-600">
                   Select Signer ({recipients.length}/10)
                 </span>
-                <button
-                  onClick={handleAddRecipient}
-                  disabled={recipients.length >= 10}
-                  className={`text-[11px] font-bold flex items-center gap-0.5 ${
-                    recipients.length >= 10
-                      ? 'text-neutral-400 cursor-not-allowed'
-                      : 'text-[#ba0000] hover:underline'
-                  }`}
-                  title={
-                    recipients.length >= 10 ? 'Maximum 10 signers allowed' : 'Add a new signer'
-                  }
-                >
-                  + Add Signer
-                </button>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={handleAddRecipient}
+                    disabled={recipients.length >= 10}
+                    className={`text-[11px] font-bold flex items-center gap-0.5 ${
+                      recipients.length >= 10
+                        ? 'text-neutral-400 cursor-not-allowed'
+                        : 'text-[#ba0000] hover:underline'
+                    }`}
+                    title={
+                      recipients.length >= 10 ? 'Maximum 10 signers allowed' : 'Add a new signer'
+                    }
+                  >
+                    + Add Signer
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setLeftSidebarCollapsed(true)}
+                    className="p-1 text-neutral-400 hover:text-neutral-700 hover:bg-neutral-200 rounded transition-colors text-xs font-bold"
+                    title="Collapse Left Sidebar"
+                  >
+                    ◀
+                  </button>
+                </div>
               </div>
 
               {/* Signer Dropdown */}
@@ -909,7 +958,7 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
                   aria-label="Active Signer Selector"
                   value={activeRecipientId}
                   onChange={(e) => setActiveRecipientId(e.target.value)}
-                  className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-2 text-xs font-semibold text-neutral-900 focus:outline-none focus:border-[#ba0000] shadow-2xs"
+                  className="w-full bg-white border border-neutral-300 rounded-lg px-3 h-10 text-xs font-semibold text-neutral-900 focus:outline-none focus:border-[#ba0000] shadow-2xs"
                 >
                   {recipients.map((recip) => (
                     <option key={recip.id} value={recip.id}>
@@ -935,7 +984,7 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
                           handleUpdateRecipient(activeRecipient.id, { name: e.target.value })
                         }
                         placeholder="e.g. Author, Approver"
-                        className="w-full bg-neutral-50 hover:bg-neutral-100 focus:bg-white border border-neutral-200 focus:border-neutral-400 rounded px-2 py-1 text-xs font-bold text-neutral-900 focus:outline-none"
+                        className="w-full bg-neutral-50 hover:bg-neutral-100 focus:bg-white border border-neutral-200 focus:border-neutral-400 rounded px-2.5 h-8 text-xs font-bold text-neutral-900 focus:outline-none"
                         title="Edit signer label (e.g. Author, Signer 1)"
                       />
                     </div>
@@ -967,14 +1016,14 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
                 <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 block mb-2">
                   Signature Fields
                 </span>
-                <div className="grid grid-cols-1 gap-1.5">
+                <div className="grid grid-cols-1 gap-2">
                   <div
                     draggable
                     onDragStart={(e) => handleDragStartFromToolbar(e, 'SIGNATURE')}
                     onClick={() => handlePaletteItemClick('SIGNATURE')}
-                    className="p-2.5 bg-blue-50/60 border border-blue-200 hover:border-blue-400 hover:bg-blue-50 text-blue-900 rounded-lg cursor-grab active:cursor-grabbing flex items-center gap-2.5 transition-all text-xs font-semibold shadow-2xs"
+                    className="min-h-[50px] p-3 bg-blue-50/60 border border-blue-200 hover:border-blue-400 hover:bg-blue-50 text-blue-900 rounded-lg cursor-grab active:cursor-grabbing flex items-center gap-3 transition-all text-xs font-semibold shadow-2xs"
                   >
-                    <span className="text-base select-none">✍️</span>
+                    <span className="text-lg select-none">✍️</span>
                     <div>
                       <span className="block font-bold">Signature</span>
                       <span className="text-[10px] text-blue-600 block">
@@ -987,9 +1036,9 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
                     draggable
                     onDragStart={(e) => handleDragStartFromToolbar(e, 'INITIALS')}
                     onClick={() => handlePaletteItemClick('INITIALS')}
-                    className="p-2.5 bg-blue-50/60 border border-blue-200 hover:border-blue-400 hover:bg-blue-50 text-blue-900 rounded-lg cursor-grab active:cursor-grabbing flex items-center gap-2.5 transition-all text-xs font-semibold shadow-2xs"
+                    className="min-h-[50px] p-3 bg-blue-50/60 border border-blue-200 hover:border-blue-400 hover:bg-blue-50 text-blue-900 rounded-lg cursor-grab active:cursor-grabbing flex items-center gap-3 transition-all text-xs font-semibold shadow-2xs"
                   >
-                    <span className="text-base select-none">✒️</span>
+                    <span className="text-lg select-none">✒️</span>
                     <div>
                       <span className="block font-bold">Initials</span>
                       <span className="text-[10px] text-blue-600 block">Initial placement box</span>
@@ -1003,14 +1052,14 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
                 <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 block mb-2">
                   Text & Information
                 </span>
-                <div className="grid grid-cols-1 gap-1.5">
+                <div className="grid grid-cols-1 gap-2">
                   <div
                     draggable
                     onDragStart={(e) => handleDragStartFromToolbar(e, 'TEXT')}
                     onClick={() => handlePaletteItemClick('TEXT')}
-                    className="p-2 bg-neutral-50 border border-neutral-200 hover:border-neutral-400 hover:bg-white text-neutral-800 rounded-lg cursor-grab active:cursor-grabbing flex items-center gap-2 transition-all text-xs font-medium"
+                    className="min-h-[44px] px-3.5 py-2.5 bg-neutral-50 border border-neutral-200 hover:border-neutral-400 hover:bg-white text-neutral-800 rounded-lg cursor-grab active:cursor-grabbing flex items-center gap-2.5 transition-all text-xs font-semibold shadow-2xs"
                   >
-                    <span>📝</span>
+                    <span className="text-base">📝</span>
                     <span>Text Field</span>
                   </div>
 
@@ -1018,29 +1067,19 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
                     draggable
                     onDragStart={(e) => handleDragStartFromToolbar(e, 'DATE')}
                     onClick={() => handlePaletteItemClick('DATE')}
-                    className="p-2 bg-neutral-50 border border-neutral-200 hover:border-neutral-400 hover:bg-white text-neutral-800 rounded-lg cursor-grab active:cursor-grabbing flex items-center gap-2 transition-all text-xs font-medium"
+                    className="min-h-[44px] px-3.5 py-2.5 bg-neutral-50 border border-neutral-200 hover:border-neutral-400 hover:bg-white text-neutral-800 rounded-lg cursor-grab active:cursor-grabbing flex items-center gap-2.5 transition-all text-xs font-semibold shadow-2xs"
                   >
-                    <span>📅</span>
-                    <span>Date Signed</span>
-                  </div>
-
-                  <div
-                    draggable
-                    onDragStart={(e) => handleDragStartFromToolbar(e, 'COMPANY')}
-                    onClick={() => handlePaletteItemClick('COMPANY')}
-                    className="p-2 bg-neutral-50 border border-neutral-200 hover:border-neutral-400 hover:bg-white text-neutral-800 rounded-lg cursor-grab active:cursor-grabbing flex items-center gap-2 transition-all text-xs font-medium"
-                  >
-                    <span>🏢</span>
-                    <span>Company Name</span>
+                    <span className="text-base">📅</span>
+                    <span>Date Field</span>
                   </div>
 
                   <div
                     draggable
                     onDragStart={(e) => handleDragStartFromToolbar(e, 'EMAIL')}
                     onClick={() => handlePaletteItemClick('EMAIL')}
-                    className="p-2 bg-neutral-50 border border-neutral-200 hover:border-neutral-400 hover:bg-white text-neutral-800 rounded-lg cursor-grab active:cursor-grabbing flex items-center gap-2 transition-all text-xs font-medium"
+                    className="min-h-[44px] px-3.5 py-2.5 bg-neutral-50 border border-neutral-200 hover:border-neutral-400 hover:bg-white text-neutral-800 rounded-lg cursor-grab active:cursor-grabbing flex items-center gap-2.5 transition-all text-xs font-semibold shadow-2xs"
                   >
-                    <span>✉️</span>
+                    <span className="text-base">✉️</span>
                     <span>Email Address</span>
                   </div>
                 </div>
@@ -1051,14 +1090,14 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
                 <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 block mb-2">
                   Choice Elements
                 </span>
-                <div className="grid grid-cols-1 gap-1.5">
+                <div className="grid grid-cols-1 gap-2">
                   <div
                     draggable
                     onDragStart={(e) => handleDragStartFromToolbar(e, 'CHECKBOX')}
                     onClick={() => handlePaletteItemClick('CHECKBOX')}
-                    className="p-2 bg-neutral-50 border border-neutral-200 hover:border-neutral-400 hover:bg-white text-neutral-800 rounded-lg cursor-grab active:cursor-grabbing flex items-center gap-2 transition-all text-xs font-medium"
+                    className="min-h-[44px] px-3.5 py-2.5 bg-neutral-50 border border-neutral-200 hover:border-neutral-400 hover:bg-white text-neutral-800 rounded-lg cursor-grab active:cursor-grabbing flex items-center gap-2.5 transition-all text-xs font-semibold shadow-2xs"
                   >
-                    <span>☑️</span>
+                    <span className="text-base">☑️</span>
                     <span>Checkbox</span>
                   </div>
 
@@ -1066,9 +1105,9 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
                     draggable
                     onDragStart={(e) => handleDragStartFromToolbar(e, 'RADIO')}
                     onClick={() => handlePaletteItemClick('RADIO')}
-                    className="p-2 bg-neutral-50 border border-neutral-200 hover:border-neutral-400 hover:bg-white text-neutral-800 rounded-lg cursor-grab active:cursor-grabbing flex items-center gap-2 transition-all text-xs font-medium"
+                    className="min-h-[44px] px-3.5 py-2.5 bg-neutral-50 border border-neutral-200 hover:border-neutral-400 hover:bg-white text-neutral-800 rounded-lg cursor-grab active:cursor-grabbing flex items-center gap-2.5 transition-all text-xs font-semibold shadow-2xs"
                   >
-                    <span>🔘</span>
+                    <span className="text-base">🔘</span>
                     <span>Radio Group</span>
                   </div>
 
@@ -1076,9 +1115,9 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
                     draggable
                     onDragStart={(e) => handleDragStartFromToolbar(e, 'DROPDOWN')}
                     onClick={() => handlePaletteItemClick('DROPDOWN')}
-                    className="p-2 bg-neutral-50 border border-neutral-200 hover:border-neutral-400 hover:bg-white text-neutral-800 rounded-lg cursor-grab active:cursor-grabbing flex items-center gap-2 transition-all text-xs font-medium"
+                    className="min-h-[44px] px-3.5 py-2.5 bg-neutral-50 border border-neutral-200 hover:border-neutral-400 hover:bg-white text-neutral-800 rounded-lg cursor-grab active:cursor-grabbing flex items-center gap-2.5 transition-all text-xs font-semibold shadow-2xs"
                   >
-                    <span>▼</span>
+                    <span className="text-base">▼</span>
                     <span>Dropdown Select</span>
                   </div>
                 </div>
@@ -1091,6 +1130,31 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
         {/* CENTER VIEWPORT: DOCUMENT CANVAS & FIELD OVERLAYS */}
         {/* ========================================================================= */}
         <main className="flex-1 overflow-auto bg-neutral-800 flex justify-center p-4 sm:p-8 relative">
+          {/* Floating Expand Buttons when sidebars are collapsed (INK-302) */}
+          {activeMode === 'editor' && leftSidebarCollapsed && (
+            <button
+              type="button"
+              onClick={() => setLeftSidebarCollapsed(false)}
+              className="absolute left-3 top-4 z-40 bg-white hover:bg-neutral-100 text-neutral-800 border border-neutral-300 rounded-lg h-9 px-3 shadow-md flex items-center gap-1.5 text-xs font-bold transition-all cursor-pointer"
+              title="Expand Field Palette"
+            >
+              <span>▶</span>
+              <span>Fields</span>
+            </button>
+          )}
+
+          {activeMode === 'editor' && rightSidebarCollapsed && (
+            <button
+              type="button"
+              onClick={() => setRightSidebarCollapsed(false)}
+              className="absolute right-3 top-4 z-40 bg-white hover:bg-neutral-100 text-neutral-800 border border-neutral-300 rounded-lg h-9 px-3 shadow-md flex items-center gap-1.5 text-xs font-bold transition-all cursor-pointer"
+              title="Expand Properties Panel"
+            >
+              <span>Properties</span>
+              <span>◀</span>
+            </button>
+          )}
+
           {/* Document Canvas Sheet */}
           <div
             ref={pageContainerRef}
@@ -1366,8 +1430,8 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
         {/* ========================================================================= */}
         {/* RIGHT SIDEBAR: FIELD PROPERTIES & VALIDATIONS (INK-80, 81, 82, 83) */}
         {/* ========================================================================= */}
-        {activeMode === 'editor' && (
-          <aside className="w-80 bg-white border-l border-neutral-200 flex flex-col shrink-0 overflow-y-auto p-4 space-y-4 shadow-xs">
+        {activeMode === 'editor' && !rightSidebarCollapsed && (
+          <aside className="w-80 bg-white border-l border-neutral-200 flex flex-col shrink-0 overflow-y-auto p-4 space-y-4 shadow-xs relative">
             {selectedField ? (
               <>
                 <div className="flex items-center justify-between border-b border-neutral-200 pb-2.5">
@@ -1379,13 +1443,23 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
                       {selectedField.type}
                     </span>
                   </div>
-                  <button
-                    onClick={() => setSelectedFieldId(null)}
-                    className="text-neutral-400 hover:text-neutral-700 text-sm font-bold"
-                    title="Deselect field"
-                  >
-                    ✕
-                  </button>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={() => setSelectedFieldId(null)}
+                      className="text-neutral-400 hover:text-neutral-700 text-sm font-bold p-1 rounded hover:bg-neutral-100"
+                      title="Deselect field"
+                    >
+                      ✕
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setRightSidebarCollapsed(true)}
+                      className="p-1 text-neutral-400 hover:text-neutral-700 hover:bg-neutral-200 rounded transition-colors text-xs font-bold"
+                      title="Collapse Right Sidebar"
+                    >
+                      ▶
+                    </button>
+                  </div>
                 </div>
 
                 {/* Recipient Assignment (INK-79) */}
@@ -1627,14 +1701,24 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
               </>
             ) : (
               <div className="space-y-4 py-1">
-                <div className="border-b border-neutral-200 pb-2.5">
-                  <h3 className="text-xs font-bold text-neutral-900 uppercase tracking-wider">
-                    Field Inspector
-                  </h3>
-                  <p className="text-[11px] text-neutral-500 mt-1">
-                    Click any field on the document to edit its settings, required rules, or
-                    assigned signer.
-                  </p>
+                <div className="border-b border-neutral-200 pb-2.5 flex items-center justify-between">
+                  <div>
+                    <h3 className="text-xs font-bold text-neutral-900 uppercase tracking-wider">
+                      Field Inspector
+                    </h3>
+                    <p className="text-[11px] text-neutral-500 mt-1">
+                      Click any field on the document to edit its settings, required rules, or
+                      assigned signer.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setRightSidebarCollapsed(true)}
+                    className="p-1 text-neutral-400 hover:text-neutral-700 hover:bg-neutral-200 rounded transition-colors text-xs font-bold shrink-0 self-start"
+                    title="Collapse Right Sidebar"
+                  >
+                    ▶
+                  </button>
                 </div>
 
                 <div className="bg-neutral-50 border border-neutral-200 rounded-xl p-3 space-y-2">

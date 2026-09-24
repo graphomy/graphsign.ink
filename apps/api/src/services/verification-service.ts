@@ -109,18 +109,19 @@ export class VerificationService {
       cleanToken,
     );
 
-    if (!seal && this.prisma.documentSeal?.findFirst) {
-      const tokenVariations = Array.from(
-        new Set([
-          cleanToken,
-          cleanToken.toUpperCase(),
-          cleanToken.toLowerCase(),
-          cleanToken.startsWith('GS-') ? cleanToken.substring(3) : `GS-${cleanToken}`,
-          cleanToken.startsWith('gs-') ? cleanToken.substring(3) : `GS-${cleanToken.toUpperCase()}`,
-          `GS-${cleanToken.toLowerCase()}`,
-        ]),
-      );
+    const tokenVariations = Array.from(
+      new Set([
+        cleanToken,
+        cleanToken.toUpperCase(),
+        cleanToken.toLowerCase(),
+        cleanToken.startsWith('GS-') ? cleanToken.substring(3) : `GS-${cleanToken}`,
+        cleanToken.startsWith('gs-') ? cleanToken.substring(3) : `GS-${cleanToken.toUpperCase()}`,
+        `GS-${cleanToken.toLowerCase()}`,
+        ...(isUuid ? [cleanToken] : []),
+      ]),
+    );
 
+    if (!seal && this.prisma.documentSeal?.findFirst) {
       seal = await this.prisma.documentSeal.findFirst({
         where: {
           OR: [
@@ -148,8 +149,10 @@ export class VerificationService {
           deletedAt: null,
           OR: [
             ...(isUuid ? [{ id: cleanToken }] : []),
-            { metadata: { path: ['envelopeId'], equals: cleanToken } },
-            { metadata: { path: ['verificationToken'], equals: cleanToken } },
+            ...tokenVariations.map((t) => ({ metadata: { path: ['envelopeId'], equals: t } })),
+            ...tokenVariations.map((t) => ({
+              metadata: { path: ['verificationToken'], equals: t },
+            })),
           ],
         },
         include: {
@@ -194,6 +197,41 @@ export class VerificationService {
                   cleanToken.toUpperCase(),
             ) || null;
         }
+      }
+
+      if (!agreement && !seal && this.prisma.agreement?.findMany) {
+        const candidateAgreements = await this.prisma.agreement.findMany({
+          where: {
+            deletedAt: null,
+            status: 'COMPLETED',
+          },
+          include: {
+            recipients: true,
+            organisation: { select: { name: true } },
+            documentSeals: {
+              include: { certificate: true },
+              orderBy: { createdAt: 'desc' },
+              take: 1,
+            },
+          },
+          orderBy: { completedAt: 'desc' },
+          take: 50,
+        });
+
+        const targetLower = cleanToken.toLowerCase();
+        agreement =
+          candidateAgreements.find((ag) => {
+            const m = (ag.metadata as Record<string, unknown>) || {};
+            const vToken =
+              typeof m.verificationToken === 'string' ? m.verificationToken.toLowerCase() : '';
+            const eId = typeof m.envelopeId === 'string' ? m.envelopeId.toLowerCase() : '';
+            return (
+              vToken === targetLower ||
+              vToken.replace('gs-', '') === targetLower.replace('gs-', '') ||
+              eId === targetLower ||
+              ag.id === cleanToken
+            );
+          }) || null;
       }
 
       if (agreement) {

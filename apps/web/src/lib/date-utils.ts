@@ -86,6 +86,10 @@ export function formatDate(
     let month = parts.find((p) => p.type === 'month')?.value || 'JAN';
     const year = parts.find((p) => p.type === 'year')?.value || '1970';
 
+    if (month.length > 3) {
+      month = month.substring(0, 3);
+    }
+
     if (options?.uppercaseMonth !== false) {
       month = month.toUpperCase();
     }

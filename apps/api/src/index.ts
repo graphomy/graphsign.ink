@@ -90,6 +90,7 @@ app.use('*', async (c, next) => {
     allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowHeaders: ['Content-Type', 'Authorization', 'x-user-id', 'x-organisation-id'],
     credentials: true,
+    maxAge: 86400,
   });
   return corsMiddleware(c, next);
 });

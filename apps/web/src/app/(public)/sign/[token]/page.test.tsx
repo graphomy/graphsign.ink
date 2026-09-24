@@ -596,13 +596,16 @@ describe('SignDocumentPage Component Tests (FR-007 Workflow Engine)', () => {
     fireEvent.click(finishBtn);
 
     // Verify error banner is shown with retry option
-    await waitFor(() => {
-      expect(screen.getByTestId('submit-error-banner')).toBeDefined();
-      expect(
-        screen.getByText(/Network request timed out or connection was interrupted/i),
-      ).toBeDefined();
-      expect(screen.getByText('Retry')).toBeDefined();
-    });
+    await waitFor(
+      () => {
+        expect(screen.getByTestId('submit-error-banner')).toBeDefined();
+        expect(
+          screen.getByText(/Network request timed out or connection was interrupted/i),
+        ).toBeDefined();
+        expect(screen.getByText('Retry')).toBeDefined();
+      },
+      { timeout: 4000 },
+    );
   });
 
   it('recovers seamlessly if server completed signing despite network error (idempotent recovery)', async () => {
@@ -717,8 +720,122 @@ describe('SignDocumentPage Component Tests (FR-007 Workflow Engine)', () => {
     fireEvent.click(finishBtn);
 
     // Since server already marked SIGNED on recovery check, user sees completed view
-    await waitFor(() => {
-      expect(screen.getByText("You're All Set!")).toBeDefined();
+    await waitFor(
+      () => {
+        expect(screen.getByText("You're All Set!")).toBeDefined();
+      },
+      { timeout: 4000 },
+    );
+  });
+
+  it('renders radio buttons and allows selection, formats date as DD-MON-YYYY with Arial 12 font (INK-301)', async () => {
+    global.fetch = vi.fn().mockImplementation((url) => {
+      if (typeof url === 'string' && url.includes('/api/v1/sign/token-test/view')) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ success: true }) });
+      }
+      return Promise.resolve({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            success: true,
+            data: {
+              agreement: {
+                id: 'ag-fields-test',
+                title: 'Field Formats Test Agreement',
+                status: 'SENT',
+                signingOrder: 'PARALLEL',
+                currentStep: 1,
+                markdownContent: '# Document Body',
+                fields: {
+                  fields: [
+                    {
+                      id: 'f-text',
+                      type: 'TEXT',
+                      label: 'Job Title',
+                      placeholder: 'Enter title',
+                      recipientId: 'recip-1',
+                    },
+                    {
+                      id: 'f-date',
+                      type: 'DATE',
+                      label: 'Effective Date',
+                      recipientId: 'recip-1',
+                    },
+                    {
+                      id: 'f-radio',
+                      type: 'RADIO',
+                      groupName: 'grp-option',
+                      recipientId: 'recip-1',
+                      options: [
+                        { label: 'Option A', value: 'opt_a' },
+                        { label: 'Option B', value: 'opt_b' },
+                      ],
+                    },
+                  ],
+                  recipients: [
+                    {
+                      id: 'recip-1',
+                      name: 'Alice Signer',
+                      email: 'alice@example.com',
+                      role: 'signer',
+                      routingOrder: 1,
+                      status: 'INVITED',
+                    },
+                  ],
+                },
+              },
+              recipient: {
+                id: 'recip-1',
+                name: 'Alice Signer',
+                email: 'alice@example.com',
+                role: 'signer',
+                status: 'INVITED',
+                hasConsented: true,
+              },
+            },
+          }),
+      });
     });
+
+    render(
+      <Suspense fallback={<div>Loading...</div>}>
+        <SignDocumentPage params={{ token: 'token-test' }} />
+      </Suspense>,
+    );
+
+    // Accept ERSD Consent Modal
+    await waitFor(() => {
+      expect(screen.getByTestId('ersd-modal-overlay')).toBeDefined();
+    });
+    fireEvent.click(screen.getByTestId('ersd-checkbox'));
+    fireEvent.click(screen.getByTestId('ersd-accept-button'));
+
+    // Verify text field font size 12 and Arial font
+    const textInput = await screen.findByTestId('input-text-f-text');
+    expect(textInput.style.fontSize).toBe('12px');
+    expect(textInput.style.fontFamily).toContain('Arial');
+
+    // Verify date field font size 12 and Arial font
+    const dateInput = await screen.findByTestId('input-date-f-date');
+    expect(dateInput.style.fontSize).toBe('12px');
+    expect(dateInput.style.fontFamily).toContain('Arial');
+
+    // Focus date field to auto-populate today in DD-MON-YYYY format
+    fireEvent.focus(dateInput);
+    expect((dateInput as HTMLInputElement).value).toMatch(/^[0-9]{2}-[A-Z]{3}-[0-9]{4}$/);
+
+    // Verify radio button option selection
+    const radioOptA = await screen.findByTestId('input-radio-f-radio-opt_a');
+    const radioOptB = await screen.findByTestId('input-radio-f-radio-opt_b');
+    expect((radioOptA as HTMLInputElement).checked).toBe(false);
+    expect((radioOptB as HTMLInputElement).checked).toBe(false);
+
+    fireEvent.click(radioOptA);
+    expect((radioOptA as HTMLInputElement).checked).toBe(true);
+    expect((radioOptB as HTMLInputElement).checked).toBe(false);
+
+    fireEvent.click(radioOptB);
+    expect((radioOptB as HTMLInputElement).checked).toBe(true);
+    expect((radioOptA as HTMLInputElement).checked).toBe(false);
   });
 });

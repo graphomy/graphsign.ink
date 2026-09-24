@@ -6,7 +6,7 @@ import React, { useState, useEffect, useMemo, useCallback, useRef, use } from 'r
 import Link from 'next/link';
 import { getApiUrl } from '@/lib/api';
 import { orDash, orLabel, formatHash } from '@/lib/format';
-import { formatDateTime } from '@/lib/date-utils';
+import { formatDate, formatDateTime } from '@/lib/date-utils';
 import { Button } from '@/components/ui/Button';
 import { Badge, StatusPill } from '@/components/ui/Badge';
 import { Card } from '@/components/ui/Card';
@@ -14,6 +14,9 @@ import { ElectronicConsentModal } from '@/components/features/sign/ElectronicCon
 import { SignatureModal, AdoptedSignature } from '@/components/features/sign/SignatureModal';
 import { OtpVerificationModal } from '@/components/features/sign/OtpVerificationModal';
 import { renderMarkdownToHtml } from '@/components/features/agreements/MarkdownEditor';
+import { loadPdfDocument } from '@/lib/pdf-document';
+import { PdfPageCanvas } from '@/components/features/agreements/PdfPageCanvas';
+import type { PDFDocumentProxy } from 'pdfjs-dist';
 import {
   FileText,
   ShieldCheck,
@@ -133,6 +136,7 @@ export default function SignDocumentPage({
   // Document Viewer & Zoom Controls
   const [zoomLevel, setZoomLevel] = useState<number>(100);
   const [effectivePdfUrl, setEffectivePdfUrl] = useState<string | null>(null);
+  const [pdfDocument, setPdfDocument] = useState<PDFDocumentProxy | null>(null);
   const [isLoadingPdf, setIsLoadingPdf] = useState(false);
   const [pdfFetchError, setPdfFetchError] = useState<string | null>(null);
   const pageContainerRef = useRef<HTMLDivElement | null>(null);
@@ -167,13 +171,42 @@ export default function SignDocumentPage({
 
   // Page Navigation State
   const [currentPage, setCurrentPage] = useState<number>(1);
+
+  // Load PDF.js Document Proxy whenever effectivePdfUrl changes (INK-302)
+  useEffect(() => {
+    if (!effectivePdfUrl) return;
+    let cancelled = false;
+    let document: PDFDocumentProxy | undefined;
+    void loadPdfDocument(effectivePdfUrl)
+      .then((loaded) => {
+        document = loaded;
+        if (cancelled) {
+          void loaded.destroy();
+          return;
+        }
+        setPdfDocument(loaded);
+        setCurrentPage(1);
+      })
+      .catch(() => {
+        if (!cancelled)
+          setPdfFetchError('Unable to read PDF pages. Please retry loading the document.');
+      });
+    return () => {
+      cancelled = true;
+      if (document) void document.destroy();
+    };
+  }, [effectivePdfUrl]);
+
   const totalPages = useMemo(() => {
+    if (pdfDocument?.numPages) return pdfDocument.numPages;
     if (!agreement?.fields?.fields || agreement.fields.fields.length === 0) return 1;
     const maxPage = Math.max(
-      ...agreement.fields.fields.map((f: { pageNumber?: number }) => f.pageNumber || 1),
+      ...agreement.fields.fields.map(
+        (f: { pageNumber?: number; page?: number }) => f.pageNumber || f.page || 1,
+      ),
     );
     return Math.max(1, maxPage);
-  }, [agreement]);
+  }, [agreement, pdfDocument]);
 
   // Fetch signing session on mount
   useEffect(() => {
@@ -459,7 +492,7 @@ export default function SignDocumentPage({
   // Save Adopted Signature from Modal
   function handleSaveAdoptedSignature(sig: AdoptedSignature) {
     setAdoptedSignature(sig);
-    const todayStr = new Date().toISOString().split('T')[0]!;
+    const todayStr = formatDate(new Date());
     setFieldValues((prev) => {
       const next = { ...prev };
       if (activeSignatureFieldId && activeSignatureFieldId !== 'signature-sidebar') {
@@ -504,7 +537,19 @@ export default function SignDocumentPage({
 
   // Input Change
   function handleInputChange(fieldId: string, val: string | boolean | number) {
-    setFieldValues((prev) => ({ ...prev, [fieldId]: val }));
+    const targetField = fields.find((f) => f.id === fieldId);
+    setFieldValues((prev) => {
+      const next = { ...prev };
+      if (targetField?.type === 'RADIO' && targetField.groupName) {
+        for (const f of fields) {
+          if (f.type === 'RADIO' && f.groupName === targetField.groupName && f.id !== fieldId) {
+            delete next[f.id];
+          }
+        }
+      }
+      next[fieldId] = val;
+      return next;
+    });
     if (formErrors[fieldId]) {
       setFormErrors((prev) => {
         const next = { ...prev };
@@ -1118,62 +1163,67 @@ export default function SignDocumentPage({
         {/* Right: Studio Controls */}
         <div className="flex items-center gap-2">
           {/* Page Navigation Controls */}
-          <div className="flex items-center gap-1 bg-ink-50 border border-ink-200 rounded-md p-0.5">
+          <div className="flex items-center gap-1 bg-ink-50 border border-ink-200 rounded-lg p-1 h-10">
             <button
               type="button"
               onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
               disabled={currentPage <= 1}
-              className="p-1 rounded text-ink-600 hover:text-ink-900 hover:bg-ink-100 disabled:opacity-40"
+              className="w-8 h-8 flex items-center justify-center rounded-md text-ink-600 hover:text-ink-900 hover:bg-ink-200 disabled:opacity-40 transition-colors"
               title="Previous Page"
             >
-              <ChevronLeft className="w-3.5 h-3.5" />
+              <ChevronLeft className="w-4 h-4" />
             </button>
-            <span className="px-2 text-xs font-medium text-ink-700 tabular-nums">
+            <span className="px-2 text-xs font-semibold text-ink-700 tabular-nums min-w-[70px] text-center">
               Page {currentPage} of {totalPages}
             </span>
             <button
               type="button"
               onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
               disabled={currentPage >= totalPages}
-              className="p-1 rounded text-ink-600 hover:text-ink-900 hover:bg-ink-100 disabled:opacity-40"
+              className="w-8 h-8 flex items-center justify-center rounded-md text-ink-600 hover:text-ink-900 hover:bg-ink-200 disabled:opacity-40 transition-colors"
               title="Next Page"
             >
-              <ChevronRight className="w-3.5 h-3.5" />
+              <ChevronRight className="w-4 h-4" />
             </button>
           </div>
 
           {/* Zoom controls */}
-          <div className="hidden sm:flex items-center border border-ink-200 rounded-md p-0.5 bg-ink-50 text-xs font-medium text-ink-700">
+          <div className="hidden sm:flex items-center border border-ink-200 rounded-lg p-1 h-10 bg-ink-50 text-xs font-medium text-ink-700 gap-0.5">
             <button
               type="button"
               onClick={() => setZoomLevel((z) => Math.max(50, z - 10))}
-              className="p-1 hover:bg-ink-200 rounded text-ink-700"
+              className="w-8 h-8 flex items-center justify-center hover:bg-ink-200 rounded text-ink-700 transition-colors"
               title="Zoom Out"
             >
-              <ZoomOut className="w-3.5 h-3.5" />
+              <ZoomOut className="w-4 h-4" />
             </button>
-            <span className="px-2 text-xs font-mono text-ink-700 select-none tabular-nums">
+            <span className="px-2 text-xs font-mono text-ink-700 select-none tabular-nums min-w-[42px] text-center">
               {zoomLevel}%
             </span>
             <button
               type="button"
               onClick={() => setZoomLevel((z) => Math.min(150, z + 10))}
-              className="p-1 hover:bg-ink-200 rounded text-ink-700"
+              className="w-8 h-8 flex items-center justify-center hover:bg-ink-200 rounded text-ink-700 transition-colors"
               title="Zoom In"
             >
-              <ZoomIn className="w-3.5 h-3.5" />
+              <ZoomIn className="w-4 h-4" />
             </button>
             <button
               type="button"
               onClick={() => setZoomLevel(100)}
-              className="px-1.5 py-0.5 text-[11px] text-ink-500 hover:text-ink-900 border-l border-ink-200"
+              className="px-2 h-7 flex items-center text-xs text-ink-600 hover:text-ink-900 border-l border-ink-200 rounded hover:bg-ink-200 transition-colors font-semibold"
             >
               Fit
             </button>
           </div>
 
           {/* Decline Button */}
-          <Button variant="ghost" size="sm" onClick={() => setShowDeclineModal(true)}>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-10 px-4 text-xs font-semibold"
+            onClick={() => setShowDeclineModal(true)}
+          >
             Decline
           </Button>
 
@@ -1181,6 +1231,7 @@ export default function SignDocumentPage({
           <Button
             variant="primary"
             size="md"
+            className="h-10 px-5 text-xs font-bold"
             onClick={handleSubmit}
             disabled={isSubmitting || !isTurn}
             isLoading={isSubmitting}
@@ -1325,10 +1376,16 @@ export default function SignDocumentPage({
                   <div
                     key={field.id}
                     onClick={() => {
-                      const el = document.getElementById(`field-overlay-${field.id}`);
-                      if (el && typeof el.scrollIntoView === 'function') {
-                        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                      const targetPage = field.pageNumber || 1;
+                      if (targetPage !== currentPage) {
+                        setCurrentPage(targetPage);
                       }
+                      setTimeout(() => {
+                        const el = document.getElementById(`field-overlay-${field.id}`);
+                        if (el && typeof el.scrollIntoView === 'function') {
+                          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        }
+                      }, 120);
                       setHighlightedFieldId(field.id);
                       setTimeout(() => setHighlightedFieldId(null), 2500);
                     }}
@@ -1341,6 +1398,9 @@ export default function SignDocumentPage({
                     <div className="flex items-center gap-2 truncate">
                       <span className="w-4 text-[11px] text-ink-400 font-mono">#{idx + 1}</span>
                       <span className="truncate">{field.label || field.type}</span>
+                      <span className="text-[10px] text-ink-400 font-mono shrink-0">
+                        (p.{field.pageNumber || 1})
+                      </span>
                       {field.computedRequired && <span className="text-brand-600">*</span>}
                     </div>
                     {isFilled ? (
@@ -1381,11 +1441,14 @@ export default function SignDocumentPage({
                 }}
               />
             ) : effectivePdfUrl ? (
-              <iframe
-                src={`${effectivePdfUrl}#page=${currentPage}&toolbar=0&navpanes=0&scrollbar=0`}
-                className="w-full h-full min-h-[1100px] border-none pointer-events-none flex-1 overflow-hidden"
-                title="Document PDF Preview"
-              />
+              pdfDocument ? (
+                <PdfPageCanvas document={pdfDocument} pageNumber={currentPage} width={800} />
+              ) : (
+                <div className="p-16 text-center text-ink-400 flex flex-col items-center justify-center min-h-[600px] space-y-3">
+                  <div className="w-8 h-8 border-2 border-ink-300 border-t-brand-600 rounded-full animate-spin" />
+                  <p className="text-xs font-semibold text-ink-600">Loading document…</p>
+                </div>
+              )
             ) : isLoadingPdf ? (
               <div className="p-16 text-center text-ink-400 flex flex-col items-center justify-center min-h-[600px] space-y-3">
                 <div className="w-8 h-8 border-2 border-ink-300 border-t-brand-600 rounded-full animate-spin" />
@@ -1402,7 +1465,7 @@ export default function SignDocumentPage({
             {/* Field Overlay Layer */}
             <div className="absolute inset-0 pointer-events-auto">
               {evaluatedFields
-                .filter((f) => f.computedVisible)
+                .filter((f) => f.computedVisible && (f.pageNumber || 1) === currentPage)
                 .map((field) => {
                   const isAssignedToMe = isFieldAssignedToMe(field.recipientId);
                   const value = fieldValues[field.id];
@@ -1473,7 +1536,18 @@ export default function SignDocumentPage({
                                     className="max-h-full max-w-full object-contain"
                                   />
                                 ) : (
-                                  <span className="font-serif italic text-sm text-ink-900 font-bold">
+                                  <span
+                                    style={{
+                                      fontSize: '12px',
+                                      fontFamily:
+                                        field.type === 'INITIALS' ? 'Arial, sans-serif' : undefined,
+                                    }}
+                                    className={`${
+                                      field.type === 'INITIALS'
+                                        ? 'text-ink-900 font-bold'
+                                        : 'font-serif italic text-sm text-ink-900 font-bold'
+                                    }`}
+                                  >
                                     {String(value)}
                                   </span>
                                 )}
@@ -1505,6 +1579,7 @@ export default function SignDocumentPage({
                             placeholder={field.placeholder || 'Enter text…'}
                             value={typeof value === 'string' ? value : ''}
                             onChange={(e) => handleInputChange(field.id, e.target.value)}
+                            style={{ fontSize: '12px', fontFamily: 'Arial, sans-serif' }}
                             className="w-full h-full text-xs font-medium px-1.5 bg-transparent border-0 focus:outline-none text-ink-900 text-center"
                             data-testid={`input-text-${field.id}`}
                           />
@@ -1512,13 +1587,77 @@ export default function SignDocumentPage({
 
                         {field.type === 'DATE' && (
                           <input
-                            type="date"
+                            type="text"
                             disabled={!isAssignedToMe}
-                            value={typeof value === 'string' ? value : ''}
+                            placeholder="DD-MON-YYYY"
+                            value={
+                              typeof value === 'string'
+                                ? value.match(/^\d{4}-\d{2}-\d{2}$/)
+                                  ? formatDate(value)
+                                  : value
+                                : ''
+                            }
+                            onFocus={() => {
+                              if (!value && isAssignedToMe) {
+                                handleInputChange(field.id, formatDate(new Date()));
+                              }
+                            }}
                             onChange={(e) => handleInputChange(field.id, e.target.value)}
+                            onBlur={(e) => {
+                              const trimmed = e.target.value.trim();
+                              if (trimmed) {
+                                const formatted = formatDate(trimmed);
+                                if (formatted) {
+                                  handleInputChange(field.id, formatted);
+                                }
+                              }
+                            }}
+                            style={{ fontSize: '12px', fontFamily: 'Arial, sans-serif' }}
                             className="w-full h-full text-xs font-medium px-1 bg-transparent border-0 focus:outline-none text-ink-900 text-center"
                             data-testid={`input-date-${field.id}`}
                           />
+                        )}
+
+                        {field.type === 'RADIO' && (
+                          <div className="w-full h-full flex flex-col justify-center items-start px-2 py-1 text-left overflow-y-auto">
+                            {field.options && field.options.length > 0 ? (
+                              field.options.map((opt, oIdx) => (
+                                <label
+                                  key={oIdx}
+                                  className="flex items-center gap-1.5 cursor-pointer text-ink-900 text-xs py-0.5 select-none"
+                                  style={{ fontSize: '12px', fontFamily: 'Arial, sans-serif' }}
+                                >
+                                  <input
+                                    type="radio"
+                                    disabled={!isAssignedToMe}
+                                    name={`radio-${field.groupName || field.id}`}
+                                    value={opt.value}
+                                    checked={value === opt.value}
+                                    onChange={() => handleInputChange(field.id, opt.value)}
+                                    className="w-3.5 h-3.5 text-brand-600 focus:ring-brand-500 cursor-pointer"
+                                    data-testid={`input-radio-${field.id}-${opt.value}`}
+                                  />
+                                  <span className="truncate">{opt.label}</span>
+                                </label>
+                              ))
+                            ) : (
+                              <label
+                                className="flex items-center gap-1.5 cursor-pointer text-ink-900 text-xs select-none"
+                                style={{ fontSize: '12px', fontFamily: 'Arial, sans-serif' }}
+                              >
+                                <input
+                                  type="radio"
+                                  disabled={!isAssignedToMe}
+                                  name={`radio-${field.groupName || field.id}`}
+                                  checked={Boolean(value)}
+                                  onChange={() => handleInputChange(field.id, true)}
+                                  className="w-3.5 h-3.5 text-brand-600 focus:ring-brand-500 cursor-pointer"
+                                  data-testid={`input-radio-${field.id}`}
+                                />
+                                <span>{field.label || 'Select'}</span>
+                              </label>
+                            )}
+                          </div>
                         )}
 
                         {field.type === 'EMAIL' && (
