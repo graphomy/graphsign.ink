@@ -412,7 +412,7 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
         case 'DATE':
           defaultW = 20;
           defaultH = 6;
-          label = 'Date';
+          label = 'Date Field';
           break;
         case 'COMPANY':
           defaultW = 25;
@@ -1021,17 +1021,7 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
                     className="p-2 bg-neutral-50 border border-neutral-200 hover:border-neutral-400 hover:bg-white text-neutral-800 rounded-lg cursor-grab active:cursor-grabbing flex items-center gap-2 transition-all text-xs font-medium"
                   >
                     <span>📅</span>
-                    <span>Date Signed</span>
-                  </div>
-
-                  <div
-                    draggable
-                    onDragStart={(e) => handleDragStartFromToolbar(e, 'COMPANY')}
-                    onClick={() => handlePaletteItemClick('COMPANY')}
-                    className="p-2 bg-neutral-50 border border-neutral-200 hover:border-neutral-400 hover:bg-white text-neutral-800 rounded-lg cursor-grab active:cursor-grabbing flex items-center gap-2 transition-all text-xs font-medium"
-                  >
-                    <span>🏢</span>
-                    <span>Company Name</span>
+                    <span>Date Field</span>
                   </div>
 
                   <div

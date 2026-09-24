@@ -17,6 +17,7 @@ export interface SealAgreementOptions {
   userId?: string;
   certificateId?: string;
   pdfData?: string | Uint8Array; // Raw or base64 PDF binary
+  verificationToken?: string;
   ipAddress?: string;
   userAgent?: string;
 }
@@ -176,9 +177,11 @@ export class PadesSealingService {
       ).certificate;
     }
 
-    // Generate unique verification token (e.g., GS-7f3a9c2e)
-    const rawTokenHex = generateToken(4).toLowerCase();
-    const verificationToken = `GS-${rawTokenHex}`;
+    // Use existing verification token from agreement metadata or options, or generate new unique token (e.g., GS-7f3a9c2e)
+    const verificationToken =
+      (meta.verificationToken as string) ||
+      options.verificationToken ||
+      `GS-${generateToken(4).toLowerCase()}`;
     const verificationUrl = `https://graphsign.ink/verify/${verificationToken}`;
 
     // Generate QR Code data URL

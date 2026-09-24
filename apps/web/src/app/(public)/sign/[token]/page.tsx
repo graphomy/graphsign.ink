@@ -6,7 +6,7 @@ import React, { useState, useEffect, useMemo, useCallback, useRef, use } from 'r
 import Link from 'next/link';
 import { getApiUrl } from '@/lib/api';
 import { orDash, orLabel, formatHash } from '@/lib/format';
-import { formatDateTime } from '@/lib/date-utils';
+import { formatDate, formatDateTime } from '@/lib/date-utils';
 import { Button } from '@/components/ui/Button';
 import { Badge, StatusPill } from '@/components/ui/Badge';
 import { Card } from '@/components/ui/Card';
@@ -459,7 +459,7 @@ export default function SignDocumentPage({
   // Save Adopted Signature from Modal
   function handleSaveAdoptedSignature(sig: AdoptedSignature) {
     setAdoptedSignature(sig);
-    const todayStr = new Date().toISOString().split('T')[0]!;
+    const todayStr = formatDate(new Date());
     setFieldValues((prev) => {
       const next = { ...prev };
       if (activeSignatureFieldId && activeSignatureFieldId !== 'signature-sidebar') {
@@ -504,7 +504,19 @@ export default function SignDocumentPage({
 
   // Input Change
   function handleInputChange(fieldId: string, val: string | boolean | number) {
-    setFieldValues((prev) => ({ ...prev, [fieldId]: val }));
+    const targetField = fields.find((f) => f.id === fieldId);
+    setFieldValues((prev) => {
+      const next = { ...prev };
+      if (targetField?.type === 'RADIO' && targetField.groupName) {
+        for (const f of fields) {
+          if (f.type === 'RADIO' && f.groupName === targetField.groupName && f.id !== fieldId) {
+            delete next[f.id];
+          }
+        }
+      }
+      next[fieldId] = val;
+      return next;
+    });
     if (formErrors[fieldId]) {
       setFormErrors((prev) => {
         const next = { ...prev };
@@ -1505,6 +1517,7 @@ export default function SignDocumentPage({
                             placeholder={field.placeholder || 'Enter text…'}
                             value={typeof value === 'string' ? value : ''}
                             onChange={(e) => handleInputChange(field.id, e.target.value)}
+                            style={{ fontSize: '12px', fontFamily: 'Arial, sans-serif' }}
                             className="w-full h-full text-xs font-medium px-1.5 bg-transparent border-0 focus:outline-none text-ink-900 text-center"
                             data-testid={`input-text-${field.id}`}
                           />
@@ -1512,13 +1525,77 @@ export default function SignDocumentPage({
 
                         {field.type === 'DATE' && (
                           <input
-                            type="date"
+                            type="text"
                             disabled={!isAssignedToMe}
-                            value={typeof value === 'string' ? value : ''}
+                            placeholder="DD-MON-YYYY"
+                            value={
+                              typeof value === 'string'
+                                ? value.match(/^\d{4}-\d{2}-\d{2}$/)
+                                  ? formatDate(value)
+                                  : value
+                                : ''
+                            }
+                            onFocus={() => {
+                              if (!value && isAssignedToMe) {
+                                handleInputChange(field.id, formatDate(new Date()));
+                              }
+                            }}
                             onChange={(e) => handleInputChange(field.id, e.target.value)}
+                            onBlur={(e) => {
+                              const trimmed = e.target.value.trim();
+                              if (trimmed) {
+                                const formatted = formatDate(trimmed);
+                                if (formatted) {
+                                  handleInputChange(field.id, formatted);
+                                }
+                              }
+                            }}
+                            style={{ fontSize: '12px', fontFamily: 'Arial, sans-serif' }}
                             className="w-full h-full text-xs font-medium px-1 bg-transparent border-0 focus:outline-none text-ink-900 text-center"
                             data-testid={`input-date-${field.id}`}
                           />
+                        )}
+
+                        {field.type === 'RADIO' && (
+                          <div className="w-full h-full flex flex-col justify-center items-start px-2 py-1 text-left overflow-y-auto">
+                            {field.options && field.options.length > 0 ? (
+                              field.options.map((opt, oIdx) => (
+                                <label
+                                  key={oIdx}
+                                  className="flex items-center gap-1.5 cursor-pointer text-ink-900 text-xs py-0.5 select-none"
+                                  style={{ fontSize: '12px', fontFamily: 'Arial, sans-serif' }}
+                                >
+                                  <input
+                                    type="radio"
+                                    disabled={!isAssignedToMe}
+                                    name={`radio-${field.groupName || field.id}`}
+                                    value={opt.value}
+                                    checked={value === opt.value}
+                                    onChange={() => handleInputChange(field.id, opt.value)}
+                                    className="w-3.5 h-3.5 text-brand-600 focus:ring-brand-500 cursor-pointer"
+                                    data-testid={`input-radio-${field.id}-${opt.value}`}
+                                  />
+                                  <span className="truncate">{opt.label}</span>
+                                </label>
+                              ))
+                            ) : (
+                              <label
+                                className="flex items-center gap-1.5 cursor-pointer text-ink-900 text-xs select-none"
+                                style={{ fontSize: '12px', fontFamily: 'Arial, sans-serif' }}
+                              >
+                                <input
+                                  type="radio"
+                                  disabled={!isAssignedToMe}
+                                  name={`radio-${field.groupName || field.id}`}
+                                  checked={Boolean(value)}
+                                  onChange={() => handleInputChange(field.id, true)}
+                                  className="w-3.5 h-3.5 text-brand-600 focus:ring-brand-500 cursor-pointer"
+                                  data-testid={`input-radio-${field.id}`}
+                                />
+                                <span>{field.label || 'Select'}</span>
+                              </label>
+                            )}
+                          </div>
                         )}
 
                         {field.type === 'EMAIL' && (

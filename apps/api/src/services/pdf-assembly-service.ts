@@ -463,6 +463,7 @@ export class PdfAssemblyService {
             y: boxY,
             width: boxW,
             height: boxH,
+            opacity: 0.35,
           });
         }
 
@@ -567,11 +568,46 @@ export class PdfAssemblyService {
           font: helveticaBold,
           color: rgb(0.1, 0.14, 0.24),
         });
+      } else if (field.type === 'RADIO') {
+        const isChecked = Boolean(value);
+        const radioText =
+          typeof value === 'string' && value !== 'true' && value !== 'false'
+            ? `(X) ${value}`
+            : isChecked
+              ? '(X)'
+              : '( )';
+        page.drawText(this.cleanWinAnsi(radioText), {
+          x: boxX + 2,
+          y: boxY + Math.max(2, boxH / 2 - 4),
+          size: 10,
+          font: helveticaBold,
+          color: rgb(0.1, 0.14, 0.24),
+        });
       } else {
-        page.drawText(this.cleanWinAnsi(String(value)), {
+        let displayVal = String(value);
+        if (field.type === 'DATE' && displayVal.match(/^\d{4}-\d{2}-\d{2}$/)) {
+          const [y, m, d] = displayVal.split('-');
+          const months = [
+            'JAN',
+            'FEB',
+            'MAR',
+            'APR',
+            'MAY',
+            'JUN',
+            'JUL',
+            'AUG',
+            'SEP',
+            'OCT',
+            'NOV',
+            'DEC',
+          ];
+          const mIdx = parseInt(m || '1', 10) - 1;
+          displayVal = `${d}-${months[mIdx] || 'JAN'}-${y}`;
+        }
+        page.drawText(this.cleanWinAnsi(displayVal), {
           x: boxX + 4,
           y: boxY + Math.max(2, boxH / 2 - 4),
-          size: Math.min(10, boxH * 0.5),
+          size: Math.min(12, Math.max(9, boxH * 0.6)),
           font: helvetica,
           color: rgb(0.1, 0.14, 0.24),
         });
