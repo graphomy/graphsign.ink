@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { VerificationService } from './verification-service.js';
 import { PDFDocument } from 'pdf-lib';
 import { PdfSignerEngine } from './pdf-signer-engine.js';
+import forge from 'node-forge';
 
 describe('VerificationService Unit Tests (INK-17, INK-135, INK-137, INK-139)', () => {
   let verificationService: VerificationService;
@@ -173,31 +174,77 @@ describe('VerificationService Unit Tests (INK-17, INK-135, INK-137, INK-139)', (
     );
   });
 
-  it('verifies native PDF with /ByteRange and CMS signature in-process and detects tampering', async () => {
-    const doc = await PDFDocument.create();
-    const page = doc.addPage([600, 400]);
-    page.drawText('Sample Legal Agreement Content', { x: 50, y: 350 });
-    const baseBytes = await doc.save();
+  it.each(['10', '00', '1000'])(
+    'verifies native PDF with CMS ending in %s and detects tampering',
+    async (suffix) => {
+      const doc = await PDFDocument.create();
+      const page = doc.addPage([600, 400]);
+      page.drawText('Sample Legal Agreement Content', { x: 50, y: 350 });
+      const baseBytes = await doc.save();
 
-    const signed = await PdfSignerEngine.signPdf({
-      pdfBytes: baseBytes,
-      certificatePem: '',
-      privateKeyPem: '',
-      reason: 'Cryptographic Test Signature',
-    });
+      const signed = await PdfSignerEngine.signPdf({
+        pdfBytes: baseBytes,
+        certificatePem: '',
+        privateKeyPem: '',
+        reason: 'Cryptographic Test Signature',
+      });
 
-    const report = await verificationService.verifyOffline(signed.signedPdfBytes);
-    expect(report.isValid).toBe(true);
-    expect(report.status).toBe('VALID');
-    expect(report.sealDetails.algorithm).toBe('CMS');
-    expect(report.sealDetails.certificateSubject).toBe('Cryptographic Test Signature');
+      // Unsigned attributes preserve the signature while exercising DER endings that
+      // must not be mistaken for the PDF Contents placeholder's zero padding.
+      const pdfBytes = Buffer.from(signed.signedPdfBytes);
+      const contents = pdfBytes.toString('latin1').match(/\/Contents\s*<([0-9a-fA-F]+)>/)!;
+      const cms = forge.asn1.fromDer(Buffer.from(contents[1]!, 'hex').toString('binary'), {
+        parseAllBytes: false,
+      });
+      const children = (node: forge.asn1.Asn1) => node.value as forge.asn1.Asn1[];
+      const signedData = children(children(cms)[1]!)[0]!;
+      const signerInfos = children(signedData).at(-1)!;
+      const signerInfo = children(signerInfos)[0]!;
+      children(signerInfo).push(
+        forge.asn1.create(forge.asn1.Class.CONTEXT_SPECIFIC, 1, true, [
+          forge.asn1.create(forge.asn1.Class.UNIVERSAL, forge.asn1.Type.SEQUENCE, true, [
+            forge.asn1.create(
+              forge.asn1.Class.UNIVERSAL,
+              forge.asn1.Type.OID,
+              false,
+              forge.asn1.oidToDer('1.2.840.113549.1.9.7').getBytes(),
+            ),
+            forge.asn1.create(forge.asn1.Class.UNIVERSAL, forge.asn1.Type.SET, true, [
+              forge.asn1.create(
+                forge.asn1.Class.UNIVERSAL,
+                forge.asn1.Type.OCTETSTRING,
+                false,
+                Buffer.from(suffix, 'hex').toString('binary'),
+              ),
+            ]),
+          ]),
+        ]),
+      );
+      const cmsHex = forge.util.bytesToHex(forge.asn1.toDer(cms).getBytes());
+      expect(cmsHex.endsWith(suffix)).toBe(true);
+      expect(cmsHex.length).toBeLessThan(contents[1]!.length);
+      const hexStart = contents.index! + contents[0].indexOf('<') + 1;
+      pdfBytes.write(cmsHex.padEnd(contents[1]!.length, '0'), hexStart, 'latin1');
 
-    // Tamper: modify byte in first range (outside signature contents)
-    const tamperedBytes = Buffer.from(signed.signedPdfBytes);
-    tamperedBytes[10] = tamperedBytes[10] ^ 0xff;
+      const report = await verificationService.verifyOffline(pdfBytes);
+      expect(report.isValid).toBe(true);
+      expect(report.status).toBe('VALID');
+      expect(report.sealDetails.algorithm).toBe('CMS');
+      expect(report.sealDetails.certificateSubject).toBe('Cryptographic Test Signature');
 
-    const tamperedReport = await verificationService.verifyOffline(tamperedBytes);
-    expect(tamperedReport.isValid).toBe(false);
-    expect(tamperedReport.status).toBe('TAMPERED');
-  });
+      const invalidPadding = Buffer.from(pdfBytes);
+      invalidPadding.write('01', hexStart + cmsHex.length, 'latin1');
+      const invalidPaddingReport = await verificationService.verifyOffline(invalidPadding);
+      expect(invalidPaddingReport.isValid).toBe(false);
+      expect(invalidPaddingReport.status).toBe('TAMPERED');
+
+      // Tamper: modify byte in first range (outside signature contents)
+      const tamperedBytes = Buffer.from(pdfBytes);
+      tamperedBytes[10] = tamperedBytes[10] ^ 0xff;
+
+      const tamperedReport = await verificationService.verifyOffline(tamperedBytes);
+      expect(tamperedReport.isValid).toBe(false);
+      expect(tamperedReport.status).toBe('TAMPERED');
+    },
+  );
 });
