@@ -15,7 +15,7 @@
   },
   "dependencies": {
     "@graphsign/db": "workspace:*",
-    "hono": "^4.13.5",
+    "hono": "^4.13.9",
     "jose": "^6.2.10",
     "node-forge": "^1.4.0",
     "pdf-lib": "^1.17.1",
