@@ -704,9 +704,14 @@ export class VerificationService {
     }
 
     try {
-      const hex = (contentsMatch[1] || '').replace(/00+$/, '');
+      const hex = contentsMatch[1] || '';
       const der = Buffer.from(hex, 'hex');
-      const asn1 = forge.asn1.fromDer(der.toString('binary'));
+      // DER encodes its own length; trimming zeroes can truncate signature bytes.
+      const buffer = forge.util.createBuffer(der.toString('binary'));
+      const asn1 = forge.asn1.fromDer(buffer, { parseAllBytes: false });
+      if (/[^\x00]/.test(buffer.getBytes())) {
+        return { valid: false };
+      }
       const p7 = forge.pkcs7.messageFromAsn1(asn1);
 
       let subjectName = 'graphsign.ink Document Signer';
