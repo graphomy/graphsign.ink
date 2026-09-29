@@ -78,7 +78,7 @@ NEXT_PUBLIC_API_URL="http://localhost:8787"
 
 ## 4. Database Synchronization & Prisma Generation
 
-Generate Prisma client types and synchronize the schema with your database:
+Generate Prisma client types, synchronize the schema with your database, and seed initial core roles:
 
 ```bash
 # 1. Generate Prisma Client
@@ -86,11 +86,50 @@ pnpm db:generate
 
 # 2. Push schema to database
 pnpm db:push
+
+# 3. Seed default core RBAC roles (super_admin, org_admin, signer, etc.)
+pnpm --filter @graphsign/db exec tsx prisma/seed.ts
 ```
 
 ---
 
-## 5. Starting Local Development Servers
+## 5. Complete Database Reset & Fresh Start
+
+To completely wipe all data, reset the database, and use the system as a brand-new application:
+
+### Option A: Force Reset Existing Database
+
+Drop all tables, recreate the schema cleanly, and re-seed default roles:
+
+```bash
+# 1. Force drop all tables & recreate schema
+pnpm --filter @graphsign/db exec prisma db push --force-reset
+
+# 2. Re-seed default core RBAC roles and superadmin
+pnpm --filter @graphsign/db exec tsx prisma/seed.ts
+```
+
+_(Alternative using Prisma migrations:_ `pnpm --filter @graphsign/db exec prisma migrate reset --force`_)_
+
+### Option B: Point to a Brand New Database
+
+1. Create a new Neon project or branch in [Neon Console](https://console.neon.tech/).
+2. Copy the pooled connection string.
+3. Update `DATABASE_URL` in `packages/db/.env` and `apps/api/.dev.vars`.
+4. Initialize and seed:
+   ```bash
+   pnpm db:push
+   pnpm --filter @graphsign/db exec tsx prisma/seed.ts
+   ```
+
+### Client State Reset
+
+1. Clear browser `localStorage` and cookies on `http://localhost:3000` (specifically `graphsign_session_token`).
+2. Navigate to `http://localhost:3000/register` to register your fresh administrator account.
+
+---
+
+## 6. Starting Local Development Servers
 
 Run the backend API worker and the Next.js frontend in separate terminal windows:
 
@@ -113,7 +152,7 @@ pnpm dev:web
 
 ---
 
-## 6. Authentication & User Flow in Development
+## 7. Authentication & User Flow in Development
 
 1. Navigate to `http://localhost:3000/register`.
 2. Fill in email and password to create an account.
@@ -128,7 +167,7 @@ pnpm dev:web
 
 ---
 
-## 7. Common Pitfalls & Troubleshooting
+## 8. Common Pitfalls & Troubleshooting
 
 ### Issue 1: "Unable to connect to the server. Please try again later."
 
@@ -152,7 +191,7 @@ pnpm dev:web
 
 ---
 
-## 8. Quality Checks & Test Commands
+## 9. Quality Checks & Test Commands
 
 Before committing code or opening a Pull Request, run the local verification suite:
 

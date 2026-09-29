@@ -1,5 +1,5 @@
 import type { MiddlewareHandler } from 'hono';
-import { createPrismaClient } from '@graphsign/db';
+import { getDbClient } from '../utils/db.js';
 import { ForbiddenError, UnauthorizedError } from '../utils/errors.js';
 
 interface CachedOrgStatus {
@@ -46,32 +46,28 @@ export function enforceTenantActiveStatus(): MiddlewareHandler {
       return;
     }
 
-    const dbUrl = c.env?.DATABASE_URL || process.env.DATABASE_URL;
+    try {
+      const prisma = getDbClient(c);
+      const org = await prisma.organisation.findUnique({
+        where: { id: orgId },
+        select: { status: true },
+      });
 
-    if (dbUrl && (dbUrl.startsWith('postgres://') || dbUrl.startsWith('postgresql://'))) {
-      try {
-        const prisma = createPrismaClient(dbUrl);
-        const org = await prisma.organisation.findUnique({
-          where: { id: orgId },
-          select: { status: true },
+      if (org) {
+        orgStatusCache.set(orgId, {
+          status: org.status,
+          expiresAt: now + STATUS_CACHE_TTL_MS,
         });
 
-        if (org) {
-          orgStatusCache.set(orgId, {
-            status: org.status,
-            expiresAt: now + STATUS_CACHE_TTL_MS,
-          });
-
-          if (org.status === 'suspended') {
-            throw new ForbiddenError(
-              'Organisation access is currently suspended. Please contact platform administration.',
-            );
-          }
+        if (org.status === 'suspended') {
+          throw new ForbiddenError(
+            'Organisation access is currently suspended. Please contact platform administration.',
+          );
         }
-      } catch (err: any) {
-        if (err instanceof ForbiddenError) throw err;
-        // Ignore non-fatal db lookup errors in unit tests with mock IDs
       }
+    } catch (err: any) {
+      if (err instanceof ForbiddenError) throw err;
+      // Ignore non-fatal db lookup errors in unit tests with mock IDs
     }
 
     await next();

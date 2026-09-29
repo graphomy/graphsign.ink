@@ -142,16 +142,28 @@ function ResetPasswordContent() {
 
   return (
     <div className="space-y-6" data-testid="reset-password-container">
+      {/* Brand Lockup */}
+      <div className="flex items-center justify-center gap-2.5">
+        <div className="h-10 w-10 rounded-xl bg-brand-600 text-white font-black text-xl flex items-center justify-center shadow-md shadow-brand-600/20">
+          g
+        </div>
+        <h2 className="text-xl font-bold tracking-tight text-ink-900">
+          graphsign<span className="text-brand-600">.ink</span>
+        </h2>
+      </div>
+
       <div>
-        <h2 className="text-center text-2xl font-semibold text-neutral-900">Set new password</h2>
-        <p className="mt-2 text-center text-sm text-neutral-600">
+        <h2 className="text-center text-2xl font-bold tracking-tight text-ink-900">
+          Set new password
+        </h2>
+        <p className="mt-1 text-center text-sm text-ink-500">
           Please enter your new password below.
         </p>
       </div>
 
       <form
         onSubmit={handleSubmit}
-        className="rounded-xl border border-neutral-200 bg-white p-8 shadow-sm space-y-5"
+        className="rounded-xl border border-ink-200 bg-white p-6 sm:p-8 shadow-[0_1px_2px_rgb(16_24_40/0.04),0_1px_3px_rgb(16_24_40/0.06)] space-y-5"
         noValidate
         data-testid="reset-password-form"
       >
@@ -255,14 +267,18 @@ function ResetPasswordContent() {
 
 export default function ResetPasswordPage() {
   return (
-    <Suspense
-      fallback={
-        <div className="text-center py-8 text-neutral-500 text-sm">
-          Loading password reset page...
-        </div>
-      }
-    >
-      <ResetPasswordContent />
-    </Suspense>
+    <div className="min-h-[100dvh] flex flex-col justify-center items-center bg-ink-50 px-4 py-8 sm:px-6">
+      <div className="w-full max-w-[440px]">
+        <Suspense
+          fallback={
+            <div className="text-center py-8 text-neutral-500 text-sm">
+              Loading password reset page...
+            </div>
+          }
+        >
+          <ResetPasswordContent />
+        </Suspense>
+      </div>
+    </div>
   );
 }

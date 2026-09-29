@@ -1,5 +1,6 @@
 import { v7 as uuidv7 } from 'uuid';
-import { scrypt as scryptAsync } from 'scrypt-js';
+import scryptJs from 'scrypt-js';
+const scryptAsync = (scryptJs as any).scrypt || scryptJs;
 
 /**
  * Scrypt parameters — OWASP-recommended for password hashing.
@@ -90,8 +91,8 @@ export async function hashToken(token: string): Promise<string> {
  *
  * Now async — Web Crypto's digest is promise-based.
  */
-export async function sha256(data: string): Promise<string> {
-  const encoded = new TextEncoder().encode(data);
+export async function sha256(data: string | Uint8Array): Promise<string> {
+  const encoded = typeof data === 'string' ? new TextEncoder().encode(data) : data;
   const hash = await crypto.subtle.digest('SHA-256', encoded);
   return toHex(new Uint8Array(hash));
 }

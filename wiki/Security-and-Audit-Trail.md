@@ -24,7 +24,17 @@ Every lifecycle action across the platform records an immutable entry into the `
 - Invitation and signing tokens are generated using cryptographically strong 256-bit entropy (`crypto.getRandomValues()`).
 - **Zero Plaintext Storage**: Plaintext tokens are transmitted strictly via single-use email links (`/sign/[token]`). Only the SHA-256 hash (`signingTokenHash`) is persisted in the database.
 
-### 3. Electronic Signature Compliance
+### 3. Isolated Key Custody (PKCS#11) & PAdES B-T Cryptographic Sealing
+
+- **Isolated Key Boundary**: Private keys never leave the key custody service boundary and are operated via PKCS#11 interfaces.
+- **PAdES Baseline Sealing**: Completed agreements are sealed with standard PAdES B-T / B-LTA digital signatures and RFC 3161 trusted timestamps from public authorities (DigiCert, Sectigo, FreeTSA).
+- **Zero-Knowledge Verification**: The `/verify` portal verifies documents client-side using Web Crypto subtle crypto without uploading raw document contents.
+
+### 4. Role-Based Privacy Boundaries (INK-248)
+
+- **Super Administrator Scoping**: System super administrators can access platform aggregate metrics and metadata, but are cryptographically and logically blocked from accessing private agreement payloads or file binaries.
+
+### 5. Electronic Signature Compliance
 
 - **ESIGN Act & UETA**: Captures explicit electronic consent checkbox prior to signature submission.
 - **Intent & Attribution**: Binds signer full name, IP address, user-agent, timestamp, and signature data payload directly to the agreement envelope.

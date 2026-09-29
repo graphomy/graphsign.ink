@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { isPersonalEmailDomain } from '../utils/email-validation.js';
 
 /**
  * Password complexity requirements:
@@ -10,27 +11,43 @@ import { z } from 'zod';
  */
 const PASSWORD_MIN_LENGTH = 8;
 
-export const registerRequestSchema = z.object({
-  email: z
-    .string()
-    .transform((val) => val.toLowerCase().trim())
-    .pipe(
-      z
-        .string()
-        .email('Please enter a valid email address.')
-        .max(255, 'Email must be 255 characters or fewer.'),
-    ),
-  password: z
-    .string()
-    .min(PASSWORD_MIN_LENGTH, `Password must be at least ${PASSWORD_MIN_LENGTH} characters.`)
-    .max(128, 'Password must be 128 characters or fewer.')
-    .regex(/[A-Z]/, 'Password must contain at least one uppercase letter.')
-    .regex(/[a-z]/, 'Password must contain at least one lowercase letter.')
-    .regex(/[0-9]/, 'Password must contain at least one digit.')
-    .regex(/[^A-Za-z0-9]/, 'Password must contain at least one special character.'),
-});
+export const registerRequestSchema = z
+  .object({
+    email: z
+      .string()
+      .transform((val) => val.toLowerCase().trim())
+      .pipe(
+        z
+          .string()
+          .email('Please enter a valid email address.')
+          .max(255, 'Email must be 255 characters or fewer.'),
+      ),
+    password: z
+      .string()
+      .min(PASSWORD_MIN_LENGTH, `Password must be at least ${PASSWORD_MIN_LENGTH} characters.`)
+      .max(128, 'Password must be 128 characters or fewer.')
+      .regex(/[A-Z]/, 'Password must contain at least one uppercase letter.')
+      .regex(/[a-z]/, 'Password must contain at least one lowercase letter.')
+      .regex(/[0-9]/, 'Password must contain at least one digit.')
+      .regex(/[^A-Za-z0-9]/, 'Password must contain at least one special character.'),
+    planType: z.enum(['individual', 'teams']).default('individual'),
+    companyName: z.string().max(255, 'Company name must be 255 characters or fewer.').optional(),
+  })
+  .refine(
+    (data) => {
+      if (data.planType === 'teams') {
+        return !isPersonalEmailDomain(data.email);
+      }
+      return true;
+    },
+    {
+      message:
+        'Teams plan requires a company or business email address (e.g., alex@company.com). Please use your company email or choose the Individual plan.',
+      path: ['email'],
+    },
+  );
 
-export type RegisterRequest = z.infer<typeof registerRequestSchema>;
+export type RegisterRequest = z.input<typeof registerRequestSchema>;
 
 export const registerResponseSchema = z.object({
   id: z.string().uuid(),
@@ -142,7 +159,7 @@ export type MfaToggleResponse = z.infer<typeof mfaToggleResponseSchema>;
 
 export const updateSessionSettingsSchema = z.object({
   sessionTimeoutMinutes: z
-    .number({ required_error: 'sessionTimeoutMinutes is required.' })
+    .number({ message: 'sessionTimeoutMinutes is required.' })
     .int('sessionTimeoutMinutes must be an integer.')
     .min(1, 'Session timeout must be at least 1 minute.')
     .max(1440, 'Session timeout cannot exceed 1440 minutes (24 hours).'),
@@ -216,7 +233,7 @@ export type ProfileResponse = z.infer<typeof profileResponseSchema>;
 
 export const verifyMfaSetupRequestSchema = z.object({
   code: z
-    .string({ required_error: 'Verification code is required.' })
+    .string({ message: 'Verification code is required.' })
     .length(6, 'Verification code must be exactly 6 digits.')
     .regex(/^\d+$/, 'Verification code must contain digits only.'),
 });
@@ -226,7 +243,7 @@ export type VerifyMfaSetupRequest = z.infer<typeof verifyMfaSetupRequestSchema>;
 export const loginMfaRequestSchema = z.object({
   mfaTicket: z.string().min(1, 'MFA ticket is required.'),
   code: z
-    .string({ required_error: 'Verification code is required.' })
+    .string({ message: 'Verification code is required.' })
     .length(6, 'Verification code must be 6 digits.')
     .regex(/^\d+$/, 'Verification code must contain digits only.'),
 });

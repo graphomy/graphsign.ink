@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import type { PrismaClient } from '@graphsign/db';
-import { createPrismaClient, getLegacyPrisma } from '@graphsign/db';
+import { getDbClient } from '../utils/db.js';
 import { AgreementService } from '../services/agreement-service.js';
 import type { AuditService } from '../services/audit-service.js';
 import { PrismaAuditService } from '../services/audit-service.js';
@@ -14,11 +14,20 @@ import {
   queryAgreementsSchema,
 } from '../validators/agreement-validators.js';
 import { saveDocumentFieldsSchema } from '../validators/field-validators.js';
-import { BadRequestError, ForbiddenError } from '../utils/errors.js';
+import { BadRequestError, ForbiddenError, NotFoundError } from '../utils/errors.js';
 import { requirePermission } from '../middleware/rbac-middleware.js';
 import { enforceTenantActiveStatus } from '../middleware/tenant-status-middleware.js';
 import { createRateLimiter } from '../middleware/rate-limiter.js';
 import { isSuperAdmin } from '../config/roles.js';
+import {
+  PdfAssemblyService,
+  type AssemblePdfField,
+  type AssemblePdfRecipient,
+} from '../services/pdf-assembly-service.js';
+import { KeyCustodyService } from '../services/key-custody-service.js';
+import { TsaService } from '../services/tsa-service.js';
+import { PadesSealingService } from '../services/pades-sealing-service.js';
+import { SigningClient } from '../services/signing-client.js';
 import type { Env } from '../index.js';
 
 export interface AgreementDeps {
@@ -27,32 +36,60 @@ export interface AgreementDeps {
   agreementService?: AgreementService;
 }
 
+function formatDocumentFieldsValidationError(error: {
+  issues: Array<{ path: PropertyKey[]; message?: string }>;
+}): string {
+  const issue = error.issues[0];
+  if (!issue) return 'Invalid document fields payload';
+
+  const path = issue.path;
+  if (path[0] === 'recipients' && typeof path[1] === 'number') {
+    const recipientIndex = path[1] + 1;
+    const prop = path[2];
+    if (prop === 'color') {
+      return `Recipient ${recipientIndex} has an invalid color.`;
+    }
+    if (prop === 'name') {
+      return `Recipient ${recipientIndex} has an invalid name.`;
+    }
+    if (prop === 'email') {
+      return `Recipient ${recipientIndex} has an invalid email.`;
+    }
+    if (prop === 'role') {
+      return `Recipient ${recipientIndex} has an invalid role.`;
+    }
+    return `Recipient ${recipientIndex} has an invalid ${String(prop || 'field')}.`;
+  }
+
+  if (path[0] === 'fields' && typeof path[1] === 'number') {
+    const fieldIndex = path[1] + 1;
+    const prop = path[2];
+    if (prop === 'recipientId') {
+      return `Field ${fieldIndex} must be assigned to a recipient.`;
+    }
+    if (prop === 'type') {
+      return `Field ${fieldIndex} has an invalid type.`;
+    }
+    return `Field ${fieldIndex} has an invalid ${String(prop || 'property')}.`;
+  }
+
+  return issue.message || 'Invalid document fields payload';
+}
+
 export function createAgreementRoutes(deps?: AgreementDeps) {
   const agreements = new Hono<{ Bindings: Env }>();
 
   agreements.use('/*', createRateLimiter(100, 60_000));
 
   function getServices(c: any) {
-    if (deps?.agreementService) return { service: deps.agreementService };
-
-    let prisma = deps?.prisma;
-    if (!prisma) {
-      const dbUrl = c.env?.DATABASE_URL || process.env.DATABASE_URL;
-      const isValidUrl =
-        dbUrl &&
-        typeof dbUrl === 'string' &&
-        dbUrl.trim() !== '' &&
-        (dbUrl.startsWith('postgres://') || dbUrl.startsWith('postgresql://'));
-
-      if (isValidUrl) {
-        prisma = createPrismaClient(dbUrl);
-      } else {
-        prisma = getLegacyPrisma();
-      }
+    if (deps?.agreementService && !deps?.prisma) {
+      return { service: deps.agreementService, prisma: undefined, audit: deps?.audit };
     }
+
+    const prisma = getDbClient(c, deps?.prisma);
     const audit = deps?.audit || new PrismaAuditService(prisma);
-    const service = new AgreementService(prisma, audit);
-    return { service };
+    const service = deps?.agreementService || new AgreementService(prisma, audit);
+    return { service, prisma, audit };
   }
 
   // GET /api/v1/agreements (List & Search - INK-248 scoped for privacy)
@@ -67,6 +104,7 @@ export function createAgreementRoutes(deps?: AgreementDeps) {
       const orgId = userPayload?.orgId || 'default-org-id';
       const userId = userPayload?.sub || 'unknown';
       const userRole = userPayload?.role || 'user';
+      const userEmail = userPayload?.email;
 
       const queryParams = {
         page: c.req.query('page'),
@@ -79,10 +117,10 @@ export function createAgreementRoutes(deps?: AgreementDeps) {
 
       const parsed = queryAgreementsSchema.safeParse(queryParams);
       if (!parsed.success) {
-        throw new BadRequestError(parsed.error.errors[0]?.message || 'Invalid query parameters');
+        throw new BadRequestError(parsed.error.issues[0]?.message || 'Invalid query parameters');
       }
 
-      const result = await service.listAgreements(orgId, parsed.data, userId, userRole);
+      const result = await service.listAgreements(orgId, parsed.data, userId, userRole, userEmail);
       return c.json(result, 200);
     },
   );
@@ -103,7 +141,7 @@ export function createAgreementRoutes(deps?: AgreementDeps) {
       const parsed = createUploadAgreementSchema.safeParse(body);
 
       if (!parsed.success) {
-        throw new BadRequestError(parsed.error.errors[0]?.message || 'Invalid upload payload');
+        throw new BadRequestError(parsed.error.issues[0]?.message || 'Invalid upload payload');
       }
 
       const agreement = await service.uploadAgreementFile(orgId, authorId, parsed.data);
@@ -128,7 +166,7 @@ export function createAgreementRoutes(deps?: AgreementDeps) {
 
       if (!parsed.success) {
         throw new BadRequestError(
-          parsed.error.errors[0]?.message || 'Invalid scratch creation payload',
+          parsed.error.issues[0]?.message || 'Invalid scratch creation payload',
         );
       }
 
@@ -175,7 +213,7 @@ export function createAgreementRoutes(deps?: AgreementDeps) {
 
       if (!parsed.success) {
         throw new BadRequestError(
-          parsed.error.errors[0]?.message || 'Invalid draft update payload',
+          parsed.error.issues[0]?.message || 'Invalid draft update payload',
         );
       }
 
@@ -202,7 +240,7 @@ export function createAgreementRoutes(deps?: AgreementDeps) {
       const parsed = activateAgreementSchema.safeParse(body);
 
       if (!parsed.success) {
-        throw new BadRequestError(parsed.error.errors[0]?.message || 'Invalid activation payload');
+        throw new BadRequestError(parsed.error.issues[0]?.message || 'Invalid activation payload');
       }
 
       const activated = await service.activateAgreement(
@@ -235,6 +273,36 @@ export function createAgreementRoutes(deps?: AgreementDeps) {
     },
   );
 
+  // POST /api/v1/agreements/:id/sign-session (In-app authenticated signing session - INK-278)
+  agreements.post(
+    '/:id/sign-session',
+    jwtAuth(),
+    enforceTenantActiveStatus(),
+    requirePermission('documents:read'),
+    async (c) => {
+      const { service } = getServices(c);
+      const agreementId = c.req.param('id');
+      const userPayload = c.get('userPayload') as any;
+      const orgId = userPayload?.orgId || 'default-org-id';
+      const userEmail = userPayload?.email;
+      const userId = userPayload?.sub;
+      const userRole = userPayload?.role;
+
+      if (!userEmail) {
+        throw new BadRequestError('User email is required to initiate signing session.');
+      }
+
+      const session = await service.createSignerSession(
+        orgId,
+        agreementId,
+        userEmail,
+        userId,
+        userRole,
+      );
+      return c.json({ success: true, data: session }, 200);
+    },
+  );
+
   // GET /api/v1/agreements/:id/file (Stream original PDF / Markdown binary - INK-248 restricted for Super Admin)
   agreements.get(
     '/:id/file',
@@ -242,7 +310,7 @@ export function createAgreementRoutes(deps?: AgreementDeps) {
     enforceTenantActiveStatus(),
     requirePermission('documents:read'),
     async (c) => {
-      const { service } = getServices(c);
+      const { service, prisma, audit } = getServices(c);
       const agreementId = c.req.param('id');
       const userPayload = c.get('userPayload') as any;
       const userEmail = userPayload?.email;
@@ -259,31 +327,108 @@ export function createAgreementRoutes(deps?: AgreementDeps) {
 
       const agreement = await service.getAgreementById(orgId, agreementId, authorId, userRole);
       const meta = (agreement.metadata as Record<string, unknown>) || {};
-      const fileData =
-        (meta.fileBase64 as string | undefined) || (meta.fileData as string | undefined);
+      let fileData =
+        (meta.signedPdfBase64 as string | undefined) ||
+        (meta.sealedPdfBase64 as string | undefined) ||
+        (meta.fileBase64 as string | undefined) ||
+        (meta.fileData as string | undefined);
+
+      if (agreement.status === 'COMPLETED' && !meta.signedPdfBase64 && !meta.sealedPdfBase64) {
+        // Self-heal: Agreement completed but sealed PDF was not saved. Attempt sealing now!
+        if (prisma) {
+          try {
+            const keyCustody = new KeyCustodyService();
+            const tsa = new TsaService({
+              primaryUrl: c.env?.TSA_PRIMARY_URL || process.env.TSA_PRIMARY_URL,
+              fallbackUrl: c.env?.TSA_FALLBACK_URL || process.env.TSA_FALLBACK_URL,
+              fallback2Url: c.env?.TSA_FALLBACK2_URL || process.env.TSA_FALLBACK2_URL,
+            });
+            const sealingService = new PadesSealingService(
+              prisma,
+              keyCustody,
+              tsa,
+              audit,
+              new SigningClient(c.env?.SIGNING_SERVICE_URL, c.env?.SIGNING_SERVICE_TOKEN),
+            );
+            const sealResult = await sealingService.sealAgreement({
+              agreementId: agreement.id,
+              organisationId: agreement.organisationId,
+            });
+            if (sealResult.status === 'SUCCESS' && sealResult.sealedPdfBase64) {
+              fileData = sealResult.sealedPdfBase64;
+            }
+          } catch (sealErr) {
+            console.warn('[AGREEMENTS_FILE] Self-healing seal attempt failed:', sealErr);
+          }
+        }
+
+        if (!fileData) {
+          throw new NotFoundError(
+            'The original signed document is unavailable. Retry final sealing instead of regenerating it.',
+          );
+        }
+      }
+
+      const formatQuery = c.req.query('format')?.toLowerCase();
+      const isPdfRequested =
+        formatQuery === 'pdf' ||
+        (!formatQuery &&
+          (agreement.mimeType === 'application/pdf' ||
+            agreement.fileName?.toLowerCase().endsWith('.pdf') ||
+            !agreement.fileName));
 
       if (fileData) {
         const base64Content = fileData.includes(',') ? fileData.split(',')[1] : fileData;
         const binaryBuffer = Buffer.from(base64Content || '', 'base64');
+        const pdfFileName = (agreement.fileName || `${agreement.title}.pdf`).replace(
+          /\.md$/i,
+          '.pdf',
+        );
         return c.body(binaryBuffer, 200, {
-          'Content-Type': agreement.mimeType || 'application/pdf',
-          'Content-Disposition': `inline; filename="${agreement.fileName || 'document.pdf'}"`,
+          'Content-Type': 'application/pdf',
+          'Content-Disposition': `inline; filename="${pdfFileName}"`,
         });
       }
 
-      if (agreement.markdownContent) {
+      if (agreement.markdownContent && agreement.status !== 'COMPLETED') {
+        if (isPdfRequested) {
+          const pdfAssembly = new PdfAssemblyService();
+          const rawFields = agreement.fields as Record<string, unknown> | null;
+          const agreementFields = (Array.isArray(rawFields?.fields)
+            ? rawFields.fields
+            : Array.isArray(agreement.fields)
+              ? agreement.fields
+              : []) as unknown as AssemblePdfField[];
+          const agreementRecipients = (Array.isArray((agreement as any).recipients)
+            ? (agreement as any).recipients
+            : Array.isArray(rawFields?.recipients)
+              ? rawFields.recipients
+              : []) as unknown as AssemblePdfRecipient[];
+          const pdfBytes = await pdfAssembly.assembleDocument({
+            agreementTitle: agreement.title,
+            envelopeId: `ENV-${agreement.id.replace(/-/g, '').toUpperCase()}`,
+            markdownContent: agreement.markdownContent,
+            fields: agreementFields,
+            recipients: agreementRecipients,
+            includeCertificate: false,
+          });
+          const pdfFileName = (agreement.fileName || `${agreement.title}.pdf`).replace(
+            /\.md$/i,
+            '.pdf',
+          );
+          return c.body(Buffer.from(pdfBytes), 200, {
+            'Content-Type': 'application/pdf',
+            'Content-Disposition': `inline; filename="${pdfFileName}"`,
+          });
+        }
+
         return c.text(agreement.markdownContent, 200, {
           'Content-Type': 'text/markdown; charset=utf-8',
           'Content-Disposition': `inline; filename="${agreement.fileName || 'agreement.md'}"`,
         });
       }
 
-      // Fallback standard PDF structure if stored without raw binary in metadata
-      const fallbackPdf = `%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n3 0 obj<</Type/Page/MediaBox[0 0 612 792]/Parent 2 0 R/Resources<<>>>>endobj\nxref\n0 4\n0000000000 65535 f\n0000000009 00000 n\n0000000052 00000 n\n0000000101 00000 n\ntrailer<</Size 4/Root 1 0 R>>\nstartxref\n178\n%%EOF`;
-      return c.body(fallbackPdf, 200, {
-        'Content-Type': 'application/pdf',
-        'Content-Disposition': `inline; filename="${agreement.fileName || 'document.pdf'}"`,
-      });
+      throw new NotFoundError('Agreement file is unavailable.');
     },
   );
 
@@ -394,6 +539,25 @@ export function createAgreementRoutes(deps?: AgreementDeps) {
     },
   );
 
+  // DELETE /api/v1/agreements/:id (INK-271 Delete agreement record)
+  agreements.delete(
+    '/:id',
+    jwtAuth(),
+    enforceTenantActiveStatus(),
+    requirePermission('documents:delete'),
+    async (c) => {
+      const { service } = getServices(c);
+      const agreementId = c.req.param('id');
+      const userPayload = c.get('userPayload') as any;
+      const authorId = userPayload?.sub || 'unknown';
+      const orgId = userPayload?.orgId || 'default-org-id';
+      const userRole = userPayload?.role || 'user';
+
+      const deleted = await service.deleteAgreement(orgId, authorId, agreementId, userRole);
+      return c.json(deleted, 200);
+    },
+  );
+
   // PATCH /api/v1/agreements/:id/metadata (INK-72 Metadata & tags)
   agreements.patch(
     '/:id/metadata',
@@ -412,7 +576,7 @@ export function createAgreementRoutes(deps?: AgreementDeps) {
       const parsed = updateMetadataTagsSchema.safeParse(body);
 
       if (!parsed.success) {
-        throw new BadRequestError(parsed.error.errors[0]?.message || 'Invalid metadata payload');
+        throw new BadRequestError(parsed.error.issues[0]?.message || 'Invalid metadata payload');
       }
 
       const updated = await service.updateMetadataAndTags(
@@ -463,9 +627,7 @@ export function createAgreementRoutes(deps?: AgreementDeps) {
       const parsed = saveDocumentFieldsSchema.safeParse(body);
 
       if (!parsed.success) {
-        throw new BadRequestError(
-          parsed.error.errors[0]?.message || 'Invalid document fields payload',
-        );
+        throw new BadRequestError(formatDocumentFieldsValidationError(parsed.error));
       }
 
       const result = await service.saveAgreementFields(

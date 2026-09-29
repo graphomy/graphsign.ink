@@ -1,9 +1,17 @@
+vi.mock('@/lib/pdf-document', () => ({
+  loadPdfDocument: vi.fn().mockResolvedValue({ numPages: 3, destroy: vi.fn() }),
+}));
+vi.mock('./PdfPageCanvas', () => ({
+  PdfPageCanvas: ({ pageNumber }: { pageNumber: number }) => (
+    <div title="Document PDF Preview">PDF page {pageNumber}</div>
+  ),
+}));
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import React from 'react';
 import { DocumentEditorModal } from './DocumentEditorModal';
 
-describe('DocumentEditorModal Component Tests (INK-78 to INK-85)', () => {
+describe('DocumentEditorModal Component Tests (INK-78 to INK-85, INK-270)', () => {
   const mockAgreement = {
     id: 'ag-edit-1',
     title: 'Employment Agreement',
@@ -39,13 +47,23 @@ describe('DocumentEditorModal Component Tests (INK-78 to INK-85)', () => {
   };
 
   beforeEach(() => {
+    global.URL.createObjectURL = vi.fn().mockReturnValue('blob:http://localhost/mock-pdf');
+    global.URL.revokeObjectURL = vi.fn();
+
     vi.stubGlobal(
       'fetch',
-      vi.fn().mockImplementation((_url: string, opts?: RequestInit) => {
+      vi.fn().mockImplementation((url: string, opts?: RequestInit) => {
         if (opts?.method === 'PUT') {
           return Promise.resolve({
             ok: true,
             json: () => Promise.resolve({ success: true }),
+          });
+        }
+        if (url.includes('/file')) {
+          return Promise.resolve({
+            ok: true,
+            blob: () =>
+              Promise.resolve(new Blob(['mock pdf content'], { type: 'application/pdf' })),
           });
         }
         return Promise.resolve({
@@ -71,7 +89,26 @@ describe('DocumentEditorModal Component Tests (INK-78 to INK-85)', () => {
     expect(screen.getByText('Choice Elements')).toBeDefined();
 
     // Check existing field overlay
-    expect(screen.getByText('Employee Signature')).toBeDefined();
+    expect(screen.getByText(/Employee Signature/)).toBeDefined();
+  });
+
+  it('renders signer dropdown and adds up to 10 signers with limit enforcement (INK-270)', async () => {
+    render(<DocumentEditorModal agreement={mockAgreement} onClose={vi.fn()} onSuccess={vi.fn()} />);
+
+    // Dropdown should exist with initial signer
+    const selectEl = screen.getByLabelText('Active Signer Selector');
+    expect(selectEl).toBeDefined();
+    expect(screen.getByText(/Select Signer \(1\/10\)/i)).toBeDefined();
+
+    const addSignerBtn = screen.getByRole('button', { name: /\+ Add Signer/i });
+
+    // Add up to 10 signers
+    for (let i = 2; i <= 10; i++) {
+      fireEvent.click(addSignerBtn);
+    }
+
+    expect(screen.getByText(/Select Signer \(10\/10\)/i)).toBeDefined();
+    expect(addSignerBtn).toBeDisabled();
   });
 
   it('allows adding a text field from palette onto the canvas (INK-80)', async () => {
@@ -88,7 +125,7 @@ describe('DocumentEditorModal Component Tests (INK-78 to INK-85)', () => {
     render(<DocumentEditorModal agreement={mockAgreement} onClose={vi.fn()} onSuccess={vi.fn()} />);
 
     // Select the existing signature field by clicking on it
-    const fieldBadge = screen.getByText('Employee Signature');
+    const fieldBadge = screen.getByText(/Employee Signature/);
     fireEvent.mouseDown(fieldBadge);
 
     expect(screen.getByText('Field Settings')).toBeDefined();
@@ -110,7 +147,7 @@ describe('DocumentEditorModal Component Tests (INK-78 to INK-85)', () => {
     expect(screen.getByText('✍️ Click to Sign')).toBeDefined();
   });
 
-  it('saves fields and triggers onSuccess callback', async () => {
+  it('allows renaming signers and opening send modal on Send for Signature (INK-266)', async () => {
     const onSuccessMock = vi.fn();
     const onCloseMock = vi.fn();
 
@@ -122,12 +159,79 @@ describe('DocumentEditorModal Component Tests (INK-78 to INK-85)', () => {
       />,
     );
 
-    const doneBtn = screen.getByText('Done');
-    fireEvent.click(doneBtn);
+    // Rename signer from Jane Signer to Author
+    const nameInput = screen.getByDisplayValue('Jane Signer');
+    fireEvent.change(nameInput, { target: { value: 'Author' } });
+    expect(screen.getByDisplayValue('Author')).toBeDefined();
+
+    const sendBtn = screen.getByRole('button', { name: 'Send for Signature' });
+    fireEvent.click(sendBtn);
+
+    // Send modal should open
+    await waitFor(() => {
+      expect(screen.getByText('Send Agreement for Signature')).toBeDefined();
+    });
+  });
+
+  it('renders a parsed multi-page PDF with actual page navigation', async () => {
+    const pdfAgreement = {
+      id: 'ag-pdf-1',
+      title: 'Vendor Master Agreement.pdf',
+      version: '0.1',
+      status: 'IN_REVIEW',
+      mimeType: 'application/pdf',
+      fileName: 'Vendor Master Agreement.pdf',
+      fields: { fields: [], recipients: [] },
+    };
+
+    render(<DocumentEditorModal agreement={pdfAgreement} onClose={vi.fn()} onSuccess={vi.fn()} />);
+
+    await waitFor(
+      () => {
+        expect(screen.getByTitle('Document PDF Preview')).toBeInTheDocument();
+        expect(screen.getByText('Page 1/3')).toBeInTheDocument();
+        expect(screen.getByText('In Review')).toBeInTheDocument();
+      },
+      { timeout: 5000 },
+    );
+  });
+
+  it('supplies fallback color when recipient color is missing from agreement and saves successfully (INK-284)', async () => {
+    const agreementWithMissingColor = {
+      ...mockAgreement,
+      status: 'DECLINED',
+      fields: {
+        fields: [],
+        recipients: [
+          {
+            id: 'recipient-no-color',
+            name: 'Kunal Signer',
+            email: 'kunal@example.com',
+            role: 'signer' as const,
+          },
+        ],
+      },
+    };
+
+    render(
+      <DocumentEditorModal
+        agreement={agreementWithMissingColor}
+        onClose={vi.fn()}
+        onSuccess={vi.fn()}
+      />,
+    );
+
+    const saveDraftBtn = screen.getByText('Save Draft');
+    fireEvent.click(saveDraftBtn);
 
     await waitFor(() => {
-      expect(onSuccessMock).toHaveBeenCalled();
-      expect(onCloseMock).toHaveBeenCalled();
+      expect(fetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/agreements/ag-edit-1/fields'),
+        expect.objectContaining({
+          method: 'PUT',
+          body: expect.stringContaining('"color":"#2563EB"'),
+        }),
+      );
     });
   });
 });

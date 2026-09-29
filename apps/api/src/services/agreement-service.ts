@@ -1,6 +1,13 @@
 import type { PrismaClient } from '@graphsign/db';
-import { generateId } from '../utils/crypto.js';
-import { NotFoundError, ForbiddenError, BadRequestError } from '../utils/errors.js';
+import { draftMetadata } from '../utils/draft-metadata.js';
+import { generateId, generateToken, hashToken } from '../utils/crypto.js';
+import {
+  NotFoundError,
+  ForbiddenError,
+  BadRequestError,
+  ValidationError,
+  ConflictError,
+} from '../utils/errors.js';
 import type { AuditService } from './audit-service.js';
 import { incrementMinorVersion, bumpToMajorVersion } from '../utils/version-utils.js';
 import type {
@@ -67,6 +74,31 @@ export class AgreementService {
   }
 
   /**
+   * Checks organisation-level document quota sufficiency (INK-286 / FR-014.009).
+   * Throws ForbiddenError if maximum document count is reached.
+   */
+  private async checkOrganisationDocumentQuota(orgId: string): Promise<void> {
+    if (!this.prisma.organisation || !this.prisma.agreement) return;
+
+    const org = await this.prisma.organisation.findUnique({
+      where: { id: orgId },
+      select: { maxDocuments: true },
+    });
+
+    if (org && org.maxDocuments > 0) {
+      const currentCount = await this.prisma.agreement.count({
+        where: { organisationId: orgId, deletedAt: null },
+      });
+      if (currentCount >= org.maxDocuments) {
+        throw new ForbiddenError(
+          `Organisation document limit reached (maximum: ${org.maxDocuments} documents). ` +
+            'Please delete or archive existing agreements, or upgrade your workspace plan.',
+        );
+      }
+    }
+  }
+
+  /**
    * Updates per-user storage usage after a successful upload (INK-206).
    */
   private async updateUserStorageUsage(userId: string, additionalBytes: number): Promise<void> {
@@ -92,7 +124,8 @@ export class AgreementService {
       );
     }
 
-    // Enforce user storage quota (INK-206)
+    // Enforce user storage quota (INK-206) and organisation document quota (INK-286)
+    await this.checkOrganisationDocumentQuota(orgId);
     if (authorId !== 'unknown') {
       await this.checkUserStorageQuota(authorId, input.fileSize);
     }
@@ -194,6 +227,7 @@ export class AgreementService {
       ? Buffer.byteLength(input.markdownContent, 'utf8')
       : DEFAULT_SCRATCH_SIZE_BYTES;
 
+    await this.checkOrganisationDocumentQuota(orgId);
     if (authorId !== 'unknown') {
       await this.checkUserStorageQuota(authorId, estimatedSizeBytes);
     }
@@ -287,9 +321,17 @@ export class AgreementService {
     }
 
     const nextVersion = incrementMinorVersion(existing.version);
+    if (
+      input.expectedVersion &&
+      String(existing.version) !== input.expectedVersion.replace(/^v/, '')
+    ) {
+      throw new ConflictError(
+        'This draft was changed in another tab. Reload the latest draft before saving.',
+      );
+    }
 
     const updated = await this.prisma.agreement.update({
-      where: { id: agreementId },
+      where: { id: agreementId, ...(input.expectedVersion ? { version: existing.version } : {}) },
       data: {
         title: input.title ?? existing.title,
         description: input.description ?? existing.description,
@@ -419,7 +461,7 @@ export class AgreementService {
       throw new NotFoundError('Agreement not found.');
     }
 
-    // Non-admin users can only view their own agreements (INK-248)
+    // Non-admin users can only view their own agreements or agreements assigned to them for review (INK-248, INK-263)
     if (
       userRole &&
       userRole !== 'org_admin' &&
@@ -427,7 +469,8 @@ export class AgreementService {
       userRole !== 'super_admin' &&
       userId &&
       userId !== 'unknown' &&
-      agreement.authorId !== userId
+      agreement.authorId !== userId &&
+      agreement.reviewerId !== userId
     ) {
       throw new ForbiddenError('You do not have permission to access this agreement.');
     }
@@ -467,7 +510,7 @@ export class AgreementService {
     const auditLogs = await this.prisma.auditLog.findMany({
       where: {
         organisationId: orgId,
-        resourceType: 'Agreement',
+        resourceType: { in: ['Agreement', 'agreement'] },
         resourceId: agreementId,
       },
       orderBy: { createdAt: 'desc' },
@@ -506,6 +549,42 @@ export class AgreementService {
           break;
         case 'AGREEMENT_CLONED':
           summary = 'Cloned agreement';
+          break;
+        case 'AGREEMENT_SUBMITTED_FOR_REVIEW':
+        case 'SUBMITTED_FOR_REVIEW':
+          summary = `Submitted for review${meta.reviewerEmail ? ` to ${meta.reviewerEmail}` : ''}`;
+          break;
+        case 'AGREEMENT_REVIEW_APPROVED':
+        case 'REVIEW_APPROVED':
+          summary = `Review approved${meta.note ? `: "${meta.note}"` : ''}`;
+          break;
+        case 'AGREEMENT_REVIEW_REJECTED':
+        case 'REVIEW_REJECTED':
+          summary = `Review rejected${meta.note ? `: "${meta.note}"` : ''}`;
+          break;
+        case 'AGREEMENT_REVIEW_RETRACTED':
+        case 'REVIEW_RETRACTED':
+          summary = 'Review request retracted';
+          break;
+        case 'AGREEMENT_SENT_FOR_SIGNATURE':
+        case 'SENT_FOR_SIGNATURE':
+          summary = `Sent for signature${meta.recipientCount ? ` to ${meta.recipientCount} recipient(s)` : ''}`;
+          break;
+        case 'AGREEMENT_REMINDER_SENT':
+        case 'REMINDER_SENT':
+          summary = `Signature reminder sent${meta.recipientEmail ? ` to ${meta.recipientEmail}` : ''}`;
+          break;
+        case 'AGREEMENT_SEALED':
+        case 'SEALED':
+          summary = `Cryptographically sealed (${meta.padesLevel || 'PAdES-B-T'})`;
+          break;
+        case 'RECIPIENT_SIGNED':
+        case 'SIGNATURE_ADOPTED':
+          summary = `Signed by ${meta.signerEmail || meta.signerName || 'recipient'}`;
+          break;
+        case 'AGREEMENT_VOIDED':
+        case 'VOIDED':
+          summary = `Voided agreement${meta.reason ? `: ${meta.reason}` : ''}`;
           break;
         case 'AGREEMENT_METADATA_UPDATED':
           if (meta.addedTags?.length && meta.removedTags?.length) {
@@ -673,7 +752,7 @@ export class AgreementService {
         mimeType: existing.mimeType,
         markdownContent: existing.markdownContent,
         tags: existing.tags ? (existing.tags as any) : [],
-        metadata: existing.metadata ? (existing.metadata as any) : {},
+        metadata: draftMetadata(existing.metadata) as any,
         version: '0.1',
         versions: {
           create: {
@@ -764,6 +843,48 @@ export class AgreementService {
   }
 
   /**
+   * Delete agreement record (INK-271)
+   */
+  async deleteAgreement(orgId: string, authorId: string, agreementId: string, userRole?: string) {
+    const existing = await this.prisma.agreement.findFirst({
+      where: { id: agreementId, organisationId: orgId, deletedAt: null },
+    });
+
+    if (!existing) {
+      throw new NotFoundError('Agreement not found.');
+    }
+
+    if (
+      userRole &&
+      userRole !== 'org_admin' &&
+      userRole !== 'admin' &&
+      userRole !== 'super_admin' &&
+      authorId !== 'unknown' &&
+      existing.authorId !== authorId
+    ) {
+      throw new ForbiddenError('You do not have permission to delete this agreement.');
+    }
+
+    await this.prisma.agreement.update({
+      where: { id: agreementId },
+      data: { deletedAt: new Date() },
+    });
+
+    if (this.audit) {
+      await this.audit.log({
+        organisationId: orgId,
+        userId: authorId,
+        action: 'AGREEMENT_DELETED',
+        resourceType: 'Agreement',
+        resourceId: agreementId,
+        metadata: { title: existing.title },
+      });
+    }
+
+    return { success: true, id: agreementId };
+  }
+
+  /**
    * Update metadata and tags (FR-004.007 / INK-72)
    */
   async updateMetadataAndTags(
@@ -834,6 +955,7 @@ export class AgreementService {
     query: QueryAgreementsInput,
     userId?: string,
     userRole?: string,
+    userEmail?: string,
   ) {
     const page = query.page || 1;
     const limit = query.limit || 20;
@@ -845,7 +967,7 @@ export class AgreementService {
       isArchived: query.isArchived ?? false,
     };
 
-    // Non-admin users are strictly scoped to their authored documents (INK-248)
+    // Non-admin users are strictly scoped to their authored documents, review assignments, or signing requests (INK-248, INK-263, INK-278)
     if (
       userRole &&
       userRole !== 'org_admin' &&
@@ -854,7 +976,24 @@ export class AgreementService {
       userId &&
       userId !== 'unknown'
     ) {
-      where.authorId = userId;
+      where.OR = [
+        { authorId: userId },
+        { reviewerId: userId },
+        ...(userEmail
+          ? [
+              {
+                recipients: {
+                  some: {
+                    email: {
+                      equals: userEmail.trim(),
+                      mode: 'insensitive' as const,
+                    },
+                  },
+                },
+              },
+            ]
+          : []),
+      ];
     }
 
     if (query.status) {
@@ -868,10 +1007,16 @@ export class AgreementService {
     }
 
     if (query.search) {
-      where.OR = [
+      const searchConditions = [
         { title: { contains: query.search, mode: 'insensitive' } },
         { description: { contains: query.search, mode: 'insensitive' } },
       ];
+      if (where.OR) {
+        where.AND = [{ OR: where.OR }, { OR: searchConditions }];
+        delete where.OR;
+      } else {
+        where.OR = searchConditions;
+      }
     }
 
     // Filter by tag using Prisma JsonB array_contains
@@ -912,6 +1057,16 @@ export class AgreementService {
           updatedAt: true,
           deletedAt: true,
           author: { select: { id: true, name: true, email: true } },
+          recipients: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              role: true,
+              status: true,
+              routingOrder: true,
+            },
+          },
         },
       }),
       this.prisma.agreement.count({ where }),
@@ -934,6 +1089,7 @@ export class AgreementService {
   async getAgreementFields(orgId: string, agreementId: string, userId?: string, userRole?: string) {
     const agreement = await this.prisma.agreement.findFirst({
       where: { id: agreementId, organisationId: orgId, deletedAt: null },
+      include: { recipients: true },
     });
 
     if (!agreement) {
@@ -960,10 +1116,54 @@ export class AgreementService {
         : [];
     const recipientsList = Array.isArray(fieldsData.recipients) ? fieldsData.recipients : [];
 
+    const defaultColors = ['#2563EB', '#059669', '#D97706', '#7C3AED', '#DB2777', '#0891B2'];
+    const persistedRecipients = (agreement as any).recipients || [];
+    const persistedById = new Map<string, any>(persistedRecipients.map((r: any) => [r.id, r]));
+    const persistedByEmail = new Map<string, any>(
+      persistedRecipients.map((r: any) => [r.email?.toLowerCase(), r]),
+    );
+
+    const recipientsSource =
+      recipientsList.length > 0
+        ? recipientsList
+        : persistedRecipients.map((pr: any) => ({
+            id: pr.id,
+            name: pr.name,
+            email: pr.email,
+            role: pr.role,
+            routingOrder: pr.routingOrder,
+            color: pr.color,
+          }));
+
+    const normalizedRecipients = recipientsSource.map((r: any, idx: number) => {
+      const persisted =
+        (r.id ? persistedById.get(r.id) : null) ||
+        (r.email ? persistedByEmail.get(r.email.toLowerCase()) : null);
+
+      const isValidHex =
+        typeof r.color === 'string' && /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(r.color.trim());
+
+      const persistedValidHex =
+        persisted &&
+        typeof persisted.color === 'string' &&
+        /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(persisted.color.trim());
+
+      const color = isValidHex
+        ? r.color.trim()
+        : persistedValidHex
+          ? persisted.color.trim()
+          : defaultColors[idx % defaultColors.length] || '#2563EB';
+
+      return {
+        ...r,
+        color,
+      };
+    });
+
     return {
       agreementId,
       fields: fieldsList,
-      recipients: recipientsList,
+      recipients: normalizedRecipients,
     };
   }
 
@@ -1028,6 +1228,98 @@ export class AgreementService {
       agreementId: updated.id,
       fields: data.fields,
       recipients: data.recipients,
+    };
+  }
+
+  /**
+   * INK-278: Generate in-app signing session for authenticated recipient
+   */
+  async createSignerSession(
+    orgId: string,
+    agreementId: string,
+    userEmail: string,
+    userId?: string,
+    userRole?: string,
+  ) {
+    const agreement = await this.prisma.agreement.findFirst({
+      where: {
+        id: agreementId,
+        organisationId: orgId,
+        deletedAt: null,
+      },
+      include: {
+        recipients: true,
+      },
+    });
+
+    if (!agreement) {
+      throw new NotFoundError('Agreement not found.');
+    }
+
+    if (agreement.status !== 'SENT' && agreement.status !== 'PARTIALLY_SIGNED') {
+      throw new ValidationError('Document is not currently active for signing.');
+    }
+
+    const normalizedEmail = userEmail.trim().toLowerCase();
+    let recipient = agreement.recipients.find(
+      (r) => r.email.trim().toLowerCase() === normalizedEmail,
+    );
+
+    if (!recipient) {
+      const isPrivileged =
+        agreement.authorId === userId || ['admin', 'owner', 'super_admin'].includes(userRole || '');
+      if (isPrivileged) {
+        const pendingRecipients = agreement.recipients.filter(
+          (r) => r.status !== 'SIGNED' && r.status !== 'DECLINED',
+        );
+        if (agreement.signingOrder === 'SEQUENTIAL') {
+          recipient =
+            pendingRecipients.find((r) => r.routingOrder === agreement.currentStep) ||
+            pendingRecipients.sort((a, b) => a.routingOrder - b.routingOrder)[0];
+        } else {
+          recipient = pendingRecipients[0];
+        }
+      }
+    }
+
+    if (!recipient) {
+      throw new ForbiddenError('You are not designated as a participant on this document.');
+    }
+
+    if (recipient.status === 'SIGNED') {
+      throw new ValidationError('You have already completed signing this document.');
+    }
+
+    if (recipient.status === 'DECLINED') {
+      throw new ValidationError('You have previously declined to sign this document.');
+    }
+
+    // Check turn in sequential order
+    if (
+      agreement.signingOrder === 'SEQUENTIAL' &&
+      recipient.routingOrder !== agreement.currentStep
+    ) {
+      throw new ValidationError(
+        'It is not your turn yet in the sequential signing order. Preceding participants are currently signing.',
+      );
+    }
+
+    // Generate fresh single-use token and update recipient
+    const rawToken = generateToken();
+    const tokenHash = await hashToken(rawToken);
+
+    await this.prisma.agreementRecipient.update({
+      where: { id: recipient.id },
+      data: {
+        signingTokenHash: tokenHash,
+        tokenExpiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours
+        status: recipient.status === 'PENDING' ? 'INVITED' : recipient.status,
+      },
+    });
+
+    return {
+      token: rawToken,
+      signingUrl: `/sign/${rawToken}`,
     };
   }
 }

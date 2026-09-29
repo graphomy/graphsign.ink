@@ -49,10 +49,10 @@ export function CancelAgreementModal({
 
       const data = await res.json();
       if (!res.ok || !data.success) {
-        throw new Error(data.error?.message || data.message || 'Failed to cancel agreement.');
+        throw new Error(data.error?.message || data.message || 'Failed to void agreement.');
       }
 
-      onSuccess(`Agreement "${agreementTitle}" has been cancelled.`);
+      onSuccess(`Agreement "${agreementTitle}" has been voided and returned to Draft.`);
       onClose();
     } catch (err: unknown) {
       setError((err as Error).message);
@@ -74,8 +74,10 @@ export function CancelAgreementModal({
         </div>
 
         <p className="text-xs text-neutral-600">
-          Are you sure you want to cancel <strong>&quot;{agreementTitle}&quot;</strong>? This will
-          immediately invalidate all outstanding signing invitations and mark the envelope as void.
+          Are you sure you want to void <strong>&quot;{agreementTitle}&quot;</strong>? This will
+          invalidate all outstanding signing invitations and return the agreement to{' '}
+          <strong className="text-neutral-900">Draft</strong> status so you can make updates and
+          resend.
         </p>
 
         {error && (

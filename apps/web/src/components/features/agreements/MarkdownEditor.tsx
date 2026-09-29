@@ -78,11 +78,13 @@ export function renderMarkdownToHtml(md?: string | null): string {
       '<li class="text-xs text-neutral-700 ml-4 list-decimal my-0.5">$2</li>',
     )
 
-    // Links
-    .replace(
-      /\[([^\]]+)\]\(([^)]+)\)/gim,
-      '<a href="$2" target="_blank" rel="noopener noreferrer" class="text-[#ba0000] underline font-medium hover:text-red-700">$1</a>',
-    )
+    // Links - strictly sanitize URL scheme to prevent javascript:, data:, vbscript: XSS
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/gim, (_, text, url) => {
+      const trimmedUrl = String(url).trim();
+      const isSafeProtocol = /^(https?:\/\/|mailto:|\/)/i.test(trimmedUrl);
+      const safeHref = isSafeProtocol ? trimmedUrl.replace(/"/g, '&quot;') : '#';
+      return `<a href="${safeHref}" target="_blank" rel="noopener noreferrer" class="text-[#ba0000] underline font-medium hover:text-red-700">${text}</a>`;
+    })
 
     // Paragraphs / line breaks
     .replace(/\n\n/gim, '<p class="my-2.5 text-xs text-neutral-700 leading-relaxed"></p>')

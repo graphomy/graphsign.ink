@@ -55,8 +55,15 @@ export const sendAgreementSchema = z.object({
 });
 export type SendAgreementInput = z.infer<typeof sendAgreementSchema>;
 
+export const verifyOtpSchema = z.object({
+  otpCode: z.string().length(6, 'Verification code must be 6 digits'),
+});
+export type VerifyOtpInput = z.infer<typeof verifyOtpSchema>;
+
 export const recipientSignSchema = z.object({
-  fieldsData: z.record(z.union([z.string(), z.boolean(), z.number(), z.null()])).default({}),
+  fieldsData: z
+    .record(z.string(), z.union([z.string(), z.boolean(), z.number(), z.null()]))
+    .default({}),
   signatureData: z
     .object({
       type: z.enum(['DRAWN', 'TYPED', 'UPLOADED']),
@@ -68,6 +75,8 @@ export const recipientSignSchema = z.object({
       timestamp: z.string().datetime().optional(),
     })
     .optional(),
+  signedAsGuest: z.boolean().optional(),
+  otpCode: z.string().optional(),
 });
 export type RecipientSignInput = z.infer<typeof recipientSignSchema>;
 
@@ -80,3 +89,17 @@ export const cancelAgreementSchema = z.object({
   reason: z.string().min(1, 'Cancellation reason is required').max(1000),
 });
 export type CancelAgreementInput = z.infer<typeof cancelAgreementSchema>;
+
+export const electronicConsentSchema = z.object({
+  consentGiven: z.boolean().refine((v) => v === true, {
+    message: 'You must explicitly consent to use electronic records and signatures.',
+  }),
+  ersdVersion: z.string().default('v1.0'),
+});
+export type ElectronicConsentInput = z.infer<typeof electronicConsentSchema>;
+
+export const sendReminderSchema = z.object({
+  recipientId: z.string().uuid('Invalid recipient ID').optional(),
+  note: z.string().max(1000).optional(),
+});
+export type SendReminderInput = z.infer<typeof sendReminderSchema>;

@@ -42,6 +42,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Verify application before deployment
+        run: pnpm db:generate && pnpm typecheck && pnpm test
+
       - name: Build web app for Cloudflare Pages
         run: pnpm --filter @graphsign/web pages:build
         env:

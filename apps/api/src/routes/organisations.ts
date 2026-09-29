@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import type { PrismaClient } from '@graphsign/db';
-import { createPrismaClient } from '@graphsign/db';
+import { getDbClient } from '../utils/db.js';
 import {
   createOrganisationSchema,
   inviteMemberSchema,
@@ -8,6 +8,7 @@ import {
   updateBrandingSchema,
   updateOrganisationSettingsSchema,
   updateComplianceSettingsSchema,
+  updateNotificationSettingsSchema,
   suspendOrganisationSchema,
   createTeamSchema,
   addTeamMemberSchema,
@@ -16,6 +17,9 @@ import {
   addDomainSchema,
   switchOrganisationSchema,
   auditLogQuerySchema,
+  auditLogExportSchema,
+  updateMemberStatusSchema,
+  upgradeToTeamsSchema,
 } from '../validators/organisation-validators.js';
 import { OrganisationService } from '../services/organisation-service.js';
 import type { MailerService } from '../services/mailer-service.js';
@@ -28,6 +32,7 @@ import { jwtAuth } from '../middleware/jwt-auth.js';
 import { enforceTenantActiveStatus } from '../middleware/tenant-status-middleware.js';
 import { requirePermission, requireRole } from '../middleware/rbac-middleware.js';
 import { signJwt } from '../utils/jwt.js';
+import { isSuperAdmin } from '../config/roles.js';
 import type { Env } from '../index.js';
 
 export interface OrganisationDeps {
@@ -50,26 +55,7 @@ export function createOrganisationRoutes(deps?: OrganisationDeps) {
       return deps.organisationService;
     }
 
-    let db = deps?.prisma;
-    if (!db) {
-      const dbUrl = c.env?.DATABASE_URL || process.env.DATABASE_URL;
-      const isValidUrl =
-        dbUrl &&
-        typeof dbUrl === 'string' &&
-        dbUrl.trim() !== '' &&
-        (dbUrl.startsWith('postgres://') || dbUrl.startsWith('postgresql://'));
-
-      if (isValidUrl) {
-        db = createPrismaClient(dbUrl);
-      } else {
-        const preview = dbUrl ? `${String(dbUrl).substring(0, 10)}...` : 'undefined';
-        throw new AppError(
-          'INTERNAL_SERVER_ERROR',
-          `Database connection string (DATABASE_URL) is missing or invalid. Received: "${preview}".`,
-          500,
-        );
-      }
-    }
+    let db = getDbClient(c, deps?.prisma);
 
     let mailer = deps?.mailer;
     if (!mailer) {
@@ -100,7 +86,7 @@ export function createOrganisationRoutes(deps?: OrganisationDeps) {
 
     const parsed = acceptInvitationSchema.safeParse(body);
     if (!parsed.success) {
-      const firstError = parsed.error.errors[0];
+      const firstError = parsed.error.issues[0];
       throw new ValidationError(firstError?.message ?? 'Invalid input.', {
         field: firstError?.path.join('.') ?? 'unknown',
         issue: firstError?.message ?? 'validation_failed',
@@ -121,7 +107,7 @@ export function createOrganisationRoutes(deps?: OrganisationDeps) {
 
     const parsed = createOrganisationSchema.safeParse(body);
     if (!parsed.success) {
-      const firstError = parsed.error.errors[0];
+      const firstError = parsed.error.issues[0];
       throw new ValidationError(firstError?.message ?? 'Invalid input.', {
         field: firstError?.path.join('.') ?? 'unknown',
         issue: firstError?.message ?? 'validation_failed',
@@ -160,7 +146,7 @@ export function createOrganisationRoutes(deps?: OrganisationDeps) {
 
     const parsed = switchOrganisationSchema.safeParse(body);
     if (!parsed.success) {
-      const firstError = parsed.error.errors[0];
+      const firstError = parsed.error.issues[0];
       throw new ValidationError(firstError?.message ?? 'Invalid input.');
     }
 
@@ -212,10 +198,53 @@ export function createOrganisationRoutes(deps?: OrganisationDeps) {
       name: org.name,
       slug: org.slug,
       status: org.status,
+      planType: org.planType || 'individual',
       sessionTimeoutMinutes: org.sessionTimeoutMinutes,
       mfaRequired: org.mfaRequired,
       mfaRequiredRoles: org.mfaRequiredRoles,
       createdAt: org.createdAt.toISOString(),
+    });
+  });
+
+  // POST /api/v1/organisations/me/upgrade-to-teams
+  orgs.post('/me/upgrade-to-teams', jwtAuth(), enforceTenantActiveStatus(), async (c) => {
+    const body = await c.req.json().catch(() => ({}));
+    const parsed = upgradeToTeamsSchema.safeParse(body);
+    if (!parsed.success) {
+      const firstError = parsed.error.issues[0];
+      throw new ValidationError(firstError?.message ?? 'Invalid upgrade data.');
+    }
+
+    const payload = c.get('userPayload');
+    const service = getService(c);
+    const updated = await service.upgradeToTeams(
+      payload.orgId,
+      payload.sub,
+      parsed.data.companyName,
+    );
+
+    const jwtSecret = c.env?.JWT_SECRET || process.env.JWT_SECRET;
+    const assignedRole = isSuperAdmin(payload.email) ? 'super_admin' : 'org_admin';
+    const token = await signJwt(
+      {
+        sub: payload.sub,
+        orgId: updated.id,
+        email: payload.email,
+        role: assignedRole,
+        jti: crypto.randomUUID(),
+      },
+      jwtSecret,
+    );
+
+    c.header('Set-Cookie', `graphsign_session=${token}; HttpOnly; Path=/; SameSite=Strict; Secure`);
+
+    return c.json({
+      token,
+      organisationId: updated.id,
+      organisationName: updated.name,
+      planType: updated.planType,
+      role: assignedRole,
+      message: 'Workspace successfully upgraded to Teams plan.',
     });
   });
 
@@ -231,7 +260,7 @@ export function createOrganisationRoutes(deps?: OrganisationDeps) {
 
       const parsed = updateOrganisationSettingsSchema.safeParse(body);
       if (!parsed.success) {
-        const firstError = parsed.error.errors[0];
+        const firstError = parsed.error.issues[0];
         throw new ValidationError(firstError?.message ?? 'Invalid input.');
       }
 
@@ -293,7 +322,7 @@ export function createOrganisationRoutes(deps?: OrganisationDeps) {
 
       const parsed = updateBrandingSchema.safeParse(body);
       if (!parsed.success) {
-        const firstError = parsed.error.errors[0];
+        const firstError = parsed.error.issues[0];
         throw new ValidationError(firstError?.message ?? 'Invalid input.');
       }
 
@@ -309,6 +338,44 @@ export function createOrganisationRoutes(deps?: OrganisationDeps) {
         defaultSenderName: updated.defaultSenderName,
         emailFooterText: updated.emailFooterText,
         message: 'Organisation branding updated successfully.',
+      });
+    },
+  );
+
+  // INK-114: GET & PATCH notification trigger settings
+  orgs.get('/me/notifications', jwtAuth(), enforceTenantActiveStatus(), async (c) => {
+    const payload = c.get('userPayload');
+    const service = getService(c);
+    const settings = await service.getNotificationSettings(payload.orgId);
+    return c.json(settings);
+  });
+
+  orgs.patch(
+    '/me/notifications',
+    jwtAuth(),
+    enforceTenantActiveStatus(),
+    requirePermission('organisation:manage'),
+    async (c) => {
+      const body = await c.req.json().catch(() => null);
+      if (!body) throw new ValidationError('Request body is required.');
+
+      const parsed = updateNotificationSettingsSchema.safeParse(body);
+      if (!parsed.success) {
+        const firstError = parsed.error.issues[0];
+        throw new ValidationError(firstError?.message ?? 'Invalid input.');
+      }
+
+      const payload = c.get('userPayload');
+      const service = getService(c);
+      const updated = await service.updateNotificationSettings(
+        payload.orgId,
+        payload.sub,
+        parsed.data,
+      );
+
+      return c.json({
+        ...updated,
+        message: 'Notification trigger settings updated successfully.',
       });
     },
   );
@@ -347,6 +414,29 @@ export function createOrganisationRoutes(deps?: OrganisationDeps) {
     },
   );
 
+  // INK-286 (FR-014.006): GET /api/v1/organisations/me/audit-logs/export
+  orgs.get(
+    '/me/audit-logs/export',
+    jwtAuth(),
+    enforceTenantActiveStatus(),
+    requirePermission('audit:read'),
+    async (c) => {
+      const queryParams = c.req.query();
+      const parsed = auditLogExportSchema.safeParse(queryParams);
+      if (!parsed.success) {
+        throw new ValidationError('Invalid query parameters for audit log export.');
+      }
+
+      const payload = c.get('userPayload');
+      const service = getService(c);
+      const result = await service.exportAuditLogs(payload.orgId, parsed.data);
+
+      c.header('Content-Type', result.contentType);
+      c.header('Content-Disposition', `attachment; filename="${result.filename}"`);
+      return c.body(result.data, 200);
+    },
+  );
+
   // GET & PUT compliance
   orgs.get('/me/compliance', jwtAuth(), enforceTenantActiveStatus(), async (c) => {
     const payload = c.get('userPayload');
@@ -372,7 +462,7 @@ export function createOrganisationRoutes(deps?: OrganisationDeps) {
 
       const parsed = updateComplianceSettingsSchema.safeParse(body);
       if (!parsed.success) {
-        const firstError = parsed.error.errors[0];
+        const firstError = parsed.error.issues[0];
         throw new ValidationError(firstError?.message ?? 'Invalid input.');
       }
 
@@ -415,7 +505,7 @@ export function createOrganisationRoutes(deps?: OrganisationDeps) {
 
       const parsed = createTeamSchema.safeParse(body);
       if (!parsed.success) {
-        const firstError = parsed.error.errors[0];
+        const firstError = parsed.error.issues[0];
         throw new ValidationError(firstError?.message ?? 'Invalid input.');
       }
 
@@ -476,6 +566,58 @@ export function createOrganisationRoutes(deps?: OrganisationDeps) {
     },
   );
 
+  // INK-286 (FR-014.001): GET /api/v1/organisations/me/members (List active organisation members)
+  orgs.get('/me/members', jwtAuth(), enforceTenantActiveStatus(), async (c) => {
+    const payload = c.get('userPayload');
+    const service = getService(c);
+    const members = await service.listMembers(payload.orgId);
+    return c.json(members);
+  });
+
+  // INK-286 (FR-014.001): DELETE /api/v1/organisations/me/members/:userId (Remove member from organisation)
+  orgs.delete(
+    '/me/members/:userId',
+    jwtAuth(),
+    enforceTenantActiveStatus(),
+    requirePermission('roles:manage'),
+    async (c) => {
+      const targetUserId = c.req.param('userId');
+      const payload = c.get('userPayload');
+      const service = getService(c);
+      await service.removeMember(payload.orgId, payload.sub, targetUserId);
+      return c.json({ message: 'Member removed from organisation successfully.' });
+    },
+  );
+
+  // INK-286 (FR-014.001): PATCH /api/v1/organisations/me/members/:userId/status (Deactivate or reactivate member)
+  orgs.patch(
+    '/me/members/:userId/status',
+    jwtAuth(),
+    enforceTenantActiveStatus(),
+    requirePermission('roles:manage'),
+    async (c) => {
+      const targetUserId = c.req.param('userId');
+      const body = await c.req.json().catch(() => null);
+      if (!body) throw new ValidationError('Request body is required.');
+
+      const parsed = updateMemberStatusSchema.safeParse(body);
+      if (!parsed.success) {
+        throw new ValidationError('Invalid status payload. Must be "active" or "suspended".');
+      }
+
+      const payload = c.get('userPayload');
+      const service = getService(c);
+      const updated = await service.updateMemberStatus(
+        payload.orgId,
+        payload.sub,
+        targetUserId,
+        parsed.data.status,
+      );
+
+      return c.json(updated);
+    },
+  );
+
   orgs.get('/roles', jwtAuth(), enforceTenantActiveStatus(), async (c) => {
     const payload = c.get('userPayload');
     const service = getService(c);
@@ -494,7 +636,7 @@ export function createOrganisationRoutes(deps?: OrganisationDeps) {
 
       const parsed = createCustomRoleSchema.safeParse(body);
       if (!parsed.success) {
-        const firstError = parsed.error.errors[0];
+        const firstError = parsed.error.issues[0];
         throw new ValidationError(firstError?.message ?? 'Invalid custom role data.');
       }
 
@@ -515,7 +657,7 @@ export function createOrganisationRoutes(deps?: OrganisationDeps) {
 
     const parsed = inviteMemberSchema.safeParse(body);
     if (!parsed.success) {
-      const firstError = parsed.error.errors[0];
+      const firstError = parsed.error.issues[0];
       throw new ValidationError(firstError?.message ?? 'Invalid input.');
     }
 
@@ -594,7 +736,7 @@ export function createOrganisationRoutes(deps?: OrganisationDeps) {
 
     const parsed = addDomainSchema.safeParse(body);
     if (!parsed.success) {
-      const firstError = parsed.error.errors[0];
+      const firstError = parsed.error.issues[0];
       throw new ValidationError(firstError?.message ?? 'Invalid domain name.');
     }
 

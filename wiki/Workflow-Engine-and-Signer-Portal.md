@@ -47,12 +47,16 @@ stateDiagram-v2
 - When a recipient opens the signing link `/sign/[token]`, a view beacon is triggered (`POST /api/v1/sign/:token/view`).
 - Status updates from `INVITED` to `VIEWED`, recording the timestamp, IP address, and user-agent.
 
-### 5. Public Signer Portal & Electronic Consent (INK-94)
+### 5. Public Signer Portal & Interactive PDF Overlays (INK-94, INK-97 to INK-105)
 
-- Signers do not need an account to sign.
-- **Signature Modes**: Supports **Drawn Signature** (HTML5 touch/mouse canvas) and **Typed Signature** (cursive font).
-- **Electronic Consent**: Signers must check the mandatory ESIGN/eIDAS electronic record and signature disclosure consent.
-- **Completion**: Upon final signer completion, status becomes `COMPLETED` and completion emails are dispatched.
+- Signers do not need an account to sign. Unauthenticated signers can verify their email via Email OTP (`POST /api/v1/sign/:token/otp/send` and `/verify`).
+- **Interactive Field Overlay**: Fields assigned to the current signer are highlighted and editable directly on the document canvas:
+  - **Signature / Initials**: Single-click to adopt or apply saved drawn/typed signature.
+  - **Text, Date, Email, Checkbox, Dropdown**: Native responsive inputs placed at exact percentage coordinates (`x%`, `y%`, `width%`, `height%`).
+- **Signature Modes**: Supports **Drawn Signature** (HTML5 touch/mouse canvas with smoothing) and **Typed Signature** (cursive font selection).
+- **Electronic Consent**: Signers must check the mandatory ESIGN/eIDAS electronic record and signature disclosure consent (`/consent`).
+- **Automatic Cryptographic Sealing**: Upon final signer completion, the workflow transitions to `COMPLETED` and immediately invokes `PadesSealingService.sealAgreement(...)` to stamp the document with PAdES B-T cryptographic signature, RFC 3161 timestamp, and QR verification badge.
+- **Completion Receipt**: Displays document title, signer, sender name, envelope UUID, verification token (`GS-xxxxxxxx`), SHA-256 certificate digest, localized timestamp with timezone, and download links.
 
 ### 6. Dynamic Conditional Logic Engine (INK-96)
 
@@ -85,9 +89,14 @@ The signer portal evaluates conditional rules in real time:
 
 ### Public Signer Endpoints
 
-| Method | Endpoint                       | Description                         | Auth Required |
-| :----- | :----------------------------- | :---------------------------------- | :------------ |
-| `GET`  | `/api/v1/sign/:token`          | Fetch signing session & fields      | Public Token  |
-| `POST` | `/api/v1/sign/:token/view`     | Record view event beacon            | Public Token  |
-| `POST` | `/api/v1/sign/:token/complete` | Submit signature & completed fields | Public Token  |
-| `POST` | `/api/v1/sign/:token/decline`  | Decline signature with reason       | Public Token  |
+| Method | Endpoint                         | Description                          | Auth Required |
+| :----- | :------------------------------- | :----------------------------------- | :------------ |
+| `GET`  | `/api/v1/sign/:token`            | Fetch signing session & fields       | Public Token  |
+| `POST` | `/api/v1/sign/:token/consent`    | Record electronic ERSD consent       | Public Token  |
+| `POST` | `/api/v1/sign/:token/view`       | Record view event beacon             | Public Token  |
+| `POST` | `/api/v1/sign/:token/otp/send`   | Send one-time passcode for guests    | Public Token  |
+| `POST` | `/api/v1/sign/:token/otp/verify` | Verify guest signer OTP code         | Public Token  |
+| `POST` | `/api/v1/sign/:token/complete`   | Submit signature & completed fields  | Public Token  |
+| `POST` | `/api/v1/sign/:token/decline`    | Decline signature with reason        | Public Token  |
+| `GET`  | `/api/v1/sign/:token/file`       | Stream PDF or Markdown binary        | Public Token  |
+| `GET`  | `/api/v1/sign/:token/download`   | Download executed document with seal | Public Token  |

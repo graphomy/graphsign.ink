@@ -1,3 +1,4 @@
+import { SigningClient } from './signing-client.js';
 import type { PrismaClient } from '@graphsign/db';
 import {
   SubmitReviewInput,
@@ -6,11 +7,22 @@ import {
   RecipientSignInput,
   DeclineSignInput,
   CancelAgreementInput,
+  ElectronicConsentInput,
+  SendReminderInput,
 } from '../validators/workflow-validators.js';
 import { AuditService } from './audit-service.js';
 import { MailerService } from './mailer-service.js';
-import { ForbiddenError, NotFoundError, ValidationError } from '../utils/errors.js';
+import { PadesSealingService } from './pades-sealing-service.js';
+import { KeyCustodyService } from './key-custody-service.js';
+import { TsaService } from './tsa-service.js';
+import {
+  BadRequestError,
+  ForbiddenError,
+  NotFoundError,
+  ValidationError,
+} from '../utils/errors.js';
 import { generateId, generateToken, hashToken } from '../utils/crypto.js';
+import { DomainEventService } from './domain-event-service.js';
 
 export interface WorkflowContext {
   userId: string;
@@ -23,11 +35,99 @@ export interface WorkflowContext {
 }
 
 export class WorkflowService {
+  private readonly sealingService: PadesSealingService;
+  private readonly eventService?: DomainEventService;
+
   constructor(
     private readonly prisma: PrismaClient,
     private readonly auditService: AuditService,
     private readonly mailerService: MailerService,
-  ) {}
+    sealingService?: PadesSealingService,
+    eventService?: DomainEventService,
+    signingClient?: SigningClient,
+  ) {
+    this.sealingService =
+      sealingService ||
+      new PadesSealingService(
+        this.prisma,
+        new KeyCustodyService(),
+        new TsaService(),
+        this.auditService,
+        signingClient,
+      );
+    this.eventService =
+      eventService ||
+      ((this.prisma as any)?.domainEvent ? new DomainEventService(this.prisma) : undefined);
+  }
+
+  /** Retries completion notifications using the original sealed artifact and stable links. */
+  async sendCompletionNotifications(
+    agreementId: string,
+    organisationId: string,
+    verificationToken: string,
+  ) {
+    const agreement = await this.prisma.agreement.findFirst({
+      where: { id: agreementId, organisationId },
+      include: { author: true, recipients: true },
+    });
+    if (!agreement) throw new NotFoundError('Agreement not found.');
+    const webUrl = (this.mailerService as { webUrl?: string }).webUrl || 'https://graphsign.ink';
+    const verificationUrl = webUrl + '/verify/' + encodeURIComponent(verificationToken);
+    const downloadUrl = `${webUrl}/api/v1/sign/${encodeURIComponent(verificationToken)}/download`;
+    try {
+      await this.eventService?.publish({
+        organisationId,
+        eventType: 'document.completed',
+        resourceType: 'agreement',
+        resourceId: agreementId,
+        actorKind: 'system',
+        actorId: 'pades-seal',
+        dedupeKey: 'document.completed:' + agreementId,
+        data: {
+          document_id: agreementId,
+          document_name: agreement.title,
+          completed_at: agreement.completedAt?.toISOString() || new Date().toISOString(),
+          verification_url: verificationUrl,
+          total_signers: agreement.recipients.filter(
+            (recipient) => recipient.role === 'signer' || recipient.role === 'approver',
+          ).length,
+        },
+      });
+    } catch {
+      console.warn(
+        '[WORKFLOW] Completion event delivery failed; the signed artifact remains saved.',
+      );
+    }
+    const participants = [
+      { email: agreement.author.email, name: agreement.author.name || 'Author', id: undefined },
+      ...agreement.recipients.map((recipient) => ({
+        email: recipient.email,
+        name: recipient.name,
+        id: recipient.id,
+      })),
+    ];
+    for (const participant of participants) {
+      try {
+        await this.mailerService.sendAgreementCompletedEmail(
+          participant.email,
+          participant.name,
+          agreement.title,
+          downloadUrl,
+          verificationUrl,
+          { organisationId, agreementId, recipientId: participant.id, eventType: 'COMPLETED' },
+        );
+      } catch {
+        console.warn(
+          '[WORKFLOW] Completion email delivery failed; recipient signatures and signed artifact remain saved.',
+        );
+      }
+    }
+  }
+
+  private static readonly otpStore = new Map<
+    string,
+    { code: string; expiresAt: number; verified?: boolean; attempts?: number }
+  >();
 
   /**
    * INK-87: Submit agreement for internal review
@@ -94,13 +194,73 @@ export class WorkflowService {
       userAgent: ctx.userAgent,
     });
 
-    // Dispatch email notification to reviewer
+    // Dispatch email notification to reviewer (INK-107, INK-113)
     await this.mailerService.sendReviewRequestEmail(
       reviewer.email,
       agreement.title,
       ctx.userName || agreement.author.name || 'An author',
       input.notes,
+      {
+        organisationId: ctx.organisationId,
+        agreementId,
+        eventType: 'REVIEW_REQUEST',
+      },
     );
+
+    return updated;
+  }
+
+  /**
+   * INK-268: Retract document from review back to draft state
+   */
+  async retractReview(ctx: WorkflowContext, agreementId: string) {
+    const agreement = await this.prisma.agreement.findFirst({
+      where: {
+        id: agreementId,
+        organisationId: ctx.organisationId,
+        deletedAt: null,
+      },
+      include: { author: { select: { name: true, email: true } } },
+    });
+
+    if (!agreement) {
+      throw new NotFoundError('Agreement not found.');
+    }
+
+    if (agreement.status !== 'IN_REVIEW') {
+      throw new ValidationError(
+        `Cannot retract agreement in '${agreement.status}' status. Only documents in review can be retracted.`,
+      );
+    }
+
+    const isAdmin = ctx.role === 'admin' || ctx.role === 'superadmin' || ctx.role === 'owner';
+    if (agreement.authorId !== ctx.userId && !isAdmin) {
+      throw new ForbiddenError(
+        'Only the document author or an administrator can retract this review request.',
+      );
+    }
+
+    const updated = await this.prisma.agreement.update({
+      where: { id: agreementId },
+      data: {
+        status: 'DRAFT',
+        rejectionReason: null,
+      },
+    });
+
+    await this.auditService.log({
+      organisationId: ctx.organisationId,
+      userId: ctx.userId,
+      action: 'REVIEW_RETRACTED',
+      resourceType: 'agreement',
+      resourceId: agreementId,
+      metadata: {
+        previousStatus: 'IN_REVIEW',
+        retractedBy: ctx.userId,
+      },
+      ipAddress: ctx.ipAddress,
+      userAgent: ctx.userAgent,
+    });
 
     return updated;
   }
@@ -156,20 +316,25 @@ export class WorkflowService {
       userAgent: ctx.userAgent,
     });
 
-    // Notify author of approval
+    // Notify author of approval (INK-113)
     await this.mailerService.sendReviewDecisionEmail(
       agreement.author.email,
       agreement.title,
       ctx.userName || 'The reviewer',
       'APPROVE',
       input.comments,
+      {
+        organisationId: ctx.organisationId,
+        agreementId,
+        eventType: 'REVIEW_APPROVED',
+      },
     );
 
     return updated;
   }
 
   /**
-   * INK-89: Reject document
+   * INK-89: Reject document (INK-110)
    */
   async rejectAgreement(ctx: WorkflowContext, agreementId: string, input: ReviewDecisionInput) {
     const agreement = await this.prisma.agreement.findFirst({
@@ -219,20 +384,25 @@ export class WorkflowService {
       userAgent: ctx.userAgent,
     });
 
-    // Notify author of rejection
+    // Notify author of rejection (INK-110, INK-113)
     await this.mailerService.sendReviewDecisionEmail(
       agreement.author.email,
       agreement.title,
       ctx.userName || 'The reviewer',
       'REJECT',
       input.comments,
+      {
+        organisationId: ctx.organisationId,
+        agreementId,
+        eventType: 'REVIEW_REJECTED',
+      },
     );
 
     return updated;
   }
 
   /**
-   * INK-90, INK-91, INK-92: Send agreement for signature
+   * INK-90, INK-91, INK-92, INK-107, INK-115: Send agreement for signature with role-aware invites & custom message
    */
   async sendForSignature(ctx: WorkflowContext, agreementId: string, input: SendAgreementInput) {
     const agreement = await this.prisma.agreement.findFirst({
@@ -252,22 +422,32 @@ export class WorkflowService {
     }
 
     if (
-      agreement.status !== 'DRAFT' &&
-      agreement.status !== 'APPROVED' &&
-      agreement.status !== 'REJECTED'
+      agreement.status === 'SENT' ||
+      agreement.status === 'SENT_FOR_SIGNATURE' ||
+      agreement.status === 'PARTIALLY_SIGNED' ||
+      agreement.status === 'COMPLETED' ||
+      agreement.status === 'SIGNED'
     ) {
       throw new ValidationError(
-        `Cannot send agreement in '${agreement.status}' status. Must be DRAFT or APPROVED.`,
+        'Agreement has already been sent for signature. It cannot be resent unless the previous request is rejected or declined.',
+      );
+    }
+
+    if (
+      agreement.status !== 'DRAFT' &&
+      agreement.status !== 'APPROVED' &&
+      agreement.status !== 'REJECTED' &&
+      agreement.status !== 'ACTIVE' &&
+      agreement.status !== 'DECLINED'
+    ) {
+      throw new ValidationError(
+        `Cannot send agreement in '${agreement.status}' status. Must be DRAFT, APPROVED, REJECTED, or DECLINED.`,
       );
     }
 
     const signingOrder = input.signingOrder || 'PARALLEL';
     const expiresAt = input.expiresAt ? new Date(input.expiresAt) : null;
-
-    // Remove existing recipients to replace with final envelope
-    await this.prisma.agreementRecipient.deleteMany({
-      where: { agreementId },
-    });
+    const tokenExpiresAt = expiresAt || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days default
 
     // Create recipients and generate initial invitation tokens
     const createdRecipients: Array<{
@@ -276,6 +456,21 @@ export class WorkflowService {
       name: string;
       role: string;
       routingOrder: number;
+      color: string;
+      rawToken: string;
+    }> = [];
+
+    const recipientRecordsToCreate: Array<{
+      id: string;
+      agreementId: string;
+      email: string;
+      name: string;
+      role: string;
+      routingOrder: number;
+      color: string;
+      signingTokenHash: string;
+      tokenExpiresAt: Date;
+      status: string;
       rawToken: string;
     }> = [];
 
@@ -284,42 +479,113 @@ export class WorkflowService {
       const rawToken = generateToken();
       const tokenHash = await hashToken(rawToken);
       const routingOrder = signingOrder === 'SEQUENTIAL' ? r.routingOrder || i + 1 : 1;
+      const color = r.color || '#2563EB';
+      const id = generateId();
 
-      const recipientRecord = await this.prisma.agreementRecipient.create({
-        data: {
-          id: generateId(),
-          agreementId,
-          email: r.email.toLowerCase().trim(),
-          name: r.name.trim(),
-          role: r.role || 'signer',
-          routingOrder,
-          color: r.color || '#2563EB',
-          signingTokenHash: tokenHash,
-          tokenExpiresAt: expiresAt || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days default
-          status: 'PENDING',
-        },
-      });
+      const record = {
+        id,
+        agreementId,
+        email: r.email.toLowerCase().trim(),
+        name: r.name.trim(),
+        role: r.role || 'signer',
+        routingOrder,
+        color,
+        signingTokenHash: tokenHash,
+        tokenExpiresAt,
+        status: 'PENDING',
+        rawToken,
+      };
 
+      recipientRecordsToCreate.push(record);
       createdRecipients.push({
-        id: recipientRecord.id,
-        email: recipientRecord.email,
-        name: recipientRecord.name,
-        role: recipientRecord.role,
-        routingOrder: recipientRecord.routingOrder,
+        id: record.id,
+        email: record.email,
+        name: record.name,
+        role: record.role,
+        routingOrder: record.routingOrder,
+        color: record.color,
         rawToken,
       });
     }
 
-    // Update agreement status to SENT
-    const updatedAgreement = await this.prisma.agreement.update({
-      where: { id: agreementId },
-      data: {
-        status: 'SENT',
-        signingOrder,
-        currentStep: 1,
-        expiresAt,
-      },
-    });
+    // Synchronize agreement.fields with the newly created recipient records
+    let synchronizedFields = agreement.fields as any;
+    if (synchronizedFields && Array.isArray(synchronizedFields.fields)) {
+      const fieldList = [...synchronizedFields.fields];
+      const oldRecipients = Array.isArray(synchronizedFields.recipients)
+        ? synchronizedFields.recipients
+        : [];
+
+      for (let i = 0; i < input.recipients.length; i++) {
+        const inputRecip = input.recipients[i] as any;
+        const created = createdRecipients[i]!;
+        const oldRecipId = inputRecip.id || oldRecipients[i]?.id || `recipient-${i + 1}`;
+
+        for (const f of fieldList) {
+          if (
+            f.recipientId === oldRecipId ||
+            f.recipientId === `recipient-${i + 1}` ||
+            f.recipientId === `signer-${i + 1}` ||
+            f.recipientId === `recip-${i + 1}` ||
+            (i === 0 &&
+              (f.recipientId === 'signer' ||
+                f.recipientId === 'r-1' ||
+                f.recipientId === 'recipient-1')) ||
+            (inputRecip.email && f.recipientId?.toLowerCase() === inputRecip.email.toLowerCase())
+          ) {
+            f.recipientId = created.id;
+          }
+        }
+      }
+
+      synchronizedFields = {
+        ...synchronizedFields,
+        fields: fieldList,
+        recipients: createdRecipients.map((cr) => ({
+          id: cr.id,
+          name: cr.name,
+          email: cr.email,
+          role: cr.role,
+          routingOrder: cr.routingOrder,
+          color: cr.color,
+        })),
+      };
+    }
+
+    const executeDbOps = async (tx: any) => {
+      // Remove existing recipients to replace with final envelope
+      await tx.agreementRecipient.deleteMany({
+        where: { agreementId },
+      });
+
+      for (const item of recipientRecordsToCreate) {
+        const { rawToken: _rawToken, ...data } = item;
+        await tx.agreementRecipient.create({
+          data,
+        });
+      }
+
+      // Update agreement status to SENT and reset rejectionReason
+      return tx.agreement.update({
+        where: { id: agreementId },
+        data: {
+          status: 'SENT',
+          rejectionReason: null,
+          signingOrder,
+          currentStep: 1,
+          expiresAt,
+          ...(synchronizedFields ? { fields: synchronizedFields } : {}),
+        },
+      });
+    };
+
+    const updatedAgreement =
+      typeof this.prisma.$transaction === 'function'
+        ? await this.prisma.$transaction(executeDbOps, {
+            maxWait: 15000,
+            timeout: 60000,
+          })
+        : await executeDbOps(this.prisma);
 
     await this.auditService.log({
       organisationId: ctx.organisationId,
@@ -331,14 +597,13 @@ export class WorkflowService {
         signingOrder,
         recipientCount: input.recipients.length,
         expiresAt: expiresAt?.toISOString(),
+        hasCustomMessage: !!input.message,
       },
       ipAddress: ctx.ipAddress,
       userAgent: ctx.userAgent,
     });
 
-    // Dispatch invitations:
-    // If SEQUENTIAL: only invite recipients where routingOrder === 1
-    // If PARALLEL: invite all recipients simultaneously
+    // Dispatch invitations (INK-107, INK-113, INK-115)
     const senderName = ctx.userName || agreement.author.name || 'Agreement Sender';
 
     for (const recip of createdRecipients) {
@@ -357,8 +622,38 @@ export class WorkflowService {
           senderName,
           recip.rawToken,
           expiresAt,
+          input.message,
+          recip.role,
+          {
+            organisationId: ctx.organisationId,
+            agreementId: agreement.id,
+            recipientId: recip.id,
+            recipientName: recip.name,
+            eventType: 'INVITATION',
+          },
         );
       }
+    }
+
+    try {
+      await this.eventService?.publish({
+        organisationId: ctx.organisationId,
+        eventType: 'document.sent',
+        resourceType: 'agreement',
+        resourceId: agreement.id,
+        actorKind: 'user',
+        actorId: ctx.userId,
+        dedupeKey: `document.sent:${agreement.id}:${Date.now()}`,
+        data: {
+          document_id: agreement.id,
+          document_name: agreement.title,
+          recipients_count: createdRecipients.length,
+          signing_order: signingOrder,
+          expires_at: expiresAt?.toISOString(),
+        },
+      });
+    } catch (e) {
+      console.warn('Failed to publish document.sent domain event', e);
     }
 
     return {
@@ -447,23 +742,36 @@ export class WorkflowService {
         signingOrder: agreement.signingOrder,
         currentStep: agreement.currentStep,
         expiresAt: agreement.expiresAt,
-        senderName: agreement.author.name || agreement.author.email,
+        author: {
+          name: agreement.author.name,
+          email: agreement.author.email,
+        },
+        senderName: agreement.author.name || agreement.author.email || 'Sender',
         organisationName: agreement.organisation.name,
+        organisation: {
+          name: agreement.organisation.name,
+        },
+        envelopeId:
+          ((agreement.metadata as any)?.envelopeId as string) ||
+          `ENV-${agreement.id.replace(/-/g, '').toUpperCase()}`,
+        verificationToken: ((agreement.metadata as any)?.verificationToken as string) || undefined,
+        documentHash: ((agreement.metadata as any)?.documentHash as string) || undefined,
       },
-      allRecipients,
+      recipients: allRecipients,
       isTurn,
     };
   }
 
   /**
-   * INK-93: Track viewed status
+   * INK-98: Record recipient view beacon
    */
-  async trackRecipientView(rawToken: string, ip?: string, userAgent?: string) {
+  async recordRecipientView(rawToken: string, ip?: string, userAgent?: string) {
     const tokenHash = await hashToken(rawToken);
+
     const recipient = await this.prisma.agreementRecipient.findUnique({
       where: { signingTokenHash: tokenHash },
       include: {
-        agreement: { select: { id: true, organisationId: true, status: true } },
+        agreement: { select: { organisationId: true } },
       },
     });
 
@@ -471,11 +779,10 @@ export class WorkflowService {
       throw new NotFoundError('Invalid signing link.');
     }
 
-    if (recipient.status === 'INVITED' || recipient.status === 'PENDING') {
+    if (!recipient.viewedAt) {
       await this.prisma.agreementRecipient.update({
         where: { id: recipient.id },
         data: {
-          status: 'VIEWED',
           viewedAt: new Date(),
           ipAddress: ip,
           userAgent,
@@ -484,7 +791,7 @@ export class WorkflowService {
 
       await this.auditService.log({
         organisationId: recipient.agreement.organisationId,
-        action: 'AGREEMENT_VIEWED',
+        action: 'AGREEMENT_VIEWED_BY_RECIPIENT',
         resourceType: 'agreement',
         resourceId: recipient.agreementId,
         metadata: {
@@ -495,19 +802,396 @@ export class WorkflowService {
         ipAddress: ip,
         userAgent,
       });
+
+      try {
+        await this.eventService?.publish({
+          organisationId: recipient.agreement.organisationId,
+          eventType: 'document.viewed',
+          resourceType: 'agreement',
+          resourceId: recipient.agreementId,
+          actorKind: 'signer',
+          actorId: recipient.id,
+          dedupeKey: `document.viewed:${recipient.agreementId}:${recipient.id}`,
+          data: {
+            document_id: recipient.agreementId,
+            recipient_id: recipient.id,
+            recipient_email: recipient.email,
+            viewed_at: new Date().toISOString(),
+          },
+        });
+      } catch (e) {
+        console.warn('Failed to publish document.viewed domain event', e);
+      }
     }
 
     return { success: true };
   }
 
   /**
-   * INK-94, INK-96: Submit recipient signature and advance workflow
+   * INK-98: Alias for recordRecipientView
+   */
+  async trackRecipientView(rawToken: string, ip?: string, userAgent?: string) {
+    return this.recordRecipientView(rawToken, ip, userAgent);
+  }
+
+  /**
+   * INK-99: Record Electronic Record and Signature Disclosure (ERSD) consent
+   */
+  async recordElectronicConsent(
+    rawToken: string,
+    input: ElectronicConsentInput,
+    ip?: string,
+    userAgent?: string,
+  ) {
+    const tokenHash = await hashToken(rawToken);
+
+    const recipient = await this.prisma.agreementRecipient.findUnique({
+      where: { signingTokenHash: tokenHash },
+      include: {
+        agreement: { select: { organisationId: true, id: true } },
+      },
+    });
+
+    if (!recipient) {
+      throw new NotFoundError('Invalid signing link.');
+    }
+
+    const consentTimestamp = new Date();
+
+    await this.auditService.log({
+      organisationId: recipient.agreement.organisationId,
+      action: 'ERSD_CONSENT_ACCEPTED',
+      resourceType: 'agreement',
+      resourceId: recipient.agreement.id,
+      metadata: {
+        recipientId: recipient.id,
+        recipientEmail: recipient.email,
+        recipientName: recipient.name,
+        ersdVersion: input.ersdVersion,
+        consentTimestamp: consentTimestamp.toISOString(),
+      },
+      ipAddress: ip,
+      userAgent,
+    });
+
+    return {
+      success: true,
+      consentTimestamp: consentTimestamp.toISOString(),
+      ersdVersion: input.ersdVersion,
+    };
+  }
+
+  /**
+   * INK-266: Send 6-digit OTP verification code to recipient's email address
+   */
+  async sendSignerOtp(rawToken: string, ip?: string, userAgent?: string) {
+    const tokenHash = await hashToken(rawToken);
+    const recipient = await this.prisma.agreementRecipient.findUnique({
+      where: { signingTokenHash: tokenHash },
+      include: {
+        agreement: { select: { organisationId: true, id: true, title: true } },
+      },
+    });
+
+    if (!recipient) {
+      throw new NotFoundError('Invalid signing link.');
+    }
+
+    if (recipient.status === 'SIGNED' || recipient.status === 'DECLINED') {
+      throw new ValidationError(
+        `Cannot send verification code for ${recipient.status.toLowerCase()} recipient.`,
+      );
+    }
+
+    // Generate cryptographically secure 6-digit code (100000 - 999999)
+    const randomBytes = new Uint32Array(1);
+    crypto.getRandomValues(randomBytes);
+    const otpCode = (100000 + (randomBytes[0]! % 900000)).toString();
+
+    WorkflowService.otpStore.set(tokenHash, {
+      code: otpCode,
+      expiresAt: Date.now() + 10 * 60 * 1000, // 10 minutes
+      verified: false,
+      attempts: 0,
+    });
+
+    await this.mailerService.sendOtpVerificationEmail(
+      recipient.email,
+      recipient.name,
+      recipient.agreement.title,
+      otpCode,
+      {
+        organisationId: recipient.agreement.organisationId,
+        agreementId: recipient.agreement.id,
+        recipientId: recipient.id,
+        recipientName: recipient.name,
+      },
+    );
+
+    await this.auditService.log({
+      organisationId: recipient.agreement.organisationId,
+      action: 'GUEST_SIGNER_OTP_SENT',
+      resourceType: 'agreement',
+      resourceId: recipient.agreement.id,
+      metadata: {
+        recipientId: recipient.id,
+        email: recipient.email,
+        name: recipient.name,
+      },
+      ipAddress: ip,
+      userAgent,
+    });
+
+    return {
+      success: true,
+      email: recipient.email,
+      expiresInSeconds: 600,
+    };
+  }
+
+  /**
+   * INK-266: Verify 6-digit OTP code for signer
+   */
+  async verifySignerOtp(rawToken: string, otpCode: string, ip?: string, userAgent?: string) {
+    const tokenHash = await hashToken(rawToken);
+    const recipient = await this.prisma.agreementRecipient.findUnique({
+      where: { signingTokenHash: tokenHash },
+      include: {
+        agreement: { select: { organisationId: true, id: true } },
+      },
+    });
+
+    if (!recipient) {
+      throw new NotFoundError('Invalid signing link.');
+    }
+
+    const entry = WorkflowService.otpStore.get(tokenHash);
+    if (!entry || Date.now() > entry.expiresAt) {
+      throw new BadRequestError('Invalid or expired verification code.');
+    }
+
+    if ((entry.attempts || 0) >= 5) {
+      WorkflowService.otpStore.delete(tokenHash);
+      throw new BadRequestError(
+        'Too many failed verification attempts. Please request a new code.',
+      );
+    }
+
+    if (entry.code !== otpCode.trim()) {
+      entry.attempts = (entry.attempts || 0) + 1;
+      throw new BadRequestError('Invalid verification code.');
+    }
+
+    entry.verified = true;
+
+    await this.auditService.log({
+      organisationId: recipient.agreement.organisationId,
+      action: 'GUEST_SIGNER_OTP_VERIFIED',
+      resourceType: 'agreement',
+      resourceId: recipient.agreement.id,
+      metadata: {
+        recipientId: recipient.id,
+        email: recipient.email,
+        name: recipient.name,
+      },
+      ipAddress: ip,
+      userAgent,
+    });
+
+    return { success: true, verified: true };
+  }
+
+  /**
+   * INK-105: Get signing document file for public recipient download or preview.
+   * Supports lookup by recipient signing token, seal verification token (GS-...), envelope ID, or agreement UUID.
+   */
+  async getSigningDocumentFile(rawTokenOrIdentifier: string) {
+    const cleanId = rawTokenOrIdentifier.trim();
+    const tokenHash = await hashToken(cleanId);
+    let agreement: any = null;
+
+    // 1. Try recipient signing token hash
+    const recipient = await this.prisma.agreementRecipient.findUnique({
+      where: { signingTokenHash: tokenHash },
+      include: {
+        agreement: {
+          include: {
+            recipients: true,
+            organisation: { select: { name: true } },
+          },
+        },
+      },
+    });
+
+    if (recipient) {
+      agreement = recipient.agreement;
+    } else {
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        cleanId,
+      );
+
+      const tokenVariations: string[] = Array.from(
+        new Set([
+          cleanId,
+          cleanId.toUpperCase(),
+          cleanId.toLowerCase(),
+          cleanId.startsWith('GS-') ? cleanId.substring(3) : `GS-${cleanId}`,
+          cleanId.startsWith('gs-') ? cleanId.substring(3) : `GS-${cleanId.toUpperCase()}`,
+          `GS-${cleanId.toLowerCase()}`,
+          ...(isUuid ? [cleanId] : []),
+        ]),
+      );
+
+      // 2. Try verification token in documentSeal
+      if (this.prisma.documentSeal?.findFirst) {
+        const seal = await this.prisma.documentSeal.findFirst({
+          where: {
+            OR: [
+              ...tokenVariations.map((t) => ({ verificationToken: t })),
+              ...(isUuid ? [{ agreementId: cleanId }, { id: cleanId }] : []),
+            ],
+          },
+          include: {
+            agreement: {
+              include: {
+                recipients: true,
+                organisation: { select: { name: true } },
+              },
+            },
+          },
+          orderBy: { createdAt: 'desc' },
+        });
+
+        if (seal?.agreement) {
+          agreement = seal.agreement;
+        }
+      }
+
+      // 3. Try lookup directly on agreement by UUID, envelopeId, or verificationToken
+      if (!agreement && this.prisma.agreement?.findFirst) {
+        agreement = await this.prisma.agreement.findFirst({
+          where: {
+            deletedAt: null,
+            OR: [
+              ...(isUuid ? [{ id: cleanId }] : []),
+              ...tokenVariations.map((t) => ({ metadata: { path: ['envelopeId'], equals: t } })),
+              ...tokenVariations.map((t) => ({
+                metadata: { path: ['verificationToken'], equals: t },
+              })),
+            ],
+          },
+          include: {
+            recipients: true,
+            organisation: { select: { name: true } },
+          },
+        });
+      }
+
+      // 4. Fallback search for recently completed agreements matching token or envelopeId in metadata
+      if (!agreement && this.prisma.agreement?.findMany) {
+        const recentCompleted = await this.prisma.agreement.findMany({
+          where: {
+            deletedAt: null,
+            status: 'COMPLETED',
+          },
+          include: {
+            recipients: true,
+            organisation: { select: { name: true } },
+          },
+          orderBy: { completedAt: 'desc' },
+          take: 50,
+        });
+
+        const targetLower = cleanId.toLowerCase();
+        agreement =
+          recentCompleted.find((ag) => {
+            const m = (ag.metadata as Record<string, unknown>) || {};
+            const vToken =
+              typeof m.verificationToken === 'string' ? m.verificationToken.toLowerCase() : '';
+            const eId = typeof m.envelopeId === 'string' ? m.envelopeId.toLowerCase() : '';
+            return (
+              vToken === targetLower ||
+              vToken.replace('gs-', '') === targetLower.replace('gs-', '') ||
+              eId === targetLower ||
+              ag.id === cleanId
+            );
+          }) || null;
+      }
+    }
+
+    if (!agreement || agreement.deletedAt || agreement.status === 'CANCELLED') {
+      throw new NotFoundError('Agreement file is not available.');
+    }
+
+    const meta = (agreement.metadata as Record<string, unknown>) || {};
+    let fileData =
+      (meta.signedPdfBase64 as string | undefined) || (meta.sealedPdfBase64 as string | undefined);
+
+    const seal = this.prisma.documentSeal?.findFirst
+      ? await this.prisma.documentSeal.findFirst({
+          where: { agreementId: agreement.id },
+          orderBy: { createdAt: 'desc' },
+        })
+      : null;
+
+    if (!fileData && (agreement.status === 'COMPLETED' || seal)) {
+      if (this.sealingService) {
+        try {
+          const recovered = await this.sealingService.sealAgreement({
+            agreementId: agreement.id,
+            organisationId: agreement.organisationId,
+            userId: agreement.authorId,
+          });
+          if (recovered?.sealedPdfBase64) {
+            fileData = recovered.sealedPdfBase64;
+          }
+        } catch (healErr) {
+          console.warn('[WORKFLOW] Self-healing seal attempt failed:', (healErr as Error).message);
+        }
+      }
+
+      if (!fileData) {
+        throw new NotFoundError(
+          'The original signed document is unavailable. It cannot be regenerated without invalidating its verification.',
+        );
+      }
+    }
+    if (!fileData) fileData = (meta.fileBase64 as string) || (meta.fileData as string);
+
+    let markdownContent = agreement.markdownContent;
+    if (fileData) {
+      markdownContent = null as any;
+    } else if (markdownContent && (agreement.status === 'COMPLETED' || seal)) {
+      const token = seal?.verificationToken || `GS-${cleanId.substring(0, 8)}`;
+      const hash = seal?.documentHash || 'pending';
+      const ts = seal?.tsaTimestamp ? seal.tsaTimestamp.toISOString() : new Date().toISOString();
+      markdownContent += `\n\n---\n\n### 🛡️ Cryptographic Execution & Integrity Certificate\n- **Status**: Digitally Signed & Sealed (PAdES B-T / RFC 3161)\n- **Verification Token**: \`${token}\`\n- **Document SHA-256 Digest**: \`${hash}\`\n- **RFC 3161 Timestamp**: \`${ts}\`\n- **Public Verification Link**: [https://graphsign.ink/verify/${token}](https://graphsign.ink/verify/${token})\n`;
+    }
+
+    return {
+      id: agreement.id,
+      title: agreement.title,
+      fileName:
+        agreement.fileName || `${agreement.title.toLowerCase().replace(/[^a-z0-9]/g, '-')}.pdf`,
+      mimeType: fileData ? 'application/pdf' : agreement.mimeType || 'application/pdf',
+      fileUrl: agreement.fileUrl,
+      fileData,
+      markdownContent,
+      status: agreement.status,
+      verificationToken: seal?.verificationToken || (meta.verificationToken as string),
+      documentHash: seal?.documentHash || (meta.documentHash as string),
+    };
+  }
+
+  /**
+   * INK-94, INK-96, INK-104, INK-109: Submit recipient signature and advance workflow
    */
   async submitRecipientSignature(
     rawToken: string,
     input: RecipientSignInput,
     ip?: string,
     userAgent?: string,
+    backgroundRunner?: (task: Promise<unknown>) => void,
   ) {
     const tokenHash = await hashToken(rawToken);
     const recipient = await this.prisma.agreementRecipient.findUnique({
@@ -533,7 +1217,94 @@ export class WorkflowService {
     }
 
     if (recipient.status === 'SIGNED') {
-      throw new ValidationError('You have already signed this document.');
+      const seal = this.prisma.documentSeal?.findFirst
+        ? await this.prisma.documentSeal.findFirst({
+            where: { agreementId: agreement.id },
+            orderBy: { createdAt: 'desc' },
+          })
+        : null;
+      const meta = (agreement.metadata as Record<string, unknown>) || {};
+      return {
+        success: true,
+        isCompleted: agreement.status === 'COMPLETED',
+        currentStep: agreement.currentStep,
+        verificationToken:
+          seal?.verificationToken || (meta.verificationToken as string) || undefined,
+        documentHash: seal?.documentHash || (meta.documentHash as string) || undefined,
+        message: 'You have already signed this document.',
+      };
+    }
+
+    // Verify OTP if signed as guest or if OTP was initiated
+    if (input.signedAsGuest || WorkflowService.otpStore.has(tokenHash)) {
+      const entry = WorkflowService.otpStore.get(tokenHash);
+      if (input.otpCode) {
+        if (!entry || Date.now() > entry.expiresAt) {
+          throw new BadRequestError('Invalid or expired verification code.');
+        }
+        if ((entry.attempts || 0) >= 5) {
+          WorkflowService.otpStore.delete(tokenHash);
+          throw new BadRequestError(
+            'Too many failed verification attempts. Please request a new code.',
+          );
+        }
+        if (entry.code !== input.otpCode.trim()) {
+          entry.attempts = (entry.attempts || 0) + 1;
+          throw new BadRequestError('Invalid verification code.');
+        }
+        entry.verified = true;
+      }
+      if (!entry || !entry.verified) {
+        throw new BadRequestError(
+          'Email OTP verification is required before confirming signature.',
+        );
+      }
+    }
+
+    // Backend validation for assigned required fields (INK-104)
+    const envelopeFields = (agreement.fields as any)?.fields || [];
+    const assignedRequiredFields = envelopeFields.filter((f: any) => {
+      if (!f.isRequired) return false;
+      if (!f.recipientId) return true;
+      if (f.recipientId === recipient.id) return true;
+      if (recipient.email && f.recipientId.toLowerCase() === recipient.email.toLowerCase())
+        return true;
+      const order = recipient.routingOrder || 1;
+      if (
+        f.recipientId === `recipient-${order}` ||
+        f.recipientId === `signer-${order}` ||
+        f.recipientId === `recip-${order}`
+      ) {
+        return true;
+      }
+      if (
+        order === 1 &&
+        (f.recipientId === 'recipient-1' ||
+          f.recipientId === 'signer-1' ||
+          f.recipientId === 'recip-1' ||
+          f.recipientId === 'signer' ||
+          f.recipientId === 'r-1')
+      ) {
+        return true;
+      }
+      return false;
+    });
+
+    const missingFields: string[] = [];
+    for (const f of assignedRequiredFields) {
+      if (f.type === 'SIGNATURE' || f.type === 'INITIALS') {
+        const val = input.fieldsData?.[f.id] || input.signatureData?.data;
+        if (!val) missingFields.push(f.label || f.type);
+      } else {
+        const val = input.fieldsData?.[f.id];
+        if (val === undefined || val === null || val === '') {
+          missingFields.push(f.label || f.type);
+        }
+      }
+    }
+
+    if (missingFields.length > 0) {
+      throw new ValidationError(`Required fields must be completed: ${missingFields.join(', ')}`);
     }
 
     // Save recipient signature submission
@@ -564,7 +1335,28 @@ export class WorkflowService {
       userAgent,
     });
 
-    // Evaluate progression and completion (INK-91, INK-94)
+    try {
+      await this.eventService?.publish({
+        organisationId: agreement.organisationId,
+        eventType: 'document.signed',
+        resourceType: 'agreement',
+        resourceId: agreement.id,
+        actorKind: 'signer',
+        actorId: recipient.id,
+        dedupeKey: `document.signed:${agreement.id}:${recipient.id}`,
+        data: {
+          document_id: agreement.id,
+          recipient_id: recipient.id,
+          recipient_email: recipient.email,
+          recipient_name: recipient.name,
+          signed_at: new Date().toISOString(),
+        },
+      });
+    } catch (e) {
+      console.warn('Failed to publish document.signed event', e);
+    }
+
+    // Evaluate progression and completion (INK-91, INK-94, INK-109)
     const allRecipients = await this.prisma.agreementRecipient.findMany({
       where: { agreementId: agreement.id },
     });
@@ -573,14 +1365,23 @@ export class WorkflowService {
       (r: any) => r.role === 'signer' || r.role === 'approver',
     );
     const allFinished = activeSigners.every((r: any) => r.status === 'SIGNED');
+    let sealResult: any = null;
 
     if (allFinished) {
-      // Mark workflow COMPLETED (INK-94)
+      const meta = (agreement.metadata as Record<string, unknown>) || {};
+      const verificationToken =
+        (meta.verificationToken as string) || `GS-${generateToken(4).toLowerCase()}`;
+
+      // Mark workflow COMPLETED (INK-94, INK-109)
       await this.prisma.agreement.update({
         where: { id: agreement.id },
         data: {
           status: 'COMPLETED',
           completedAt: new Date(),
+          metadata: {
+            ...meta,
+            verificationToken,
+          },
         },
       });
 
@@ -597,9 +1398,51 @@ export class WorkflowService {
         userAgent,
       });
 
-      // Send completion confirmation emails to all participants
-      for (const r of allRecipients) {
-        await this.mailerService.sendAgreementCompletedEmail(r.email, r.name, agreement.title);
+      const backgroundSealingAndNotify = async () => {
+        try {
+          sealResult = await this.sealingService.sealAgreement({
+            agreementId: agreement.id,
+            organisationId: agreement.organisationId,
+            userId: agreement.authorId,
+            verificationToken,
+            ipAddress: ip,
+            userAgent,
+          });
+        } catch (sealErr) {
+          console.warn(
+            '[WORKFLOW] Automatic sealing failed on completion:',
+            (sealErr as Error).message,
+            (sealErr as Error).stack,
+          );
+        }
+
+        const finalToken = sealResult?.verificationToken || verificationToken;
+        await this.sendCompletionNotifications(
+          agreement.id,
+          agreement.organisationId,
+          finalToken,
+        ).catch((err) => {
+          console.warn('[WORKFLOW] Completion notification error:', (err as Error).message);
+        });
+      };
+
+      if (backgroundRunner) {
+        backgroundRunner(backgroundSealingAndNotify());
+        return {
+          success: true,
+          isCompleted: true,
+          currentStep: agreement.currentStep,
+          verificationToken,
+        };
+      } else {
+        await backgroundSealingAndNotify();
+        return {
+          success: true,
+          isCompleted: true,
+          currentStep: agreement.currentStep,
+          verificationToken: sealResult?.verificationToken || verificationToken,
+          documentHash: sealResult?.documentHash,
+        };
       }
     } else if (agreement.signingOrder === 'SEQUENTIAL') {
       // Advance to next sequential tier if current tier is finished
@@ -625,21 +1468,34 @@ export class WorkflowService {
           const senderName = agreement.author.name || 'Author';
 
           for (const nextRecip of nextTierRecipients) {
+            const nextRawToken = generateToken();
+            const nextTokenHash = await hashToken(nextRawToken);
+
             await this.prisma.agreementRecipient.update({
               where: { id: nextRecip.id },
-              data: { status: 'INVITED' },
+              data: {
+                status: 'INVITED',
+                signingTokenHash: nextTokenHash,
+              },
             });
 
-            if (nextRecip.signingTokenHash) {
-              await this.mailerService.sendSigningInvitationEmail(
-                nextRecip.email,
-                nextRecip.name,
-                agreement.title,
-                senderName,
-                rawToken, // or recipient link
-                agreement.expiresAt,
-              );
-            }
+            await this.mailerService.sendSigningInvitationEmail(
+              nextRecip.email,
+              nextRecip.name,
+              agreement.title,
+              senderName,
+              nextRawToken,
+              agreement.expiresAt,
+              undefined,
+              nextRecip.role,
+              {
+                organisationId: agreement.organisationId,
+                agreementId: agreement.id,
+                recipientId: nextRecip.id,
+                recipientName: nextRecip.name,
+                eventType: 'INVITATION',
+              },
+            );
           }
         }
       }
@@ -649,11 +1505,13 @@ export class WorkflowService {
       success: true,
       isCompleted: allFinished,
       currentStep: agreement.currentStep,
+      verificationToken: sealResult?.verificationToken,
+      documentHash: sealResult?.documentHash,
     };
   }
 
   /**
-   * INK-95: Decline signing
+   * INK-95, INK-111: Decline signing and notify author
    */
   async declineRecipientSignature(
     rawToken: string,
@@ -670,7 +1528,7 @@ export class WorkflowService {
             id: true,
             organisationId: true,
             title: true,
-            author: { select: { email: true } },
+            author: { select: { name: true, email: true } },
           },
         },
       },
@@ -685,6 +1543,7 @@ export class WorkflowService {
       data: {
         status: 'DECLINED',
         declinedAt: new Date(),
+        declineReason: input.reason,
         ipAddress: ip,
         userAgent,
       },
@@ -713,6 +1572,46 @@ export class WorkflowService {
       userAgent,
     });
 
+    try {
+      await this.eventService?.publish({
+        organisationId: recipient.agreement.organisationId,
+        eventType: 'document.declined',
+        resourceType: 'agreement',
+        resourceId: recipient.agreementId,
+        actorKind: 'signer',
+        actorId: recipient.id,
+        dedupeKey: `document.declined:${recipient.agreementId}:${recipient.id}`,
+        data: {
+          document_id: recipient.agreementId,
+          recipient_id: recipient.id,
+          recipient_email: recipient.email,
+          reason: input.reason,
+          declined_at: new Date().toISOString(),
+        },
+      });
+    } catch (e) {
+      console.warn('Failed to publish document.declined event', e);
+    }
+
+    // Notify author of decline (INK-111, INK-113)
+    if (recipient.agreement.author?.email) {
+      await this.mailerService.sendAgreementDeclinedEmail(
+        recipient.agreement.author.email,
+        recipient.agreement.author.name || 'Author',
+        recipient.agreement.title,
+        recipient.name,
+        recipient.email,
+        input.reason,
+        {
+          organisationId: recipient.agreement.organisationId,
+          agreementId: recipient.agreementId,
+          recipientId: recipient.id,
+          recipientName: recipient.name,
+          eventType: 'DECLINED',
+        },
+      );
+    }
+
     return { success: true };
   }
 
@@ -738,14 +1637,14 @@ export class WorkflowService {
       throw new ForbiddenError('You can only cancel your own agreements.');
     }
 
-    if (agreement.status === 'COMPLETED' || agreement.status === 'CANCELLED') {
-      throw new ValidationError(`Cannot cancel agreement in '${agreement.status}' status.`);
+    if (agreement.status === 'COMPLETED') {
+      throw new ValidationError(`Cannot void agreement in '${agreement.status}' status.`);
     }
 
     const updated = await this.prisma.agreement.update({
       where: { id: agreementId },
       data: {
-        status: 'CANCELLED',
+        status: 'DRAFT',
       },
     });
 
@@ -764,18 +1663,46 @@ export class WorkflowService {
       metadata: {
         reason: input.reason,
         previousStatus: agreement.status,
+        newStatus: 'DRAFT',
       },
       ipAddress: ctx.ipAddress,
       userAgent: ctx.userAgent,
     });
 
-    // Notify all recipients
+    try {
+      await this.eventService?.publish({
+        organisationId: ctx.organisationId,
+        eventType: 'document.voided',
+        resourceType: 'agreement',
+        resourceId: agreementId,
+        actorKind: 'user',
+        actorId: ctx.userId,
+        dedupeKey: `document.voided:${agreementId}:${Date.now()}`,
+        data: {
+          document_id: agreementId,
+          document_name: agreement.title,
+          reason: input.reason,
+          cancelled_at: new Date().toISOString(),
+        },
+      });
+    } catch (e) {
+      console.warn('Failed to publish document.voided event', e);
+    }
+
+    // Notify all recipients (INK-113)
     for (const r of agreement.recipients) {
       await this.mailerService.sendAgreementCancelledEmail(
         r.email,
         r.name,
         agreement.title,
         input.reason,
+        {
+          organisationId: ctx.organisationId,
+          agreementId,
+          recipientId: r.id,
+          recipientName: r.name,
+          eventType: 'CANCELLED',
+        },
       );
     }
 
@@ -783,15 +1710,182 @@ export class WorkflowService {
   }
 
   /**
-   * INK-95: Auto-expire agreements past deadline
+   * INK-108: Send manual reminder to pending signers
    */
-  async checkExpiredAgreements() {
+  async sendManualReminder(ctx: WorkflowContext, agreementId: string, input?: SendReminderInput) {
+    const agreement = await this.prisma.agreement.findFirst({
+      where: {
+        id: agreementId,
+        organisationId: ctx.organisationId,
+        deletedAt: null,
+      },
+      include: {
+        author: { select: { name: true, email: true } },
+        recipients: true,
+      },
+    });
+
+    if (!agreement) {
+      throw new NotFoundError('Agreement not found.');
+    }
+
+    if (agreement.status !== 'SENT') {
+      throw new ValidationError(
+        `Cannot send reminder for agreement in '${agreement.status}' status. Only SENT agreements can be reminded.`,
+      );
+    }
+
+    // Determine candidate recipients
+    let candidateRecipients = agreement.recipients.filter(
+      (r) => r.status === 'PENDING' || r.status === 'INVITED',
+    );
+
+    // In sequential mode, filter to current step
+    if (agreement.signingOrder === 'SEQUENTIAL') {
+      candidateRecipients = candidateRecipients.filter(
+        (r) => r.routingOrder === agreement.currentStep,
+      );
+    }
+
+    if (input?.recipientId) {
+      candidateRecipients = candidateRecipients.filter((r) => r.id === input.recipientId);
+      if (candidateRecipients.length === 0) {
+        throw new ValidationError(
+          'Specified recipient is not currently in a pending signing state.',
+        );
+      }
+    }
+
+    if (candidateRecipients.length === 0) {
+      throw new ValidationError('No active pending recipients found to remind.');
+    }
+
+    const senderName = ctx.userName || agreement.author.name || 'Sender';
+    const reminded: Array<{ id: string; name: string; email: string }> = [];
+
+    for (const recip of candidateRecipients) {
+      const rawToken = generateToken();
+      const tokenHash = await hashToken(rawToken);
+
+      await this.prisma.agreementRecipient.update({
+        where: { id: recip.id },
+        data: {
+          signingTokenHash: tokenHash,
+          tokenExpiresAt:
+            recip.tokenExpiresAt ||
+            agreement.expiresAt ||
+            new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+          status: 'INVITED',
+        },
+      });
+
+      await this.mailerService.sendReminderEmail(
+        recip.email,
+        recip.name,
+        agreement.title,
+        senderName,
+        rawToken,
+        agreement.expiresAt,
+        input?.note,
+        {
+          organisationId: ctx.organisationId,
+          agreementId: agreement.id,
+          recipientId: recip.id,
+          recipientName: recip.name,
+          eventType: 'REMINDER',
+        },
+      );
+
+      reminded.push({ id: recip.id, name: recip.name, email: recip.email });
+    }
+
+    await this.auditService.log({
+      organisationId: ctx.organisationId,
+      userId: ctx.userId,
+      action: 'AGREEMENT_REMINDER_SENT',
+      resourceType: 'agreement',
+      resourceId: agreementId,
+      metadata: {
+        remindedCount: reminded.length,
+        recipients: reminded.map((r) => r.email),
+        note: input?.note,
+      },
+      ipAddress: ctx.ipAddress,
+      userAgent: ctx.userAgent,
+    });
+
+    return {
+      success: true,
+      remindedCount: reminded.length,
+      recipients: reminded,
+    };
+  }
+
+  /**
+   * INK-113: Get notification delivery logs for an agreement
+   */
+  async getAgreementNotificationHistory(ctx: WorkflowContext, agreementId: string) {
+    const agreement = await this.prisma.agreement.findFirst({
+      where: {
+        id: agreementId,
+        organisationId: ctx.organisationId,
+        deletedAt: null,
+      },
+      select: { id: true, title: true },
+    });
+
+    if (!agreement) {
+      throw new NotFoundError('Agreement not found.');
+    }
+
+    const logs = await this.prisma.notificationLog.findMany({
+      where: {
+        agreementId,
+        organisationId: ctx.organisationId,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return {
+      agreementId,
+      agreementTitle: agreement.title,
+      logs: logs.map((l) => ({
+        id: l.id,
+        recipientEmail: l.recipientEmail,
+        recipientName: l.recipientName,
+        eventType: l.eventType,
+        channel: l.channel,
+        status: l.status,
+        providerMessageId: l.providerMessageId,
+        attempts: l.attempts,
+        lastError: l.lastError,
+        sentAt: l.sentAt?.toISOString() || null,
+        createdAt: l.createdAt.toISOString(),
+      })),
+    };
+  }
+
+  /**
+   * INK-108, INK-112: Process automated expirations, 24h pre-expiry warnings, and policy reminders
+   */
+  async processAutomatedRemindersAndExpirations() {
     const now = new Date();
+    const results = {
+      expiredCount: 0,
+      warningCount: 0,
+      reminderCount: 0,
+    };
+
+    // 1. Process Expired Agreements (deadline passed)
     const expiredAgreements = await this.prisma.agreement.findMany({
       where: {
         status: 'SENT',
         expiresAt: { lt: now },
         deletedAt: null,
+      },
+      include: {
+        author: { select: { name: true, email: true } },
+        recipients: true,
       },
     });
 
@@ -811,8 +1905,106 @@ export class WorkflowService {
           deadline: ag.expiresAt?.toISOString(),
         },
       });
+
+      // Notify author (INK-112)
+      await this.mailerService.sendAgreementExpiredEmail(
+        ag.author.email,
+        ag.author.name || 'Author',
+        ag.title,
+        {
+          organisationId: ag.organisationId,
+          agreementId: ag.id,
+          eventType: 'EXPIRED',
+        },
+      );
+
+      // Notify pending recipients (INK-112)
+      for (const r of ag.recipients) {
+        if (r.status === 'PENDING' || r.status === 'INVITED') {
+          await this.mailerService.sendAgreementExpiredEmail(r.email, r.name, ag.title, {
+            organisationId: ag.organisationId,
+            agreementId: ag.id,
+            recipientId: r.id,
+            recipientName: r.name,
+            eventType: 'EXPIRED',
+          });
+        }
+      }
+
+      results.expiredCount++;
     }
 
-    return { expiredCount: expiredAgreements.length };
+    // 2. Process Expiry Warnings (within 24 hours of deadline)
+    const in24Hours = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+    const expiringSoonAgreements = await this.prisma.agreement.findMany({
+      where: {
+        status: 'SENT',
+        expiresAt: { gt: now, lte: in24Hours },
+        deletedAt: null,
+      },
+      include: {
+        author: { select: { name: true, email: true } },
+        recipients: true,
+      },
+    });
+
+    for (const ag of expiringSoonAgreements) {
+      if (!ag.expiresAt) continue;
+
+      // Check if expiry warning was already sent
+      const existingWarning = await this.prisma.notificationLog.findFirst({
+        where: {
+          agreementId: ag.id,
+          eventType: 'EXPIRY_WARNING',
+          status: 'SENT',
+        },
+      });
+
+      if (existingWarning) continue;
+
+      // Find active pending recipients whose turn it is
+      let pendingRecips = ag.recipients.filter(
+        (r) => r.status === 'PENDING' || r.status === 'INVITED',
+      );
+      if (ag.signingOrder === 'SEQUENTIAL') {
+        pendingRecips = pendingRecips.filter((r) => r.routingOrder === ag.currentStep);
+      }
+
+      for (const recip of pendingRecips) {
+        const rawToken = generateToken();
+        const tokenHash = await hashToken(rawToken);
+
+        await this.prisma.agreementRecipient.update({
+          where: { id: recip.id },
+          data: { signingTokenHash: tokenHash },
+        });
+
+        await this.mailerService.sendExpiryWarningEmail(
+          recip.email,
+          recip.name,
+          ag.title,
+          ag.expiresAt,
+          rawToken,
+          {
+            organisationId: ag.organisationId,
+            agreementId: ag.id,
+            recipientId: recip.id,
+            recipientName: recip.name,
+            eventType: 'EXPIRY_WARNING',
+          },
+        );
+
+        results.warningCount++;
+      }
+    }
+
+    return results;
+  }
+
+  /**
+   * INK-95: Auto-expire agreements past deadline (backward compatibility alias)
+   */
+  async checkExpiredAgreements() {
+    return this.processAutomatedRemindersAndExpirations();
   }
 }

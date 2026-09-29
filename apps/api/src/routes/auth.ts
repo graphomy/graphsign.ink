@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import type { PrismaClient } from '@graphsign/db';
-import { createPrismaClient } from '@graphsign/db';
+import { getDbClient } from '../utils/db.js';
 import {
   registerRequestSchema,
   loginRequestSchema,
@@ -23,10 +23,11 @@ import type { MailerService } from '../services/mailer-service.js';
 import { createMailerService } from '../services/mailer-service.js';
 import type { AuditService } from '../services/audit-service.js';
 import { PrismaAuditService } from '../services/audit-service.js';
-import { AppError, ValidationError, UnauthorizedError } from '../utils/errors.js';
+import { ValidationError, UnauthorizedError } from '../utils/errors.js';
 import { createRateLimiter } from '../middleware/rate-limiter.js';
 import { jwtAuth } from '../middleware/jwt-auth.js';
-import { decodeJwt } from '../utils/jwt.js';
+import { decodeJwt, signJwt } from '../utils/jwt.js';
+import { sha256 } from '../utils/crypto.js';
 import type { Env } from '../index.js';
 
 export interface AuthDeps {
@@ -46,26 +47,7 @@ export function createAuthRoutes(deps?: AuthDeps) {
   auth.use('/*', createRateLimiter(10, 60_000));
 
   function getAuthService(c: any): AuthService {
-    let db = deps?.prisma;
-    if (!db) {
-      const dbUrl = c.env?.DATABASE_URL || process.env.DATABASE_URL;
-      const isValidUrl =
-        dbUrl &&
-        typeof dbUrl === 'string' &&
-        dbUrl.trim() !== '' &&
-        (dbUrl.startsWith('postgres://') || dbUrl.startsWith('postgresql://'));
-
-      if (isValidUrl) {
-        db = createPrismaClient(dbUrl);
-      } else {
-        const preview = dbUrl ? `${String(dbUrl).substring(0, 10)}...` : 'undefined';
-        throw new AppError(
-          'INTERNAL_SERVER_ERROR',
-          `Database connection string (DATABASE_URL) is missing or invalid in Worker secrets/bindings. Received: "${preview}". Please configure a valid postgresql:// URL in Cloudflare Worker secrets.`,
-          500,
-        );
-      }
-    }
+    const db = getDbClient(c, deps?.prisma);
 
     let mailer = deps?.mailer;
     if (!mailer) {
@@ -96,7 +78,7 @@ export function createAuthRoutes(deps?: AuthDeps) {
     const parsed = registerRequestSchema.safeParse(body);
 
     if (!parsed.success) {
-      const firstError = parsed.error.errors[0];
+      const firstError = parsed.error.issues[0];
       throw new ValidationError(firstError?.message ?? 'Invalid input.', {
         field: firstError?.path.join('.') ?? 'unknown',
         issue: firstError?.message ?? 'validation_failed',
@@ -137,7 +119,7 @@ export function createAuthRoutes(deps?: AuthDeps) {
     const parsed = loginRequestSchema.safeParse(body);
 
     if (!parsed.success) {
-      const firstError = parsed.error.errors[0];
+      const firstError = parsed.error.issues[0];
       throw new ValidationError(firstError?.message ?? 'Invalid input.', {
         field: firstError?.path.join('.') ?? 'unknown',
         issue: firstError?.message ?? 'validation_failed',
@@ -199,7 +181,7 @@ export function createAuthRoutes(deps?: AuthDeps) {
     const parsed = verifyEmailRequestSchema.safeParse(body);
 
     if (!parsed.success) {
-      const firstError = parsed.error.errors[0];
+      const firstError = parsed.error.issues[0];
       throw new ValidationError(firstError?.message ?? 'Invalid input.', {
         field: firstError?.path.join('.') ?? 'unknown',
         issue: firstError?.message ?? 'validation_failed',
@@ -236,7 +218,7 @@ export function createAuthRoutes(deps?: AuthDeps) {
     const parsed = resendVerificationRequestSchema.safeParse(body);
 
     if (!parsed.success) {
-      const firstError = parsed.error.errors[0];
+      const firstError = parsed.error.issues[0];
       throw new ValidationError(firstError?.message ?? 'Invalid input.', {
         field: firstError?.path.join('.') ?? 'unknown',
         issue: firstError?.message ?? 'validation_failed',
@@ -270,7 +252,7 @@ export function createAuthRoutes(deps?: AuthDeps) {
     const parsed = forgotPasswordRequestSchema.safeParse(body);
 
     if (!parsed.success) {
-      const firstError = parsed.error.errors[0];
+      const firstError = parsed.error.issues[0];
       throw new ValidationError(firstError?.message ?? 'Invalid input.', {
         field: firstError?.path.join('.') ?? 'unknown',
         issue: firstError?.message ?? 'validation_failed',
@@ -304,7 +286,7 @@ export function createAuthRoutes(deps?: AuthDeps) {
     const parsed = resetPasswordRequestSchema.safeParse(body);
 
     if (!parsed.success) {
-      const firstError = parsed.error.errors[0];
+      const firstError = parsed.error.issues[0];
       throw new ValidationError(firstError?.message ?? 'Invalid input.', {
         field: firstError?.path.join('.') ?? 'unknown',
         issue: firstError?.message ?? 'validation_failed',
@@ -440,7 +422,7 @@ export function createAuthRoutes(deps?: AuthDeps) {
     const parsed = updateSessionSettingsSchema.safeParse(body);
 
     if (!parsed.success) {
-      const firstError = parsed.error.errors[0];
+      const firstError = parsed.error.issues[0];
       throw new ValidationError(firstError?.message ?? 'Invalid input.', {
         field: firstError?.path.join('.') ?? 'unknown',
         issue: firstError?.message ?? 'validation_failed',
@@ -513,7 +495,7 @@ export function createAuthRoutes(deps?: AuthDeps) {
     const parsed = updateProfileRequestSchema.safeParse(body);
 
     if (!parsed.success) {
-      const firstError = parsed.error.errors[0];
+      const firstError = parsed.error.issues[0];
       throw new ValidationError(firstError?.message ?? 'Invalid input.', {
         field: firstError?.path.join('.') ?? 'unknown',
         issue: firstError?.message ?? 'validation_failed',
@@ -549,7 +531,7 @@ export function createAuthRoutes(deps?: AuthDeps) {
     const parsed = verifyEmailChangeRequestSchema.safeParse(body);
 
     if (!parsed.success) {
-      const firstError = parsed.error.errors[0];
+      const firstError = parsed.error.issues[0];
       throw new ValidationError(firstError?.message ?? 'Invalid input.', {
         field: firstError?.path.join('.') ?? 'unknown',
         issue: firstError?.message ?? 'validation_failed',
@@ -581,7 +563,7 @@ export function createAuthRoutes(deps?: AuthDeps) {
     const parsed = changePasswordRequestSchema.safeParse(body);
 
     if (!parsed.success) {
-      const firstError = parsed.error.errors[0];
+      const firstError = parsed.error.issues[0];
       throw new ValidationError(firstError?.message ?? 'Invalid input.', {
         field: firstError?.path.join('.') ?? 'unknown',
         issue: firstError?.message ?? 'validation_failed',
@@ -617,7 +599,7 @@ export function createAuthRoutes(deps?: AuthDeps) {
     const parsed = loginMfaRequestSchema.safeParse(body);
 
     if (!parsed.success) {
-      const firstError = parsed.error.errors[0];
+      const firstError = parsed.error.issues[0];
       throw new ValidationError(firstError?.message ?? 'Invalid input.', {
         field: firstError?.path.join('.') ?? 'unknown',
         issue: firstError?.message ?? 'validation_failed',
@@ -678,7 +660,7 @@ export function createAuthRoutes(deps?: AuthDeps) {
     const parsed = verifyMfaSetupRequestSchema.safeParse(body);
 
     if (!parsed.success) {
-      const firstError = parsed.error.errors[0];
+      const firstError = parsed.error.issues[0];
       throw new ValidationError(firstError?.message ?? 'Invalid input.', {
         field: firstError?.path.join('.') ?? 'unknown',
         issue: firstError?.message ?? 'validation_failed',
@@ -729,7 +711,7 @@ export function createAuthRoutes(deps?: AuthDeps) {
     const parsed = updateMfaEnforcementRequestSchema.safeParse(body);
 
     if (!parsed.success) {
-      const firstError = parsed.error.errors[0];
+      const firstError = parsed.error.issues[0];
       throw new ValidationError(firstError?.message ?? 'Invalid input.', {
         field: firstError?.path.join('.') ?? 'unknown',
         issue: firstError?.message ?? 'validation_failed',
@@ -762,7 +744,7 @@ export function createAuthRoutes(deps?: AuthDeps) {
 
     const parsed = deleteAccountRequestSchema.safeParse(body);
     if (!parsed.success) {
-      const firstError = parsed.error.errors[0];
+      const firstError = parsed.error.issues[0];
       throw new ValidationError(firstError?.message ?? 'Invalid password input.');
     }
 
@@ -782,6 +764,110 @@ export function createAuthRoutes(deps?: AuthDeps) {
     return c.json({
       success: true,
       message: 'Account permanently deleted. You can create a new account anytime.',
+    });
+  });
+
+  /**
+   * POST /api/v1/auth/refresh
+   * INK-148: Refresh session tokens with atomic rotation and reuse detection
+   */
+  auth.post('/refresh', async (c) => {
+    const body = await c.req.json().catch(() => ({}));
+    const cookieHeader = c.req.header('cookie');
+    let refreshToken = body.refreshToken;
+
+    if (!refreshToken && cookieHeader) {
+      const match = cookieHeader.match(/graphsign_refresh_token=([^;]+)/);
+      if (match && match[1]) refreshToken = match[1];
+    }
+
+    if (!refreshToken || typeof refreshToken !== 'string') {
+      throw new ValidationError('Refresh token is required.');
+    }
+
+    const tokenHash = await sha256(refreshToken.trim());
+    const db = getDbClient(c, deps?.prisma);
+
+    if (!db?.refreshSession) {
+      throw new UnauthorizedError('Session refresh store unavailable.');
+    }
+
+    const session = await db.refreshSession.findUnique({
+      where: { tokenHash },
+      include: {
+        user: {
+          select: { id: true, email: true, role: true, status: true, organisationId: true },
+        },
+      },
+    });
+
+    if (!session) {
+      throw new UnauthorizedError('invalid_refresh_token');
+    }
+
+    const now = new Date();
+
+    // Reuse detection: if token was already consumed, revoke entire family
+    if (session.consumedAt) {
+      await db.refreshSession.updateMany({
+        where: { familyId: session.familyId },
+        data: { revokedAt: now },
+      });
+      throw new UnauthorizedError('Refresh token reuse detected. Family revoked.');
+    }
+
+    if (session.revokedAt || session.expiresAt <= now) {
+      throw new UnauthorizedError('token_expired');
+    }
+
+    if (!session.user || session.user.status === 'suspended') {
+      throw new UnauthorizedError('User account inactive.');
+    }
+
+    // Generate new refresh token
+    const newRawRefreshToken = crypto.randomUUID() + '.' + crypto.randomUUID();
+    const newTokenHash = await sha256(newRawRefreshToken);
+    const newExpiresAt = new Date(now.getTime() + 24 * 3600 * 1000); // 24 hours
+
+    const newSession = await db.refreshSession.create({
+      data: {
+        organisationId: session.organisationId,
+        userId: session.userId,
+        clientBindingId: session.clientBindingId,
+        tokenHash: newTokenHash,
+        familyId: session.familyId,
+        expiresAt: newExpiresAt,
+      },
+    });
+
+    // Mark current session consumed
+    await db.refreshSession.update({
+      where: { id: session.id },
+      data: {
+        consumedAt: now,
+        replacementId: newSession.id,
+      },
+    });
+
+    // Generate new access token
+    const secret = (c.env as any)?.JWT_SECRET || process.env.JWT_SECRET;
+    const accessToken = await signJwt(
+      {
+        sub: session.user.id,
+        orgId: session.organisationId,
+        email: session.user.email,
+        role: session.user.role,
+        jti: crypto.randomUUID(),
+      },
+      secret,
+      15 * 60, // 15 minutes
+    );
+
+    return c.json({
+      accessToken,
+      refreshToken: newRawRefreshToken,
+      expiresIn: 900,
+      tokenType: 'Bearer',
     });
   });
 

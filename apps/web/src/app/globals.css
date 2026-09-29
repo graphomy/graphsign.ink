@@ -1,22 +1,121 @@
 @import 'tailwindcss';
 
 :root {
-  --background: #fafafa;
-  --foreground: #09090b;
+  /* Brand */
+  --brand-50: #fef2f2;
+  --brand-100: #fee2e2;
+  --brand-200: #fecaca;
+  --brand-300: #fca5a5;
+  --brand-400: #f26a6a;
+  --brand-500: #e11d2e;
+  --brand-600: #c2101f;
+  --brand-700: #9e0c18;
+  --brand-800: #7a0912;
+  --brand-900: #5c070e;
+
+  /* Ink */
+  --ink-50: #f7f8fa;
+  --ink-100: #f1f3f6;
+  --ink-200: #e3e7ec;
+  --ink-300: #cbd1d9;
+  --ink-400: #9aa1ac;
+  --ink-500: #6b7280;
+  --ink-600: #565c69;
+  --ink-700: #3d424d;
+  --ink-800: #252932;
+  --ink-900: #16181d;
+  --ink-950: #0a0a0b;
+
+  /* Amber */
+  --amber-50: #fff8eb;
+  --amber-100: #feefc7;
+  --amber-200: #fde0a0;
+  --amber-300: #fccf5b;
+  --amber-500: #e8a317;
+  --amber-600: #c27c0b;
+  --amber-700: #8f5a06;
+
+  /* Verified */
+  --verified-50: #ecfdf3;
+  --verified-100: #d1fadf;
+  --verified-500: #12a150;
+  --verified-600: #0b8043;
+  --verified-700: #076c38;
+
+  /* Info */
+  --info-50: #eef2f8;
+  --info-100: #dde4ef;
+  --info-500: #4a5a75;
+  --info-600: #374761;
+
+  /* Semantic Aliases */
+  --background: var(--ink-50);
+  --foreground: var(--ink-900);
+  --color-surface: #ffffff;
+  --color-border: var(--ink-200);
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+@theme {
+  --color-brand-50: var(--brand-50);
+  --color-brand-100: var(--brand-100);
+  --color-brand-200: var(--brand-200);
+  --color-brand-300: var(--brand-300);
+  --color-brand-400: var(--brand-400);
+  --color-brand-500: var(--brand-500);
+  --color-brand-600: var(--brand-600);
+  --color-brand-700: var(--brand-700);
+  --color-brand-800: var(--brand-800);
+  --color-brand-900: var(--brand-900);
+
+  --color-ink-50: var(--ink-50);
+  --color-ink-100: var(--ink-100);
+  --color-ink-200: var(--ink-200);
+  --color-ink-300: var(--ink-300);
+  --color-ink-400: var(--ink-400);
+  --color-ink-500: var(--ink-500);
+  --color-ink-600: var(--ink-600);
+  --color-ink-700: var(--ink-700);
+  --color-ink-800: var(--ink-800);
+  --color-ink-900: var(--ink-900);
+  --color-ink-950: var(--ink-950);
+
+  --color-amber-50: var(--amber-50);
+  --color-amber-100: var(--amber-100);
+  --color-amber-200: var(--amber-200);
+  --color-amber-300: var(--amber-300);
+  --color-amber-500: var(--amber-500);
+  --color-amber-600: var(--amber-600);
+  --color-amber-700: var(--amber-700);
+
+  --color-verified-50: var(--verified-50);
+  --color-verified-100: var(--verified-100);
+  --color-verified-500: var(--verified-500);
+  --color-verified-600: var(--verified-600);
+  --color-verified-700: var(--verified-700);
+
+  --color-info-50: var(--info-50);
+  --color-info-100: var(--info-100);
+  --color-info-500: var(--info-500);
+  --color-info-600: var(--info-600);
+
+  --shadow-e1: 0 1px 2px rgb(16 24 40 / 0.04), 0 1px 3px rgb(16 24 40 / 0.06);
+  --shadow-e2: 0 4px 8px -2px rgb(16 24 40 / 0.06), 0 12px 24px -4px rgb(16 24 40 / 0.08);
+  --shadow-e3: 0 8px 16px -4px rgb(16 24 40 / 0.08), 0 24px 48px -12px rgb(16 24 40 / 0.16);
+
+  --z-sticky: 10;
+  --z-dropdown: 20;
+  --z-toolbar: 30;
+  --z-overlay: 40;
+  --z-modal: 50;
+  --z-toast: 60;
 }
 
 body {
-  background-color: #fafafa;
-  color: #09090b;
+  background-color: var(--ink-50);
+  color: var(--ink-900);
   font-family:
     var(--font-geist-sans),
+    Inter,
     ui-sans-serif,
     system-ui,
     -apple-system,
@@ -24,4 +123,23 @@ body {
     'Segoe UI',
     Roboto,
     sans-serif;
+  margin: 0;
+  padding: 0;
+}
+
+/* Chrome autofill override */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+textarea:-webkit-autofill,
+select:-webkit-autofill {
+  -webkit-box-shadow: 0 0 0 1000px #ffffff inset !important;
+  -webkit-text-fill-color: #16181d !important;
+  transition: background-color 9999s ease-out;
+}
+
+/* Global focus-visible ring */
+*:focus-visible {
+  outline: 2px solid #0a0a0b;
+  outline-offset: 2px;
 }

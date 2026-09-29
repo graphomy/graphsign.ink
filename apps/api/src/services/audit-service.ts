@@ -7,7 +7,7 @@ import { generateId, sha256 } from '../utils/crypto.js';
  * Audit logs are append-only and hash-chained (previous_hash → current_hash).
  */
 export interface AuditService {
-  log(params: AuditLogParams): Promise<void>;
+  log(params: AuditLogParams, tx?: any): Promise<void>;
 }
 
 export interface AuditLogParams {
@@ -24,9 +24,20 @@ export interface AuditLogParams {
 export class PrismaAuditService implements AuditService {
   constructor(private readonly prisma: PrismaClient) {}
 
-  async log(params: AuditLogParams): Promise<void> {
+  async log(params: AuditLogParams, tx?: any): Promise<void> {
+    const client = tx || this.prisma;
+
+    // Serialize append per tenant using transaction advisory lock if inside a transaction
+    if (tx && typeof client.$executeRaw === 'function') {
+      try {
+        await client.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${params.organisationId}))`;
+      } catch {
+        // Fall back if advisory lock is unavailable
+      }
+    }
+
     // Retrieve the most recent audit event for this org to chain hashes
-    const lastEvent = await this.prisma.auditLog.findFirst({
+    const lastEvent = await client.auditLog.findFirst({
       where: { organisationId: params.organisationId },
       orderBy: { createdAt: 'desc' },
       select: { currentHash: true },
@@ -34,7 +45,8 @@ export class PrismaAuditService implements AuditService {
 
     const previousHash = lastEvent?.currentHash ?? null;
     const id = generateId();
-    const now = new Date().toISOString();
+    const timestampDate = new Date();
+    const nowIso = timestampDate.toISOString();
 
     // Hash chain: SHA-256(id + action + resourceType + resourceId + timestamp + previousHash)
     const hashInput = [
@@ -42,12 +54,12 @@ export class PrismaAuditService implements AuditService {
       params.action,
       params.resourceType,
       params.resourceId,
-      now,
+      nowIso,
       previousHash ?? 'GENESIS',
     ].join('|');
     const currentHash = await sha256(hashInput);
 
-    await this.prisma.auditLog.create({
+    await client.auditLog.create({
       data: {
         id,
         organisationId: params.organisationId,
@@ -60,6 +72,7 @@ export class PrismaAuditService implements AuditService {
         currentHash,
         ipAddress: params.ipAddress,
         userAgent: params.userAgent,
+        createdAt: timestampDate,
       },
     });
   }

@@ -1,8 +1,14 @@
 'use client';
+import { loadPdfDocument } from '@/lib/pdf-document';
+import { PdfPageCanvas } from './PdfPageCanvas';
+import type { PDFDocumentProxy } from 'pdfjs-dist';
 
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { getApiUrl } from '@/lib/api';
+import { fetchRead } from '@/lib/fetch-read';
+import { formatStatus } from '@/lib/date-utils';
 import { renderMarkdownToHtml } from './MarkdownEditor';
+import { SendAgreementModal } from './SendAgreementModal';
 
 export type FieldType =
   | 'SIGNATURE'
@@ -54,7 +60,7 @@ export interface Recipient {
   name: string;
   email: string;
   role: 'signer' | 'approver' | 'viewer';
-  color: string;
+  color?: string;
 }
 
 interface AgreementData {
@@ -92,7 +98,12 @@ const DEFAULT_RECIPIENT_COLORS = [
 
 function getToken(): string {
   if (typeof window === 'undefined') return '';
-  return localStorage.getItem('graphsign_session_token') || localStorage.getItem('token') || '';
+  return (
+    localStorage.getItem('graphsign_session_token') ||
+    localStorage.getItem('token') ||
+    localStorage.getItem('access_token') ||
+    ''
+  );
 }
 
 export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentEditorModalProps) {
@@ -103,12 +114,18 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
   // Recipients State
   const [recipients, setRecipients] = useState<Recipient[]>(() => {
     const existing = agreement.fields?.recipients;
-    if (existing && existing.length > 0) return existing;
+    if (existing && existing.length > 0) {
+      return existing.map((r, idx) => ({
+        ...r,
+        color:
+          r.color || DEFAULT_RECIPIENT_COLORS[idx % DEFAULT_RECIPIENT_COLORS.length] || '#2563EB',
+      }));
+    }
     return [
       {
         id: 'recipient-1',
         name: 'Signer 1',
-        email: 'signer1@example.com',
+        email: '',
         role: 'signer',
         color: DEFAULT_RECIPIENT_COLORS[0] ?? '#2563EB',
       },
@@ -128,9 +145,22 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
 
   const [selectedFieldId, setSelectedFieldId] = useState<string | null>(null);
   const [zoomLevel, setZoomLevel] = useState<number>(100);
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [pdfDocument, setPdfDocument] = useState<PDFDocumentProxy | null>(null);
+  const totalPages = useMemo(() => {
+    if (pdfDocument) return pdfDocument.numPages;
+    if (!fields || fields.length === 0) return 1;
+    const maxPage = Math.max(...fields.map((f) => f.pageNumber || 1));
+    return Math.max(1, maxPage);
+  }, [fields, pdfDocument]);
   const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [showSendModal, setShowSendModal] = useState(false);
+
+  // Sidebar Collapse States (INK-302)
+  const [leftSidebarCollapsed, setLeftSidebarCollapsed] = useState(false);
+  const [rightSidebarCollapsed, setRightSidebarCollapsed] = useState(false);
 
   // Mobile Drawer Tab
   const [mobileTab, setMobileTab] = useState<'palette' | 'properties' | 'recipients'>('palette');
@@ -199,17 +229,101 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
     return null;
   }, [rawFileData, agreement.mimeType]);
 
+  const [fetchedBlobUrl, setFetchedBlobUrl] = useState<string | null>(null);
+  const [isLoadingPdf, setIsLoadingPdf] = useState<boolean>(false);
+  const [pdfFetchError, setPdfFetchError] = useState<string | null>(null);
+
+  // Fetch binary file with authorization headers when inline base64 is not present
+  useEffect(() => {
+    if (inlinePdfUrl) {
+      return;
+    }
+
+    let isMounted = true;
+    let createdUrl: string | null = null;
+
+    async function loadPdfBinary() {
+      setIsLoadingPdf(true);
+      setPdfFetchError(null);
+
+      try {
+        const token = getToken();
+        const res = await fetch(
+          `${getApiUrl()}/api/v1/agreements/${agreement.id}/file?format=pdf`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          },
+        );
+
+        if (!res.ok) {
+          const errData = await res.json().catch(() => null);
+          throw new Error(errData?.error?.message || `Failed to fetch document (${res.status})`);
+        }
+
+        const blob = await res.blob();
+        if (!isMounted) return;
+
+        createdUrl = URL.createObjectURL(blob);
+        setFetchedBlobUrl(createdUrl);
+      } catch (err: unknown) {
+        if (!isMounted) return;
+        setPdfFetchError((err as Error).message);
+      } finally {
+        if (isMounted) {
+          setIsLoadingPdf(false);
+        }
+      }
+    }
+
+    loadPdfBinary();
+
+    return () => {
+      isMounted = false;
+      if (createdUrl) {
+        URL.revokeObjectURL(createdUrl);
+      }
+    };
+  }, [agreement.id, inlinePdfUrl]);
+
+  const effectivePdfUrl = inlinePdfUrl || fetchedBlobUrl;
+  useEffect(() => {
+    if (!effectivePdfUrl) return;
+    let cancelled = false;
+    let document: PDFDocumentProxy | undefined;
+    void loadPdfDocument(effectivePdfUrl)
+      .then((loaded) => {
+        document = loaded;
+        if (cancelled) {
+          void loaded.destroy();
+          return;
+        }
+        setPdfDocument(loaded);
+        setCurrentPage(1);
+      })
+      .catch(() => {
+        if (!cancelled)
+          setErrorMessage('Unable to read PDF pages. Please retry loading the document.');
+      });
+    return () => {
+      cancelled = true;
+      if (document) void document.destroy();
+    };
+  }, [effectivePdfUrl]);
+
   // Load existing fields on mount from server if not populated
   useEffect(() => {
-    let ignore = false;
+    const controller = new AbortController();
     async function loadFields() {
       try {
-        const res = await fetch(`${getApiUrl()}/api/v1/agreements/${agreement.id}/fields`, {
+        const res = await fetchRead(`${getApiUrl()}/api/v1/agreements/${agreement.id}/fields`, {
           headers: { Authorization: `Bearer ${getToken()}` },
+          signal: controller.signal,
         });
         if (res.ok) {
           const data = await res.json();
-          if (!ignore && data) {
+          if (!controller.signal.aborted && data) {
             if (Array.isArray(data.fields) && data.fields.length > 0) {
               setFields(data.fields);
             }
@@ -219,13 +333,14 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
             }
           }
         }
-      } catch (err) {
-        console.error('Failed to load fields from API:', err);
+      } catch (err: unknown) {
+        if ((err as { name?: string })?.name === 'AbortError') return;
+        console.warn('Unable to load document fields from API (using fallback state):', err);
       }
     }
     loadFields();
     return () => {
-      ignore = true;
+      controller.abort();
     };
   }, [agreement.id]);
 
@@ -233,8 +348,16 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
     return fields.find((f) => f.id === selectedFieldId) || null;
   }, [fields, selectedFieldId]);
 
-  // Add Recipient
+  const activeRecipient = useMemo(() => {
+    return recipients.find((r) => r.id === activeRecipientId) || recipients[0] || null;
+  }, [recipients, activeRecipientId]);
+
+  // Add Recipient (Max 10 Limit)
   function handleAddRecipient() {
+    if (recipients.length >= 10) {
+      setErrorMessage('Maximum limit of 10 signers reached for this document.');
+      return;
+    }
     const nextIdx = recipients.length + 1;
     const newColor =
       DEFAULT_RECIPIENT_COLORS[(nextIdx - 1) % DEFAULT_RECIPIENT_COLORS.length] || '#2563EB';
@@ -293,7 +416,7 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
         case 'DATE':
           defaultW = 20;
           defaultH = 6;
-          label = 'Date';
+          label = 'Date Field';
           break;
         case 'COMPANY':
           defaultW = 25;
@@ -363,7 +486,7 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
   // Click-to-place button from palette
   function handlePaletteItemClick(type: FieldType) {
     // Default place in center of active viewport
-    createFieldAt(type, 35, 40, 1);
+    createFieldAt(type, 35, 40, currentPage);
   }
 
   // Drag-and-drop start from toolbar
@@ -392,7 +515,7 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
     const xPct = ((clientX - rect.left) / rect.width) * 100;
     const yPct = ((clientY - rect.top) / rect.height) * 100;
 
-    createFieldAt(type, xPct, yPct, 1);
+    createFieldAt(type, xPct, yPct, currentPage);
     dragItemTypeRef.current = null;
   }
 
@@ -533,7 +656,7 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
         } else {
           delete errors[field.id];
         }
-      } catch (_e) {
+      } catch {
         delete errors[field.id];
       }
     } else {
@@ -543,12 +666,24 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
   }
 
   // Save Fields to API
-  async function handleSaveFields(exitOnSave: boolean = false) {
+  async function handleSaveFields(exitOnSave: boolean = false): Promise<boolean> {
     setIsSaving(true);
     setSaveMessage(null);
     setErrorMessage(null);
 
     try {
+      const invalidRecipient = recipients.find((r) => !r.id || !r.name?.trim());
+      if (invalidRecipient)
+        throw new Error(
+          'Each recipient needs an identifier and a name. Please update the recipient details.',
+        );
+      const invalidField = fields.find(
+        (f) => !f.id || !f.recipientId || !recipients.some((r) => r.id === f.recipientId),
+      );
+      if (invalidField)
+        throw new Error(
+          `Assign ${invalidField.label || 'each field'} to an existing recipient before saving.`,
+        );
       const res = await fetch(`${getApiUrl()}/api/v1/agreements/${agreement.id}/fields`, {
         method: 'PUT',
         headers: {
@@ -562,6 +697,9 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
       });
 
       if (!res.ok) {
+        if (res.status === 401) {
+          throw new Error('Your session has expired. Please refresh the page or sign in again.');
+        }
         const errData = await res.json().catch(() => null);
         throw new Error(errData?.error?.message || errData?.message || 'Failed to save fields.');
       }
@@ -573,8 +711,15 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
       if (exitOnSave) {
         onClose();
       }
+      return true;
     } catch (err: unknown) {
-      setErrorMessage((err as Error).message);
+      const msg = (err as Error).message || 'Failed to save fields.';
+      if (msg.includes('Failed to fetch') || msg.includes('NetworkError')) {
+        setErrorMessage('Unable to reach server. Please check your connection or sign in again.');
+      } else {
+        setErrorMessage(msg);
+      }
+      return false;
     } finally {
       setIsSaving(false);
     }
@@ -583,21 +728,21 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
   return (
     <div className="fixed inset-0 z-50 bg-neutral-900/90 backdrop-blur-md flex flex-col h-screen w-screen overflow-hidden text-neutral-900 select-none">
       {/* Top Navigation Bar */}
-      <header className="h-14 bg-white border-b border-neutral-200 px-4 flex items-center justify-between gap-3 shrink-0 shadow-sm">
+      <header className="h-16 bg-white border-b border-neutral-200 px-4 flex items-center justify-between gap-3 shrink-0 shadow-sm">
         {/* Left: Document Info & Back */}
         <div className="flex items-center gap-3 min-w-0">
           <button
             onClick={onClose}
-            className="p-1.5 text-neutral-500 hover:text-neutral-900 hover:bg-neutral-100 rounded-lg transition-colors text-xs font-semibold flex items-center gap-1"
+            className="h-10 px-3.5 text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100 rounded-lg transition-colors text-xs font-semibold flex items-center gap-1.5 border border-neutral-200"
           >
             <span>←</span> Back
           </button>
-          <div className="h-4 w-px bg-neutral-200" />
+          <div className="h-5 w-px bg-neutral-200" />
           <div className="truncate">
             <h1 className="text-sm font-bold text-neutral-900 truncate flex items-center gap-2">
               <span>{agreement.title}</span>
               <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-neutral-100 border border-neutral-300 text-neutral-600 uppercase">
-                {agreement.status}
+                {formatStatus(agreement.status)}
               </span>
             </h1>
             <p className="text-[10px] text-neutral-400">
@@ -606,68 +751,143 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
           </div>
         </div>
 
-        {/* Center: Mode Switcher (Editor vs Preview) - INK-85 */}
-        <div className="flex items-center bg-neutral-100 p-0.5 rounded-lg border border-neutral-200">
-          <button
-            onClick={() => setActiveMode('editor')}
-            className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all flex items-center gap-1.5 ${
-              activeMode === 'editor'
-                ? 'bg-white text-neutral-900 shadow-sm'
-                : 'text-neutral-500 hover:text-neutral-900'
-            }`}
-          >
-            <span>✏️</span> Edit Fields
-          </button>
-          <button
-            onClick={() => setActiveMode('preview')}
-            className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all flex items-center gap-1.5 ${
-              activeMode === 'preview'
-                ? 'bg-[#ba0000] text-white shadow-sm'
-                : 'text-neutral-500 hover:text-neutral-900'
-            }`}
-          >
-            <span>👁️</span> Preview as Signer
-          </button>
+        {/* Center: Mode Switcher & Sidebar Toggles - INK-85 / INK-302 */}
+        <div className="flex items-center gap-2">
+          {activeMode === 'editor' && (
+            <div className="hidden lg:flex items-center gap-1 bg-neutral-100 p-0.5 rounded-lg border border-neutral-200">
+              <button
+                type="button"
+                onClick={() => setLeftSidebarCollapsed((v) => !v)}
+                className={`h-9 px-2.5 rounded-md text-xs font-medium transition-all flex items-center gap-1.5 ${
+                  leftSidebarCollapsed
+                    ? 'bg-neutral-200 text-neutral-700'
+                    : 'bg-white text-neutral-900 shadow-2xs font-bold'
+                }`}
+                title={leftSidebarCollapsed ? 'Expand Field Palette' : 'Collapse Field Palette'}
+              >
+                <span>{leftSidebarCollapsed ? '▶' : '◀'}</span>
+                <span>Fields</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setRightSidebarCollapsed((v) => !v)}
+                className={`h-9 px-2.5 rounded-md text-xs font-medium transition-all flex items-center gap-1.5 ${
+                  rightSidebarCollapsed
+                    ? 'bg-neutral-200 text-neutral-700'
+                    : 'bg-white text-neutral-900 shadow-2xs font-bold'
+                }`}
+                title={
+                  rightSidebarCollapsed ? 'Expand Properties Panel' : 'Collapse Properties Panel'
+                }
+              >
+                <span>Properties</span>
+                <span>{rightSidebarCollapsed ? '◀' : '▶'}</span>
+              </button>
+            </div>
+          )}
+
+          <div className="flex items-center bg-neutral-100 p-0.5 rounded-lg border border-neutral-200">
+            <button
+              onClick={() => setActiveMode('editor')}
+              className={`h-9 px-3.5 rounded-md text-xs font-bold transition-all flex items-center gap-1.5 ${
+                activeMode === 'editor'
+                  ? 'bg-white text-neutral-900 shadow-sm'
+                  : 'text-neutral-500 hover:text-neutral-900'
+              }`}
+            >
+              <span>✏️</span> Edit Fields
+            </button>
+            <button
+              onClick={() => setActiveMode('preview')}
+              className={`h-9 px-3.5 rounded-md text-xs font-bold transition-all flex items-center gap-1.5 ${
+                activeMode === 'preview'
+                  ? 'bg-[#ba0000] text-white shadow-sm'
+                  : 'text-neutral-500 hover:text-neutral-900'
+              }`}
+            >
+              <span>👁️</span> Preview as Signer
+            </button>
+          </div>
         </div>
 
         {/* Right: Zoom & Save Action Buttons */}
         <div className="flex items-center gap-2">
-          {/* Zoom controls */}
-          <div className="hidden sm:flex items-center gap-1 bg-neutral-50 border border-neutral-200 px-2 py-1 rounded-lg text-xs">
+          {/* Page Navigation Controls */}
+          <div className="flex items-center gap-1 bg-neutral-50 border border-neutral-200 px-2 h-10 rounded-lg text-xs">
             <button
+              type="button"
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              disabled={currentPage <= 1}
+              className="text-neutral-600 hover:text-neutral-900 w-7 h-7 flex items-center justify-center font-bold disabled:opacity-40 rounded hover:bg-neutral-200 transition-colors"
+              title="Previous page"
+            >
+              ←
+            </button>
+            <span className="font-mono text-xs font-semibold text-neutral-700 min-w-[64px] text-center">
+              Page {currentPage}/{totalPages}
+            </span>
+            <button
+              type="button"
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              disabled={currentPage >= totalPages}
+              className="text-neutral-600 hover:text-neutral-900 w-7 h-7 flex items-center justify-center font-bold disabled:opacity-40 rounded hover:bg-neutral-200 transition-colors"
+              title="Next page"
+            >
+              →
+            </button>
+          </div>
+
+          {/* Zoom controls */}
+          <div className="hidden sm:flex items-center gap-1 bg-neutral-50 border border-neutral-200 px-2 h-10 rounded-lg text-xs">
+            <button
+              type="button"
               onClick={() => setZoomLevel((z) => Math.max(50, z - 15))}
-              className="text-neutral-600 hover:text-neutral-900 px-1 font-bold"
+              className="text-neutral-600 hover:text-neutral-900 w-7 h-7 flex items-center justify-center font-bold rounded hover:bg-neutral-200 transition-colors"
               title="Zoom out"
             >
               −
             </button>
-            <span className="font-mono text-[11px] font-semibold text-neutral-700 min-w-[36px] text-center">
+            <span className="font-mono text-xs font-semibold text-neutral-700 min-w-[40px] text-center">
               {zoomLevel}%
             </span>
             <button
+              type="button"
               onClick={() => setZoomLevel((z) => Math.min(175, z + 15))}
-              className="text-neutral-600 hover:text-neutral-900 px-1 font-bold"
+              className="text-neutral-600 hover:text-neutral-900 w-7 h-7 flex items-center justify-center font-bold rounded hover:bg-neutral-200 transition-colors"
               title="Zoom in"
             >
               +
+            </button>
+            <button
+              type="button"
+              onClick={() => setZoomLevel(100)}
+              className="text-xs text-neutral-500 hover:text-neutral-900 px-2 h-7 flex items-center border-l border-neutral-300 font-medium rounded hover:bg-neutral-200 transition-colors"
+            >
+              Fit
             </button>
           </div>
 
           <button
             onClick={() => handleSaveFields(false)}
             disabled={isSaving}
-            className="px-3.5 py-1.5 bg-white border border-neutral-300 hover:bg-neutral-50 text-neutral-800 text-xs font-semibold rounded-lg shadow-sm transition-all disabled:opacity-50 flex items-center gap-1.5"
+            className="h-10 px-4 bg-white border border-neutral-300 hover:bg-neutral-50 text-neutral-800 text-xs font-semibold rounded-lg shadow-sm transition-all disabled:opacity-50 flex items-center gap-1.5"
           >
             {isSaving ? <span className="animate-spin text-neutral-700">⏳</span> : <span>💾</span>}
             Save Draft
           </button>
 
           <button
-            onClick={() => handleSaveFields(true)}
+            type="button"
+            onClick={async () => {
+              const saved = await handleSaveFields(false);
+              if (saved) {
+                setShowSendModal(true);
+              }
+            }}
             disabled={isSaving}
-            className="px-4 py-1.5 bg-[#ba0000] hover:bg-red-700 text-white text-xs font-bold rounded-lg shadow-sm transition-all disabled:opacity-50 flex items-center gap-1.5"
+            className="h-10 px-5 bg-[#ba0000] hover:bg-red-700 text-white text-xs font-bold rounded-lg shadow-sm transition-all disabled:opacity-50 flex items-center gap-2 whitespace-nowrap shrink-0"
           >
-            <span>✓</span> Done
+            <span aria-hidden="true">✓</span> Send for Signature
           </button>
         </div>
       </header>
@@ -698,46 +918,95 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
         {/* ========================================================================= */}
         {/* LEFT SIDEBAR: FIELD PALETTE & RECIPIENTS (Editor Mode Only) */}
         {/* ========================================================================= */}
-        {activeMode === 'editor' && (
-          <aside className="w-64 bg-white border-r border-neutral-200 flex flex-col shrink-0 overflow-y-auto hidden md:flex">
-            {/* Recipient Manager Section (INK-79) */}
-            <div className="p-3.5 border-b border-neutral-200 bg-neutral-50/70">
-              <div className="flex items-center justify-between mb-2">
+        {activeMode === 'editor' && !leftSidebarCollapsed && (
+          <aside className="w-64 bg-white border-r border-neutral-200 flex flex-col shrink-0 overflow-y-auto hidden md:flex relative">
+            {/* Recipient Manager Section (INK-79 / INK-270) */}
+            <div className="p-3.5 border-b border-neutral-200 bg-neutral-50/70 space-y-3">
+              <div className="flex items-center justify-between">
                 <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-600">
-                  Assign Signer
+                  Select Signer ({recipients.length}/10)
                 </span>
-                <button
-                  onClick={handleAddRecipient}
-                  className="text-[11px] font-bold text-[#ba0000] hover:underline flex items-center gap-0.5"
-                >
-                  + Add Signer
-                </button>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={handleAddRecipient}
+                    disabled={recipients.length >= 10}
+                    className={`text-[11px] font-bold flex items-center gap-0.5 ${
+                      recipients.length >= 10
+                        ? 'text-neutral-400 cursor-not-allowed'
+                        : 'text-[#ba0000] hover:underline'
+                    }`}
+                    title={
+                      recipients.length >= 10 ? 'Maximum 10 signers allowed' : 'Add a new signer'
+                    }
+                  >
+                    + Add Signer
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setLeftSidebarCollapsed(true)}
+                    className="p-1 text-neutral-400 hover:text-neutral-700 hover:bg-neutral-200 rounded transition-colors text-xs font-bold"
+                    title="Collapse Left Sidebar"
+                  >
+                    ◀
+                  </button>
+                </div>
               </div>
 
-              <div className="space-y-1.5">
-                {recipients.map((recip) => (
-                  <button
-                    key={recip.id}
-                    onClick={() => setActiveRecipientId(recip.id)}
-                    className={`w-full text-left p-2 rounded-lg text-xs font-semibold flex items-center justify-between transition-all border ${
-                      activeRecipientId === recip.id
-                        ? 'bg-white border-neutral-300 shadow-sm'
-                        : 'border-transparent hover:bg-neutral-100 text-neutral-600'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2 min-w-0">
+              {/* Signer Dropdown */}
+              <div>
+                <select
+                  aria-label="Active Signer Selector"
+                  value={activeRecipientId}
+                  onChange={(e) => setActiveRecipientId(e.target.value)}
+                  className="w-full bg-white border border-neutral-300 rounded-lg px-3 h-10 text-xs font-semibold text-neutral-900 focus:outline-none focus:border-[#ba0000] shadow-2xs"
+                >
+                  {recipients.map((recip) => (
+                    <option key={recip.id} value={recip.id}>
+                      {recip.name} ({recip.role})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Active Selected Signer Editor Card */}
+              {activeRecipient && (
+                <div className="p-2.5 bg-white border border-neutral-200 rounded-lg shadow-2xs space-y-2">
+                  <div className="flex items-center justify-between gap-1.5">
+                    <div className="flex items-center gap-1.5 flex-1 min-w-0">
                       <span
                         className="w-3 h-3 rounded-full shrink-0 border border-white shadow-xs"
-                        style={{ backgroundColor: recip.color }}
+                        style={{ backgroundColor: activeRecipient.color }}
                       />
-                      <span className="truncate">{recip.name}</span>
+                      <input
+                        type="text"
+                        value={activeRecipient.name}
+                        onChange={(e) =>
+                          handleUpdateRecipient(activeRecipient.id, { name: e.target.value })
+                        }
+                        placeholder="e.g. Author, Approver"
+                        className="w-full bg-neutral-50 hover:bg-neutral-100 focus:bg-white border border-neutral-200 focus:border-neutral-400 rounded px-2.5 h-8 text-xs font-bold text-neutral-900 focus:outline-none"
+                        title="Edit signer label (e.g. Author, Signer 1)"
+                      />
                     </div>
-                    <span className="text-[10px] text-neutral-400 font-mono font-normal truncate">
-                      {recip.email.split('@')[0]}
-                    </span>
-                  </button>
-                ))}
-              </div>
+                    {recipients.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveRecipient(activeRecipient.id)}
+                        className="text-neutral-400 hover:text-red-600 p-1 rounded text-xs font-bold shrink-0"
+                        title="Remove signer"
+                      >
+                        ×
+                      </button>
+                    )}
+                  </div>
+                  <div className="flex items-center justify-between text-[10px] text-neutral-400 px-1 font-normal">
+                    <span className="capitalize">{activeRecipient.role}</span>
+                    {activeRecipient.email ? (
+                      <span className="truncate max-w-[120px]">{activeRecipient.email}</span>
+                    ) : null}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Field Palette Toolbar (INK-78 to INK-81) */}
@@ -747,14 +1016,14 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
                 <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 block mb-2">
                   Signature Fields
                 </span>
-                <div className="grid grid-cols-1 gap-1.5">
+                <div className="grid grid-cols-1 gap-2">
                   <div
                     draggable
                     onDragStart={(e) => handleDragStartFromToolbar(e, 'SIGNATURE')}
                     onClick={() => handlePaletteItemClick('SIGNATURE')}
-                    className="p-2.5 bg-blue-50/60 border border-blue-200 hover:border-blue-400 hover:bg-blue-50 text-blue-900 rounded-lg cursor-grab active:cursor-grabbing flex items-center gap-2.5 transition-all text-xs font-semibold shadow-2xs"
+                    className="min-h-[50px] p-3 bg-blue-50/60 border border-blue-200 hover:border-blue-400 hover:bg-blue-50 text-blue-900 rounded-lg cursor-grab active:cursor-grabbing flex items-center gap-3 transition-all text-xs font-semibold shadow-2xs"
                   >
-                    <span className="text-base select-none">✍️</span>
+                    <span className="text-lg select-none">✍️</span>
                     <div>
                       <span className="block font-bold">Signature</span>
                       <span className="text-[10px] text-blue-600 block">
@@ -767,9 +1036,9 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
                     draggable
                     onDragStart={(e) => handleDragStartFromToolbar(e, 'INITIALS')}
                     onClick={() => handlePaletteItemClick('INITIALS')}
-                    className="p-2.5 bg-blue-50/60 border border-blue-200 hover:border-blue-400 hover:bg-blue-50 text-blue-900 rounded-lg cursor-grab active:cursor-grabbing flex items-center gap-2.5 transition-all text-xs font-semibold shadow-2xs"
+                    className="min-h-[50px] p-3 bg-blue-50/60 border border-blue-200 hover:border-blue-400 hover:bg-blue-50 text-blue-900 rounded-lg cursor-grab active:cursor-grabbing flex items-center gap-3 transition-all text-xs font-semibold shadow-2xs"
                   >
-                    <span className="text-base select-none">✒️</span>
+                    <span className="text-lg select-none">✒️</span>
                     <div>
                       <span className="block font-bold">Initials</span>
                       <span className="text-[10px] text-blue-600 block">Initial placement box</span>
@@ -783,14 +1052,14 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
                 <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 block mb-2">
                   Text & Information
                 </span>
-                <div className="grid grid-cols-1 gap-1.5">
+                <div className="grid grid-cols-1 gap-2">
                   <div
                     draggable
                     onDragStart={(e) => handleDragStartFromToolbar(e, 'TEXT')}
                     onClick={() => handlePaletteItemClick('TEXT')}
-                    className="p-2 bg-neutral-50 border border-neutral-200 hover:border-neutral-400 hover:bg-white text-neutral-800 rounded-lg cursor-grab active:cursor-grabbing flex items-center gap-2 transition-all text-xs font-medium"
+                    className="min-h-[44px] px-3.5 py-2.5 bg-neutral-50 border border-neutral-200 hover:border-neutral-400 hover:bg-white text-neutral-800 rounded-lg cursor-grab active:cursor-grabbing flex items-center gap-2.5 transition-all text-xs font-semibold shadow-2xs"
                   >
-                    <span>📝</span>
+                    <span className="text-base">📝</span>
                     <span>Text Field</span>
                   </div>
 
@@ -798,29 +1067,19 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
                     draggable
                     onDragStart={(e) => handleDragStartFromToolbar(e, 'DATE')}
                     onClick={() => handlePaletteItemClick('DATE')}
-                    className="p-2 bg-neutral-50 border border-neutral-200 hover:border-neutral-400 hover:bg-white text-neutral-800 rounded-lg cursor-grab active:cursor-grabbing flex items-center gap-2 transition-all text-xs font-medium"
+                    className="min-h-[44px] px-3.5 py-2.5 bg-neutral-50 border border-neutral-200 hover:border-neutral-400 hover:bg-white text-neutral-800 rounded-lg cursor-grab active:cursor-grabbing flex items-center gap-2.5 transition-all text-xs font-semibold shadow-2xs"
                   >
-                    <span>📅</span>
-                    <span>Date Signed</span>
-                  </div>
-
-                  <div
-                    draggable
-                    onDragStart={(e) => handleDragStartFromToolbar(e, 'COMPANY')}
-                    onClick={() => handlePaletteItemClick('COMPANY')}
-                    className="p-2 bg-neutral-50 border border-neutral-200 hover:border-neutral-400 hover:bg-white text-neutral-800 rounded-lg cursor-grab active:cursor-grabbing flex items-center gap-2 transition-all text-xs font-medium"
-                  >
-                    <span>🏢</span>
-                    <span>Company Name</span>
+                    <span className="text-base">📅</span>
+                    <span>Date Field</span>
                   </div>
 
                   <div
                     draggable
                     onDragStart={(e) => handleDragStartFromToolbar(e, 'EMAIL')}
                     onClick={() => handlePaletteItemClick('EMAIL')}
-                    className="p-2 bg-neutral-50 border border-neutral-200 hover:border-neutral-400 hover:bg-white text-neutral-800 rounded-lg cursor-grab active:cursor-grabbing flex items-center gap-2 transition-all text-xs font-medium"
+                    className="min-h-[44px] px-3.5 py-2.5 bg-neutral-50 border border-neutral-200 hover:border-neutral-400 hover:bg-white text-neutral-800 rounded-lg cursor-grab active:cursor-grabbing flex items-center gap-2.5 transition-all text-xs font-semibold shadow-2xs"
                   >
-                    <span>✉️</span>
+                    <span className="text-base">✉️</span>
                     <span>Email Address</span>
                   </div>
                 </div>
@@ -831,14 +1090,14 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
                 <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 block mb-2">
                   Choice Elements
                 </span>
-                <div className="grid grid-cols-1 gap-1.5">
+                <div className="grid grid-cols-1 gap-2">
                   <div
                     draggable
                     onDragStart={(e) => handleDragStartFromToolbar(e, 'CHECKBOX')}
                     onClick={() => handlePaletteItemClick('CHECKBOX')}
-                    className="p-2 bg-neutral-50 border border-neutral-200 hover:border-neutral-400 hover:bg-white text-neutral-800 rounded-lg cursor-grab active:cursor-grabbing flex items-center gap-2 transition-all text-xs font-medium"
+                    className="min-h-[44px] px-3.5 py-2.5 bg-neutral-50 border border-neutral-200 hover:border-neutral-400 hover:bg-white text-neutral-800 rounded-lg cursor-grab active:cursor-grabbing flex items-center gap-2.5 transition-all text-xs font-semibold shadow-2xs"
                   >
-                    <span>☑️</span>
+                    <span className="text-base">☑️</span>
                     <span>Checkbox</span>
                   </div>
 
@@ -846,9 +1105,9 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
                     draggable
                     onDragStart={(e) => handleDragStartFromToolbar(e, 'RADIO')}
                     onClick={() => handlePaletteItemClick('RADIO')}
-                    className="p-2 bg-neutral-50 border border-neutral-200 hover:border-neutral-400 hover:bg-white text-neutral-800 rounded-lg cursor-grab active:cursor-grabbing flex items-center gap-2 transition-all text-xs font-medium"
+                    className="min-h-[44px] px-3.5 py-2.5 bg-neutral-50 border border-neutral-200 hover:border-neutral-400 hover:bg-white text-neutral-800 rounded-lg cursor-grab active:cursor-grabbing flex items-center gap-2.5 transition-all text-xs font-semibold shadow-2xs"
                   >
-                    <span>🔘</span>
+                    <span className="text-base">🔘</span>
                     <span>Radio Group</span>
                   </div>
 
@@ -856,9 +1115,9 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
                     draggable
                     onDragStart={(e) => handleDragStartFromToolbar(e, 'DROPDOWN')}
                     onClick={() => handlePaletteItemClick('DROPDOWN')}
-                    className="p-2 bg-neutral-50 border border-neutral-200 hover:border-neutral-400 hover:bg-white text-neutral-800 rounded-lg cursor-grab active:cursor-grabbing flex items-center gap-2 transition-all text-xs font-medium"
+                    className="min-h-[44px] px-3.5 py-2.5 bg-neutral-50 border border-neutral-200 hover:border-neutral-400 hover:bg-white text-neutral-800 rounded-lg cursor-grab active:cursor-grabbing flex items-center gap-2.5 transition-all text-xs font-semibold shadow-2xs"
                   >
-                    <span>▼</span>
+                    <span className="text-base">▼</span>
                     <span>Dropdown Select</span>
                   </div>
                 </div>
@@ -871,6 +1130,31 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
         {/* CENTER VIEWPORT: DOCUMENT CANVAS & FIELD OVERLAYS */}
         {/* ========================================================================= */}
         <main className="flex-1 overflow-auto bg-neutral-800 flex justify-center p-4 sm:p-8 relative">
+          {/* Floating Expand Buttons when sidebars are collapsed (INK-302) */}
+          {activeMode === 'editor' && leftSidebarCollapsed && (
+            <button
+              type="button"
+              onClick={() => setLeftSidebarCollapsed(false)}
+              className="absolute left-3 top-4 z-40 bg-white hover:bg-neutral-100 text-neutral-800 border border-neutral-300 rounded-lg h-9 px-3 shadow-md flex items-center gap-1.5 text-xs font-bold transition-all cursor-pointer"
+              title="Expand Field Palette"
+            >
+              <span>▶</span>
+              <span>Fields</span>
+            </button>
+          )}
+
+          {activeMode === 'editor' && rightSidebarCollapsed && (
+            <button
+              type="button"
+              onClick={() => setRightSidebarCollapsed(false)}
+              className="absolute right-3 top-4 z-40 bg-white hover:bg-neutral-100 text-neutral-800 border border-neutral-300 rounded-lg h-9 px-3 shadow-md flex items-center gap-1.5 text-xs font-bold transition-all cursor-pointer"
+              title="Expand Properties Panel"
+            >
+              <span>Properties</span>
+              <span>◀</span>
+            </button>
+          )}
+
           {/* Document Canvas Sheet */}
           <div
             ref={pageContainerRef}
@@ -879,29 +1163,35 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
             style={{
               transform: `scale(${zoomLevel / 100})`,
               transformOrigin: 'top center',
-              width: '800px',
-              minHeight: '1100px',
+              width: '850px',
+              minHeight: pdfDocument ? 'auto' : '1100px',
             }}
-            className="bg-white shadow-2xl rounded-sm relative transition-transform duration-100 flex flex-col my-auto select-none"
+            className="bg-white shadow-2xl rounded-sm relative transition-transform duration-100 flex flex-col mb-auto select-none overflow-hidden"
           >
             {/* Document Content Layer */}
-            {isMarkdown ? (
+            {effectivePdfUrl ? (
+              pdfDocument ? (
+                <PdfPageCanvas document={pdfDocument} pageNumber={currentPage} width={850} />
+              ) : (
+                <p role="status">Loading document pages...</p>
+              )
+            ) : isMarkdown ? (
               <div
                 className="p-12 prose prose-sm max-w-none text-neutral-900 pointer-events-none"
                 dangerouslySetInnerHTML={{
                   __html: renderMarkdownToHtml(agreement.markdownContent || ''),
                 }}
               />
-            ) : inlinePdfUrl ? (
-              <iframe
-                src={`${inlinePdfUrl}#toolbar=0&navpanes=0`}
-                className="w-full h-full min-h-[1100px] border-none pointer-events-none"
-                title="Document PDF Preview"
-              />
+            ) : isLoadingPdf ? (
+              <div className="p-16 text-center text-neutral-400 flex flex-col items-center justify-center min-h-[600px] space-y-3">
+                <div className="w-8 h-8 border-3 border-neutral-300 border-t-neutral-800 rounded-full animate-spin" />
+                <p className="text-xs font-semibold text-neutral-600">Loading PDF document...</p>
+              </div>
             ) : (
               <div className="p-16 text-center text-neutral-400 flex flex-col items-center justify-center min-h-[600px]">
                 <span className="text-4xl mb-2">📄</span>
                 <p className="text-xs font-semibold text-neutral-600">{agreement.title}</p>
+                {pdfFetchError && <p className="text-[11px] text-red-500 mt-1">{pdfFetchError}</p>}
                 <p className="text-[11px] text-neutral-400 mt-1">
                   Drag & drop fields anywhere onto this page canvas.
                 </p>
@@ -910,222 +1200,229 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
 
             {/* Field Overlay Layer */}
             <div className="absolute inset-0 pointer-events-auto">
-              {fields.map((field) => {
-                const assignedRecip = recipients.find((r) => r.id === field.recipientId);
-                const recipColor = assignedRecip?.color || '#2563EB';
-                const isSelected = selectedFieldId === field.id && activeMode === 'editor';
+              {fields
+                .filter((field) => (field.pageNumber || 1) === currentPage)
+                .map((field) => {
+                  const assignedRecip = recipients.find((r) => r.id === field.recipientId);
+                  const recipColor = assignedRecip?.color || '#2563EB';
+                  const isSelected = selectedFieldId === field.id && activeMode === 'editor';
 
-                // In Preview Mode (INK-85): only fields assigned to active preview recipient are interactable
-                const isCurrentRecipientInPreview =
-                  activeMode === 'preview' && field.recipientId === effectivePreviewRecipientId;
+                  // In Preview Mode (INK-85): only fields assigned to active preview recipient are interactable
+                  const isCurrentRecipientInPreview =
+                    activeMode === 'preview' && field.recipientId === effectivePreviewRecipientId;
 
-                const fieldValue = previewValues[field.id];
-                const fieldError = previewErrors[field.id];
+                  const fieldValue = previewValues[field.id];
+                  const fieldError = previewErrors[field.id];
 
-                return (
-                  <div
-                    key={field.id}
-                    onMouseDown={(e) => handleFieldMouseDown(e, field)}
-                    onClick={(e) => {
-                      if (activeMode === 'editor') {
-                        e.stopPropagation();
-                        setSelectedFieldId(field.id);
-                      }
-                    }}
-                    style={{
-                      left: `${field.x}%`,
-                      top: `${field.y}%`,
-                      width: `${field.width}%`,
-                      height: `${field.height}%`,
-                      borderColor: recipColor,
-                    }}
-                    className={`absolute rounded transition-shadow flex flex-col justify-between overflow-visible ${
-                      activeMode === 'editor'
-                        ? 'cursor-move border-2 shadow-xs'
-                        : isCurrentRecipientInPreview
-                          ? 'border-2 border-dashed bg-white/90 shadow-md cursor-pointer'
-                          : 'opacity-40 border border-neutral-300 pointer-events-none'
-                    } ${isSelected ? 'ring-2 ring-offset-1 ring-blue-500 z-30' : 'z-10'}`}
-                  >
-                    {/* Header Badge */}
+                  return (
                     <div
-                      style={{ backgroundColor: recipColor }}
-                      className="px-1.5 py-0.5 text-white text-[9px] font-bold flex items-center justify-between shrink-0 leading-tight"
+                      key={field.id}
+                      onMouseDown={(e) => handleFieldMouseDown(e, field)}
+                      onClick={(e) => {
+                        if (activeMode === 'editor') {
+                          e.stopPropagation();
+                          setSelectedFieldId(field.id);
+                        }
+                      }}
+                      style={{
+                        left: `${field.x}%`,
+                        top: `${field.y}%`,
+                        width: `${field.width}%`,
+                        height: `${field.height}%`,
+                        borderColor: recipColor,
+                      }}
+                      className={`absolute rounded transition-shadow flex flex-col justify-between overflow-visible ${
+                        activeMode === 'editor'
+                          ? 'cursor-move border-2 shadow-xs'
+                          : isCurrentRecipientInPreview
+                            ? 'border-2 border-dashed bg-white/90 shadow-md cursor-pointer'
+                            : 'opacity-40 border border-neutral-300 pointer-events-none'
+                      } ${isSelected ? 'ring-2 ring-offset-1 ring-blue-500 z-30' : 'z-10'}`}
                     >
-                      <div className="flex items-center gap-1 truncate">
-                        <span className="truncate">{field.label}</span>
-                        {field.isRequired && (
-                          <span className="text-red-300 font-extrabold text-xs" title="Required">
-                            *
+                      {/* Header Badge */}
+                      <div
+                        style={{ backgroundColor: recipColor }}
+                        className="px-1.5 py-0.5 text-white text-[9px] font-bold flex items-center justify-between shrink-0 leading-tight"
+                      >
+                        <div className="flex items-center gap-1 truncate">
+                          <span className="truncate">
+                            {field.label} •{' '}
+                            {recipients.find((r) => r.id === field.recipientId)?.name || 'Signer'}
                           </span>
-                        )}
-                      </div>
-                      {activeMode === 'editor' && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDeleteField(field.id);
-                          }}
-                          className="hover:text-red-200 text-[10px] ml-1 font-bold"
-                          title="Delete field"
-                        >
-                          ×
-                        </button>
-                      )}
-                    </div>
-
-                    {/* Field Content / Preview Inputs (INK-85) */}
-                    <div className="flex-1 bg-white/80 p-1 flex items-center justify-center text-center overflow-hidden">
-                      {activeMode === 'preview' ? (
-                        <div className="w-full h-full flex flex-col justify-center">
-                          {field.type === 'SIGNATURE' && (
-                            <div className="border border-neutral-300 bg-neutral-50 rounded p-1 text-center text-xs font-semibold text-neutral-600 hover:bg-neutral-100">
-                              {fieldValue ? (
-                                <span className="font-serif italic text-sm text-blue-900">
-                                  {fieldValue}
-                                </span>
-                              ) : (
-                                <span>✍️ Click to Sign</span>
-                              )}
-                            </div>
-                          )}
-
-                          {field.type === 'INITIALS' && (
-                            <div className="border border-neutral-300 bg-neutral-50 rounded p-1 text-center text-xs font-bold text-neutral-700">
-                              {fieldValue || 'Initials'}
-                            </div>
-                          )}
-
-                          {field.type === 'TEXT' && (
-                            <input
-                              type="text"
-                              placeholder={field.placeholder || 'Enter text...'}
-                              value={typeof fieldValue === 'string' ? fieldValue : ''}
-                              onChange={(e) => handlePreviewInputChange(field, e.target.value)}
-                              className="w-full bg-white border border-neutral-300 rounded px-1.5 py-0.5 text-xs text-neutral-900 focus:outline-none focus:border-blue-500"
-                            />
-                          )}
-
-                          {field.type === 'DATE' && (
-                            <input
-                              type="date"
-                              value={typeof fieldValue === 'string' ? fieldValue : ''}
-                              onChange={(e) => handlePreviewInputChange(field, e.target.value)}
-                              className="w-full bg-white border border-neutral-300 rounded px-1.5 py-0.5 text-xs text-neutral-900 focus:outline-none focus:border-blue-500"
-                            />
-                          )}
-
-                          {field.type === 'EMAIL' && (
-                            <input
-                              type="email"
-                              placeholder="signer@example.com"
-                              value={typeof fieldValue === 'string' ? fieldValue : ''}
-                              onChange={(e) => handlePreviewInputChange(field, e.target.value)}
-                              className="w-full bg-white border border-neutral-300 rounded px-1.5 py-0.5 text-xs text-neutral-900 focus:outline-none focus:border-blue-500"
-                            />
-                          )}
-
-                          {field.type === 'COMPANY' && (
-                            <input
-                              type="text"
-                              placeholder="Company name..."
-                              value={typeof fieldValue === 'string' ? fieldValue : ''}
-                              onChange={(e) => handlePreviewInputChange(field, e.target.value)}
-                              className="w-full bg-white border border-neutral-300 rounded px-1.5 py-0.5 text-xs text-neutral-900 focus:outline-none focus:border-blue-500"
-                            />
-                          )}
-
-                          {field.type === 'CHECKBOX' && (
-                            <label className="flex items-center gap-1.5 justify-center cursor-pointer text-xs">
-                              <input
-                                type="checkbox"
-                                checked={!!fieldValue}
-                                onChange={(e) => handlePreviewInputChange(field, e.target.checked)}
-                                className="w-3.5 h-3.5 text-blue-600 rounded"
-                              />
-                              <span className="text-[10px] text-neutral-700">{field.label}</span>
-                            </label>
-                          )}
-
-                          {field.type === 'RADIO' && (
-                            <div className="flex flex-col gap-1 text-left text-[10px]">
-                              {field.options?.map((opt) => (
-                                <label
-                                  key={opt.value}
-                                  className="flex items-center gap-1 cursor-pointer"
-                                >
-                                  <input
-                                    type="radio"
-                                    name={field.groupName || field.id}
-                                    value={opt.value}
-                                    checked={fieldValue === opt.value}
-                                    onChange={(e) =>
-                                      handlePreviewInputChange(field, e.target.value)
-                                    }
-                                  />
-                                  <span>{opt.label}</span>
-                                </label>
-                              ))}
-                            </div>
-                          )}
-
-                          {field.type === 'DROPDOWN' && (
-                            <select
-                              value={typeof fieldValue === 'string' ? fieldValue : ''}
-                              onChange={(e) => handlePreviewInputChange(field, e.target.value)}
-                              className="w-full bg-white border border-neutral-300 rounded px-1 py-0.5 text-[11px]"
-                            >
-                              <option value="">Select option...</option>
-                              {field.options?.map((opt) => (
-                                <option key={opt.value} value={opt.value}>
-                                  {opt.label}
-                                </option>
-                              ))}
-                            </select>
-                          )}
-
-                          {fieldError && (
-                            <span className="text-[9px] font-bold text-red-600 mt-0.5 block">
-                              {fieldError}
+                          {field.isRequired && (
+                            <span className="text-red-300 font-extrabold text-xs" title="Required">
+                              *
                             </span>
                           )}
                         </div>
-                      ) : (
-                        /* Editor Static Placeholder Display */
-                        <div className="text-center truncate text-[11px] font-medium text-neutral-600">
-                          {field.type === 'SIGNATURE' && <span>✍️ Signature</span>}
-                          {field.type === 'INITIALS' && <span>✒️ Initials</span>}
-                          {field.type === 'TEXT' && (
-                            <span>{field.placeholder || 'Text field'}</span>
-                          )}
-                          {field.type === 'DATE' && (
-                            <span>📅 {field.dateFormat || 'YYYY-MM-DD'}</span>
-                          )}
-                          {field.type === 'EMAIL' && <span>✉️ Email</span>}
-                          {field.type === 'COMPANY' && <span>🏢 Company</span>}
-                          {field.type === 'CHECKBOX' && <span>☑️ Checkbox</span>}
-                          {field.type === 'RADIO' && (
-                            <span>🔘 Radio ({field.options?.length || 2} options)</span>
-                          )}
-                          {field.type === 'DROPDOWN' && (
-                            <span>▼ Dropdown ({field.options?.length || 2} options)</span>
-                          )}
-                        </div>
+                        {activeMode === 'editor' && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteField(field.id);
+                            }}
+                            className="hover:text-red-200 text-[10px] ml-1 font-bold"
+                            title="Delete field"
+                          >
+                            ×
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Field Content / Preview Inputs (INK-85) */}
+                      <div className="flex-1 bg-white/80 p-1 flex items-center justify-center text-center overflow-hidden">
+                        {activeMode === 'preview' ? (
+                          <div className="w-full h-full flex flex-col justify-center">
+                            {field.type === 'SIGNATURE' && (
+                              <div className="border border-neutral-300 bg-neutral-50 rounded p-1 text-center text-xs font-semibold text-neutral-600 hover:bg-neutral-100">
+                                {fieldValue ? (
+                                  <span className="font-serif italic text-sm text-blue-900">
+                                    {fieldValue}
+                                  </span>
+                                ) : (
+                                  <span>✍️ Click to Sign</span>
+                                )}
+                              </div>
+                            )}
+
+                            {field.type === 'INITIALS' && (
+                              <div className="border border-neutral-300 bg-neutral-50 rounded p-1 text-center text-xs font-bold text-neutral-700">
+                                {fieldValue || 'Initials'}
+                              </div>
+                            )}
+
+                            {field.type === 'TEXT' && (
+                              <input
+                                type="text"
+                                placeholder={field.placeholder || 'Enter text...'}
+                                value={typeof fieldValue === 'string' ? fieldValue : ''}
+                                onChange={(e) => handlePreviewInputChange(field, e.target.value)}
+                                className="w-full bg-white border border-neutral-300 rounded px-1.5 py-0.5 text-xs text-neutral-900 focus:outline-none focus:border-blue-500"
+                              />
+                            )}
+
+                            {field.type === 'DATE' && (
+                              <input
+                                type="date"
+                                value={typeof fieldValue === 'string' ? fieldValue : ''}
+                                onChange={(e) => handlePreviewInputChange(field, e.target.value)}
+                                className="w-full bg-white border border-neutral-300 rounded px-1.5 py-0.5 text-xs text-neutral-900 focus:outline-none focus:border-blue-500"
+                              />
+                            )}
+
+                            {field.type === 'EMAIL' && (
+                              <input
+                                type="email"
+                                placeholder="signer@example.com"
+                                value={typeof fieldValue === 'string' ? fieldValue : ''}
+                                onChange={(e) => handlePreviewInputChange(field, e.target.value)}
+                                className="w-full bg-white border border-neutral-300 rounded px-1.5 py-0.5 text-xs text-neutral-900 focus:outline-none focus:border-blue-500"
+                              />
+                            )}
+
+                            {field.type === 'COMPANY' && (
+                              <input
+                                type="text"
+                                placeholder="Company name..."
+                                value={typeof fieldValue === 'string' ? fieldValue : ''}
+                                onChange={(e) => handlePreviewInputChange(field, e.target.value)}
+                                className="w-full bg-white border border-neutral-300 rounded px-1.5 py-0.5 text-xs text-neutral-900 focus:outline-none focus:border-blue-500"
+                              />
+                            )}
+
+                            {field.type === 'CHECKBOX' && (
+                              <label className="flex items-center gap-1.5 justify-center cursor-pointer text-xs">
+                                <input
+                                  type="checkbox"
+                                  checked={!!fieldValue}
+                                  onChange={(e) =>
+                                    handlePreviewInputChange(field, e.target.checked)
+                                  }
+                                  className="w-3.5 h-3.5 text-blue-600 rounded"
+                                />
+                                <span className="text-[10px] text-neutral-700">{field.label}</span>
+                              </label>
+                            )}
+
+                            {field.type === 'RADIO' && (
+                              <div className="flex flex-col gap-1 text-left text-[10px]">
+                                {field.options?.map((opt) => (
+                                  <label
+                                    key={opt.value}
+                                    className="flex items-center gap-1 cursor-pointer"
+                                  >
+                                    <input
+                                      type="radio"
+                                      name={field.groupName || field.id}
+                                      value={opt.value}
+                                      checked={fieldValue === opt.value}
+                                      onChange={(e) =>
+                                        handlePreviewInputChange(field, e.target.value)
+                                      }
+                                    />
+                                    <span>{opt.label}</span>
+                                  </label>
+                                ))}
+                              </div>
+                            )}
+
+                            {field.type === 'DROPDOWN' && (
+                              <select
+                                value={typeof fieldValue === 'string' ? fieldValue : ''}
+                                onChange={(e) => handlePreviewInputChange(field, e.target.value)}
+                                className="w-full bg-white border border-neutral-300 rounded px-1 py-0.5 text-[11px]"
+                              >
+                                <option value="">Select option...</option>
+                                {field.options?.map((opt) => (
+                                  <option key={opt.value} value={opt.value}>
+                                    {opt.label}
+                                  </option>
+                                ))}
+                              </select>
+                            )}
+
+                            {fieldError && (
+                              <span className="text-[9px] font-bold text-red-600 mt-0.5 block">
+                                {fieldError}
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          /* Editor Static Placeholder Display */
+                          <div className="text-center truncate text-[11px] font-medium text-neutral-600">
+                            {field.type === 'SIGNATURE' && <span>✍️ Signature</span>}
+                            {field.type === 'INITIALS' && <span>✒️ Initials</span>}
+                            {field.type === 'TEXT' && (
+                              <span>{field.placeholder || 'Text field'}</span>
+                            )}
+                            {field.type === 'DATE' && (
+                              <span>📅 {field.dateFormat || 'YYYY-MM-DD'}</span>
+                            )}
+                            {field.type === 'EMAIL' && <span>✉️ Email</span>}
+                            {field.type === 'COMPANY' && <span>🏢 Company</span>}
+                            {field.type === 'CHECKBOX' && <span>☑️ Checkbox</span>}
+                            {field.type === 'RADIO' && (
+                              <span>🔘 Radio ({field.options?.length || 2} options)</span>
+                            )}
+                            {field.type === 'DROPDOWN' && (
+                              <span>▼ Dropdown ({field.options?.length || 2} options)</span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Resizing Handle (Bottom-Right) - INK-84 */}
+                      {activeMode === 'editor' && (
+                        <div
+                          onMouseDown={(e) => handleResizeMouseDown(e, field)}
+                          style={{ backgroundColor: recipColor }}
+                          className="absolute bottom-0 right-0 w-3 h-3 cursor-se-resize rounded-tl-xs shadow-xs"
+                          title="Drag to resize"
+                        />
                       )}
                     </div>
-
-                    {/* Resizing Handle (Bottom-Right) - INK-84 */}
-                    {activeMode === 'editor' && (
-                      <div
-                        onMouseDown={(e) => handleResizeMouseDown(e, field)}
-                        style={{ backgroundColor: recipColor }}
-                        className="absolute bottom-0 right-0 w-3 h-3 cursor-se-resize rounded-tl-xs shadow-xs"
-                        title="Drag to resize"
-                      />
-                    )}
-                  </div>
-                );
-              })}
+                  );
+                })}
             </div>
           </div>
         </main>
@@ -1133,8 +1430,8 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
         {/* ========================================================================= */}
         {/* RIGHT SIDEBAR: FIELD PROPERTIES & VALIDATIONS (INK-80, 81, 82, 83) */}
         {/* ========================================================================= */}
-        {activeMode === 'editor' && (
-          <aside className="w-80 bg-white border-l border-neutral-200 flex flex-col shrink-0 overflow-y-auto p-4 space-y-4 shadow-xs">
+        {activeMode === 'editor' && !rightSidebarCollapsed && (
+          <aside className="w-80 bg-white border-l border-neutral-200 flex flex-col shrink-0 overflow-y-auto p-4 space-y-4 shadow-xs relative">
             {selectedField ? (
               <>
                 <div className="flex items-center justify-between border-b border-neutral-200 pb-2.5">
@@ -1146,13 +1443,23 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
                       {selectedField.type}
                     </span>
                   </div>
-                  <button
-                    onClick={() => setSelectedFieldId(null)}
-                    className="text-neutral-400 hover:text-neutral-700 text-sm font-bold"
-                    title="Deselect field"
-                  >
-                    ✕
-                  </button>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={() => setSelectedFieldId(null)}
+                      className="text-neutral-400 hover:text-neutral-700 text-sm font-bold p-1 rounded hover:bg-neutral-100"
+                      title="Deselect field"
+                    >
+                      ✕
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setRightSidebarCollapsed(true)}
+                      className="p-1 text-neutral-400 hover:text-neutral-700 hover:bg-neutral-200 rounded transition-colors text-xs font-bold"
+                      title="Collapse Right Sidebar"
+                    >
+                      ▶
+                    </button>
+                  </div>
                 </div>
 
                 {/* Recipient Assignment (INK-79) */}
@@ -1394,14 +1701,24 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
               </>
             ) : (
               <div className="space-y-4 py-1">
-                <div className="border-b border-neutral-200 pb-2.5">
-                  <h3 className="text-xs font-bold text-neutral-900 uppercase tracking-wider">
-                    Field Inspector
-                  </h3>
-                  <p className="text-[11px] text-neutral-500 mt-1">
-                    Click any field on the document to edit its settings, required rules, or
-                    assigned signer.
-                  </p>
+                <div className="border-b border-neutral-200 pb-2.5 flex items-center justify-between">
+                  <div>
+                    <h3 className="text-xs font-bold text-neutral-900 uppercase tracking-wider">
+                      Field Inspector
+                    </h3>
+                    <p className="text-[11px] text-neutral-500 mt-1">
+                      Click any field on the document to edit its settings, required rules, or
+                      assigned signer.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setRightSidebarCollapsed(true)}
+                    className="p-1 text-neutral-400 hover:text-neutral-700 hover:bg-neutral-200 rounded transition-colors text-xs font-bold shrink-0 self-start"
+                    title="Collapse Right Sidebar"
+                  >
+                    ▶
+                  </button>
                 </div>
 
                 <div className="bg-neutral-50 border border-neutral-200 rounded-xl p-3 space-y-2">
@@ -1521,6 +1838,23 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
           👥 Signers ({recipients.length})
         </button>
       </div>
+
+      {/* Specify Signer Emails & Send Modal (INK-266) */}
+      {showSendModal && (
+        <SendAgreementModal
+          agreementId={agreement.id}
+          agreementTitle={agreement.title}
+          defaultRecipients={recipients}
+          onClose={() => setShowSendModal(false)}
+          onSuccess={(msg) => {
+            setShowSendModal(false);
+            if (onSuccess) {
+              onSuccess(msg);
+            }
+            onClose();
+          }}
+        />
+      )}
     </div>
   );
 }

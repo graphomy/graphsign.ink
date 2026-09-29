@@ -21,6 +21,7 @@ describe('Agreement Routes Integration Tests (Epic INK-8)', () => {
       listVersions: vi.fn(),
       cloneAgreement: vi.fn(),
       setArchiveStatus: vi.fn(),
+      deleteAgreement: vi.fn(),
       updateMetadataAndTags: vi.fn(),
       listAgreements: vi.fn(),
     };
@@ -243,6 +244,33 @@ describe('Agreement Routes Integration Tests (Epic INK-8)', () => {
     expect(text).toContain('# Terms of Service');
   });
 
+  it('GET /api/v1/agreements/:id/file - dynamically assembles PDF when markdown agreement is requested as PDF', async () => {
+    mockAgreementService.getAgreementById.mockResolvedValue({
+      id: 'ag-md-pdf',
+      title: 'Active Contract',
+      fileName: 'contract.pdf',
+      mimeType: 'application/pdf',
+      markdownContent: '# Active Contract\n\n- Clause 1\n- Clause 2',
+      metadata: {},
+      fields: [],
+      recipients: [],
+      status: 'SENT',
+    });
+
+    const res = await app.request('/api/v1/agreements/ag-md-pdf/file?format=pdf', {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get('Content-Type')).toBe('application/pdf');
+    expect(res.headers.get('Content-Disposition')).toContain('contract.pdf');
+    const bytes = await res.arrayBuffer();
+    const header = Buffer.from(bytes.slice(0, 5)).toString('utf8');
+    expect(header).toBe('%PDF-');
+  });
+
   it('GET /api/v1/agreements/:id/file - streams file when token is passed in query parameter', async () => {
     mockAgreementService.getAgreementById.mockResolvedValue({
       id: 'ag-query-token',
@@ -276,6 +304,7 @@ describe('Agreement Routes Integration Tests (Epic INK-8)', () => {
       expect.objectContaining({ page: 1, limit: 20 }),
       'user-123',
       'sender',
+      'sender@graphomy.com',
     );
   });
 
@@ -405,6 +434,140 @@ describe('Agreement Routes Integration Tests (Epic INK-8)', () => {
       'user-123',
       'ag-fields-1',
       expect.objectContaining({ fields: expect.any(Array), recipients: expect.any(Array) }),
+      'sender',
+    );
+  });
+
+  it('PUT /api/v1/agreements/:id/fields - returns contextual error when recipient color is invalid (INK-284)', async () => {
+    const payload = {
+      fields: [],
+      recipients: [
+        {
+          id: 'r-1',
+          name: 'Jane Signer',
+          email: 'jane@example.com',
+          color: 'invalid-color-value',
+        },
+      ],
+    };
+
+    const res = await app.request('/api/v1/agreements/ag-fields-1/fields', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as any;
+    expect(body.error?.message).toBe('Recipient 1 has an invalid color.');
+  });
+
+  it('PUT /api/v1/agreements/:id/fields - returns contextual error when field recipient is missing (INK-284)', async () => {
+    const payload = {
+      fields: [
+        {
+          id: 'f-1',
+          type: 'SIGNATURE',
+          pageNumber: 1,
+          x: 10,
+          y: 20,
+          width: 20,
+          height: 10,
+          recipientId: '',
+        },
+      ],
+      recipients: [],
+    };
+
+    const res = await app.request('/api/v1/agreements/ag-fields-1/fields', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as any;
+    expect(body.error?.message).toBe('Field 1 must be assigned to a recipient.');
+  });
+
+  it('PUT /api/v1/agreements/:id/fields - defaults omitted color to #2563EB and saves (INK-284)', async () => {
+    mockAgreementService.saveAgreementFields = vi.fn().mockResolvedValue({
+      agreementId: 'ag-fields-1',
+      fields: [],
+      recipients: [
+        {
+          id: 'r-1',
+          name: 'Jane Signer',
+          email: 'jane@example.com',
+          role: 'signer',
+          color: '#2563EB',
+        },
+      ],
+    });
+
+    const payload = {
+      fields: [],
+      recipients: [
+        {
+          id: 'r-1',
+          name: 'Jane Signer',
+          email: 'jane@example.com',
+        },
+      ],
+    };
+
+    const res = await app.request('/api/v1/agreements/ag-fields-1/fields', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    expect(res.status).toBe(200);
+    expect(mockAgreementService.saveAgreementFields).toHaveBeenCalledWith(
+      'org-123',
+      'user-123',
+      'ag-fields-1',
+      expect.objectContaining({
+        recipients: [
+          expect.objectContaining({
+            id: 'r-1',
+            color: '#2563EB',
+          }),
+        ],
+      }),
+      'sender',
+    );
+  });
+
+  it('DELETE /api/v1/agreements/:id - deletes agreement record (INK-271)', async () => {
+    mockAgreementService.deleteAgreement.mockResolvedValue({
+      success: true,
+      id: 'ag-del-1',
+    });
+
+    const res = await app.request('/api/v1/agreements/ag-del-1', {
+      method: 'DELETE',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    expect(body.success).toBe(true);
+    expect(mockAgreementService.deleteAgreement).toHaveBeenCalledWith(
+      'org-123',
+      'user-123',
+      'ag-del-1',
       'sender',
     );
   });

@@ -1,0 +1,58 @@
+openapi: 3.1.0
+info:
+  title: GraphSign REST API v2
+  version: 2.0.0
+  description: Version 2 of REST APIs for graphsign.ink, designed for backward-compatible evolution (INK-150).
+servers:
+  - url: https://dev-graphsign-api.kunal-f9f.workers.dev
+    description: Development API
+  - url: http://localhost:8787
+    description: Local Development Server
+
+paths:
+  /api/v2/documents:
+    get:
+      summary: List documents (v2)
+      responses:
+        '200':
+          description: List of documents with cursor/page pagination
+    post:
+      summary: Create document (v2)
+      responses:
+        '201':
+          description: Created document
+
+  /api/v2/documents/{id}:
+    get:
+      summary: Get document by ID (v2)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Document detail
+    put:
+      summary: Replace document (v2)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Updated document
+    delete:
+      summary: Delete document (v2)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Document deleted

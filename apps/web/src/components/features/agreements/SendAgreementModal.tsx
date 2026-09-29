@@ -25,6 +25,12 @@ function getToken(): string {
   return localStorage.getItem('graphsign_session_token') || localStorage.getItem('token') || '';
 }
 
+function getTomorrowDateString(): string {
+  const d = new Date();
+  d.setDate(d.getDate() + 1);
+  return d.toISOString().split('T')[0];
+}
+
 export function SendAgreementModal({
   agreementId,
   agreementTitle,
@@ -32,6 +38,7 @@ export function SendAgreementModal({
   onClose,
   onSuccess,
 }: SendAgreementModalProps) {
+  const [tomorrowStr] = useState(getTomorrowDateString);
   const [signingOrder, setSigningOrder] = useState<'PARALLEL' | 'SEQUENTIAL'>('PARALLEL');
   const [expiresAt, setExpiresAt] = useState('');
   const [message, setMessage] = useState('');
@@ -39,7 +46,9 @@ export function SendAgreementModal({
     if (defaultRecipients && defaultRecipients.length > 0) {
       return defaultRecipients.map((r, idx) => ({
         ...r,
+        email: r.email && !r.email.endsWith('@example.com') ? r.email : '',
         routingOrder: r.routingOrder || idx + 1,
+        color: r.color || '#2563EB',
       }));
     }
     return [
@@ -55,20 +64,6 @@ export function SendAgreementModal({
 
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  function handleAddRecipient() {
-    const nextIdx = recipients.length + 1;
-    setRecipients([
-      ...recipients,
-      {
-        name: `Signer ${nextIdx}`,
-        email: '',
-        role: 'signer',
-        routingOrder: nextIdx,
-        color: '#059669',
-      },
-    ]);
-  }
 
   function handleUpdateRecipient(index: number, updates: Partial<RecipientItem>) {
     setRecipients((prev) => prev.map((r, idx) => (idx === index ? { ...r, ...updates } : r)));
@@ -93,6 +88,16 @@ export function SendAgreementModal({
       }
     }
 
+    let parsedExpiresAt: string | null = null;
+    if (expiresAt && expiresAt.trim()) {
+      const d = new Date(expiresAt + 'T23:59:59');
+      if (isNaN(d.getTime())) {
+        setError('Please select a valid expiration date.');
+        return;
+      }
+      parsedExpiresAt = d.toISOString();
+    }
+
     setIsSending(true);
     setError(null);
 
@@ -105,8 +110,9 @@ export function SendAgreementModal({
         },
         body: JSON.stringify({
           signingOrder,
-          expiresAt: expiresAt ? new Date(expiresAt).toISOString() : null,
+          expiresAt: parsedExpiresAt,
           recipients: recipients.map((r) => ({
+            id: r.id,
             name: r.name.trim(),
             email: r.email.trim(),
             role: r.role,
@@ -201,13 +207,6 @@ export function SendAgreementModal({
               <label className="text-xs font-bold text-neutral-700">
                 Recipients &amp; Signers ({recipients.length})
               </label>
-              <button
-                type="button"
-                onClick={handleAddRecipient}
-                className="text-xs text-blue-600 hover:text-blue-800 font-bold flex items-center gap-1"
-              >
-                + Add Signer
-              </button>
             </div>
 
             <div className="space-y-2.5 max-h-48 overflow-y-auto p-1">
@@ -280,17 +279,21 @@ export function SendAgreementModal({
             </div>
           </div>
 
-          {/* Expiration Date (INK-95) */}
+          {/* Expiration Date Picker (Issue 8) */}
           <div>
             <label className="block text-xs font-bold text-neutral-700 mb-1">
               Expiration Date (Optional)
             </label>
             <input
               type="date"
+              min={tomorrowStr}
               value={expiresAt}
               onChange={(e) => setExpiresAt(e.target.value)}
-              className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-blue-600"
+              className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-blue-600 cursor-pointer"
             />
+            <p className="text-[10px] text-neutral-400 mt-1">
+              Select date after which recipient signing links will automatically expire.
+            </p>
           </div>
 
           {/* Custom Message */}

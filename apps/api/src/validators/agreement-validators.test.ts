@@ -40,7 +40,7 @@ describe('Agreement Validators Unit Tests (Epic INK-8)', () => {
       });
       expect(locked.success).toBe(false);
       if (!locked.success) {
-        expect(locked.error.errors[0]?.message).toContain(
+        expect(locked.error.issues[0]?.message).toContain(
           'The uploaded document is encrypted or password-protected',
         );
       }

@@ -49,3 +49,7 @@ jobs:
 
       - name: Test
         run: pnpm test
+
+      - name: Browser regression
+        run: pnpm --filter @graphsign/web exec playwright install --with-deps chromium && pnpm --filter @graphsign/web test:e2e
+

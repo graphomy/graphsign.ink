@@ -54,13 +54,105 @@ describe('DashboardPage Unit Tests (INK-257)', () => {
                 updatedAt: '2026-08-18T00:00:00Z',
                 author: { email: 'author@graphsign.ink' },
               },
+              {
+                id: 'ag-3',
+                title: 'Consulting NDA',
+                description: 'NDA in review',
+                status: 'IN_REVIEW',
+                createdAt: '2026-08-18T00:00:00Z',
+                updatedAt: '2026-08-18T00:00:00Z',
+                author: { email: 'other@graphsign.ink' },
+              },
             ],
           }),
       }),
     );
   });
 
-  it('renders dashboard greeting and workspace agreements', async () => {
+  it('renders Pending Signature (5) and Pending Review (1) with counts when pending documents exist', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: () =>
+          Promise.resolve({
+            items: [
+              {
+                id: 'ag-review',
+                title: 'Consulting NDA',
+                status: 'IN_REVIEW',
+                createdAt: '2026-08-18T00:00:00Z',
+                updatedAt: '2026-08-18T00:00:00Z',
+                author: { email: 'other@graphsign.ink' },
+              },
+              ...Array.from({ length: 5 }, (_, i) => ({
+                id: `ag-sig-${i}`,
+                title: `Agreement Pending Signature ${i + 1}`,
+                status: 'SENT',
+                createdAt: '2026-08-18T00:00:00Z',
+                updatedAt: '2026-08-18T00:00:00Z',
+                author: { email: 'author@graphsign.ink' },
+              })),
+            ],
+          }),
+      }),
+    );
+
+    render(<DashboardPage />);
+    expect(await screen.findByRole('link', { name: 'Pending Signature (5)' })).toHaveAttribute(
+      'href',
+      '/agreements?tab=waiting_for_me',
+    );
+    expect(screen.getByRole('link', { name: 'Pending Review (1)' })).toHaveAttribute(
+      'href',
+      '/agreements?tab=review_required',
+    );
+    expect(screen.queryByRole('link', { name: /Upload Template/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /Upload Agreement/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /Create from Scratch/ })).not.toBeInTheDocument();
+  });
+
+  it('hides Pending Review and Pending Signature buttons when no documents are pending', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: () =>
+          Promise.resolve({
+            items: [
+              {
+                id: 'ag-1',
+                title: 'Draft Agreement',
+                status: 'DRAFT',
+                createdAt: '2026-08-18T00:00:00Z',
+                updatedAt: '2026-08-18T00:00:00Z',
+                author: { email: 'author@graphsign.ink' },
+              },
+              {
+                id: 'ag-2',
+                title: 'Completed Agreement',
+                status: 'COMPLETED',
+                createdAt: '2026-08-18T00:00:00Z',
+                updatedAt: '2026-08-18T00:00:00Z',
+                author: { email: 'author@graphsign.ink' },
+              },
+            ],
+          }),
+      }),
+    );
+
+    render(<DashboardPage />);
+    await waitFor(() => {
+      expect(screen.getByText('Draft Agreement')).toBeInTheDocument();
+    });
+
+    expect(screen.queryByRole('link', { name: /Pending Review/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /Pending Signature/ })).not.toBeInTheDocument();
+  });
+
+  it('renders dashboard greeting, workspace agreements, and Requiring My Review widget', async () => {
     render(<DashboardPage />);
 
     await waitFor(() => {
@@ -68,10 +160,12 @@ describe('DashboardPage Unit Tests (INK-257)', () => {
       expect(screen.getByText('tester')).toBeInTheDocument();
       expect(screen.getByText('Employment Agreement')).toBeInTheDocument();
       expect(screen.getByText('Vendor Service Contract')).toBeInTheDocument();
+      expect(screen.getByText('Consulting NDA')).toBeInTheDocument();
     });
 
-    // Check live metrics
+    // Check live metrics including Requiring My Review
     expect(screen.getByText('Pending Actions')).toBeInTheDocument();
+    expect(screen.getByText('Requiring My Review')).toBeInTheDocument();
     expect(screen.getByText('Completed Agreements')).toBeInTheDocument();
     expect(screen.getByText('Total Workspace Contracts')).toBeInTheDocument();
   });

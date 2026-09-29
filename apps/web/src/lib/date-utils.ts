@@ -86,6 +86,10 @@ export function formatDate(
     let month = parts.find((p) => p.type === 'month')?.value || 'JAN';
     const year = parts.find((p) => p.type === 'year')?.value || '1970';
 
+    if (month.length > 3) {
+      month = month.substring(0, 3);
+    }
+
     if (options?.uppercaseMonth !== false) {
       month = month.toUpperCase();
     }
@@ -101,7 +105,7 @@ export function formatDate(
 }
 
 /**
- * Formats a Date/string/number into DD-MON-YYYY HH:mm (e.g. "14-AUG-2026 18:30 GMT").
+ * Formats a Date/string/number into DD-MON-YYYY HH:mm (e.g. "14-AUG-2026 18:30" or "14-AUG-2026 18:30:15 EST").
  */
 export function formatDateTime(
   dateInput: string | number | Date | null | undefined,
@@ -116,8 +120,9 @@ export function formatDateTime(
   const dateStr = formatDate(date, options);
 
   try {
+    const effectiveTz = tz === 'GMT' ? 'UTC' : tz;
     const formatter = new Intl.DateTimeFormat('en-GB', {
-      timeZone: tz === 'GMT' ? 'UTC' : tz,
+      timeZone: effectiveTz,
       hour: '2-digit',
       minute: '2-digit',
       second: options?.includeSeconds ? '2-digit' : undefined,
@@ -125,11 +130,67 @@ export function formatDateTime(
     });
 
     const timeStr = formatter.format(date);
-    const tzLabel = options?.includeTimezone ? ` (${tz})` : '';
+    let tzLabel = '';
+    if (options?.includeTimezone) {
+      try {
+        const tzParts = new Intl.DateTimeFormat('en-US', {
+          timeZone: effectiveTz,
+          timeZoneName: 'short',
+        }).formatToParts(date);
+        const name = tzParts.find((p) => p.type === 'timeZoneName')?.value;
+        tzLabel = name ? ` ${name}` : ` (${tz})`;
+      } catch {
+        tzLabel = ` (${tz})`;
+      }
+    }
     return `${dateStr} ${timeStr}${tzLabel}`;
   } catch {
     const hours = String(date.getUTCHours()).padStart(2, '0');
     const minutes = String(date.getUTCMinutes()).padStart(2, '0');
-    return `${dateStr} ${hours}:${minutes}`;
+    const tzLabel = options?.includeTimezone ? ' UTC' : '';
+    return `${dateStr} ${hours}:${minutes}${tzLabel}`;
   }
+}
+
+/**
+ * Formats an agreement status string:
+ * - COMPLETED / SIGNED -> 'Signed'
+ * - IN_REVIEW -> 'In Review'
+ * - Removes underscores across all statuses (e.g. SENT_FOR_SIGNATURE -> 'SENT FOR SIGNATURE').
+ */
+export function formatStatus(status: string | null | undefined): string {
+  if (!status) return '';
+  const upper = status.toUpperCase();
+  if (upper === 'COMPLETED' || upper === 'SIGNED') {
+    return 'Signed';
+  }
+  if (upper === 'IN_REVIEW') {
+    return 'In Review';
+  }
+  return status.replace(/_/g, ' ');
+}
+
+/**
+ * Parses user-entered date strings like '15-Sep-2026', '15-SEP-2026', '2026-09-15', or '15/09/2026'.
+ */
+export function parseCustomDate(input: string): Date | null {
+  if (!input || !input.trim()) return null;
+  const val = input.trim();
+
+  // Match DD-MMM-YYYY (e.g. 15-Sep-2026 or 15-SEP-2026)
+  const dmmmyyyy = /^(\d{1,2})[-/ ]([a-zA-Z]{3})[-/ ](\d{4})$/i.exec(val);
+  if (dmmmyyyy) {
+    const day = parseInt(dmmmyyyy[1], 10);
+    const monStr = dmmmyyyy[2].toUpperCase();
+    const year = parseInt(dmmmyyyy[3], 10);
+    const monthIdx = MONTH_NAMES.indexOf(monStr);
+    if (monthIdx !== -1 && day >= 1 && day <= 31) {
+      const d = new Date(Date.UTC(year, monthIdx, day, 23, 59, 59));
+      if (!isNaN(d.getTime())) return d;
+    }
+  }
+
+  // Standard Date parsing fallback
+  const d = new Date(val);
+  return isNaN(d.getTime()) ? null : d;
 }

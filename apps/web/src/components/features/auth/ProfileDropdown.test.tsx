@@ -32,7 +32,7 @@ describe('ProfileDropdown', () => {
     expect(screen.getByText('T')).toBeInTheDocument(); // Initial of test@graphsign.ink
   });
 
-  it('should toggle dropdown menu when menu button is clicked', () => {
+  it('should toggle dropdown menu when menu button is clicked for individual plan', () => {
     render(<ProfileDropdown email="test@graphsign.ink" />);
 
     // Menu initially closed
@@ -41,14 +41,24 @@ describe('ProfileDropdown', () => {
     // Click to open
     fireEvent.click(screen.getByTestId('profile-menu-button'));
     expect(screen.getByTestId('profile-dropdown-menu')).toBeInTheDocument();
+    expect(screen.getByTestId('plan-badge-individual')).toBeInTheDocument();
     expect(screen.getByTestId('profile-settings-link')).toBeInTheDocument();
     expect(screen.getByTestId('security-settings-link')).toBeInTheDocument();
-    expect(screen.getByTestId('organisation-settings-link')).toBeInTheDocument();
+    expect(screen.getByTestId('upgrade-to-teams-link')).toBeInTheDocument();
     expect(screen.getByTestId('sign-out-button')).toBeInTheDocument();
 
     // Click to close
     fireEvent.click(screen.getByTestId('profile-menu-button'));
     expect(screen.queryByTestId('profile-dropdown-menu')).not.toBeInTheDocument();
+  });
+
+  it('should render organisation settings link and teams badge when plan is teams', () => {
+    localStorage.setItem('graphsign_plan_type', 'teams');
+    render(<ProfileDropdown email="test@graphsign.ink" />);
+
+    fireEvent.click(screen.getByTestId('profile-menu-button'));
+    expect(screen.getByTestId('plan-badge-teams')).toBeInTheDocument();
+    expect(screen.getByTestId('organisation-settings-link')).toBeInTheDocument();
   });
 
   it('should render organization name in dropdown when provided', () => {
