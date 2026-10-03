@@ -50,7 +50,7 @@ describe('RegisterPage Component Tests (INK-304)', () => {
     vi.mocked(global.fetch).mockResolvedValueOnce({
       ok: true,
       json: async () => ({ id: 'usr-1', email: 'test@example.com' }),
-    } as any);
+    } as unknown as Response);
 
     render(<RegisterPage />);
 

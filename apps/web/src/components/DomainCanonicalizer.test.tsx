@@ -1,5 +1,5 @@
 import React from 'react';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render } from '@testing-library/react';
 import { DomainCanonicalizer } from './DomainCanonicalizer';
 
@@ -30,7 +30,7 @@ describe('DomainCanonicalizer Component', () => {
       pathname: '/dashboard',
       search: '?tab=active',
       hash: '',
-      replace: replaceMock as any,
+      replace: replaceMock as unknown as Location['replace'],
     });
 
     render(<DomainCanonicalizer />);
@@ -44,7 +44,7 @@ describe('DomainCanonicalizer Component', () => {
       pathname: '/login',
       search: '',
       hash: '',
-      replace: replaceMock as any,
+      replace: replaceMock as unknown as Location['replace'],
     });
 
     render(<DomainCanonicalizer />);
@@ -58,11 +58,13 @@ describe('DomainCanonicalizer Component', () => {
       pathname: '/agreements',
       search: '?status=DRAFT',
       hash: '#section1',
-      replace: replaceMock as any,
+      replace: replaceMock as unknown as Location['replace'],
     });
 
     render(<DomainCanonicalizer />);
-    expect(replaceMock).toHaveBeenCalledWith('https://graphsign.ink/agreements?status=DRAFT#section1');
+    expect(replaceMock).toHaveBeenCalledWith(
+      'https://graphsign.ink/agreements?status=DRAFT#section1',
+    );
   });
 
   it('redirects graphsign-web.pages.dev to graphsign.ink', () => {
@@ -72,7 +74,7 @@ describe('DomainCanonicalizer Component', () => {
       pathname: '/',
       search: '',
       hash: '',
-      replace: replaceMock as any,
+      replace: replaceMock as unknown as Location['replace'],
     });
 
     render(<DomainCanonicalizer />);

@@ -398,7 +398,10 @@ function RegisterContent() {
               data-testid="terms-checkbox"
               className="mt-1 h-4 w-4 rounded border-neutral-300 text-[#ba0000] focus:ring-[#ba0000] cursor-pointer"
             />
-            <label htmlFor="agreeToTerms" className="text-xs text-neutral-600 leading-normal cursor-pointer select-none">
+            <label
+              htmlFor="agreeToTerms"
+              className="text-xs text-neutral-600 leading-normal cursor-pointer select-none"
+            >
               By signing up, you agree that you are 18 years of age or older and agree to our{' '}
               <Link
                 href="/terms"
