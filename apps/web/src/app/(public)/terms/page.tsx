@@ -21,9 +21,15 @@ export default function TermsPage() {
           <section>
             <h2 className="text-lg font-bold text-neutral-900 mb-2">1. Eligibility & Age Requirement</h2>
             <p>
-              By accessing or using graphsign.ink (&quot;the Service&quot;), you represent and warrant that you are
-              at least 18 years of age and possess the legal capacity to form a binding contract. If you are under
-              18 years of age, you are strictly prohibited from creating an account or using the Service.
+              By accessing or using graphsign.ink (&quot;the Service&quot;), including creating an account or executing
+              any document as a signer, you represent and warrant that you are at least 18 years of age and possess
+              the full legal capacity to enter into legally binding agreements.
+            </p>
+            <p className="mt-2">
+              <strong>All signers and participants must be 18 years of age or older</strong>, not solely paying account
+              holders or workspace administrators. If we learn or have reason to believe that any user, account holder,
+              or document signer is underage (under 18 years old), the associated account and access will be immediately
+              suspended, pending agreements may be voided, and services terminated in accordance with applicable laws.
             </p>
           </section>
 
