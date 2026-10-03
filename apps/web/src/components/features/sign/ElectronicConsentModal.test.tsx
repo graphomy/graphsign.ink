@@ -39,6 +39,11 @@ describe('ElectronicConsentModal (INK-99)', () => {
     // Decline button
     const declineBtn = screen.getByTestId('ersd-decline-button');
     fireEvent.click(declineBtn);
+    expect(onDecline).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Go back' }));
+    expect(onDecline).not.toHaveBeenCalled();
+    fireEvent.click(declineBtn);
+    fireEvent.click(screen.getByRole('button', { name: 'Decline agreement' }));
     expect(onDecline).toHaveBeenCalledTimes(1);
 
     // When isOpen is false, nothing is rendered

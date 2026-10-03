@@ -454,7 +454,7 @@ export default function SignDocumentPage({
       await fetch(`${getApiUrl()}/api/v1/sign/${rawToken}/consent`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ consentGiven: true, ersdVersion: 'v1.0' }),
+        body: JSON.stringify({ consentGiven: true, ersdVersion: '2026-10-03' }),
       });
       setConsentAccepted(true);
       setShowConsentModal(false);
@@ -1726,7 +1726,8 @@ export default function SignDocumentPage({
         organisationName={agreement?.organisationName || 'Organization'}
         envelopeId={envelopeId}
         onAcceptConsent={handleAcceptConsent}
-        onDecline={() => {
+        onDecline={(reason) => {
+          setDeclineReason(reason?.trim() || 'Electronic signing consent declined');
           setShowConsentModal(false);
           setShowDeclineModal(true);
         }}
