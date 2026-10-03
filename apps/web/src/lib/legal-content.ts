@@ -29,7 +29,7 @@ export const electronicDisclosure = [
 export const termsSections = [
   [
     'Business identity and agreement',
-    'Graphsign.ink is operated by Graphomy Technologies LLP (Graphomy, we, us). Contact support@graphsign.ink for business correspondence. These Terms govern hosted service use by account holders, workspace members and invited signers. Use is voluntary. By registering or using the Service you agree to these Terms; if you disagree, stop using it. The electronic-signing disclosure separately governs consent to electronic records. An agreement you sign with a sender is between its parties, not Graphomy.',
+    'Graphsign.ink is operated by Graphomy Technologies LLP (Graphomy, we, us). Contact support@graphsign.ink for business correspondence. These Terms govern hosted service use by account holders, workspace members and invited signers. The Service is available for use globally, subject to applicable laws and service availability; it is not restricted to users in a particular country. Use is voluntary. By registering or using the Service you agree to these Terms; if you disagree, stop using it. The electronic-signing disclosure separately governs consent to electronic records. An agreement you sign with a sender is between its parties, not Graphomy.',
   ],
   [
     'Eligibility and authority',
@@ -92,7 +92,7 @@ export const privacySections = [
   ],
   [
     'Storage locations and transfers',
-    'Documents, account records and logs are stored in the configured database and object-storage regions. Network routing, email delivery, timestamping and vendor support may process data in other countries. A self-hosted operator chooses its own vendors and locations. This notice does not promise India-only, EU-only or any other single-country storage. Ask support@graphsign.ink for the current hosted-service storage countries and relevant transfer safeguards before uploading data subject to residency requirements. Where required, international transfers must use an applicable lawful mechanism and safeguards.',
+    'The hosted-service database is hosted in Europe in AWS Europe Central 1 (Frankfurt, Germany), region eu-central-1. Cloudflare Workers run globally across the Cloudflare edge network rather than in a single fixed hosting location, so requests and data processed by Workers may be handled outside Germany and the European Union. The database location does not imply that all documents, object storage, backups, logs or other processing remain in that region. Object storage follows its configured location arrangements; email delivery, timestamping and vendor support may process data in other countries. A self-hosted operator chooses its own vendors and locations. The Service supports users globally and does not promise single-country or EU-only processing. Contact support@graphsign.ink for object-storage and backup locations and relevant transfer safeguards before uploading data subject to residency requirements. Where required, international transfers must use an applicable lawful mechanism and safeguards.',
   ],
   [
     'Retention and deletion',
