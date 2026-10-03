@@ -1885,8 +1885,7 @@ function OrganisationSettingsContent() {
                     <span>
                       <strong>Admin Delegation:</strong> Organisation Admins have full permissions
                       to assign the <code>Organisation Admin</code> (<code>org_admin</code>) role to
-                      add more admins to the workspace. Super Admin is strictly reserved for
-                      designated system maintainers.
+                      add more admins to the workspace.
                     </span>
                   </div>
                 </div>
