@@ -10,7 +10,7 @@ export default function SupportPage() {
       sections={[
         [
           'Business identity',
-          'Graphsign.ink is operated by Graphomy Technologies LLP. Account holders and invited signers can contact us without purchasing a plan.',
+          'Graphsign.ink is operated by Graphomy Technologies LLP, a limited liability partnership located in Noida, Uttar Pradesh, India. Account holders and invited signers can contact us without purchasing a plan.',
         ],
         [
           'Support',
@@ -22,7 +22,7 @@ export default function SupportPage() {
         ],
         [
           'Grievances and complaints',
-          'Address service or privacy grievances to the Grievance contact, Graphomy Technologies LLP, at support@graphsign.ink with the subject Grievance. We will route your complaint to the responsible person and respond within applicable legal time limits. This channel does not restrict complaints to competent authorities or any mandatory legal rights.',
+          'The designated Grievance Officer is Kunal Priyadarshi, Designated Partner, Graphomy Technologies LLP. Send service or privacy grievances to support@graphsign.ink with the subject Grievance, addressed to Kunal Priyadarshi. We will respond within applicable legal time limits. This channel does not restrict complaints to competent authorities or any mandatory legal rights.',
         ],
         [
           'Paid services and business enquiries',

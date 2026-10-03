@@ -34,7 +34,7 @@ export function ElectronicConsentModal({
   recipientName,
   senderName,
   organisationName,
-  envelopeId = 'env_sec_disclosure',
+  envelopeId,
   onAcceptConsent,
   onDecline,
 }: ElectronicConsentModalProps) {
@@ -46,6 +46,7 @@ export function ElectronicConsentModal({
   const [showDeclineConfirm, setShowDeclineConfirm] = useState(false);
   const [declineReason, setDeclineReason] = useState('');
   const [copiedEnvelope, setCopiedEnvelope] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -64,6 +65,8 @@ export function ElectronicConsentModal({
       }
       setAgreed(false);
       setShowDeclineConfirm(false);
+      setDeclineReason('');
+      setActionError(null);
     }
   }, [isOpen]);
 
@@ -122,7 +125,20 @@ export function ElectronicConsentModal({
   }
 
   function handlePrint() {
-    window.print();
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      setActionError('Allow pop-ups to print the disclosure, or use Download Disclosure.');
+      return;
+    }
+    printWindow.opener = null;
+    printWindow.document.title = 'Electronic Record and Signature Disclosure';
+    const content = printWindow.document.createElement('pre');
+    content.textContent = disclosureText;
+    content.style.cssText =
+      'white-space:pre-wrap;overflow-wrap:anywhere;font:15px/1.65 sans-serif;';
+    printWindow.document.body.replaceChildren(content);
+    printWindow.focus();
+    printWindow.print();
   }
 
   function handleDownloadDisclosure() {
@@ -139,16 +155,28 @@ export function ElectronicConsentModal({
   async function handleConfirm() {
     if (!agreed || submitting || !hasScrolledToBottom) return;
     setSubmitting(true);
+    setActionError(null);
     try {
       await onAcceptConsent();
+    } catch {
+      setActionError('Consent could not be recorded. Please try again or contact support.');
     } finally {
       setSubmitting(false);
     }
   }
 
   async function handleConfirmDecline() {
-    await onDecline(declineReason);
-    setShowDeclineConfirm(false);
+    if (submitting) return;
+    setSubmitting(true);
+    setActionError(null);
+    try {
+      await onDecline(declineReason.trim());
+      setShowDeclineConfirm(false);
+    } catch {
+      setActionError('Your decline could not be recorded. Please try again or contact support.');
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   const senderDisplay = organisationName?.trim()
@@ -157,11 +185,11 @@ export function ElectronicConsentModal({
 
   const disclosureText = [
     'ELECTRONIC RECORD AND SIGNATURE DISCLOSURE',
-    'Version: 3 October 2026',
+    'Version: 4 October 2026',
     `Document: ${documentTitle}`,
     `Sender: ${senderDisplay}`,
     `Recipient: ${recipientName}`,
-    `Envelope ID: ${envelopeId}`,
+    ...(envelopeId ? [`Envelope ID: ${envelopeId}`] : []),
     ...electronicDisclosure.map(({ title, body }) => `${title}\n${body}`),
     'Terms: https://graphsign.ink/terms\nPrivacy: https://graphsign.ink/privacy\nSupport: support@graphsign.ink',
   ].join('\n\n');
@@ -219,24 +247,26 @@ export function ElectronicConsentModal({
               <dt className="text-ink-500">Recipient</dt>
               <dd className="font-semibold text-ink-900 truncate">{orDash(recipientName)}</dd>
             </div>
-            <div className="flex justify-between sm:block">
-              <dt className="text-ink-500">Envelope ID</dt>
-              <dd className="font-mono text-xs font-semibold text-ink-900 flex items-center gap-1.5 tabular-nums">
-                <span>{envelopeId}</span>
-                <button
-                  type="button"
-                  onClick={handleCopyEnvelope}
-                  className="text-ink-400 hover:text-ink-700 focus:outline-none"
-                  title="Copy Envelope ID"
-                >
-                  {copiedEnvelope ? (
-                    <CheckCheck className="w-3.5 h-3.5 text-verified-600" />
-                  ) : (
-                    <Copy className="w-3.5 h-3.5" />
-                  )}
-                </button>
-              </dd>
-            </div>
+            {envelopeId && (
+              <div className="flex justify-between sm:block">
+                <dt className="text-ink-500">Envelope ID</dt>
+                <dd className="font-mono text-xs font-semibold text-ink-900 flex items-center gap-1.5 tabular-nums">
+                  <span>{envelopeId}</span>
+                  <button
+                    type="button"
+                    onClick={handleCopyEnvelope}
+                    className="text-ink-400 hover:text-ink-700 focus:outline-none"
+                    title="Copy Envelope ID"
+                  >
+                    {copiedEnvelope ? (
+                      <CheckCheck className="w-3.5 h-3.5 text-verified-600" />
+                    ) : (
+                      <Copy className="w-3.5 h-3.5" />
+                    )}
+                  </button>
+                </dd>
+              </div>
+            )}
           </dl>
         </div>
 
@@ -277,7 +307,7 @@ export function ElectronicConsentModal({
               <Link href="/support" target="_blank" rel="noopener noreferrer">
                 Support
               </Link>
-            </p>{' '}
+            </p>
           </div>
 
           {/* Fade Mask Bottom */}
@@ -338,6 +368,11 @@ export function ElectronicConsentModal({
         </div>
 
         {/* Footer */}
+        {actionError && !showDeclineConfirm && (
+          <p role="alert" className="px-7 pb-3 text-sm text-brand-700">
+            {actionError}
+          </p>
+        )}
         <div className="p-5 px-7 border-t border-ink-200 bg-ink-50 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2">
             <Button
@@ -398,10 +433,14 @@ export function ElectronicConsentModal({
             </p>
 
             <div className="space-y-1">
-              <label className="block text-xs font-semibold text-ink-700">
+              <label
+                htmlFor="ersd-decline-reason"
+                className="block text-xs font-semibold text-ink-700"
+              >
                 Reason for declining (Optional):
               </label>
               <textarea
+                id="ersd-decline-reason"
                 rows={3}
                 value={declineReason}
                 onChange={(e) => setDeclineReason(e.target.value)}
@@ -409,6 +448,11 @@ export function ElectronicConsentModal({
                 className="w-full text-xs border border-ink-200 rounded-md p-2.5 bg-white text-ink-900 focus:border-ink-900 focus:outline-none"
               />
             </div>
+            {actionError && (
+              <p role="alert" className="text-sm text-brand-700">
+                {actionError}
+              </p>
+            )}
 
             <div className="flex justify-end gap-2 pt-2 border-t border-ink-100">
               <Button
@@ -419,7 +463,13 @@ export function ElectronicConsentModal({
               >
                 Go back
               </Button>
-              <Button type="button" variant="destructive" size="md" onClick={handleConfirmDecline}>
+              <Button
+                type="button"
+                variant="destructive"
+                size="md"
+                isLoading={submitting}
+                onClick={handleConfirmDecline}
+              >
                 Decline agreement
               </Button>
             </div>

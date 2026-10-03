@@ -18,7 +18,7 @@ export function LegalPage({
           graphsign.ink
         </Link>
         <h1 className="mt-6 text-3xl font-bold text-ink-900">{title}</h1>
-        <p className="mt-2 text-sm text-ink-500">Effective date: 3 October 2026</p>
+        <p className="mt-2 text-sm text-ink-500">Effective date: 4 October 2026</p>
         <div className="mt-8 max-w-[68ch] space-y-8 text-[15px] leading-relaxed text-ink-700">
           {sections.map(([heading, body]) => (
             <section key={heading}>

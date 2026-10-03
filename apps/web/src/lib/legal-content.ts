@@ -29,7 +29,7 @@ export const electronicDisclosure = [
 export const termsSections = [
   [
     'Business identity and agreement',
-    'Graphsign.ink is operated by Graphomy Technologies LLP (Graphomy, we, us). Contact support@graphsign.ink for business correspondence. These Terms govern hosted service use by account holders, workspace members and invited signers. The Service is available for use globally, subject to applicable laws and service availability; it is not restricted to users in a particular country. Use is voluntary. By registering or using the Service you agree to these Terms; if you disagree, stop using it. The electronic-signing disclosure separately governs consent to electronic records. An agreement you sign with a sender is between its parties, not Graphomy.',
+    'Graphsign.ink is operated by Graphomy Technologies LLP (Graphomy, we, us). Graphomy is located in Noida, Uttar Pradesh, India, and is a limited liability partnership. Contact support@graphsign.ink for business correspondence. These Terms govern hosted service use by account holders, workspace members and invited signers. The Service is available for use globally, subject to applicable laws and service availability; it is not restricted to users in a particular country. Use is voluntary. By registering or using the Service you agree to these Terms; if you disagree, stop using it. The electronic-signing disclosure separately governs consent to electronic records. An agreement you sign with a sender is between its parties, not Graphomy.',
   ],
   [
     'Eligibility and authority',
@@ -76,7 +76,7 @@ export const termsSections = [
 export const privacySections = [
   [
     'Who this notice covers',
-    'Graphomy Technologies LLP operates Graphsign.ink. This notice covers visitors, account holders, workspace members and invited signers, including those without an account. Graphomy determines how account administration, service security and support data are used. For documents and recipient details submitted by a customer, the sending organization generally determines the purposes and Graphomy processes them on its instructions. Contact the sender about its own privacy practices and us at support@graphsign.ink about ours.',
+    'Graphomy Technologies LLP, located in Noida, Uttar Pradesh, India, operates Graphsign.ink. This notice covers visitors, account holders, workspace members and invited signers, including those without an account. Graphomy determines how account administration, service security and support data are used. For documents and recipient details submitted by a customer, the sending organization generally determines the purposes and Graphomy processes them on its instructions. Contact the sender about its own privacy practices and us at support@graphsign.ink about ours.',
   ],
   [
     'Data and sources',
@@ -88,7 +88,7 @@ export const privacySections = [
   ],
   [
     'Recipients and vendors',
-    'Authorized senders, recipients and workspace users may receive documents and audit evidence according to the workflow and access permissions. Configured webhooks and integrations receive information the customer instructs us to send. The platform uses infrastructure and delivery services such as Cloudflare (network and object storage), Neon (database), Resend (transactional email), and configured signing/timestamp providers, according to the deployment. Vendors process only the data needed for their functions under applicable arrangements. We may disclose data when lawfully required, to protect rights or security, or in a business transfer with appropriate safeguards. We do not sell personal data or use uploaded documents for advertising.',
+    'Authorized senders, recipients and workspace users may receive documents and audit evidence according to the workflow and access permissions. Configured webhooks and integrations receive information the customer instructs us to send. Our production vendors include Neon for database services, Resend for transactional email, and Cloudflare for Workers, network services and R2 object storage. Signing and timestamp services, where used by a workflow, receive the information needed to produce or verify its evidence. Vendors process only the data needed for their functions under applicable arrangements. We may disclose data when lawfully required, to protect rights or security, or in a business transfer with appropriate safeguards. We do not sell personal data or use uploaded documents for advertising.',
   ],
   [
     'Storage locations and transfers',
@@ -96,7 +96,7 @@ export const privacySections = [
   ],
   [
     'Retention and deletion',
-    'Accounts and documents are kept as needed for active services, customer settings and lawful instructions. The workspace document-retention setting defaults to 30 days; this is a configuration value, not a promise that every copy is automatically erased after 30 days. Request-log entries are assigned a 90-day expiry and failed-webhook records a 30-day expiry. Actual removal depends on cleanup and deployment configuration. Signature and audit evidence may need to outlast account access for legal obligations and disputes. Backups and legally retained records may persist after deletion requests, with restricted use. Contact support for your applicable retention and deletion arrangements. Sender or recipient copies, exported PDFs and embedded signature evidence are outside our ability to recall.',
+    'Accounts and documents are kept as needed for active services, customer settings and lawful instructions. An administrator can configure document retention within the application. Ask your workspace administrator or sender for the retention period that applies to your document. A retention setting does not by itself guarantee erasure of every copy, backup or audit record at the end of that period. Request-log entries have a 90-day expiry and failed-webhook records a 30-day expiry; these expiry values do not guarantee immediate physical deletion. Signature and audit evidence may need to outlast account access for legal obligations and disputes. Backups and legally retained records may persist after deletion requests, with restricted use. Email support@graphsign.ink to request deletion or ask about retention, including backups and records retained for legal obligations. Sender or recipient copies, exported PDFs and embedded signature evidence are outside our ability to recall.',
   ],
   [
     'Rights for account holders and invited signers',
@@ -104,6 +104,6 @@ export const privacySections = [
   ],
   [
     'Security, children and contact',
-    'Access controls and security measures help protect data, but no system eliminates every risk. Use secure devices and keep signing links confidential. The Service is for adults aged 18 or over; report suspected children’s data to us. For privacy requests, security concerns and grievances, contact Graphomy Technologies LLP at support@graphsign.ink, addressed to Privacy / Grievance contact as appropriate. We will handle requests within applicable legal time limits. Material notice changes will be communicated as appropriate; see the effective date for this version.',
+    'Access controls and security measures help protect data, but no system eliminates every risk. Use secure devices and keep signing links confidential. The Service is for adults aged 18 or over; report suspected children’s data to us. For privacy requests, security concerns and grievances, email support@graphsign.ink. The designated Grievance Officer is Kunal Priyadarshi, Designated Partner, Graphomy Technologies LLP, reachable at the same email address. We will handle requests within applicable legal time limits. Material notice changes will be communicated as appropriate; see the effective date for this version.',
   ],
 ] as const;
