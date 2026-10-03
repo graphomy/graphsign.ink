@@ -7,6 +7,8 @@ import { HeaderNav } from '@/components/layout/HeaderNav';
 import { Footer } from '@/components/layout/Footer';
 import { getApiUrl } from '@/lib/api';
 import { formatDateTime } from '@/lib/date-utils';
+import { applyBrandingCssVariables } from '@/lib/branding';
+import { BRANDING_UPDATED_EVENT } from '@/components/features/branding/BrandingProvider';
 
 interface OrganisationProfile {
   id: string;
@@ -689,6 +691,30 @@ function OrganisationSettingsContent() {
       const data = await res.json().catch(() => null);
       if (!res.ok) throw new Error(data?.error?.message ?? 'Save branding failed.');
       setMessage('Organisation branding saved successfully.');
+
+      applyBrandingCssVariables({
+        primaryColor,
+        secondaryColor,
+        logoUrl,
+        defaultSenderName,
+        companyAddress,
+        emailFooterText,
+      });
+
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent(BRANDING_UPDATED_EVENT, {
+            detail: {
+              primaryColor: primaryColor || null,
+              secondaryColor: secondaryColor || null,
+              logoUrl: logoUrl || null,
+              defaultSenderName: defaultSenderName || null,
+              companyAddress: companyAddress || null,
+              emailFooterText: emailFooterText || null,
+            },
+          }),
+        );
+      }
     } catch (err: unknown) {
       const errObj = err as Error;
       setError(errObj.message ?? 'Unable to save branding.');
@@ -1118,13 +1144,36 @@ function OrganisationSettingsContent() {
                     >
                       Primary Accent Color
                     </label>
-                    <input
-                      id="primaryColor"
-                      type="color"
-                      value={primaryColor}
-                      onChange={(e) => setPrimaryColor(e.target.value)}
-                      className="mt-1 h-10 w-full rounded-lg border cursor-pointer p-1"
-                    />
+                    <div className="flex items-center gap-2 mt-1">
+                      <input
+                        id="primaryColor"
+                        type="color"
+                        value={primaryColor}
+                        onChange={(e) => {
+                          setPrimaryColor(e.target.value);
+                          applyBrandingCssVariables({
+                            primaryColor: e.target.value,
+                            secondaryColor,
+                          });
+                        }}
+                        className="h-10 w-16 rounded-lg border cursor-pointer p-1"
+                      />
+                      <input
+                        type="text"
+                        value={primaryColor}
+                        onChange={(e) => {
+                          setPrimaryColor(e.target.value);
+                          if (/^#[0-9a-f]{6}$/i.test(e.target.value)) {
+                            applyBrandingCssVariables({
+                              primaryColor: e.target.value,
+                              secondaryColor,
+                            });
+                          }
+                        }}
+                        className="block w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm font-mono uppercase"
+                        maxLength={7}
+                      />
+                    </div>
                   </div>
                   <div>
                     <label
@@ -1133,13 +1182,98 @@ function OrganisationSettingsContent() {
                     >
                       Secondary Color
                     </label>
-                    <input
-                      id="secondaryColor"
-                      type="color"
-                      value={secondaryColor}
-                      onChange={(e) => setSecondaryColor(e.target.value)}
-                      className="mt-1 h-10 w-full rounded-lg border cursor-pointer p-1"
-                    />
+                    <div className="flex items-center gap-2 mt-1">
+                      <input
+                        id="secondaryColor"
+                        type="color"
+                        value={secondaryColor}
+                        onChange={(e) => {
+                          setSecondaryColor(e.target.value);
+                          applyBrandingCssVariables({
+                            primaryColor,
+                            secondaryColor: e.target.value,
+                          });
+                        }}
+                        className="h-10 w-16 rounded-lg border cursor-pointer p-1"
+                      />
+                      <input
+                        type="text"
+                        value={secondaryColor}
+                        onChange={(e) => {
+                          setSecondaryColor(e.target.value);
+                          if (/^#[0-9a-f]{6}$/i.test(e.target.value)) {
+                            applyBrandingCssVariables({
+                              primaryColor,
+                              secondaryColor: e.target.value,
+                            });
+                          }
+                        }}
+                        className="block w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm font-mono uppercase"
+                        maxLength={7}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Live Theme & Interface Preview */}
+                <div className="p-5 rounded-2xl border border-slate-200 bg-slate-50/60 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                      Live Interface Preview
+                    </span>
+                    <span className="text-[11px] text-slate-400">
+                      Instantly updates your active application instance
+                    </span>
+                  </div>
+
+                  <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs flex flex-wrap items-center justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                      {logoUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={logoUrl}
+                          alt="Brand Logo"
+                          className="h-8 max-h-8 max-w-[140px] object-contain rounded"
+                          onError={(e) => {
+                            (e.currentTarget as HTMLElement).style.display = 'none';
+                          }}
+                        />
+                      ) : (
+                        <div
+                          className="h-8 w-8 rounded-lg text-white font-black text-lg flex items-center justify-center shadow-xs"
+                          style={{ backgroundColor: primaryColor }}
+                        >
+                          g
+                        </div>
+                      )}
+                      <div>
+                        <div className="text-sm font-bold text-slate-900">
+                          {org?.name || name || 'Your Organisation'}
+                        </div>
+                        <div className="text-xs text-slate-500">
+                          Sender: {defaultSenderName || 'Document Coordinator'}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        className="py-2 px-4 rounded-xl text-white font-semibold text-xs shadow-xs transition-opacity hover:opacity-90"
+                        style={{ backgroundColor: primaryColor }}
+                      >
+                        Sign Document
+                      </button>
+                      <span
+                        className="py-1 px-2.5 rounded-lg text-xs font-bold"
+                        style={{
+                          backgroundColor: `${primaryColor}18`,
+                          color: primaryColor,
+                        }}
+                      >
+                        Verified Seal
+                      </span>
+                    </div>
                   </div>
                 </div>
 
@@ -1194,9 +1328,9 @@ function OrganisationSettingsContent() {
                 <button
                   type="submit"
                   disabled={isSaving}
-                  className="rounded-lg bg-[#ba0000] px-5 py-2.5 text-xs font-bold text-white hover:bg-[#a00000]"
+                  className="rounded-lg bg-brand-600 px-5 py-2.5 text-xs font-bold text-white hover:bg-brand-700 transition-colors shadow-xs"
                 >
-                  Save Branding
+                  {isSaving ? 'Saving...' : 'Save Branding'}
                 </button>
               </form>
             )}
@@ -1752,8 +1886,7 @@ function OrganisationSettingsContent() {
                     <span>
                       <strong>Admin Delegation:</strong> Organisation Admins have full permissions
                       to assign the <code>Organisation Admin</code> (<code>org_admin</code>) role to
-                      add more admins to the workspace. Super Admin is strictly reserved for
-                      designated system maintainers.
+                      add more admins to the workspace.
                     </span>
                   </div>
                 </div>

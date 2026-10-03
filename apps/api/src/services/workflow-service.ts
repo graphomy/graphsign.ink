@@ -674,7 +674,14 @@ export class WorkflowService {
         agreement: {
           include: {
             author: { select: { name: true, email: true } },
-            organisation: { select: { name: true } },
+            organisation: {
+              select: {
+                name: true,
+                logoUrl: true,
+                primaryColor: true,
+                secondaryColor: true,
+              },
+            },
           },
         },
       },
@@ -750,6 +757,9 @@ export class WorkflowService {
         organisationName: agreement.organisation.name,
         organisation: {
           name: agreement.organisation.name,
+          logoUrl: agreement.organisation.logoUrl,
+          primaryColor: agreement.organisation.primaryColor,
+          secondaryColor: agreement.organisation.secondaryColor,
         },
         envelopeId:
           ((agreement.metadata as any)?.envelopeId as string) ||

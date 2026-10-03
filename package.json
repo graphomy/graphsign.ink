@@ -1,7 +1,7 @@
 {
   "name": "graphsign-ink",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.9.0",
   "description": "Open-source electronic signature platform",
   "license": "AGPL-3.0",
   "packageManager": "pnpm@9.15.4",
@@ -28,8 +28,8 @@
     "typecheck": "pnpm -r typecheck"
   },
   "devDependencies": {
-    "@types/node": "^26.3.0",
-    "prettier": "^3.3.0",
+    "@types/node": "^26.6.4",
+    "prettier": "^3.9.9",
     "typescript": "^5.9.3"
   }
 }

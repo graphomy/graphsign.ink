@@ -4,6 +4,7 @@ import React, { useState, useRef, useEffect, useSyncExternalStore } from 'react'
 import Link from 'next/link';
 import { getApiUrl } from '@/lib/api';
 import { User, Shield, Building, LogOut, Sliders, ChevronDown, Award } from 'lucide-react';
+import { APP_VERSION } from '@/config/version';
 
 interface ProfileDropdownProps {
   email?: string;
@@ -293,6 +294,11 @@ export function ProfileDropdown({ email, token, orgName }: ProfileDropdownProps)
             <LogOut className="h-4 w-4 text-brand-600 shrink-0" aria-hidden="true" />
             Sign out
           </button>
+
+          <div className="mt-2 pt-2 border-t border-ink-100 flex items-center justify-between px-3 text-[10px] text-ink-400">
+            <span>graphsign.ink</span>
+            <span>v{APP_VERSION}</span>
+          </div>
         </div>
       )}
     </div>

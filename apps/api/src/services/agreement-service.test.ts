@@ -367,17 +367,61 @@ describe('AgreementService Unit Tests (Epic INK-8)', () => {
       expect(res.id).toBe('ag-1');
     });
 
-    it('getAgreementById - throws ForbiddenError when non-admin accesses another user agreement', async () => {
+    it('getAgreementById - throws ForbiddenError when another user accesses agreement', async () => {
       mockPrisma.agreement.findFirst.mockResolvedValue({
         id: 'ag-1',
         organisationId: 'org-1',
         authorId: 'user-1',
         title: 'User 1 Document',
+        recipients: [],
       });
 
       await expect(service.getAgreementById('org-1', 'ag-1', 'user-2', 'user')).rejects.toThrow(
         ForbiddenError,
       );
+    });
+
+    it('getAgreementById - throws ForbiddenError even when org_admin/super_admin tries to access another user agreement (INK-305)', async () => {
+      mockPrisma.agreement.findFirst.mockResolvedValue({
+        id: 'ag-1',
+        organisationId: 'org-1',
+        authorId: 'user-1',
+        title: 'User 1 Document',
+        recipients: [],
+      });
+
+      await expect(
+        service.getAgreementById('org-1', 'ag-1', 'admin-user', 'org_admin', 'admin@example.com'),
+      ).rejects.toThrow(ForbiddenError);
+
+      await expect(
+        service.getAgreementById(
+          'org-1',
+          'ag-1',
+          'super-admin',
+          'super_admin',
+          'super@example.com',
+        ),
+      ).rejects.toThrow(ForbiddenError);
+    });
+
+    it('getAgreementById - allows recipient to access agreement (INK-305)', async () => {
+      mockPrisma.agreement.findFirst.mockResolvedValue({
+        id: 'ag-1',
+        organisationId: 'org-1',
+        authorId: 'user-1',
+        title: 'User 1 Document',
+        recipients: [{ email: 'signer@example.com', name: 'Signer Person' }],
+      });
+
+      const res = await service.getAgreementById(
+        'org-1',
+        'ag-1',
+        'signer-id',
+        'user',
+        'signer@example.com',
+      );
+      expect(res.id).toBe('ag-1');
     });
 
     it('saveDraft - throws ForbiddenError when non-admin edits another user draft', async () => {

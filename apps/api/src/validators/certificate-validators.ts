@@ -14,6 +14,7 @@ export const generateSelfSignedSchema = z.object({
   state: z.string().max(100).optional(),
   locality: z.string().max(100).optional(),
   email: z.string().email('Invalid email address').optional().or(z.literal('')),
+  setAsDefault: z.boolean().optional().default(false),
 });
 
 export const uploadByoCertificateSchema = z.object({
@@ -26,6 +27,7 @@ export const uploadByoCertificateSchema = z.object({
     .optional()
     .default('RSA_2048'),
   tsaUrl: z.string().url('Invalid TSA URL').optional(),
+  setAsDefault: z.boolean().optional().default(false),
 });
 
 export const sealAgreementSchema = z.object({

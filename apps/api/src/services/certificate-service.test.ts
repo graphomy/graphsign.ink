@@ -90,16 +90,18 @@ describe('CertificateService Unit Tests', () => {
     );
   });
 
-  it('sets default certificate for organisation', async () => {
+  it('sets default certificate for organisation when active', async () => {
     mockPrisma.signingCertificate.findFirst.mockResolvedValueOnce({
       id: 'cert-2',
       name: 'New Default',
       organisationId: 'org-1',
+      status: 'ACTIVE',
     });
     mockPrisma.signingCertificate.updateMany.mockResolvedValueOnce({ count: 1 });
     mockPrisma.signingCertificate.update.mockResolvedValueOnce({
       id: 'cert-2',
       isDefault: true,
+      status: 'ACTIVE',
     });
 
     const updated = await certService.setDefaultCertificate('org-1', 'usr-1', 'cert-2');
@@ -111,20 +113,100 @@ describe('CertificateService Unit Tests', () => {
     expect(updated.isDefault).toBe(true);
   });
 
-  it('soft-deletes / revokes certificate', async () => {
+  it('rejects setting revoked or inactive certificate as default', async () => {
+    mockPrisma.signingCertificate.findFirst.mockResolvedValueOnce({
+      id: 'cert-revoked',
+      name: 'Revoked Cert',
+      organisationId: 'org-1',
+      status: 'REVOKED',
+    });
+
+    await expect(
+      certService.setDefaultCertificate('org-1', 'usr-1', 'cert-revoked'),
+    ).rejects.toThrow('Cannot set an inactive, expired, or revoked certificate as the default.');
+  });
+
+  it('stores multiple certificates and enforces single active default', async () => {
+    mockPrisma.organisation.findUnique.mockResolvedValue({
+      id: 'org-1',
+      name: 'Acme Corp',
+    });
+    // First certificate created when none exists becomes default
+    mockPrisma.signingCertificate.findFirst.mockResolvedValueOnce(null);
+    mockPrisma.signingCertificate.create.mockImplementationOnce(({ data }: any) =>
+      Promise.resolve({ id: 'cert-1', ...data }),
+    );
+
+    const first = await certService.generateSelfSigned('org-1', 'usr-1', {
+      name: 'Cert 1',
+    });
+    expect(first.certificate.isDefault).toBe(true);
+
+    // Second certificate created without setAsDefault remains non-default
     mockPrisma.signingCertificate.findFirst.mockResolvedValueOnce({
       id: 'cert-1',
-      name: 'Old Cert',
-      organisationId: 'org-1',
+      isDefault: true,
+      status: 'ACTIVE',
     });
-    mockPrisma.signingCertificate.update.mockResolvedValueOnce({
+    mockPrisma.signingCertificate.create.mockImplementationOnce(({ data }: any) =>
+      Promise.resolve({ id: 'cert-2', ...data }),
+    );
+
+    const second = await certService.generateSelfSigned('org-1', 'usr-1', {
+      name: 'Cert 2',
+    });
+    expect(second.certificate.isDefault).toBe(false);
+
+    // Third certificate created with setAsDefault=true switches default
+    mockPrisma.signingCertificate.findFirst.mockResolvedValueOnce({
+      id: 'cert-1',
+      isDefault: true,
+      status: 'ACTIVE',
+    });
+    mockPrisma.signingCertificate.updateMany.mockResolvedValueOnce({ count: 1 });
+    mockPrisma.signingCertificate.create.mockImplementationOnce(({ data }: any) =>
+      Promise.resolve({ id: 'cert-3', ...data }),
+    );
+
+    const third = await certService.generateSelfSigned('org-1', 'usr-1', {
+      name: 'Cert 3',
+      setAsDefault: true,
+    });
+    expect(third.certificate.isDefault).toBe(true);
+    expect(mockPrisma.signingCertificate.updateMany).toHaveBeenCalledWith({
+      where: { organisationId: 'org-1', isDefault: true },
+      data: { isDefault: false },
+    });
+  });
+
+  it('soft-deletes / revokes certificate and auto-promotes next active certificate when default revoked', async () => {
+    mockPrisma.signingCertificate.findFirst
+      .mockResolvedValueOnce({
+        id: 'cert-1',
+        name: 'Old Default Cert',
+        organisationId: 'org-1',
+        isDefault: true,
+        status: 'ACTIVE',
+      })
+      .mockResolvedValueOnce({
+        id: 'cert-2',
+        name: 'Next Active Cert',
+        organisationId: 'org-1',
+        status: 'ACTIVE',
+      });
+    mockPrisma.signingCertificate.update.mockResolvedValue({
       id: 'cert-1',
       status: 'REVOKED',
+      isDefault: false,
     });
 
     const res = await certService.deleteCertificate('org-1', 'usr-1', 'cert-1');
 
     expect(res.success).toBe(true);
+    expect(mockPrisma.signingCertificate.update).toHaveBeenCalledWith({
+      where: { id: 'cert-2' },
+      data: { isDefault: true },
+    });
     expect(mockAudit.log).toHaveBeenCalledWith(
       expect.objectContaining({
         action: 'CERTIFICATE_REVOKED',

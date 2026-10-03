@@ -308,7 +308,13 @@ describe('Agreement Routes Integration Tests (Epic INK-8)', () => {
     );
   });
 
-  it('GET /api/v1/agreements/:id/file - blocks super admin from accessing private file payloads (INK-248)', async () => {
+  it('GET /api/v1/agreements/:id/file - blocks super admin from accessing other users private file payloads (INK-248)', async () => {
+    mockAgreementService.getAgreementById.mockResolvedValue({
+      id: 'ag-secret',
+      title: 'Secret Document',
+      authorId: 'other-user-999',
+    });
+
     const superAdminToken = await signJwt({
       sub: 'super-1',
       email: 'kunal@graphomy.com',
@@ -323,6 +329,33 @@ describe('Agreement Routes Integration Tests (Epic INK-8)', () => {
     expect(res.status).toBe(403);
     const body = (await res.json()) as any;
     expect(body.error?.message).toContain('Super Admins are restricted to metadata only');
+  });
+
+  it('GET /api/v1/agreements/:id/file - allows super admin to view and stream their own uploaded document (INK-305)', async () => {
+    mockAgreementService.getAgreementById.mockResolvedValue({
+      id: 'ag-own',
+      title: 'My Super Admin Doc',
+      authorId: 'super-1',
+      fileName: 'my-doc.md',
+      markdownContent: '# My Content',
+      metadata: {},
+    });
+
+    const superAdminToken = await signJwt({
+      sub: 'super-1',
+      email: 'kunal@graphomy.com',
+      orgId: 'org-123',
+      role: 'super_admin',
+    });
+
+    const res = await app.request('/api/v1/agreements/ag-own/file', {
+      headers: { Authorization: `Bearer ${superAdminToken}` },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get('Content-Type')).toContain('text/markdown');
+    const text = await res.text();
+    expect(text).toContain('# My Content');
   });
 
   it('GET /api/v1/agreements/:id/fields - returns fields and recipients (INK-78 to INK-85)', async () => {

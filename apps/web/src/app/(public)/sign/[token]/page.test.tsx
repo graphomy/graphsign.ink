@@ -93,6 +93,70 @@ describe('SignDocumentPage Component Tests (FR-007 Workflow Engine)', () => {
     });
   });
 
+  it('requires server-confirmed consent and records a confirmed decline without a second dialog', async () => {
+    const recipient = {
+      id: 'recip-1',
+      name: 'Jane Signer',
+      email: 'jane@example.com',
+      role: 'signer',
+      status: 'INVITED',
+    };
+    const mockFetch = vi.fn().mockImplementation((url: string) => {
+      if (url.endsWith('/consent'))
+        return Promise.resolve({ ok: false, json: async () => ({ success: false }) });
+      if (url.endsWith('/decline') || url.endsWith('/view'))
+        return Promise.resolve({ ok: true, json: async () => ({ success: true }) });
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({
+          success: true,
+          data: {
+            agreement: {
+              id: 'ag-1',
+              title: 'Consent regression document',
+              status: 'SENT',
+              signingOrder: 'PARALLEL',
+              currentStep: 1,
+              senderName: 'Acme Legal',
+              organisationName: 'Acme Corp',
+              markdownContent: '# Terms',
+              fields: { fields: [], recipients: [recipient] },
+            },
+            recipient,
+            allRecipients: [recipient],
+            isTurn: true,
+          },
+        }),
+      });
+    });
+    global.fetch = mockFetch;
+    render(
+      <Suspense fallback={<div>Loading test...</div>}>
+        <SignDocumentPage params={{ token: 'token-123' }} />
+      </Suspense>,
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId('ersd-checkbox')).toHaveProperty('disabled', false),
+    );
+    fireEvent.click(screen.getByTestId('ersd-checkbox'));
+    fireEvent.click(screen.getByTestId('ersd-accept-button'));
+    await waitFor(() =>
+      expect(screen.getByRole('alert').textContent).toContain('Consent could not be recorded'),
+    );
+    expect(screen.getByTestId('ersd-modal-overlay')).toBeDefined();
+    fireEvent.click(screen.getByTestId('ersd-decline-button'));
+    fireEvent.click(screen.getByRole('button', { name: 'Decline agreement' }));
+    await waitFor(() =>
+      expect(mockFetch.mock.calls.some(([url]) => url.endsWith('/decline'))).toBe(true),
+    );
+    const declineCall = mockFetch.mock.calls.find(([url]) => url.endsWith('/decline'));
+    expect(JSON.parse(declineCall?.[1].body)).toEqual({
+      reason: 'Electronic signing consent declined',
+    });
+    await waitFor(() => expect(screen.queryByTestId('ersd-modal-overlay')).toBeNull());
+    expect(screen.queryByTestId('confirm-decline-button')).toBeNull();
+  });
+
   it('evaluates conditional logic rules to hide or show dependent fields (INK-96)', async () => {
     global.fetch = vi.fn().mockImplementation((url) => {
       if (typeof url === 'string' && url.includes('/api/v1/sign/token-123/view')) {

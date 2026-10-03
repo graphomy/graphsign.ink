@@ -8,6 +8,16 @@ import { PrismaNeon } from '@prisma/adapter-neon';
  * @prisma/adapter-neon v6.x expects a PoolConfig object (not a Pool instance).
  * It creates and manages its own Pool internally.
  */
+import { neonConfig } from '@neondatabase/serverless';
+
+// Configure Neon driver for robust connection handling:
+// - Enable fetch query mode for standard queries to leverage subrequest connection pooling
+neonConfig.poolQueryViaFetch = true;
+
+// Cache PrismaClient instances in local development and Node environments to prevent
+// repeated connection pool creation, socket exhaustion, and cold-start latency.
+const prismaClientCache = new Map<string, PrismaClient>();
+
 export function createPrismaClient(databaseUrl: string): PrismaClient {
   if (
     !databaseUrl ||
@@ -19,16 +29,33 @@ export function createPrismaClient(databaseUrl: string): PrismaClient {
       `Invalid DATABASE_URL provided to createPrismaClient: "${preview}". Must be a valid postgresql:// or postgres:// connection string.`,
     );
   }
-  // In Cloudflare Workers, each request lifecycle must instantiate its own adapter/client
-  // to avoid cross-request I/O collisions (Cannot perform I/O on behalf of a different request).
   const adapter = new PrismaNeon({ connectionString: databaseUrl });
   return new PrismaClient({ adapter } as any);
 }
 
-// In Cloudflare Workers, each request lifecycle must instantiate its own adapter/client
-// to avoid cross-request I/O collisions (Cannot perform I/O on behalf of a different request).
+/**
+ * Returns a cached PrismaClient instance for non-production environments, or creates
+ * a fresh client per-request in production Cloudflare Workers to prevent cross-request I/O collisions.
+ */
 export function getOrCreatePrismaClient(databaseUrl: string): PrismaClient {
-  return createPrismaClient(databaseUrl);
+  const isCloudflareProd =
+    typeof navigator !== 'undefined' &&
+    navigator.userAgent === 'Cloudflare-Workers' &&
+    typeof process !== 'undefined' &&
+    process.env?.NODE_ENV === 'production';
+
+  if (!isCloudflareProd) {
+    const cached = prismaClientCache.get(databaseUrl);
+    if (cached) {
+      return cached;
+    }
+  }
+
+  const client = createPrismaClient(databaseUrl);
+  if (!isCloudflareProd) {
+    prismaClientCache.set(databaseUrl, client);
+  }
+  return client;
 }
 
 // ── Legacy singleton for backward compatibility (local dev, tests) ──

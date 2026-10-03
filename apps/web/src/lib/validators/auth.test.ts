@@ -32,6 +32,7 @@ describe('Web Auth Validators (INK-265)', () => {
         password: validPassword,
         confirmPassword: validPassword,
         planType: 'individual',
+        agreeToTerms: true,
       });
       expect(result.success).toBe(true);
     });
@@ -43,6 +44,7 @@ describe('Web Auth Validators (INK-265)', () => {
         confirmPassword: validPassword,
         planType: 'teams',
         companyName: 'Acme Corporation',
+        agreeToTerms: true,
       });
       expect(result.success).toBe(true);
     });
@@ -54,6 +56,7 @@ describe('Web Auth Validators (INK-265)', () => {
         confirmPassword: validPassword,
         planType: 'teams',
         companyName: 'Acme Corporation',
+        agreeToTerms: true,
       });
       expect(result.success).toBe(false);
       if (!result.success) {
@@ -67,10 +70,25 @@ describe('Web Auth Validators (INK-265)', () => {
         password: validPassword,
         confirmPassword: 'DifferentPassword1!',
         planType: 'individual',
+        agreeToTerms: true,
       });
       expect(result.success).toBe(false);
       if (!result.success) {
         expect(result.error.issues[0]?.message).toBe('Passwords do not match.');
+      }
+    });
+
+    it('rejects registration when agreeToTerms is false or omitted', () => {
+      const result = registerFormSchema.safeParse({
+        email: 'alex@example.com',
+        password: validPassword,
+        confirmPassword: validPassword,
+        planType: 'individual',
+        agreeToTerms: false,
+      });
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.issues[0]?.message).toContain('18 years old');
       }
     });
   });

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { getApiUrl } from '@/lib/api';
 import { ProfileDropdown } from '@/components/features/auth/ProfileDropdown';
+import { useBranding } from '@/components/features/branding/BrandingProvider';
 
 const emptySubscribe = () => () => {};
 function getStoredEmail() {
@@ -19,6 +20,7 @@ export function HeaderNav() {
   const pathname = usePathname();
   const [orgName, setOrgName] = useState<string>('Workspace');
   const userEmail = useSyncExternalStore(emptySubscribe, getStoredEmail, getServerEmail);
+  const { branding } = useBranding();
 
   useEffect(() => {
     async function fetchOrg() {
@@ -50,12 +52,25 @@ export function HeaderNav() {
     <header className="bg-white border-b border-ink-200 sticky top-0 z-30 shadow-xs">
       <div className="max-w-[1440px] mx-auto px-6 lg:px-8">
         <div className="flex items-center justify-between h-14 relative">
-          {/* Left: 'g' mark + wordmark linking to /dashboard */}
+          {/* Left: Dynamic org logo or 'g' mark + wordmark linking to /dashboard */}
           <div className="flex items-center gap-6 z-10">
             <Link href="/dashboard" className="flex items-center gap-2.5 group">
-              <div className="h-8 w-8 rounded-lg bg-brand-600 text-white font-black text-lg flex items-center justify-center shadow-xs group-hover:bg-brand-700 transition-colors">
-                g
-              </div>
+              {branding?.logoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={branding.logoUrl}
+                  alt={orgName}
+                  className="h-8 max-h-8 max-w-[140px] object-contain rounded"
+                  onError={(e) => {
+                    // Fallback to default mark if URL is broken
+                    (e.currentTarget as HTMLElement).style.display = 'none';
+                  }}
+                />
+              ) : (
+                <div className="h-8 w-8 rounded-lg bg-brand-600 text-white font-black text-lg flex items-center justify-center shadow-xs group-hover:bg-brand-700 transition-colors">
+                  g
+                </div>
+              )}
               <span className="text-base font-bold text-ink-900 tracking-tight leading-none">
                 graphsign<span className="text-brand-600">.ink</span>
               </span>
