@@ -151,6 +151,14 @@ export function createDocumentRoutes(deps?: DocumentDeps) {
 
     const { page = 1, limit = 20, cursor, status, folder, search, from, to } = parseResult.data;
 
+    const authorId = principal.userId || principal.id;
+    const userScopeConditions: any[] = [{ authorId }, { reviewerId: authorId }];
+    if (principal.email) {
+      userScopeConditions.push({
+        recipients: { some: { email: { equals: principal.email, mode: 'insensitive' } } },
+      });
+    }
+
     const where: any = {
       organisationId: principal.organisationId,
       deletedAt: null,
@@ -161,10 +169,17 @@ export function createDocumentRoutes(deps?: DocumentDeps) {
       where.metadata = { path: ['folder'], equals: folder };
     }
     if (search) {
-      where.OR = [
-        { title: { contains: search, mode: 'insensitive' } },
-        { description: { contains: search, mode: 'insensitive' } },
+      where.AND = [
+        {
+          OR: [
+            { title: { contains: search, mode: 'insensitive' } },
+            { description: { contains: search, mode: 'insensitive' } },
+          ],
+        },
+        { OR: userScopeConditions },
       ];
+    } else {
+      where.OR = userScopeConditions;
     }
     if (from || to) {
       where.createdAt = {};
@@ -222,7 +237,15 @@ export function createDocumentRoutes(deps?: DocumentDeps) {
     const id = c.req.param('id');
 
     try {
-      const agreement = await agreementService.getAgreementById(principal.organisationId, id);
+      const authorId = principal.userId || principal.id;
+      const userRole = (principal as any).role || principal.roles?.[0] || 'user';
+      const agreement = await agreementService.getAgreementById(
+        principal.organisationId,
+        id,
+        authorId,
+        userRole,
+        principal.email,
+      );
       return c.json(toDocumentDto(agreement));
     } catch (err: any) {
       if (err instanceof NotFoundError || err?.statusCode === 404) {

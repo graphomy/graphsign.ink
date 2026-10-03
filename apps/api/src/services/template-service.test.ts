@@ -110,6 +110,77 @@ describe('TemplateService Unit Tests (Epic INK-11)', () => {
         }),
       ).rejects.toThrow(ForbiddenError);
     });
+
+    it('should throw ForbiddenError when user belongs to no team (INK-305)', async () => {
+      mockPrisma.template.findFirst.mockResolvedValue({
+        id: 'tpl-1',
+        organisationId: 'org-1',
+        authorId: 'author-user',
+        shares: [],
+      });
+      mockPrisma.teamMember.findMany.mockResolvedValue([]);
+
+      await expect(service.getTemplateById('org-1', 'viewer-user', 'tpl-1')).rejects.toThrow(
+        'Access denied. You can only view templates shared within a team you belong to.',
+      );
+    });
+
+    it('should throw ForbiddenError when user does not share a team with author (INK-305)', async () => {
+      mockPrisma.template.findFirst.mockResolvedValue({
+        id: 'tpl-1',
+        organisationId: 'org-1',
+        authorId: 'author-user',
+        shares: [],
+      });
+      // User is in team-1, Author is in team-2
+      mockPrisma.teamMember.findMany
+        .mockResolvedValueOnce([{ teamId: 'team-1' }])
+        .mockResolvedValueOnce([{ teamId: 'team-2' }]);
+
+      await expect(service.getTemplateById('org-1', 'viewer-user', 'tpl-1')).rejects.toThrow(
+        'Access denied. You can only view templates of authors who share a team with you.',
+      );
+    });
+
+    it('should allow access when users share a team AND template is shared with that team (INK-305)', async () => {
+      mockPrisma.template.findFirst.mockResolvedValue({
+        id: 'tpl-1',
+        organisationId: 'org-1',
+        authorId: 'author-user',
+        shares: [{ targetType: 'team', targetId: 'team-shared', accessLevel: 'READ' }],
+      });
+      mockPrisma.template.findUnique.mockResolvedValue({
+        id: 'tpl-1',
+        organisationId: 'org-1',
+        title: 'Shared Template',
+      });
+      // Both in team-shared
+      mockPrisma.teamMember.findMany
+        .mockResolvedValueOnce([{ teamId: 'team-shared' }])
+        .mockResolvedValueOnce([{ teamId: 'team-shared' }]);
+
+      const res = await service.getTemplateById('org-1', 'viewer-user', 'tpl-1');
+      expect(res?.id).toBe('tpl-1');
+    });
+
+    it('shareTemplate - throws ForbiddenError when sharing with team author does not belong to (INK-305)', async () => {
+      mockPrisma.template.findFirst.mockResolvedValue({
+        id: 'tpl-1',
+        organisationId: 'org-1',
+        authorId: 'author-user',
+        shares: [],
+      });
+      // Author only in team-1
+      mockPrisma.teamMember.findMany.mockResolvedValueOnce([{ teamId: 'team-1' }]);
+
+      await expect(
+        service.shareTemplate('org-1', 'author-user', 'tpl-1', {
+          targetType: 'team',
+          targetId: 'team-other',
+          accessLevel: 'USE',
+        }),
+      ).rejects.toThrow('You can only share templates with teams you are a member of.');
+    });
   });
 
   describe('instantiateTemplate (INK-77)', () => {

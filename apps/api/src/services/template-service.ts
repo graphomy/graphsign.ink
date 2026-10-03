@@ -36,42 +36,48 @@ export class TemplateService {
       throw new NotFoundError('Template not found.');
     }
 
-    // Check if user is author or has org-admin role
+    // Check if user is author
     if (template.authorId === userId) {
       return template;
     }
 
-    const userOrg = await this.prisma.userOrganisation.findFirst({
-      where: { userId, organisationId: orgId },
-    });
-
-    const isOrgAdmin = userOrg?.role === 'org_admin' || userOrg?.role === 'super_admin';
-    if (isOrgAdmin) {
-      return template;
-    }
-
-    // If requiredLevel is READ and template is published, grant access
-    if (requiredLevel === 'READ' && template.isPublished && !template.isArchived) {
-      return template;
-    }
-
-    // Check direct user share or team membership shares
+    // INK-305: Template team isolation
+    // Users can only view or edit each other's templates if they are part of the same team AND the template is shared with that team.
     const userTeamMemberships = await this.prisma.teamMember.findMany({
       where: { userId },
       select: { teamId: true },
     });
-    const teamIds = userTeamMemberships.map((m) => m.teamId);
+    const userTeamIds = userTeamMemberships.map((m) => m.teamId);
+
+    if (userTeamIds.length === 0) {
+      throw new ForbiddenError(
+        'Access denied. You can only view templates shared within a team you belong to.',
+      );
+    }
+
+    const authorTeamMemberships = await this.prisma.teamMember.findMany({
+      where: { userId: template.authorId },
+      select: { teamId: true },
+    });
+    const authorTeamIds = authorTeamMemberships.map((m) => m.teamId);
+    const commonTeamIds = userTeamIds.filter((id) => authorTeamIds.includes(id));
+
+    if (commonTeamIds.length === 0) {
+      throw new ForbiddenError(
+        'Access denied. You can only view templates of authors who share a team with you.',
+      );
+    }
 
     const hasShare = template.shares.find((s) => {
       const isTarget =
-        (s.targetType === 'user' && s.targetId === userId) ||
-        (s.targetType === 'team' && teamIds.includes(s.targetId));
+        (s.targetType === 'team' && commonTeamIds.includes(s.targetId)) ||
+        (s.targetType === 'user' && s.targetId === userId);
 
       if (!isTarget) return false;
 
       if (requiredLevel === 'READ') return true;
       if (requiredLevel === 'EDIT') return s.accessLevel === 'EDIT';
-      if (requiredLevel === 'MANAGE') return false; // Manage requires author or admin
+      if (requiredLevel === 'MANAGE') return false; // Manage requires author
       return false;
     });
 
@@ -322,6 +328,29 @@ export class TemplateService {
   ) {
     const template = await this.checkTemplateAccess(orgId, authorId, templateId, 'EDIT');
 
+    // INK-305: Ensure sharing is restricted to teams author belongs to, or teammates
+    const authorTeamMemberships = await this.prisma.teamMember.findMany({
+      where: { userId: authorId },
+      select: { teamId: true },
+    });
+    const authorTeamIds = authorTeamMemberships.map((m) => m.teamId);
+
+    if (input.targetType === 'team') {
+      if (!authorTeamIds.includes(input.targetId)) {
+        throw new ForbiddenError('You can only share templates with teams you are a member of.');
+      }
+    } else if (input.targetType === 'user') {
+      const targetUserMemberships = await this.prisma.teamMember.findMany({
+        where: { userId: input.targetId },
+        select: { teamId: true },
+      });
+      const targetTeamIds = targetUserMemberships.map((m) => m.teamId);
+      const sharesTeam = authorTeamIds.some((tId) => targetTeamIds.includes(tId));
+      if (!sharesTeam) {
+        throw new ForbiddenError('You can only share templates with members of your team.');
+      }
+    }
+
     const shareId = generateId();
 
     const share = await this.prisma.templateShare.upsert({
@@ -536,24 +565,60 @@ export class TemplateService {
 
     if (query.view === 'mine') {
       where.authorId = userId;
-    } else if (query.view === 'library') {
-      where.isPublished = true;
-    } else if (query.view === 'shared') {
-      // Resolve user's team memberships for team-level ACL shares
+    } else {
+      // INK-305: Template team isolation. Users can only view templates authored by themselves or shared by teammates in a shared team.
       const userTeamMemberships = await this.prisma.teamMember.findMany({
         where: { userId },
         select: { teamId: true },
       });
       const teamIds = userTeamMemberships.map((m) => m.teamId);
 
-      where.shares = {
-        some: {
-          OR: [
-            { targetType: 'user', targetId: userId },
-            { targetType: 'team', targetId: { in: teamIds } },
-          ],
-        },
-      };
+      const teamMembers =
+        teamIds.length > 0
+          ? await this.prisma.teamMember.findMany({
+              where: { teamId: { in: teamIds } },
+              select: { userId: true },
+            })
+          : [];
+      const teammateUserIds = Array.from(new Set(teamMembers.map((tm) => tm.userId)));
+
+      if (query.view === 'shared' || query.view === 'library') {
+        if (teamIds.length === 0) {
+          return {
+            items: [],
+            pagination: { page, limit, total: 0, totalPages: 0 },
+          };
+        }
+        where.authorId = { in: teammateUserIds, not: userId };
+        where.shares = {
+          some: {
+            OR: [
+              { targetType: 'team', targetId: { in: teamIds } },
+              { targetType: 'user', targetId: userId },
+            ],
+          },
+        };
+      } else {
+        // All accessible templates: my own OR shared by a teammate
+        if (teamIds.length === 0) {
+          where.authorId = userId;
+        } else {
+          where.OR = [
+            { authorId: userId },
+            {
+              authorId: { in: teammateUserIds },
+              shares: {
+                some: {
+                  OR: [
+                    { targetType: 'team', targetId: { in: teamIds } },
+                    { targetType: 'user', targetId: userId },
+                  ],
+                },
+              },
+            },
+          ];
+        }
+      }
     }
 
     if (query.search) {

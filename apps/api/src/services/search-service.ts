@@ -69,11 +69,10 @@ export class SearchService {
       isArchived: query.isArchived ?? false,
     };
 
-    // 2. RBAC Access Scoping (INK-119, FR-010.007)
-    // Non-admins only see documents they authored, are reviewing, or where they are a recipient
-    const isAdmin = ctx.role === 'org_admin' || ctx.role === 'admin' || ctx.role === 'super_admin';
-
-    if (!isAdmin && ctx.userId && ctx.userId !== 'unknown') {
+    // 2. Strict Document Isolation (INK-119, INK-305)
+    // No one should be able to view each other's documents.
+    // Every user (including admins and super_admin) only sees documents they authored, are reviewing, or where they are a recipient
+    if (ctx.userId && ctx.userId !== 'unknown') {
       where.OR = [
         { authorId: ctx.userId },
         { reviewerId: ctx.userId },
@@ -438,12 +437,46 @@ export class SearchService {
       organisationId: ctx.organisationId,
     };
 
+    // INK-305: Template team isolation. Users can only view their own templates or templates shared within their common team.
+    const userTeamMemberships =
+      (await this.prisma.teamMember?.findMany({
+        where: { userId: ctx.userId },
+        select: { teamId: true },
+      })) || [];
+    const teamIds = userTeamMemberships.map((m: any) => m.teamId);
+
+    const teamMembers =
+      teamIds.length > 0
+        ? (await this.prisma.teamMember?.findMany({
+            where: { teamId: { in: teamIds } },
+            select: { userId: true },
+          })) || []
+        : [];
+    const teammateUserIds = Array.from(new Set(teamMembers.map((tm: any) => tm.userId)));
+
+    const accessConditions: any[] = [{ authorId: ctx.userId }];
+    if (teamIds.length > 0) {
+      accessConditions.push({
+        authorId: { in: teammateUserIds },
+        shares: {
+          some: {
+            OR: [
+              { targetType: 'team', targetId: { in: teamIds } },
+              { targetType: 'user', targetId: ctx.userId },
+            ],
+          },
+        },
+      });
+    }
+
     if (keyword) {
       const keywordConditions = [
         { title: { contains: keyword, mode: 'insensitive' } },
         { description: { contains: keyword, mode: 'insensitive' } },
       ];
-      where.OR = keywordConditions;
+      where.AND = [{ OR: keywordConditions }, { OR: accessConditions }];
+    } else {
+      where.OR = accessConditions;
     }
 
     if (query.isPublished !== undefined) {

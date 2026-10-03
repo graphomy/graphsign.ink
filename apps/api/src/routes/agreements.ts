@@ -189,7 +189,13 @@ export function createAgreementRoutes(deps?: AgreementDeps) {
       const userId = userPayload?.sub || 'unknown';
       const userRole = userPayload?.role || 'user';
 
-      const agreement = await service.getAgreementById(orgId, agreementId, userId, userRole);
+      const agreement = await service.getAgreementById(
+        orgId,
+        agreementId,
+        userId,
+        userRole,
+        userPayload?.email,
+      );
       return c.json(agreement, 200);
     },
   );
@@ -268,7 +274,13 @@ export function createAgreementRoutes(deps?: AgreementDeps) {
       const userId = userPayload?.sub || 'unknown';
       const userRole = userPayload?.role || 'user';
 
-      const history = await service.getAgreementHistory(orgId, agreementId, userId, userRole);
+      const history = await service.getAgreementHistory(
+        orgId,
+        agreementId,
+        userId,
+        userRole,
+        userPayload?.email,
+      );
       return c.json(history, 200);
     },
   );
@@ -318,14 +330,24 @@ export function createAgreementRoutes(deps?: AgreementDeps) {
       const authorId = userPayload?.sub || 'unknown';
       const orgId = userPayload?.orgId || 'default-org-id';
 
-      // INK-248: Super Admin is restricted to metadata only and cannot access private file contents
-      if (isSuperAdmin(userEmail) || userRole === 'super_admin') {
+      const agreement = await service.getAgreementById(
+        orgId,
+        agreementId,
+        authorId,
+        userRole,
+        userEmail,
+      );
+
+      // INK-248 / INK-305: Super Admin is restricted to metadata only for other users' files,
+      // but is permitted to access and view their own authored documents.
+      if (
+        (isSuperAdmin(userEmail) || userRole === 'super_admin') &&
+        agreement.authorId !== authorId
+      ) {
         throw new ForbiddenError(
-          'Super Admins are restricted to metadata only and cannot access private file contents.',
+          'Super Admins are restricted to metadata only and cannot access private file contents of other users.',
         );
       }
-
-      const agreement = await service.getAgreementById(orgId, agreementId, authorId, userRole);
       const meta = (agreement.metadata as Record<string, unknown>) || {};
       let fileData =
         (meta.signedPdfBase64 as string | undefined) ||
