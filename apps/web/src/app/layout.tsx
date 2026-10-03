@@ -12,6 +12,8 @@ const geistMono = Geist_Mono({
   subsets: ['latin'],
 });
 
+import { DomainCanonicalizer } from '@/components/DomainCanonicalizer';
+
 export const metadata: Metadata = {
   title: 'graphsign.ink — Electronic Signature Platform',
   description:
@@ -25,7 +27,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
-      <body className="min-h-full flex flex-col bg-neutral-50 text-neutral-900">{children}</body>
+      <body className="min-h-full flex flex-col bg-neutral-50 text-neutral-900">
+        <DomainCanonicalizer />
+        {children}
+      </body>
     </html>
   );
 }

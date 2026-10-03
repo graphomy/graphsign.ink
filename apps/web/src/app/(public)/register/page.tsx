@@ -21,6 +21,7 @@ function RegisterContent() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [agreeToTerms, setAgreeToTerms] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [apiError, setApiError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -40,6 +41,7 @@ function RegisterContent() {
       confirmPassword,
       planType,
       companyName: planType === 'teams' ? companyName : undefined,
+      agreeToTerms,
     });
     if (!parsed.success) {
       const fieldErrors: Record<string, string> = {};
@@ -382,10 +384,45 @@ function RegisterContent() {
           )}
         </div>
 
+        {/* 18+ and Terms of Use Checkbox */}
+        <div>
+          <div className="flex items-start gap-3">
+            <input
+              id="agreeToTerms"
+              name="agreeToTerms"
+              type="checkbox"
+              checked={agreeToTerms}
+              onChange={(e) => setAgreeToTerms(e.target.checked)}
+              aria-invalid={!!errors.agreeToTerms}
+              aria-describedby={errors.agreeToTerms ? 'terms-error' : undefined}
+              data-testid="terms-checkbox"
+              className="mt-1 h-4 w-4 rounded border-neutral-300 text-[#ba0000] focus:ring-[#ba0000] cursor-pointer"
+            />
+            <label htmlFor="agreeToTerms" className="text-xs text-neutral-600 leading-normal cursor-pointer select-none">
+              By signing up, you agree that you are 18 years of age or older and agree to our{' '}
+              <Link
+                href="/terms"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-medium text-[#ba0000] hover:text-[#a00000] underline underline-offset-2"
+                data-testid="terms-link"
+              >
+                Terms of Use
+              </Link>
+              .
+            </label>
+          </div>
+          {errors.agreeToTerms && (
+            <p id="terms-error" className="mt-1.5 text-sm text-red-600" role="alert">
+              {errors.agreeToTerms}
+            </p>
+          )}
+        </div>
+
         {/* Submit */}
         <button
           type="submit"
-          disabled={isLoading}
+          disabled={isLoading || !agreeToTerms}
           className="w-full rounded-lg bg-[#ba0000] px-4 py-2.5 text-sm font-semibold text-white
             shadow-sm hover:bg-[#a00000] focus:outline-none focus:ring-2 focus:ring-[#ba0000]
             focus:ring-offset-2 disabled:opacity-60 disabled:cursor-not-allowed
