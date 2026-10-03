@@ -14,34 +14,34 @@
   },
   "dependencies": {
     "clsx": "^2.1.1",
-    "lucide-react": "^1.37.0",
+    "lucide-react": "^1.51.0",
     "next": "16.3.1",
     "pdfjs-dist": "5.4.624",
     "react": "19.2.8",
     "react-dom": "19.2.8",
-    "tailwind-merge": "^3.6.0",
-    "zod": "^4.4.3"
+    "tailwind-merge": "^3.7.0",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
-    "@cloudflare/next-on-pages": "^1.13.7",
+    "@cloudflare/next-on-pages": "^1.13.16",
     "@playwright/test": "1.58.2",
-    "@tailwindcss/postcss": "^4",
-    "@testing-library/jest-dom": "^7.0.0",
-    "@testing-library/react": "^16.3.2",
-    "@types/node": "^26.3.0",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
+    "@tailwindcss/postcss": "^4.3.3",
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/react": "^16.3.3",
+    "@types/node": "^26.6.4",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.1",
-    "eslint": "^10.9.1",
+    "eslint": "^10.12.0",
     "eslint-config-next": "16.3.4",
     "eslint-plugin-import": "^2.32.0",
     "eslint-plugin-jsx-a11y": "^6.10.2",
     "eslint-plugin-react": "^7.37.5",
     "eslint-plugin-react-hooks": "^7.1.1",
-    "jsdom": "^30.0.1",
-    "tailwindcss": "^4",
+    "jsdom": "^30.1.1",
+    "tailwindcss": "^4.3.3",
     "typescript": "^5.9.3",
     "vitest": "^4.1.11",
-    "wrangler": "^4.115.0"
+    "wrangler": "^4.147.0"
   }
 }

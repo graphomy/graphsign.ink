@@ -91,6 +91,13 @@ export const registerFormSchema = z
     confirmPassword: z.string().min(1, 'Please confirm your password.'),
     planType: z.enum(['individual', 'teams']).default('individual'),
     companyName: z.string().max(255, 'Company name must be 255 characters or fewer.').optional(),
+    agreeToTerms: z
+      .boolean({
+        message: 'You must agree to the terms and confirm you are at least 18 years old.',
+      })
+      .refine((val) => val === true, {
+        message: 'You must agree to the terms and confirm you are at least 18 years old.',
+      }),
   })
   .refine((data) => data.password === data.confirmPassword, {
     message: 'Passwords do not match.',

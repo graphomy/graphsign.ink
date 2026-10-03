@@ -449,30 +449,39 @@ export class AgreementService {
   }
 
   /**
-   * Get single agreement by ID (INK-248 scoped for privacy)
+   * Get single agreement by ID (INK-248, INK-305 scoped for strict privacy: no viewing each other's documents)
    */
-  async getAgreementById(orgId: string, agreementId: string, userId?: string, userRole?: string) {
+  async getAgreementById(
+    orgId: string,
+    agreementId: string,
+    userId?: string,
+    _userRole?: string,
+    userEmail?: string,
+  ) {
     const agreement = await this.prisma.agreement.findFirst({
       where: { id: agreementId, organisationId: orgId, deletedAt: null },
-      include: { author: { select: { id: true, name: true, email: true } } },
+      include: {
+        author: { select: { id: true, name: true, email: true } },
+        recipients: { select: { id: true, email: true, name: true, role: true } },
+      },
     });
 
     if (!agreement) {
       throw new NotFoundError('Agreement not found.');
     }
 
-    // Non-admin users can only view their own agreements or agreements assigned to them for review (INK-248, INK-263)
-    if (
-      userRole &&
-      userRole !== 'org_admin' &&
-      userRole !== 'admin' &&
-      userRole !== 'super_admin' &&
-      userId &&
-      userId !== 'unknown' &&
-      agreement.authorId !== userId &&
-      agreement.reviewerId !== userId
-    ) {
-      throw new ForbiddenError('You do not have permission to access this agreement.');
+    // Strict Privacy (INK-305): No one can view each other's documents.
+    // Users can only view documents they authored, are assigned to review, or are designated as a recipient/signer.
+    if (userId && userId !== 'unknown') {
+      const isAuthor = agreement.authorId === userId;
+      const isReviewer = agreement.reviewerId === userId;
+      const isRecipient = userEmail
+        ? agreement.recipients?.some((r: any) => r.email?.toLowerCase() === userEmail.toLowerCase())
+        : false;
+
+      if (!isAuthor && !isReviewer && !isRecipient) {
+        throw new ForbiddenError('You do not have permission to access this agreement.');
+      }
     }
 
     return agreement;
@@ -485,26 +494,30 @@ export class AgreementService {
     orgId: string,
     agreementId: string,
     userId?: string,
-    userRole?: string,
+    _userRole?: string,
+    userEmail?: string,
   ): Promise<HistoryItem[]> {
     const agreement = await this.prisma.agreement.findFirst({
       where: { id: agreementId, organisationId: orgId, deletedAt: null },
+      include: {
+        recipients: { select: { id: true, email: true, name: true, role: true } },
+      },
     });
 
     if (!agreement) {
       throw new NotFoundError('Agreement not found.');
     }
 
-    if (
-      userRole &&
-      userRole !== 'org_admin' &&
-      userRole !== 'admin' &&
-      userRole !== 'super_admin' &&
-      userId &&
-      userId !== 'unknown' &&
-      agreement.authorId !== userId
-    ) {
-      throw new ForbiddenError('You do not have permission to access this agreement history.');
+    if (userId && userId !== 'unknown') {
+      const isAuthor = agreement.authorId === userId;
+      const isReviewer = agreement.reviewerId === userId;
+      const isRecipient = userEmail
+        ? agreement.recipients?.some((r: any) => r.email?.toLowerCase() === userEmail.toLowerCase())
+        : false;
+
+      if (!isAuthor && !isReviewer && !isRecipient) {
+        throw new ForbiddenError('You do not have permission to access this agreement history.');
+      }
     }
 
     const auditLogs = await this.prisma.auditLog.findMany({

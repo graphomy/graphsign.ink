@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
+import { APP_VERSION } from '@/config/version';
 
 /* ─── Scroll-triggered animation wrapper ─── */
 function AnimateInView({
@@ -596,6 +597,7 @@ export default function Home() {
             <Link href="/" className="text-lg font-bold tracking-tight text-neutral-900">
               graph<span className="text-[#ba0000]">sign</span>.ink
             </Link>
+            <span className="text-xs text-neutral-400">v{APP_VERSION}</span>
             <span className="text-xs text-neutral-400">AGPL-3.0 License</span>
           </div>
 

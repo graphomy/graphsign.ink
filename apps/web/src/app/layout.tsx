@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
+import { BrandingProvider } from '@/components/features/branding/BrandingProvider';
 import './globals.css';
 
 const geistSans = Geist({
@@ -11,6 +12,8 @@ const geistMono = Geist_Mono({
   variable: '--font-geist-mono',
   subsets: ['latin'],
 });
+
+import { DomainCanonicalizer } from '@/components/DomainCanonicalizer';
 
 export const metadata: Metadata = {
   title: 'graphsign.ink — Electronic Signature Platform',
@@ -25,7 +28,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
-      <body className="min-h-full flex flex-col bg-neutral-50 text-neutral-900">{children}</body>
+      <body className="min-h-full flex flex-col bg-neutral-50 text-neutral-900">
+        <DomainCanonicalizer />
+        <BrandingProvider>{children}</BrandingProvider>
+      </body>
     </html>
   );
 }

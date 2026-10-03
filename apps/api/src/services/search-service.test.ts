@@ -128,6 +128,9 @@ describe('SearchService Unit Tests (INK-117 to INK-122)', () => {
         ]),
         count: vi.fn().mockResolvedValue(1),
       },
+      teamMember: {
+        findMany: vi.fn().mockResolvedValue([]),
+      },
       searchFilterPreset: {
         create: vi.fn().mockImplementation(({ data }) =>
           Promise.resolve({
@@ -173,8 +176,8 @@ describe('SearchService Unit Tests (INK-117 to INK-122)', () => {
       expect(mockPrisma.agreement.findMany).toHaveBeenCalled();
       const callArgs = mockPrisma.agreement.findMany.mock.calls[0][0];
       expect(callArgs.where.organisationId).toBe('org-1');
-      expect(callArgs.where.OR).toBeDefined();
-      expect(callArgs.where.OR).toEqual(
+      const keywordOr = callArgs.where.AND ? callArgs.where.AND[1].OR : callArgs.where.OR;
+      expect(keywordOr).toEqual(
         expect.arrayContaining([
           { title: { contains: 'Employment', mode: 'insensitive' } },
           { description: { contains: 'Employment', mode: 'insensitive' } },
@@ -348,12 +351,15 @@ describe('SearchService Unit Tests (INK-117 to INK-122)', () => {
       expect(callArgs.where.AND.length).toBe(2);
     });
 
-    it('allows admin users full workspace access without restricting to authorId', async () => {
+    it('restricts admin users to their own, reviewable, or recipient documents (INK-305)', async () => {
       await service.searchAgreements(mockAdminCtx, { q: 'Agreement' });
       const callArgs = mockPrisma.agreement.findMany.mock.calls[0][0];
       expect(callArgs.where.organisationId).toBe('org-1');
-      // No authorId/reviewerId restriction
-      expect(callArgs.where.AND).toBeUndefined();
+      // Admin is strictly scoped to authorId/reviewerId/recipient
+      expect(callArgs.where.AND).toBeDefined();
+      expect(callArgs.where.AND[0].OR).toEqual(
+        expect.arrayContaining([{ authorId: 'admin-1' }, { reviewerId: 'admin-1' }]),
+      );
     });
   });
 
