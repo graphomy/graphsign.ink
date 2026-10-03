@@ -56,6 +56,7 @@ export function HeaderNav() {
           <div className="flex items-center gap-6 z-10">
             <Link href="/dashboard" className="flex items-center gap-2.5 group">
               {branding?.logoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={branding.logoUrl}
                   alt={orgName}

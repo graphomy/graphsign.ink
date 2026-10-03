@@ -101,24 +101,60 @@ export function BrandingProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    // Apply initial CSS variables on mount
     applyBrandingCssVariables(branding);
-    refreshBranding();
+  }, [branding]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadInitialBranding() {
+      if (typeof window === 'undefined') return;
+      const token =
+        localStorage.getItem('graphsign_session_token') || localStorage.getItem('token') || '';
+      if (!token) return;
+
+      try {
+        const res = await fetch(`${getApiUrl()}/api/v1/organisations/me/branding`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'x-organisation-id': localStorage.getItem('graphsign_org_id') ?? '',
+          },
+        });
+
+        if (res.ok && isMounted) {
+          const data = await res.json();
+          const updated: BrandingSettings = {
+            logoUrl: data.logoUrl || null,
+            primaryColor: data.primaryColor || DEFAULT_BRAND_PRIMARY,
+            secondaryColor: data.secondaryColor || DEFAULT_BRAND_SECONDARY,
+            defaultSenderName: data.defaultSenderName || null,
+            companyAddress: data.companyAddress || null,
+            emailFooterText: data.emailFooterText || null,
+          };
+          applyAndSave(updated);
+        }
+      } catch (err) {
+        console.debug('Failed to fetch organisation branding:', err);
+      }
+    }
+
+    void loadInitialBranding();
 
     function handleBrandingEvent(e: Event) {
       const customEvent = e as CustomEvent<BrandingSettings>;
       if (customEvent.detail) {
         applyAndSave(customEvent.detail);
       } else {
-        refreshBranding();
+        void loadInitialBranding();
       }
     }
 
     window.addEventListener(BRANDING_UPDATED_EVENT, handleBrandingEvent);
     return () => {
+      isMounted = false;
       window.removeEventListener(BRANDING_UPDATED_EVENT, handleBrandingEvent);
     };
-  }, [refreshBranding, applyAndSave]);
+  }, [applyAndSave]);
 
   return (
     <BrandingContext.Provider

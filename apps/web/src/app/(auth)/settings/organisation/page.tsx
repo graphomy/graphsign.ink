@@ -1229,6 +1229,7 @@ function OrganisationSettingsContent() {
                   <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs flex flex-wrap items-center justify-between gap-4">
                     <div className="flex items-center gap-3">
                       {logoUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
                         <img
                           src={logoUrl}
                           alt="Brand Logo"
