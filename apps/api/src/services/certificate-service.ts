@@ -3,7 +3,7 @@ import type { PrismaClient } from '@graphsign/db';
 import { generateId, sha256 } from '../utils/crypto.js';
 import { KeyCustodyService, KeyAlgorithm } from './key-custody-service.js';
 import { AuditService } from './audit-service.js';
-import { NotFoundError } from '../utils/errors.js';
+import { NotFoundError, ValidationError } from '../utils/errors.js';
 import forge from 'node-forge';
 
 export interface GenerateSelfSignedInput {
@@ -17,6 +17,7 @@ export interface GenerateSelfSignedInput {
   state?: string;
   locality?: string;
   email?: string;
+  setAsDefault?: boolean;
 }
 
 export interface UploadByoCertificateInput {
@@ -26,6 +27,7 @@ export interface UploadByoCertificateInput {
   chainPem?: string;
   algorithm?: KeyAlgorithm;
   tsaUrl?: string;
+  setAsDefault?: boolean;
 }
 
 export class CertificateService {
@@ -46,14 +48,18 @@ export class CertificateService {
       where: { organisationId, deletedAt: null, status: 'ACTIVE' },
       orderBy: { createdAt: 'desc' },
     });
+    if (certificate) {
+      await this.prisma.signingCertificate.update({
+        where: { id: certificate.id },
+        data: { isDefault: true },
+      });
+      return { ...certificate, isDefault: true };
+    }
     return (
-      certificate ||
-      (
-        await this.generateSelfSigned(organisationId, userId, {
-          name: 'Default Signing Certificate',
-        })
-      ).certificate
-    );
+      await this.generateSelfSigned(organisationId, userId, {
+        name: 'Default Signing Certificate',
+      })
+    ).certificate;
   }
 
   /**
@@ -137,9 +143,17 @@ export class CertificateService {
       );
     }
 
-    const count = await this.prisma.signingCertificate.count({
-      where: { organisationId, deletedAt: null },
+    const activeDefault = await this.prisma.signingCertificate.findFirst({
+      where: { organisationId, isDefault: true, deletedAt: null, status: 'ACTIVE' },
     });
+    const isDefault = input.setAsDefault ? true : !activeDefault;
+    if (isDefault && activeDefault) {
+      await this.prisma.signingCertificate.updateMany({
+        where: { organisationId, isDefault: true },
+        data: { isDefault: false },
+      });
+    }
+
     const certificate = await this.prisma.signingCertificate.create({
       data: {
         id,
@@ -156,7 +170,7 @@ export class CertificateService {
         issuerDn,
         validFrom,
         validTo,
-        isDefault: count === 0,
+        isDefault,
         status: 'ACTIVE',
         padesLevel,
         createdBy: userId,
@@ -200,9 +214,17 @@ export class CertificateService {
       certificatePem: input.certificatePem,
       chainPem: input.chainPem,
     });
-    const count = await this.prisma.signingCertificate.count({
-      where: { organisationId, deletedAt: null },
+    const activeDefault = await this.prisma.signingCertificate.findFirst({
+      where: { organisationId, isDefault: true, deletedAt: null, status: 'ACTIVE' },
     });
+    const isDefault = input.setAsDefault ? true : !activeDefault;
+    if (isDefault && activeDefault) {
+      await this.prisma.signingCertificate.updateMany({
+        where: { organisationId, isDefault: true },
+        data: { isDefault: false },
+      });
+    }
+
     const cert = await this.prisma.signingCertificate.create({
       data: {
         id,
@@ -219,7 +241,7 @@ export class CertificateService {
         issuerDn: material.issuerDn,
         validFrom: new Date(material.validFrom),
         validTo: new Date(material.validTo),
-        isDefault: count === 0,
+        isDefault,
         status: 'ACTIVE',
         padesLevel: input.tsaUrl ? 'B_T' : 'B_B',
         tsaUrl: input.tsaUrl || null,
@@ -287,6 +309,12 @@ export class CertificateService {
       throw new NotFoundError('Certificate not found.');
     }
 
+    if (cert.status !== 'ACTIVE') {
+      throw new ValidationError(
+        'Cannot set an inactive, expired, or revoked certificate as the default.',
+      );
+    }
+
     // Unset current default
     await this.prisma.signingCertificate.updateMany({
       where: { organisationId, isDefault: true },
@@ -339,6 +367,25 @@ export class CertificateService {
         isDefault: false,
       },
     });
+
+    // If the revoked certificate was the default, automatically promote the most recently created remaining active certificate
+    if (cert.isDefault) {
+      const nextActive = await this.prisma.signingCertificate.findFirst({
+        where: {
+          organisationId,
+          id: { not: certificateId },
+          deletedAt: null,
+          status: 'ACTIVE',
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+      if (nextActive) {
+        await this.prisma.signingCertificate.update({
+          where: { id: nextActive.id },
+          data: { isDefault: true },
+        });
+      }
+    }
 
     await this.auditService.log({
       organisationId,
