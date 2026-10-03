@@ -450,18 +450,17 @@ export default function SignDocumentPage({
 
   // Handle ERSD Consent Acceptance
   async function handleAcceptConsent() {
-    try {
-      await fetch(`${getApiUrl()}/api/v1/sign/${rawToken}/consent`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ consentGiven: true, ersdVersion: 'v1.0' }),
-      });
-      setConsentAccepted(true);
-      setShowConsentModal(false);
-    } catch {
-      setConsentAccepted(true);
-      setShowConsentModal(false);
+    const response = await fetch(`${getApiUrl()}/api/v1/sign/${rawToken}/consent`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ consentGiven: true, ersdVersion: '2026-10-04' }),
+    });
+    const data = await response.json();
+    if (!response.ok || data.success !== true) {
+      throw new Error('Consent could not be recorded');
     }
+    setConsentAccepted(true);
+    setShowConsentModal(false);
   }
 
   // Handle Signature Field Click (Click-to-sign / Click-to-apply)
@@ -750,8 +749,8 @@ export default function SignDocumentPage({
   }
 
   // Decline Signing Action
-  async function handleDecline() {
-    if (!declineReason.trim()) return;
+  async function handleDecline(reasonOverride?: string) {
+    const reason = reasonOverride?.trim() || declineReason.trim() || 'Declined to sign';
     setIsDeclining(true);
     setSubmitError(null);
 
@@ -759,7 +758,7 @@ export default function SignDocumentPage({
       const res = await fetch(`${getApiUrl()}/api/v1/sign/${rawToken}/decline`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reason: declineReason.trim() }),
+        body: JSON.stringify({ reason }),
       });
 
       const data = await res.json();
@@ -769,12 +768,14 @@ export default function SignDocumentPage({
 
       setIsDeclined(true);
       setShowDeclineModal(false);
+      return true;
     } catch (err: unknown) {
       setSubmitError(
         (err as Error)?.message === 'Failed to fetch'
           ? 'Unable to connect to server. Please check your internet connection and try again.'
           : (err as Error)?.message || 'Failed to decline document.',
       );
+      return false;
     } finally {
       setIsDeclining(false);
     }
@@ -1726,9 +1727,12 @@ export default function SignDocumentPage({
         organisationName={agreement?.organisationName || 'Organization'}
         envelopeId={envelopeId}
         onAcceptConsent={handleAcceptConsent}
-        onDecline={() => {
+        onDecline={async (reason) => {
+          const declined = await handleDecline(
+            reason?.trim() || 'Electronic signing consent declined',
+          );
+          if (!declined) throw new Error('Decline could not be recorded');
           setShowConsentModal(false);
-          setShowDeclineModal(true);
         }}
       />
 
@@ -1762,7 +1766,7 @@ export default function SignDocumentPage({
                 type="button"
                 variant="destructive"
                 size="md"
-                onClick={handleDecline}
+                onClick={() => handleDecline()}
                 isLoading={isDeclining}
                 data-testid="confirm-decline-button"
               >

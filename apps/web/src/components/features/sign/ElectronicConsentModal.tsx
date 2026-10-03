@@ -1,6 +1,8 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
+import Link from 'next/link';
+import { electronicDisclosure } from '@/lib/legal-content';
 import { orDash } from '@/lib/format';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
@@ -32,7 +34,7 @@ export function ElectronicConsentModal({
   recipientName,
   senderName,
   organisationName,
-  envelopeId = 'env_sec_disclosure',
+  envelopeId,
   onAcceptConsent,
   onDecline,
 }: ElectronicConsentModalProps) {
@@ -44,6 +46,7 @@ export function ElectronicConsentModal({
   const [showDeclineConfirm, setShowDeclineConfirm] = useState(false);
   const [declineReason, setDeclineReason] = useState('');
   const [copiedEnvelope, setCopiedEnvelope] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -62,6 +65,8 @@ export function ElectronicConsentModal({
       }
       setAgreed(false);
       setShowDeclineConfirm(false);
+      setDeclineReason('');
+      setActionError(null);
     }
   }, [isOpen]);
 
@@ -120,7 +125,20 @@ export function ElectronicConsentModal({
   }
 
   function handlePrint() {
-    window.print();
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      setActionError('Allow pop-ups to print the disclosure, or use Download Disclosure.');
+      return;
+    }
+    printWindow.opener = null;
+    printWindow.document.title = 'Electronic Record and Signature Disclosure';
+    const content = printWindow.document.createElement('pre');
+    content.textContent = disclosureText;
+    content.style.cssText =
+      'white-space:pre-wrap;overflow-wrap:anywhere;font:15px/1.65 sans-serif;';
+    printWindow.document.body.replaceChildren(content);
+    printWindow.focus();
+    printWindow.print();
   }
 
   function handleDownloadDisclosure() {
@@ -131,45 +149,50 @@ export function ElectronicConsentModal({
     document.body.appendChild(element);
     element.click();
     document.body.removeChild(element);
+    URL.revokeObjectURL(element.href);
   }
 
   async function handleConfirm() {
     if (!agreed || submitting || !hasScrolledToBottom) return;
     setSubmitting(true);
+    setActionError(null);
     try {
       await onAcceptConsent();
+    } catch {
+      setActionError('Consent could not be recorded. Please try again or contact support.');
     } finally {
       setSubmitting(false);
     }
   }
 
   async function handleConfirmDecline() {
-    await onDecline(declineReason);
-    setShowDeclineConfirm(false);
+    if (submitting) return;
+    setSubmitting(true);
+    setActionError(null);
+    try {
+      await onDecline(declineReason.trim());
+      setShowDeclineConfirm(false);
+    } catch {
+      setActionError('Your decline could not be recorded. Please try again or contact support.');
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   const senderDisplay = organisationName?.trim()
     ? `${senderName} (${organisationName.trim()})`
     : senderName;
 
-  const disclosureText = `ELECTRONIC RECORD AND SIGNATURE DISCLOSURE
-Document: ${documentTitle}
-Sender: ${senderDisplay}
-Recipient: ${recipientName}
-Envelope ID: ${envelopeId}
-
-1. Consent to Electronic Execution (ESIGN & eIDAS)
-You agree that your electronic signature, whether drawn, typed, or uploaded, is the legal equivalent of your manual physical signature, carrying full legal validity and enforceability under the U.S. Electronic Signatures in Global and National Commerce Act (ESIGN), the Uniform Electronic Transactions Act (UETA), and EU Regulation 910/2014 (eIDAS).
-
-2. Access and Hardware / Software Requirements
-To view and sign documents electronically, you require a standard web browser (Chrome, Firefox, Safari, Edge) supporting TLS 1.3 encryption and JavaScript execution. You may download and retain electronic records as PDF files using any standard PDF viewer.
-
-3. Right to Withdraw Consent
-You have the right to withdraw your consent to conduct business electronically at any time prior to submitting your completed signature. If you choose to withdraw consent, the signing session will terminate, and the requesting party will be notified.
-
-4. Copies and Record Retention
-Upon completing execution, a cryptographically sealed PDF copy of the executed document, complete with an immutable SHA-256 audit trail certificate, will be made available for download and transmitted to your verified email address.`;
-
+  const disclosureText = [
+    'ELECTRONIC RECORD AND SIGNATURE DISCLOSURE',
+    'Version: 4 October 2026',
+    `Document: ${documentTitle}`,
+    `Sender: ${senderDisplay}`,
+    `Recipient: ${recipientName}`,
+    ...(envelopeId ? [`Envelope ID: ${envelopeId}`] : []),
+    ...electronicDisclosure.map(({ title, body }) => `${title}\n${body}`),
+    'Terms: https://graphsign.ink/terms\nPrivacy: https://graphsign.ink/privacy\nSupport: support@graphsign.ink',
+  ].join('\n\n');
   return (
     <div
       className="fixed inset-0 z-50 bg-ink-950/55 backdrop-blur-[2px] flex items-center justify-center p-4 overflow-y-auto"
@@ -224,24 +247,26 @@ Upon completing execution, a cryptographically sealed PDF copy of the executed d
               <dt className="text-ink-500">Recipient</dt>
               <dd className="font-semibold text-ink-900 truncate">{orDash(recipientName)}</dd>
             </div>
-            <div className="flex justify-between sm:block">
-              <dt className="text-ink-500">Envelope ID</dt>
-              <dd className="font-mono text-xs font-semibold text-ink-900 flex items-center gap-1.5 tabular-nums">
-                <span>{envelopeId}</span>
-                <button
-                  type="button"
-                  onClick={handleCopyEnvelope}
-                  className="text-ink-400 hover:text-ink-700 focus:outline-none"
-                  title="Copy Envelope ID"
-                >
-                  {copiedEnvelope ? (
-                    <CheckCheck className="w-3.5 h-3.5 text-verified-600" />
-                  ) : (
-                    <Copy className="w-3.5 h-3.5" />
-                  )}
-                </button>
-              </dd>
-            </div>
+            {envelopeId && (
+              <div className="flex justify-between sm:block">
+                <dt className="text-ink-500">Envelope ID</dt>
+                <dd className="font-mono text-xs font-semibold text-ink-900 flex items-center gap-1.5 tabular-nums">
+                  <span>{envelopeId}</span>
+                  <button
+                    type="button"
+                    onClick={handleCopyEnvelope}
+                    className="text-ink-400 hover:text-ink-700 focus:outline-none"
+                    title="Copy Envelope ID"
+                  >
+                    {copiedEnvelope ? (
+                      <CheckCheck className="w-3.5 h-3.5 text-verified-600" />
+                    ) : (
+                      <Copy className="w-3.5 h-3.5" />
+                    )}
+                  </button>
+                </dd>
+              </div>
+            )}
           </dl>
         </div>
 
@@ -266,47 +291,22 @@ Upon completing execution, a cryptographically sealed PDF copy of the executed d
             className="flex-1 overflow-y-auto p-5 text-[15px] leading-[1.65] text-ink-700 w-full space-y-4 font-sans focus:outline-none"
             data-testid="ersd-disclosure-content"
           >
-            <p>
-              Please read this Electronic Record and Signature Disclosure (&quot;Disclosure&quot;)
-              carefully. By checking the consent box below and clicking &quot;Accept&quot;, you
-              consent to receive electronic records and use electronic signatures in lieu of paper
-              documents for this transaction.
-            </p>
-
-            <h3 className="font-bold text-ink-900 text-base mt-5">
-              1. Consent to Electronic Execution (ESIGN &amp; eIDAS)
-            </h3>
-            <p>
-              You agree that your electronic signature, whether drawn, typed, or uploaded, is the
-              legal equivalent of your manual physical signature, carrying full legal validity and
-              enforceability under the U.S. Electronic Signatures in Global and National Commerce
-              Act (ESIGN Act, 15 U.S.C. § 7001 et seq.), the Uniform Electronic Transactions Act
-              (UETA), and Regulation (EU) No 910/2014 (eIDAS).
-            </p>
-
-            <h3 className="font-bold text-ink-900 text-base mt-5">
-              2. Hardware and Software Minimum Requirements
-            </h3>
-            <p>
-              To access and retain electronic records, you must have an internet browser capable of
-              128-bit or 256-bit TLS encryption, an active email account, and software capable of
-              displaying Portable Document Format (PDF) files.
-            </p>
-
-            <h3 className="font-bold text-ink-900 text-base mt-5">3. Right to Withdraw Consent</h3>
-            <p>
-              You have the right to withdraw your consent to execute this agreement electronically
-              at any time before finalizing your signature. If you decline or withdraw consent, the
-              document will be voided and the initiating party will be notified immediately.
-            </p>
-
-            <h3 className="font-bold text-ink-900 text-base mt-5">
-              4. Cryptographic Record Retention and Tamper Evidence
-            </h3>
-            <p>
-              Following completion of all signing events, an immutable audit trail certificate
-              bearing RFC 3161 timestamps, cryptographic SHA-256 hash chains, signer IP addresses,
-              and verification telemetry is permanently embedded into the finalized PAdES document.
+            {electronicDisclosure.map(({ title, body }) => (
+              <section key={title}>
+                <h3 className="font-bold text-ink-900 text-base mt-5">{title}</h3>
+                <p>{body}</p>
+              </section>
+            ))}
+            <p className="flex flex-wrap gap-4 text-sm underline">
+              <Link href="/terms" target="_blank" rel="noopener noreferrer">
+                Terms of Service
+              </Link>
+              <Link href="/privacy" target="_blank" rel="noopener noreferrer">
+                Privacy Notice
+              </Link>
+              <Link href="/support" target="_blank" rel="noopener noreferrer">
+                Support
+              </Link>
             </p>
           </div>
 
@@ -368,6 +368,11 @@ Upon completing execution, a cryptographically sealed PDF copy of the executed d
         </div>
 
         {/* Footer */}
+        {actionError && !showDeclineConfirm && (
+          <p role="alert" className="px-7 pb-3 text-sm text-brand-700">
+            {actionError}
+          </p>
+        )}
         <div className="p-5 px-7 border-t border-ink-200 bg-ink-50 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2">
             <Button
@@ -376,7 +381,6 @@ Upon completing execution, a cryptographically sealed PDF copy of the executed d
               size="sm"
               leftIcon={<X className="w-3.5 h-3.5" />}
               onClick={() => {
-                onDecline();
                 setShowDeclineConfirm(true);
               }}
               data-testid="ersd-decline-button"
@@ -424,15 +428,19 @@ Upon completing execution, a cryptographically sealed PDF copy of the executed d
           <div className="bg-white border border-ink-200 rounded-xl p-6 max-w-md w-full shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-150">
             <h2 className="text-lg font-bold text-ink-900">Decline this agreement?</h2>
             <p className="text-sm text-ink-700 leading-relaxed">
-              If you decline, the document will be permanently voided and the sender will be
-              notified of your decision.
+              If you confirm, this signing workflow will end and the sender may be notified of your
+              decision.
             </p>
 
             <div className="space-y-1">
-              <label className="block text-xs font-semibold text-ink-700">
+              <label
+                htmlFor="ersd-decline-reason"
+                className="block text-xs font-semibold text-ink-700"
+              >
                 Reason for declining (Optional):
               </label>
               <textarea
+                id="ersd-decline-reason"
                 rows={3}
                 value={declineReason}
                 onChange={(e) => setDeclineReason(e.target.value)}
@@ -440,6 +448,11 @@ Upon completing execution, a cryptographically sealed PDF copy of the executed d
                 className="w-full text-xs border border-ink-200 rounded-md p-2.5 bg-white text-ink-900 focus:border-ink-900 focus:outline-none"
               />
             </div>
+            {actionError && (
+              <p role="alert" className="text-sm text-brand-700">
+                {actionError}
+              </p>
+            )}
 
             <div className="flex justify-end gap-2 pt-2 border-t border-ink-100">
               <Button
@@ -450,7 +463,13 @@ Upon completing execution, a cryptographically sealed PDF copy of the executed d
               >
                 Go back
               </Button>
-              <Button type="button" variant="destructive" size="md" onClick={handleConfirmDecline}>
+              <Button
+                type="button"
+                variant="destructive"
+                size="md"
+                isLoading={submitting}
+                onClick={handleConfirmDecline}
+              >
                 Decline agreement
               </Button>
             </div>
