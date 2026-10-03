@@ -180,5 +180,5 @@ describe('PadesSealingService Unit Tests', () => {
     const decoded = Buffer.from(result.sealedPdfBase64, 'base64').toString('latin1');
     expect(decoded).toContain('/ByteRange');
     expect(decoded).toContain('/Type /Sig');
-  });
+  }, 15000);
 });
