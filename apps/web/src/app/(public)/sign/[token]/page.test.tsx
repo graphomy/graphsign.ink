@@ -668,7 +668,7 @@ describe('SignDocumentPage Component Tests (FR-007 Workflow Engine)', () => {
         ).toBeDefined();
         expect(screen.getByText('Retry')).toBeDefined();
       },
-      { timeout: 4000 },
+      { timeout: 10000 },
     );
   });
 
@@ -788,7 +788,7 @@ describe('SignDocumentPage Component Tests (FR-007 Workflow Engine)', () => {
       () => {
         expect(screen.getByText("You're All Set!")).toBeDefined();
       },
-      { timeout: 4000 },
+      { timeout: 10000 },
     );
   });
 

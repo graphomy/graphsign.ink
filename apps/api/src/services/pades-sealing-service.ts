@@ -201,14 +201,28 @@ export class PadesSealingService {
       (typeof options.pdfData === 'string' ? options.pdfData : undefined);
     const existingPdfBytes = options.pdfData instanceof Uint8Array ? options.pdfData : undefined;
 
+    const rawFields = agreement.fields as any;
+    const fieldsList = Array.isArray(rawFields?.fields)
+      ? rawFields.fields
+      : Array.isArray(agreement.fields)
+        ? agreement.fields
+        : [];
+
+    const recipientsList =
+      Array.isArray(agreement.recipients) && agreement.recipients.length > 0
+        ? agreement.recipients
+        : Array.isArray(rawFields?.recipients)
+          ? rawFields.recipients
+          : [];
+
     const assembledPdfBytes = await pdfAssembly.assembleCompletedDocument({
       agreementTitle: agreement.title,
       envelopeId,
       markdownContent: agreement.markdownContent,
       existingPdfBytes,
       existingPdfBase64,
-      fields: (agreement.fields as any)?.fields || [],
-      recipients: (agreement.recipients as any[]) || [],
+      fields: fieldsList,
+      recipients: recipientsList as any[],
       sealDetails: {
         verificationToken,
         verificationUrl,
@@ -322,10 +336,27 @@ export class PadesSealingService {
     };
 
     let seal = sealData as any;
-    if ((this.prisma as any).documentSeal?.create) {
-      seal = await this.prisma.documentSeal.create({
-        data: sealData,
+    if ((this.prisma as any).documentSeal?.findFirst && (this.prisma as any).documentSeal?.create) {
+      const existingSealRecord = await (this.prisma as any).documentSeal.findFirst({
+        where: {
+          OR: [{ agreementId }, { verificationToken }],
+        },
+        orderBy: { createdAt: 'desc' },
       });
+
+      if (existingSealRecord) {
+        seal = await (this.prisma as any).documentSeal.update({
+          where: { id: existingSealRecord.id },
+          data: {
+            ...sealData,
+            id: existingSealRecord.id,
+          },
+        });
+      } else {
+        seal = await (this.prisma as any).documentSeal.create({
+          data: sealData,
+        });
+      }
     }
 
     // Update agreement with sealed PDF container and metadata

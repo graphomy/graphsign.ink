@@ -124,4 +124,32 @@ This agreement shall remain in effect for five years.
     const doc = await PDFDocument.load(resultBytes);
     expect(doc.getPageCount()).toBe(2); // 1 base page + 1 certificate page
   });
+
+  describe('WinAnsi Character Encoding (INK-316)', () => {
+    it('cleanWinAnsi replaces 0x000d carriage returns, newlines, and tabs with spaces', () => {
+      const input =
+        'First Line\r\nSecond Line\rThird Line\tTabbed\u2014EmDash\u2019Apostrophe\u2713Check';
+      const cleaned = service.cleanWinAnsi(input);
+      // Must not contain \r (0x000d), \n (0x000a), \t (0x0009)
+      expect(cleaned).not.toMatch(/[\r\n\t]/);
+      expect(cleaned).toContain('First Line');
+      expect(cleaned).toContain('Second Line');
+      expect(cleaned).toContain("Third Line Tabbed-EmDash'Apostrophe?Check");
+    });
+
+    it('assembles markdown document with Windows CRLF and carriage returns without throwing WinAnsi error', async () => {
+      const crlfMarkdown =
+        '# Document with CRLF\r\n\r\nThis is paragraph one with Windows line endings.\r\n\r\n- Item 1\r\n- Item 2 with \t tab and \r lone carriage return\r\n';
+      const pdfBytes = await service.assembleDocument({
+        agreementTitle: 'CRLF Test Document \r\n Title',
+        envelopeId: 'ENV-CRLF-1',
+        markdownContent: crlfMarkdown,
+      });
+
+      expect(pdfBytes).toBeInstanceOf(Uint8Array);
+      expect(pdfBytes.length).toBeGreaterThan(100);
+      const doc = await PDFDocument.load(pdfBytes);
+      expect(doc.getPageCount()).toBeGreaterThanOrEqual(1);
+    });
+  });
 });

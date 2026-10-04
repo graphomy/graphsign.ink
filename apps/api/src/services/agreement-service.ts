@@ -10,6 +10,7 @@ import {
 } from '../utils/errors.js';
 import type { AuditService } from './audit-service.js';
 import { incrementMinorVersion, bumpToMajorVersion } from '../utils/version-utils.js';
+import { convertDocxToPdf } from '../utils/docx-converter.js';
 import type {
   CreateUploadAgreementInput,
   CreateScratchAgreementInput,
@@ -135,11 +136,40 @@ export class AgreementService {
       input.mimeType === 'text/plain' ||
       input.fileName.toLowerCase().endsWith('.md');
 
+    const isDocx =
+      input.fileName.toLowerCase().endsWith('.docx') ||
+      input.fileName.toLowerCase().endsWith('.doc') ||
+      input.mimeType ===
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+      input.mimeType === 'application/msword';
+
     // PDF / DOCX are active documents at version 1.0; MD is draft at version 0.1
     const status = isMarkdown ? 'DRAFT' : 'ACTIVE';
     const version = isMarkdown ? '0.1' : '1.0';
 
     const agreementId = generateId();
+
+    let fileBase64 = input.fileBase64;
+    let markdownContent = input.markdownContent;
+
+    if (isDocx && input.fileBase64) {
+      try {
+        const rawBase64 = input.fileBase64.includes(',')
+          ? input.fileBase64.split(',')[1]!
+          : input.fileBase64;
+        const docxBuffer = Buffer.from(rawBase64, 'base64');
+        const conversion = await convertDocxToPdf(
+          docxBuffer,
+          input.title,
+          `ENV-${agreementId.replace(/-/g, '').toUpperCase()}`,
+        );
+        fileBase64 = Buffer.from(conversion.pdfBytes).toString('base64');
+        markdownContent = conversion.markdownContent;
+      } catch (convErr) {
+        console.warn('[AGREEMENT_SERVICE] DOCX conversion warning:', (convErr as Error).message);
+      }
+    }
+
     // Simulated storage / PDF conversion URL
     const cleanFileName = input.fileName.toLowerCase().replace(/[^a-z0-9.]/g, '-');
     const pdfFileName = isMarkdown
@@ -162,11 +192,11 @@ export class AgreementService {
         fileName: input.fileName,
         fileSize: input.fileSize,
         mimeType: isMarkdown ? 'text/markdown' : 'application/pdf',
-        markdownContent: input.markdownContent,
+        markdownContent,
         tags: input.tags ? (input.tags as any) : [],
         metadata: {
           ...((input.metadata as any) || {}),
-          ...(input.fileBase64 ? { fileData: input.fileBase64 } : {}),
+          ...(fileBase64 ? { fileData: fileBase64, fileBase64 } : {}),
         },
         version,
         versions: {
@@ -175,7 +205,7 @@ export class AgreementService {
             version,
             title: input.title,
             fileUrl,
-            markdownContent: input.markdownContent,
+            markdownContent,
             changeSummary: isMarkdown
               ? 'Uploaded markdown draft v0.1'
               : 'Uploaded active document v1.0',
