@@ -351,11 +351,9 @@ export function createAgreementRoutes(deps?: AgreementDeps) {
       const meta = (agreement.metadata as Record<string, unknown>) || {};
       let fileData =
         (meta.signedPdfBase64 as string | undefined) ||
-        (meta.sealedPdfBase64 as string | undefined) ||
-        (meta.fileBase64 as string | undefined) ||
-        (meta.fileData as string | undefined);
+        (meta.sealedPdfBase64 as string | undefined);
 
-      if (agreement.status === 'COMPLETED' && !meta.signedPdfBase64 && !meta.sealedPdfBase64) {
+      if (agreement.status === 'COMPLETED' && !fileData) {
         // Self-heal: Agreement completed but sealed PDF was not saved. Attempt sealing now!
         if (prisma) {
           try {
@@ -389,6 +387,10 @@ export function createAgreementRoutes(deps?: AgreementDeps) {
             'The original signed document is unavailable. Retry final sealing instead of regenerating it.',
           );
         }
+      }
+
+      if (!fileData && agreement.status !== 'COMPLETED') {
+        fileData = (meta.fileBase64 as string | undefined) || (meta.fileData as string | undefined);
       }
 
       const formatQuery = c.req.query('format')?.toLowerCase();

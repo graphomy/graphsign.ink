@@ -411,7 +411,7 @@ export class PdfAssemblyService {
       const boxY = pHeight - (field.y / 100) * pHeight - boxH;
 
       // Find matching recipient
-      const matchedRecip =
+      let matchedRecip =
         recipients.find(
           (r) =>
             r.id === field.recipientId ||
@@ -422,21 +422,50 @@ export class PdfAssemblyService {
               (field.recipientId === 'recipient-1' || field.recipientId === 'signer-1')),
         ) || recipients[0];
 
-      if (!matchedRecip) continue;
+      let value: any = undefined;
+      if (matchedRecip) {
+        const fieldsData =
+          typeof matchedRecip.fieldsData === 'string'
+            ? JSON.parse(matchedRecip.fieldsData)
+            : matchedRecip.fieldsData || {};
+        value = fieldsData[field.id];
 
-      let value = matchedRecip.fieldsData?.[field.id];
+        const sigData =
+          typeof matchedRecip.signatureData === 'string'
+            ? JSON.parse(matchedRecip.signatureData)
+            : matchedRecip.signatureData || {};
 
-      // If signature or initials, also check signatureData
-      if (
-        (field.type === 'SIGNATURE' || field.type === 'INITIALS') &&
-        !value &&
-        matchedRecip.signatureData?.data
-      ) {
-        value = matchedRecip.signatureData.data;
+        if ((field.type === 'SIGNATURE' || field.type === 'INITIALS') && !value && sigData?.data) {
+          value = sigData.data;
+        }
+
+        if (field.type === 'DATE' && !value && matchedRecip.signedAt) {
+          value = new Date(matchedRecip.signedAt).toISOString().split('T')[0];
+        }
       }
 
-      if (field.type === 'DATE' && !value && matchedRecip.signedAt) {
-        value = new Date(matchedRecip.signedAt).toISOString().split('T')[0];
+      // Fallback: search across all recipients for field value or signature
+      if (!value) {
+        for (const r of recipients) {
+          const rFields =
+            typeof r.fieldsData === 'string' ? JSON.parse(r.fieldsData) : r.fieldsData || {};
+          if (rFields && rFields[field.id]) {
+            value = rFields[field.id];
+            matchedRecip = r;
+            break;
+          }
+          if (field.type === 'SIGNATURE' || field.type === 'INITIALS') {
+            const rSig =
+              typeof r.signatureData === 'string'
+                ? JSON.parse(r.signatureData)
+                : r.signatureData || {};
+            if (rSig?.data) {
+              value = rSig.data;
+              matchedRecip = r;
+              break;
+            }
+          }
+        }
       }
 
       if (!value) continue;
@@ -463,15 +492,17 @@ export class PdfAssemblyService {
             y: boxY,
             width: boxW,
             height: boxH,
-            opacity: 0.35,
+            opacity: 0.25,
           });
         }
 
-        // Compute inner area positioned within the 2 blue lines (x ~ 26% to 94%, y ~ 16% to 84%)
-        const sigX = boxX + boxW * 0.26;
-        const sigW = boxW * 0.68;
-        const sigY = boxY + boxH * 0.16;
-        const sigH = boxH * 0.68;
+        // Compute inner area positioned within the field box
+        const padX = Math.min(3, boxW * 0.04);
+        const padY = Math.min(3, boxH * 0.04);
+        const sigX = boxX + padX;
+        const sigY = boxY + padY;
+        const sigW = boxW - padX * 2;
+        const sigH = boxH - padY * 2;
 
         if (
           typeof value === 'string' &&
@@ -499,23 +530,42 @@ export class PdfAssemblyService {
           }
         }
 
-        // Fallback: draw bold stylized signature text inside the two blue lines
+        // Fallback: draw bold stylized signature text inside the field box
         let textToDraw = String(value);
         if (textToDraw.includes('<svg') || textToDraw.startsWith('data:image/svg+xml')) {
           const svgMatch = textToDraw.match(/<text[^>]*>(.*?)<\/text>/i);
-          textToDraw = svgMatch ? decodeURIComponent(svgMatch[1]!) : matchedRecip.name || 'Signed';
+          textToDraw = svgMatch ? decodeURIComponent(svgMatch[1]!) : matchedRecip?.name || 'Signed';
         }
-        const cleanText = textToDraw.replace(/[^\x20-\x7E]/g, '') || matchedRecip.name || 'Signed';
+        const cleanText = textToDraw.replace(/[^\x20-\x7E]/g, '') || matchedRecip?.name || 'Signed';
 
+        const fontSize = Math.min(14, Math.max(9, sigH * 0.45));
         page.drawText(cleanText, {
           x: sigX + 4,
-          y: sigY + Math.max(4, sigH / 2 - 5),
-          size: Math.min(13, sigH * 0.55),
+          y: sigY + Math.max(3, sigH / 2 - fontSize / 3),
+          size: fontSize,
           font: helveticaBold,
-          color: rgb(0.08, 0.12, 0.28),
+          color: rgb(0.08, 0.12, 0.32),
+        });
+
+        const signerName = matchedRecip?.name || 'Authorized Signer';
+        const signDate = matchedRecip?.signedAt
+          ? new Date(matchedRecip.signedAt).toISOString().split('T')[0]
+          : new Date().toISOString().split('T')[0];
+        page.drawText(this.cleanWinAnsi(`Signed by ${signerName} (${signDate})`), {
+          x: sigX + 4,
+          y: sigY + 2,
+          size: Math.min(6.5, fontSize * 0.5),
+          font: helvetica,
+          color: rgb(0.4, 0.45, 0.55),
         });
       } else if (field.type === 'INITIALS') {
-        // Initials: drawn directly into bounding box without signature frame or badge
+        const padX = Math.min(2, boxW * 0.05);
+        const padY = Math.min(2, boxH * 0.05);
+        const initX = boxX + padX;
+        const initY = boxY + padY;
+        const initW = boxW - padX * 2;
+        const initH = boxH - padY * 2;
+
         if (
           typeof value === 'string' &&
           value.startsWith('data:image/') &&
@@ -531,10 +581,10 @@ export class PdfAssemblyService {
                 : await pdfDoc.embedPng(imgBuffer);
 
             page.drawImage(embeddedImg, {
-              x: boxX,
-              y: boxY,
-              width: boxW,
-              height: boxH,
+              x: initX,
+              y: initY,
+              width: initW,
+              height: initH,
             });
             continue;
           } catch (err) {
@@ -547,15 +597,16 @@ export class PdfAssemblyService {
           const svgMatch = textToDraw.match(/<text[^>]*>(.*?)<\/text>/i);
           textToDraw = svgMatch
             ? decodeURIComponent(svgMatch[1]!)
-            : matchedRecip.name || 'Initials';
+            : matchedRecip?.name || 'Initials';
         }
         const cleanText =
-          textToDraw.replace(/[^\x20-\x7E]/g, '') || matchedRecip.name || 'Initials';
+          textToDraw.replace(/[^\x20-\x7E]/g, '') || matchedRecip?.name || 'Initials';
 
+        const fontSize = Math.min(13, Math.max(9, initH * 0.5));
         page.drawText(cleanText, {
-          x: boxX + 4,
-          y: boxY + Math.max(4, boxH / 2 - 5),
-          size: 12,
+          x: initX + 4,
+          y: initY + Math.max(3, initH / 2 - fontSize / 3),
+          size: fontSize,
           font: helveticaBold,
           color: rgb(0.08, 0.12, 0.28),
         });
@@ -904,25 +955,42 @@ export class PdfAssemblyService {
     }
     y -= certBoxH + 18;
 
-    // 6. QR Code & Legal Non-Repudiation Footer
+    // 6. QR Code & Legal Non-Repudiation Footer (Pure Vector rendering, zero canvas dependency)
     try {
-      const qrDataUrl = await QRCode.toDataURL(verifyUrl, {
-        width: 140,
-        margin: 1,
-        color: { dark: '#0F172A', light: '#FFFFFF' },
-      });
-      const qrPngBytes = Buffer.from(qrDataUrl.split(',')[1]!, 'base64');
-      const qrImage = await pdfDoc.embedPng(qrPngBytes);
+      const qr = QRCode.create(verifyUrl, { errorCorrectionLevel: 'M' });
+      const modules = qr.modules;
+      const size = modules.size;
+      const qrBoxSize = 72;
+      const cellSize = qrBoxSize / size;
+      const qrStartX = marginX + contentWidth - 80;
+      const qrStartY = y - 76;
 
-      certPage.drawImage(qrImage, {
-        x: marginX + contentWidth - 84,
-        y: y - 76,
-        width: 80,
-        height: 80,
+      // Draw white background backing for QR code
+      certPage.drawRectangle({
+        x: qrStartX - 4,
+        y: qrStartY - 4,
+        width: qrBoxSize + 8,
+        height: qrBoxSize + 8,
+        color: rgb(1, 1, 1),
       });
+
+      // Draw sharp vector QR modules
+      for (let row = 0; row < size; row++) {
+        for (let col = 0; col < size; col++) {
+          if (modules.get(row, col)) {
+            certPage.drawRectangle({
+              x: qrStartX + col * cellSize,
+              y: qrStartY + (size - 1 - row) * cellSize,
+              width: cellSize + 0.1,
+              height: cellSize + 0.1,
+              color: rgb(0.06, 0.09, 0.16),
+            });
+          }
+        }
+      }
 
       certPage.drawText('Scan to Verify Document', {
-        x: marginX + contentWidth - 90,
+        x: marginX + contentWidth - 86,
         y: y - 84,
         size: 6.5,
         font: helveticaBold,

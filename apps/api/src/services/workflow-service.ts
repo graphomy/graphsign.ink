@@ -1166,7 +1166,10 @@ export class WorkflowService {
         );
       }
     }
-    if (!fileData) fileData = (meta.fileBase64 as string) || (meta.fileData as string);
+
+    if (!fileData && agreement.status !== 'COMPLETED' && !seal) {
+      fileData = (meta.fileBase64 as string) || (meta.fileData as string);
+    }
 
     let markdownContent = agreement.markdownContent;
     if (fileData) {
@@ -1408,52 +1411,44 @@ export class WorkflowService {
         userAgent,
       });
 
-      const backgroundSealingAndNotify = async () => {
-        try {
-          sealResult = await this.sealingService.sealAgreement({
-            agreementId: agreement.id,
-            organisationId: agreement.organisationId,
-            userId: agreement.authorId,
-            verificationToken,
-            ipAddress: ip,
-            userAgent,
-          });
-        } catch (sealErr) {
-          console.warn(
-            '[WORKFLOW] Automatic sealing failed on completion:',
-            (sealErr as Error).message,
-            (sealErr as Error).stack,
-          );
-        }
-
-        const finalToken = sealResult?.verificationToken || verificationToken;
-        await this.sendCompletionNotifications(
-          agreement.id,
-          agreement.organisationId,
-          finalToken,
-        ).catch((err) => {
-          console.warn('[WORKFLOW] Completion notification error:', (err as Error).message);
+      try {
+        sealResult = await this.sealingService.sealAgreement({
+          agreementId: agreement.id,
+          organisationId: agreement.organisationId,
+          userId: agreement.authorId,
+          verificationToken,
+          ipAddress: ip,
+          userAgent,
         });
-      };
+      } catch (sealErr) {
+        console.error(
+          '[WORKFLOW] Automatic sealing failed on completion:',
+          (sealErr as Error).message,
+          (sealErr as Error).stack,
+        );
+      }
+
+      const finalToken = sealResult?.verificationToken || verificationToken;
+      const sendNotifs = () =>
+        this.sendCompletionNotifications(agreement.id, agreement.organisationId, finalToken).catch(
+          (err) => {
+            console.warn('[WORKFLOW] Completion notification error:', (err as Error).message);
+          },
+        );
 
       if (backgroundRunner) {
-        backgroundRunner(backgroundSealingAndNotify());
-        return {
-          success: true,
-          isCompleted: true,
-          currentStep: agreement.currentStep,
-          verificationToken,
-        };
+        backgroundRunner(sendNotifs());
       } else {
-        await backgroundSealingAndNotify();
-        return {
-          success: true,
-          isCompleted: true,
-          currentStep: agreement.currentStep,
-          verificationToken: sealResult?.verificationToken || verificationToken,
-          documentHash: sealResult?.documentHash,
-        };
+        await sendNotifs();
       }
+
+      return {
+        success: true,
+        isCompleted: true,
+        currentStep: agreement.currentStep,
+        verificationToken: finalToken,
+        documentHash: sealResult?.documentHash,
+      };
     } else if (agreement.signingOrder === 'SEQUENTIAL') {
       // Advance to next sequential tier if current tier is finished
       const currentTierSigners = activeSigners.filter(
