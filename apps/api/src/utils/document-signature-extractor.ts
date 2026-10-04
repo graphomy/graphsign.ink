@@ -125,15 +125,27 @@ export class DocumentSignatureExtractor {
     const tsaMatch = text.match(/%TSA:\s*([A-Za-z0-9+/=]+)/);
     const metaMatch = text.match(/%META:\s*([A-Za-z0-9+/=]+)/);
 
-    // Also look for token pattern in general PDF text (e.g. GS-12345678)
-    const genericTokenMatch = text.match(/GS-[0-9a-fA-F]{8}/);
+    // Also look for token pattern in general PDF text (e.g. GS-12345678 or verify URL)
+    const genericTokenMatch =
+      text.match(/graphsign\.ink\/verify\/(GS-[0-9a-fA-F]{8})/i) ||
+      text.match(/GS-[0-9a-fA-F]{8}/i);
 
-    let verificationToken = tokenMatch?.[1] || genericTokenMatch?.[0] || null;
+    let verificationToken =
+      tokenMatch?.[1] || genericTokenMatch?.[1] || genericTokenMatch?.[0] || null;
     let signatureBase64 = sigMatch?.[1] || null;
     let timestampToken = tsaMatch?.[1] || null;
     let certificatePem: string | null = null;
     let algorithm: string | null = null;
     let signerDetails: ExtractedSignerDetails | null = null;
+
+    // Check for standard PDF /Contents <hex> signature
+    const contentsMatch = text.match(/\/Contents\s*<([0-9a-fA-F]+)>/);
+    if (contentsMatch && contentsMatch[1]) {
+      const cleanHex = contentsMatch[1].replace(/0+$/, '');
+      if (cleanHex.length > 0 && !signatureBase64) {
+        signatureBase64 = Buffer.from(cleanHex, 'hex').toString('base64');
+      }
+    }
 
     if (metaMatch?.[1]) {
       try {
@@ -163,7 +175,14 @@ export class DocumentSignatureExtractor {
     }
     const signedContentDigest = await sha256(new Uint8Array(preSealBytes));
 
-    const hasSignature = !!(tokenMatch || sigMatch || metaMatch);
+    const hasSignature = !!(
+      tokenMatch ||
+      sigMatch ||
+      metaMatch ||
+      contentsMatch ||
+      text.includes('/ByteRange') ||
+      text.includes('/SubFilter')
+    );
 
     return {
       format: 'pdf',

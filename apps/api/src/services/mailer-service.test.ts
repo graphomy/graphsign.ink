@@ -158,6 +158,37 @@ describe('MailerService Unit Tests (INK-107 to INK-116)', () => {
         }),
       );
     });
+
+    it('renders accurate compliance text in sendAgreementCompletedEmail (INK-317)', async () => {
+      const mockResendInstance = {
+        emails: {
+          send: vi.fn().mockResolvedValue({ data: { id: 'email-comp-1' }, error: null }),
+        },
+      };
+
+      const mailer = new ResendMailerService(
+        're_test_key_123',
+        'noreply@graphsign.ink',
+        'http://localhost:3000',
+        mockPrisma,
+      );
+      (mailer as any).resend = mockResendInstance;
+
+      await mailer.sendAgreementCompletedEmail(
+        'signer@example.com',
+        'Signer 1',
+        'Master Agreement',
+        'http://localhost:3000/download',
+        'http://localhost:3000/verify/token-1',
+        { organisationId: 'org-1', agreementId: 'ag-1' },
+      );
+
+      expect(mockResendInstance.emails.send).toHaveBeenCalledTimes(1);
+      const callArg = (mockResendInstance.emails.send.mock.calls[0] as any)[0];
+      expect(callArg.html).toContain('ESIGN, UETA, and eIDAS');
+      expect(callArg.html).toContain('cryptographically sealed with a tamper-evident audit trail');
+      expect(callArg.html).not.toContain('ETSI EN 319 142 PAdES Baseline-T');
+    });
   });
 
   describe('createMailerService', () => {

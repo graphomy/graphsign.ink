@@ -73,11 +73,9 @@ export class PdfSignerEngine {
     firstPage.node.addAnnot(widgetRef);
 
     // Register signature in document /AcroForm
-    const acroForm = pdfDoc.context.obj({
-      Fields: [widgetRef],
-      SigFlags: 3, // SignaturesExist | AppendOnly
-    });
-    pdfDoc.catalog.set(PDFName.of('AcroForm'), acroForm);
+    const acroForm = pdfDoc.catalog.getOrCreateAcroForm();
+    acroForm.dict.set(PDFName.of('SigFlags'), pdfDoc.context.obj(3));
+    acroForm.addField(widgetRef);
   }
 
   /**
