@@ -536,7 +536,7 @@ export class ResendMailerService implements MailerService {
             }
           </div>
           <p style="color: #666; font-size: 12px; line-height: 1.4; margin-top: 20px;">
-            The sealed document complies with ETSI EN 319 142 PAdES Baseline-T standards and includes an RFC 3161 cryptographic timestamp.
+            This document has been legally executed in compliance with ESIGN, UETA, and eIDAS standards, and cryptographically sealed with a tamper-evident audit trail and digital timestamp verification.
           </p>
         </div>
       `,
