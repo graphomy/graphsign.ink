@@ -199,8 +199,9 @@ export class PdfAssemblyService {
 
     let inCodeBlock = false;
 
-    // Process lines of markdown
-    const lines = (markdown || '').split('\n');
+    // Normalize line endings and process lines of markdown
+    const normalizedMarkdown = (markdown || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    const lines = normalizedMarkdown.split('\n');
     for (const rawLine of lines) {
       const line = rawLine.trim();
 
@@ -1030,6 +1031,9 @@ export class PdfAssemblyService {
     if (!text) return '';
     return (
       text
+        // Normalize CRLF, LF, CR, and tabs to standard spaces
+        .replace(/\r\n/g, ' ')
+        .replace(/[\r\n\t]/g, ' ')
         .replace(/[\u2318]/g, 'Cmd') // ⌘
         .replace(/[\u21E7]/g, 'Shift') // ⇧
         .replace(/[\u2325]/g, 'Option') // ⌥
@@ -1040,8 +1044,8 @@ export class PdfAssemblyService {
         .replace(/[\u2022\u2023\u25E6\u2043\u2219]/g, '*') // bullet variants
         .replace(/[\u2026]/g, '...') // …
         .replace(/[\u00A0]/g, ' ') // non-breaking space
-        // Replace any remaining character outside WinAnsi / ASCII printable range
-        .replace(/[^\x20-\x7E\xA0-\xFF\n\r\t]/g, '?')
+        // Replace any remaining character outside WinAnsi printable range
+        .replace(/[^\x20-\x7E\xA0-\xFF]/g, '?')
     );
   }
 
@@ -1050,8 +1054,9 @@ export class PdfAssemblyService {
    * Splits words if single word exceeds maxWidth.
    */
   private wrapText(text: string, maxWidth: number, fontSize: number, font: any): string[] {
-    const cleaned = this.cleanWinAnsi(text);
-    const words = cleaned.split(' ');
+    const cleaned = this.cleanWinAnsi(text).replace(/\n/g, ' ').trim();
+    if (!cleaned) return [''];
+    const words = cleaned.split(/\s+/).filter(Boolean);
     const lines: string[] = [];
     let currentLine = '';
 
