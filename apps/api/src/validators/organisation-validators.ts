@@ -134,6 +134,18 @@ export const updateMemberStatusSchema = z.object({
   status: z.enum(['active', 'suspended']),
 });
 
+export const updateDomainOnboardingPolicySchema = z.object({
+  policy: z.enum(['admin_approval', 'automatic', 'disabled']),
+});
+
+export const reviewJoinRequestSchema = z.object({
+  decision: z.enum(['approve', 'reject']),
+});
+
+export const superAdminAssignAdminSchema = z.object({
+  userId: z.string().uuid('Invalid user ID'),
+});
+
 export type CreateOrganisationInput = z.infer<typeof createOrganisationSchema>;
 export type InviteMemberInput = z.infer<typeof inviteMemberSchema>;
 export type AcceptInvitationInput = z.infer<typeof acceptInvitationSchema>;
@@ -149,3 +161,6 @@ export type AuditLogQueryInput = z.infer<typeof auditLogQuerySchema>;
 export type AuditLogExportInput = z.infer<typeof auditLogExportSchema>;
 export type UpdateMemberStatusInput = z.infer<typeof updateMemberStatusSchema>;
 export type UpgradeToTeamsInput = z.infer<typeof upgradeToTeamsSchema>;
+export type UpdateDomainOnboardingPolicyInput = z.infer<typeof updateDomainOnboardingPolicySchema>;
+export type ReviewJoinRequestInput = z.infer<typeof reviewJoinRequestSchema>;
+export type SuperAdminAssignAdminInput = z.infer<typeof superAdminAssignAdminSchema>;

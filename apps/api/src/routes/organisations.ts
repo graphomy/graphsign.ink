@@ -20,6 +20,9 @@ import {
   auditLogExportSchema,
   updateMemberStatusSchema,
   upgradeToTeamsSchema,
+  updateDomainOnboardingPolicySchema,
+  reviewJoinRequestSchema,
+  superAdminAssignAdminSchema,
 } from '../validators/organisation-validators.js';
 import { OrganisationService } from '../services/organisation-service.js';
 import type { MailerService } from '../services/mailer-service.js';
@@ -560,9 +563,100 @@ export function createOrganisationRoutes(deps?: OrganisationDeps) {
 
       const payload = c.get('userPayload');
       const service = getService(c);
-      await service.updateMemberRole(payload.orgId, payload.sub, targetUserId, parsed.data.role);
+      await service.updateMemberRole(
+        payload.orgId,
+        payload.sub,
+        targetUserId,
+        parsed.data.role,
+        (body as any).password,
+      );
 
       return c.json({ message: 'Member role updated successfully.' });
+    },
+  );
+
+  // INK-318: GET /api/v1/organisations/me/admins (List active workspace admins for contact)
+  orgs.get('/me/admins', jwtAuth(), enforceTenantActiveStatus(), async (c) => {
+    const payload = c.get('userPayload');
+    const service = getService(c);
+    const admins = await service.getAdmins(payload.orgId);
+    return c.json(admins);
+  });
+
+  // INK-318: PATCH /api/v1/organisations/me/onboarding-policy (Configure domain onboarding policy)
+  orgs.patch(
+    '/me/onboarding-policy',
+    jwtAuth(),
+    enforceTenantActiveStatus(),
+    requireRole(['org_admin', 'super_admin']),
+    async (c) => {
+      const body = await c.req.json().catch(() => null);
+      if (!body) throw new ValidationError('Request body is required.');
+
+      const parsed = updateDomainOnboardingPolicySchema.safeParse(body);
+      if (!parsed.success) {
+        throw new ValidationError(
+          'Invalid policy. Must be admin_approval, automatic, or disabled.',
+        );
+      }
+
+      const payload = c.get('userPayload');
+      const service = getService(c);
+      const updated = await service.updateDomainOnboardingPolicy(
+        payload.orgId,
+        payload.sub,
+        parsed.data.policy,
+      );
+
+      return c.json({
+        domainOnboardingPolicy: updated.domainOnboardingPolicy,
+        message: 'Domain onboarding policy updated successfully.',
+      });
+    },
+  );
+
+  // INK-318: GET /api/v1/organisations/me/join-requests (List pending join requests)
+  orgs.get(
+    '/me/join-requests',
+    jwtAuth(),
+    enforceTenantActiveStatus(),
+    requireRole(['org_admin', 'super_admin']),
+    async (c) => {
+      const payload = c.get('userPayload');
+      const service = getService(c);
+      const requests = await service.listJoinRequests(payload.orgId);
+      return c.json(requests);
+    },
+  );
+
+  // INK-318: POST /api/v1/organisations/me/join-requests/:id/review (Approve or reject join request)
+  orgs.post(
+    '/me/join-requests/:id/review',
+    jwtAuth(),
+    enforceTenantActiveStatus(),
+    requireRole(['org_admin', 'super_admin']),
+    async (c) => {
+      const requestId = c.req.param('id');
+      const body = await c.req.json().catch(() => null);
+      if (!body) throw new ValidationError('Request body is required.');
+
+      const parsed = reviewJoinRequestSchema.safeParse(body);
+      if (!parsed.success)
+        throw new ValidationError('Invalid decision. Must be approve or reject.');
+
+      const payload = c.get('userPayload');
+      const service = getService(c);
+      const result = await service.reviewJoinRequest(
+        payload.orgId,
+        payload.sub,
+        requestId,
+        parsed.data.decision,
+      );
+
+      return c.json({
+        status: result.status,
+        message: `Join request ${parsed.data.decision}d successfully.`,
+      });
     },
   );
 
@@ -730,41 +824,88 @@ export function createOrganisationRoutes(deps?: OrganisationDeps) {
     return c.json(domains);
   });
 
-  orgs.post('/domains', jwtAuth(), enforceTenantActiveStatus(), async (c) => {
-    const body = await c.req.json().catch(() => null);
-    if (!body) throw new ValidationError('Request body is required.');
+  orgs.post(
+    '/domains',
+    jwtAuth(),
+    enforceTenantActiveStatus(),
+    requireRole(['org_admin', 'super_admin']),
+    async (c) => {
+      const body = await c.req.json().catch(() => null);
+      if (!body) throw new ValidationError('Request body is required.');
 
-    const parsed = addDomainSchema.safeParse(body);
-    if (!parsed.success) {
-      const firstError = parsed.error.issues[0];
-      throw new ValidationError(firstError?.message ?? 'Invalid domain name.');
-    }
+      const parsed = addDomainSchema.safeParse(body);
+      if (!parsed.success) {
+        const firstError = parsed.error.issues[0];
+        throw new ValidationError(firstError?.message ?? 'Invalid domain name.');
+      }
 
-    const payload = c.get('userPayload');
-    const service = getService(c);
-    const domainRecord = await service.addDomain(payload.orgId, payload.sub, parsed.data);
+      const payload = c.get('userPayload');
+      const service = getService(c);
+      const domainRecord = await service.addDomain(payload.orgId, payload.sub, parsed.data);
 
-    return c.json(domainRecord, 201);
-  });
+      return c.json(domainRecord, 201);
+    },
+  );
 
-  orgs.post('/domains/:id/verify', jwtAuth(), enforceTenantActiveStatus(), async (c) => {
-    const domainId = c.req.param('id');
-    const payload = c.get('userPayload');
-    const service = getService(c);
-    const verified = await service.verifyDomain(payload.orgId, domainId, payload.sub);
+  orgs.post(
+    '/domains/:id/verify',
+    jwtAuth(),
+    enforceTenantActiveStatus(),
+    requireRole(['org_admin', 'super_admin']),
+    async (c) => {
+      const domainId = c.req.param('id');
+      const payload = c.get('userPayload');
+      const service = getService(c);
+      const verified = await service.verifyDomain(payload.orgId, domainId, payload.sub);
 
-    return c.json({
-      id: verified.id,
-      domain: verified.domain,
-      status: verified.status,
-      verifiedAt: verified.verifiedAt?.toISOString(),
-      message: 'Domain verification successful.',
-    });
-  });
+      return c.json({
+        id: verified.id,
+        domain: verified.domain,
+        status: verified.status,
+        verifiedAt: verified.verifiedAt?.toISOString(),
+        message: 'Domain verification successful.',
+      });
+    },
+  );
+
+  orgs.delete(
+    '/domains/:id',
+    jwtAuth(),
+    enforceTenantActiveStatus(),
+    requireRole(['org_admin', 'super_admin']),
+    async (c) => {
+      const domainId = c.req.param('id');
+      const payload = c.get('userPayload');
+      const service = getService(c);
+      await service.removeDomain(payload.orgId, domainId, payload.sub);
+
+      return c.json({ message: 'Domain removed successfully.' });
+    },
+  );
 
   /**
    * System Super Admin Endpoints
    */
+  orgs.post(
+    '/admin/organisations/:id/assign-admin',
+    jwtAuth(),
+    requireRole(['super_admin']),
+    async (c) => {
+      const orgId = c.req.param('id');
+      const body = await c.req.json().catch(() => null);
+      if (!body) throw new ValidationError('Request body is required.');
+
+      const parsed = superAdminAssignAdminSchema.safeParse(body);
+      if (!parsed.success) throw new ValidationError('Invalid target user ID.');
+
+      const payload = c.get('userPayload');
+      const service = getService(c);
+      await service.superAdminAssignAdmin(orgId, payload.sub, parsed.data.userId);
+
+      return c.json({ message: 'Administrator assigned successfully.' });
+    },
+  );
+
   orgs.post('/:id/suspend', jwtAuth(), requireRole(['super_admin']), async (c) => {
     const orgId = c.req.param('id');
     const body = await c.req.json().catch(() => ({}));
