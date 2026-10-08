@@ -56,6 +56,7 @@ export interface LoginResult {
   id?: string;
   email?: string;
   status?: string;
+  role?: string;
   token?: string;
   organisationId?: string;
   mfaRequired?: boolean;
@@ -479,6 +480,7 @@ export class AuthService {
       email: user.email,
       status: user.status,
       token: sessionToken,
+      role: activeRole,
       organisationId: org.id,
     };
   }
@@ -560,6 +562,7 @@ export class AuthService {
       email: user.email,
       status: user.status,
       token: sessionToken,
+      role: activeRole,
       organisationId: org.id,
     };
   }

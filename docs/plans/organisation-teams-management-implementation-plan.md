@@ -9,6 +9,7 @@
 ## 1. Architecture Overview & Core Tenets
 
 ### 1.1 Core Principles
+
 1. **Domain Authority vs Mailbox Access**: Email verification confirms control over an individual inbox. It does NOT grant authority over an entire company domain. Domain-wide auto-membership requires cryptographic or DNS TXT ownership proof.
 2. **Atomic State & Zero Race Conditions**: Organisation creation, first admin assignment, member role changes, and account deletion must execute within transactional boundaries with row locks (`SELECT ... FOR UPDATE`) to prevent duplicate organisations, orphaned workspaces, or zero-admin states.
 3. **Strict Multi-Tenant Isolation**: Personal user assets (agreements, templates, signing certificates) belong to the individual's personal workspace. Joining a company Teams organisation MUST NOT expose or transfer existing personal data.
@@ -152,6 +153,7 @@ model OrganisationJoinRequest {
 ### 3.1 Section 1: Organisation Creation & First Administrator
 
 #### Requirements Breakdown
+
 1. **Email Verification Prerequisite**: User cannot enable Teams or create an organisation until `User.emailVerified === true`. If unverified, API returns `403 FORBIDDEN` with code `EMAIL_NOT_VERIFIED`.
 2. **First Eligible User Becomes Admin**: If no organisation exists for that company domain, the first eligible verified user who triggers Teams enablement creates the organisation and receives the `org_admin` role.
 3. **Proof of Domain Ownership**: Email verification does NOT grant domain auto-join authority. Automatic domain-based membership is disabled by default until proof of domain ownership (DNS TXT record: `graphsign-verify=<token>`) is validated. Once verified, `isImmutable = true` and the domain cannot be edited or modified.
@@ -161,12 +163,26 @@ model OrganisationJoinRequest {
 5. **Disposable & Public Provider Blocklist**: Personal email providers (gmail.com, yahoo.com, hotmail.com, outlook.com, icloud.com, proton.me, etc.) and disposable email domains (mailinator.com, tempmail.com, etc.) are strictly prohibited from enabling domain-based Teams onboarding or registering company domains.
 
 #### Implementation Logic
+
 ```typescript
 // apps/api/src/utils/domain-validator.ts
 const BLOCKED_DOMAINS = new Set([
-  'gmail.com', 'googlemail.com', 'yahoo.com', 'ymail.com', 'hotmail.com',
-  'outlook.com', 'live.com', 'icloud.com', 'me.com', 'aol.com', 'proton.me',
-  'protonmail.com', 'zoho.com', 'mail.com', 'gmx.com', 'yandex.com'
+  'gmail.com',
+  'googlemail.com',
+  'yahoo.com',
+  'ymail.com',
+  'hotmail.com',
+  'outlook.com',
+  'live.com',
+  'icloud.com',
+  'me.com',
+  'aol.com',
+  'proton.me',
+  'protonmail.com',
+  'zoho.com',
+  'mail.com',
+  'gmx.com',
+  'yandex.com',
 ]);
 
 export function isPersonalOrDisposableDomain(domain: string): boolean {
@@ -178,6 +194,7 @@ export function isPersonalOrDisposableDomain(domain: string): boolean {
 ```
 
 #### Atomic Creation Sequence
+
 ```sql
 -- Transaction with PostgreSQL advisory lock
 BEGIN;
@@ -195,6 +212,7 @@ COMMIT;
 ### 3.2 Section 2: Joining an Existing Organisation
 
 #### Requirements Breakdown
+
 1. **Verified Domain Match Post Email Verification**: When a user verifies their email (e.g., `user@acme.com`), the system checks for an existing organisation with `verifiedDomain === 'acme.com'`.
 2. **Onboarding Policies**:
    - `admin_approval` (Default, Safe): User is enrolled in `pending_approval` state. An `OrganisationJoinRequest` record is generated. Workspace admins receive notification and can approve or reject in `/settings/organisation?tab=members`.
@@ -209,8 +227,9 @@ COMMIT;
 ### 3.3 Section 3: Existing Accounts & Invitations
 
 #### Requirements Breakdown
+
 1. **Existing Individual User Prompt**: If an existing user with an individual workspace has email `@acme.com` and Acme Corp verifies its domain:
-   - On login or dashboard visit, a non-intrusive modal/banner displays: *"Acme Corp has a company workspace on GraphSign. Would you like to request to join?"*
+   - On login or dashboard visit, a non-intrusive modal/banner displays: _"Acme Corp has a company workspace on GraphSign. Would you like to request to join?"_
 2. **Strict Data & Asset Isolation**:
    - Joining a company organisation MUST NOT expose or transfer existing personal agreements, personal templates, drafts, or private signing keys.
    - Multi-tenant model: User maintains their personal `Organisation` (`tenantId`), and gains an active membership in the company `Organisation` via `UserOrganisation`.
@@ -228,21 +247,23 @@ COMMIT;
 ### 3.4 Section 4: Roles & Administrator Management
 
 #### Explicit Permission Matrix
-| Permission / Capability | `super_admin` | `org_admin` | `member` |
-| :--- | :---: | :---: | :---: |
-| Invite / Remove Members | Yes | Yes | No |
-| Suspend / Unsuspend Members | Yes | Yes | No |
-| Promote to Admin / Demote | Yes | Yes | No |
-| View / Edit Org Settings & Branding | Yes | Yes | Read-Only |
-| View / Verify Custom Domains | Yes | Yes | Read-Only |
-| View Org Audit Logs | Yes | Yes | No |
-| Manage Teams & Custom Roles | Yes | Yes | No |
-| Create, Edit, Send Agreements | Yes | Yes | Yes |
-| Sign Assigned Agreements | Yes | Yes | Yes |
-| Create & Use Templates | Yes | Yes | Yes |
-| Override Admin Assignment | Yes (Global) | No | No |
+
+| Permission / Capability             | `super_admin` | `org_admin` | `member`  |
+| :---------------------------------- | :-----------: | :---------: | :-------: |
+| Invite / Remove Members             |      Yes      |     Yes     |    No     |
+| Suspend / Unsuspend Members         |      Yes      |     Yes     |    No     |
+| Promote to Admin / Demote           |      Yes      |     Yes     |    No     |
+| View / Edit Org Settings & Branding |      Yes      |     Yes     | Read-Only |
+| View / Verify Custom Domains        |      Yes      |     Yes     | Read-Only |
+| View Org Audit Logs                 |      Yes      |     Yes     |    No     |
+| Manage Teams & Custom Roles         |      Yes      |     Yes     |    No     |
+| Create, Edit, Send Agreements       |      Yes      |     Yes     |    Yes    |
+| Sign Assigned Agreements            |      Yes      |     Yes     |    Yes    |
+| Create & Use Templates              |      Yes      |     Yes     |    Yes    |
+| Override Admin Assignment           | Yes (Global)  |     No      |    No     |
 
 #### Administrator Safeguards
+
 1. **Step-Up Authentication for Admin Promotion**:
    - Promoting any user to `org_admin` requires recent re-authentication (password verification or session `auth_time` < 15 minutes).
    - Requires explicit confirmation modal acknowledging elevated workspace privileges.
@@ -251,12 +272,12 @@ COMMIT;
    - Suspended admins (`status === 'suspended'`) DO NOT count toward the minimum admin threshold.
 3. **Audit Trail Invariant**:
    - All role and membership modifications log append-only hash-chained events:
-     * `USER_PROMOTED_TO_ADMIN`
-     * `USER_DEMOTED_FROM_ADMIN`
-     * `USER_SUSPENDED`
-     * `USER_UNSUSPENDED`
-     * `USER_REMOVED_FROM_ORGANISATION`
-     * `ADMIN_ASSIGNED_BY_SUPERADMIN`
+     - `USER_PROMOTED_TO_ADMIN`
+     - `USER_DEMOTED_FROM_ADMIN`
+     - `USER_SUSPENDED`
+     - `USER_UNSUSPENDED`
+     - `USER_REMOVED_FROM_ORGANISATION`
+     - `ADMIN_ASSIGNED_BY_SUPERADMIN`
 4. **Super Admin Break-Glass Recovery**:
    - Platform `super_admin` (`kunal@graphomy.com` or `SUPERADMIN_ID`) can assign an admin to any organisation via `/api/v1/admin/organisations/:id/assign-admin` in emergency/abandoned workspace scenarios.
 
@@ -265,6 +286,7 @@ COMMIT;
 ### 3.5 Section 5: Organisation Settings Enforcement & UI Lockdown
 
 #### Requirements Breakdown
+
 1. **API & UI RBAC Enforcement**:
    - Only `org_admin` and `super_admin` can execute `PATCH /api/v1/organisations/:id`, `PUT /branding`, `POST /domains`, `POST /teams`, etc.
    - Enforce via Hono middleware: `requireRole(['org_admin', 'super_admin'])`.
@@ -276,15 +298,16 @@ COMMIT;
      > **"Only an organisation admin can change this setting. Please contact your workspace administrator."**
 4. **Contact Admin Directory**:
    - UI provides a "Contact Administrator" modal accessible to members showing:
-     * Admin Name and Avatar
-     * Work Email address (clickable `mailto:`)
-     * Quick copy email button
+     - Admin Name and Avatar
+     - Work Email address (clickable `mailto:`)
+     - Quick copy email button
 
 ---
 
 ### 3.6 Section 6: Organisation-Wide Configuration & Brand Immutability
 
 #### Requirements Breakdown
+
 1. **Single Source of Truth**:
    - Organisation branding (logo, colors, company address, sender name, footer) is stored on `Organisation` and shared across all members.
    - Outbound transactional emails, signing invites, and agreement headers automatically inherit organisation branding.
@@ -302,6 +325,7 @@ COMMIT;
 ### 3.7 Section 7: Minimum Administrator Protection & Account Deletion
 
 #### Transactional Enforcement
+
 Every active organisation with active members MUST have at least one active administrator.
 Enforce via atomic transaction and row lock:
 
@@ -336,7 +360,7 @@ const totalActiveMembers = await tx.user.count({
 if (isTargetUserLastAdmin) {
   if (totalActiveMembers > 1) {
     throw new BadRequestError(
-      'Cannot delete account or demote. You are the only active administrator. Please promote another active member to administrator first.'
+      'Cannot delete account or demote. You are the only active administrator. Please promote another active member to administrator first.',
     );
   } else {
     // Target user is the sole remaining member: Allow account soft deletion
@@ -350,6 +374,7 @@ if (isTargetUserLastAdmin) {
 ```
 
 This check applies universally to:
+
 - Account deletion (`POST /api/v1/auth/delete-account`)
 - Role demotion (`PATCH /api/v1/organisations/:id/members/:userId/role`)
 - Member suspension (`PATCH /api/v1/organisations/:id/members/:userId/status`)
@@ -361,11 +386,12 @@ This check applies universally to:
 ### 3.8 Section 8: Soft Deletion, Retained Records & Compliance Retention
 
 #### Requirements Breakdown
+
 1. **Immediate Revocation (Operational Soft Deletion)**:
    - When account deletion is confirmed:
-     * Set `User.deletedAt = new Date()`, `User.status = 'deleted'`.
-     * Revoke all active sessions: delete all `RefreshSession` records for user.
-     * Revoke API tokens and active JWTs.
+     - Set `User.deletedAt = new Date()`, `User.status = 'deleted'`.
+     - Revoke all active sessions: delete all `RefreshSession` records for user.
+     - Revoke API tokens and active JWTs.
 2. **Asset Handover & In-Flight Work**:
    - **Draft Envelopes / Unsent Agreements**: Handed over to remaining active organisation admin or marked `archived_on_creator_deletion`.
    - **In-Flight Envelopes (Pending Signatures)**: Preserved. External signers can still complete their signatures. Notifications route to backup admin.
@@ -381,36 +407,37 @@ This check applies universally to:
 
 ## 4. API Specification & Endpoints
 
-| Method | Endpoint | Access / Auth | Description |
-| :--- | :--- | :--- | :--- |
-| `POST` | `/api/v1/organisations/enable-teams` | Verified User | Converts workspace to Teams or initiates new Teams org with atomic domain locking. |
-| `POST` | `/api/v1/organisations/domains` | `org_admin` | Registers custom domain, returns DNS TXT verification token. Rejects public/disposable domains. |
-| `POST` | `/api/v1/organisations/domains/:id/verify` | `org_admin` | Queries DNS TXT record. On success, marks domain verified and sets immutable lock. |
-| `PATCH` | `/api/v1/organisations/me/onboarding-policy` | `org_admin` | Sets domain onboarding policy (`admin_approval` \| `automatic` \| `disabled`). |
-| `GET` | `/api/v1/organisations/me/join-requests` | `org_admin` | Lists pending join requests for verified domain. |
-| `POST` | `/api/v1/organisations/me/join-requests/:id/review` | `org_admin` | Approves or rejects a user join request. |
-| `GET` | `/api/v1/organisations/me/admins` | Any Member | Returns list of active administrators (names, avatars, emails) for member contact. |
-| `PATCH` | `/api/v1/organisations/me/members/:id/role` | `org_admin` (Re-auth) | Updates member role. Requires recent re-authentication when promoting to admin. |
-| `DELETE` | `/api/v1/organisations/me/members/:id` | `org_admin` | Removes member with transactional minimum admin verification. |
-| `POST` | `/api/v1/auth/delete-account` | Authenticated User | Soft deletes account with password verification and transactional minimum admin protection. |
-| `POST` | `/api/v1/admin/organisations/:id/assign-admin` | `super_admin` | Emergency super admin assignment of organisation administrator. |
+| Method   | Endpoint                                            | Access / Auth         | Description                                                                                     |
+| :------- | :-------------------------------------------------- | :-------------------- | :---------------------------------------------------------------------------------------------- |
+| `POST`   | `/api/v1/organisations/enable-teams`                | Verified User         | Converts workspace to Teams or initiates new Teams org with atomic domain locking.              |
+| `POST`   | `/api/v1/organisations/domains`                     | `org_admin`           | Registers custom domain, returns DNS TXT verification token. Rejects public/disposable domains. |
+| `POST`   | `/api/v1/organisations/domains/:id/verify`          | `org_admin`           | Queries DNS TXT record. On success, marks domain verified and sets immutable lock.              |
+| `PATCH`  | `/api/v1/organisations/me/onboarding-policy`        | `org_admin`           | Sets domain onboarding policy (`admin_approval` \| `automatic` \| `disabled`).                  |
+| `GET`    | `/api/v1/organisations/me/join-requests`            | `org_admin`           | Lists pending join requests for verified domain.                                                |
+| `POST`   | `/api/v1/organisations/me/join-requests/:id/review` | `org_admin`           | Approves or rejects a user join request.                                                        |
+| `GET`    | `/api/v1/organisations/me/admins`                   | Any Member            | Returns list of active administrators (names, avatars, emails) for member contact.              |
+| `PATCH`  | `/api/v1/organisations/me/members/:id/role`         | `org_admin` (Re-auth) | Updates member role. Requires recent re-authentication when promoting to admin.                 |
+| `DELETE` | `/api/v1/organisations/me/members/:id`              | `org_admin`           | Removes member with transactional minimum admin verification.                                   |
+| `POST`   | `/api/v1/auth/delete-account`                       | Authenticated User    | Soft deletes account with password verification and transactional minimum admin protection.     |
+| `POST`   | `/api/v1/admin/organisations/:id/assign-admin`      | `super_admin`         | Emergency super admin assignment of organisation administrator.                                 |
 
 ---
 
 ## 5. Frontend & UI/UX Architecture (`apps/web`)
 
 ### 5.1 Settings Navigation & Tab Layout (`/settings/organisation`)
+
 - **Role Detection**: Query user role on load (`isAdmin = userRole === 'org_admin' || userRole === 'super_admin'`).
 - **Read-Only Mode for Members**:
-  - Render a top-level banner for members: *"You are viewing organisation settings in read-only mode."*
+  - Render a top-level banner for members: _"You are viewing organisation settings in read-only mode."_
   - Add "Need to make changes? [Contact Workspace Administrator]" trigger button opening `ContactAdminModal`.
   - Disable input fields, selects, and action buttons for non-admins.
 - **Admin Promotion Modal with Re-Authentication**:
-  - Modal prompts: *"Promoting to Administrator requires password confirmation."*
+  - Modal prompts: _"Promoting to Administrator requires password confirmation."_
   - Calls step-up verification endpoint before granting admin rights.
 - **Domain Verification Card**:
   - Displays DNS TXT record requirements (`Host: @`, `Type: TXT`, `Value: graphsign-verify=<token>`).
-  - Once verified, displays green badge **"Verified & Locked"** with text: *"Domain verified. Domain name cannot be modified."*
+  - Once verified, displays green badge **"Verified & Locked"** with text: _"Domain verified. Domain name cannot be modified."_
 - **Members Tab Additions**:
   - Tab badge showing pending join requests count.
   - Sub-section for "Pending Join Requests" with "Approve" and "Reject" buttons.
@@ -423,12 +450,14 @@ This check applies universally to:
 All work will be tracked under parent epic **INK-249**.
 
 ### Phase 1: Database Schema & Concurrency Locks (Task INK-310)
+
 - Add schema fields to `Organisation`, `OrganisationDomain`, `UserOrganisation`, `OrganisationJoinRequest`.
 - Implement `isPersonalOrDisposableDomain` utility and blocklist.
 - Create migration script with database indexes.
 - Unit tests for domain validator and schema models.
 
 ### Phase 2: Domain Verification & Onboarding Engine (Task INK-311)
+
 - Implement DNS TXT lookup service via Node `dns/promises`.
 - Build atomic domain registration with `isImmutable` protection.
 - Implement domain matching logic post email verification (`verifyEmail`).
@@ -436,18 +465,21 @@ All work will be tracked under parent epic **INK-249**.
 - Integration tests for domain verification and onboarding policies.
 
 ### Phase 3: Roles, Step-up Auth & Admin Protection Safeguards (Task INK-312)
+
 - Implement step-up password re-auth requirement for admin promotion.
 - Transactional minimum admin check (`SELECT ... FOR UPDATE`) in `updateMemberRole`, `removeMember`, `updateMemberStatus`.
 - Implement `super_admin` override endpoint.
 - Unit and integration tests for concurrent demotion/deletion race prevention.
 
 ### Phase 4: Organisation Settings Lockdown & Member Read-Only UI (Task INK-313)
+
 - Enforce API middleware permissions across all organisation modification routes.
 - Update `apps/web/src/app/(auth)/settings/organisation/page.tsx` for member read-only display.
 - Build `ContactAdminModal` component displaying active admins with direct contact links.
 - Render custom warning banner when restricted action attempted.
 
 ### Phase 5: Soft Deletion, Asset Handover & Token Revocation (Task INK-314)
+
 - Refactor `POST /api/v1/auth/delete-account` from destructive hard delete to compliance soft delete.
 - Implement immediate session and refresh token revocation.
 - Implement draft and template asset handover to remaining admin.
@@ -455,6 +487,7 @@ All work will be tracked under parent epic **INK-249**.
 - Verification tests for GDPR/eIDAS compliance lifecycle.
 
 ### Phase 6: E2E Verification & Audit Log Validation (Task INK-315)
+
 - Full Playwright E2E test suite covering:
   1. Teams enablement & first admin creation.
   2. Domain verification and auto-join / approval flows.
@@ -466,7 +499,9 @@ All work will be tracked under parent epic **INK-249**.
 ---
 
 ## 7. Quality Gates & Acceptance Verification
+
 Before raising PR targeting `develop`:
+
 - `pnpm db:generate` passes.
 - `pnpm typecheck` passes with 0 TypeScript errors.
 - `pnpm lint` and `pnpm format:check` pass.

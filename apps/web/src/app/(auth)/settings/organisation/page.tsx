@@ -229,7 +229,23 @@ function OrganisationSettingsContent() {
   // INK-318: Role and Administrator Management States
   const [userRole, setUserRole] = useState<string>(() => {
     if (typeof window !== 'undefined') {
-      return localStorage.getItem('graphsign_user_role') || 'member';
+      const stored = localStorage.getItem('graphsign_user_role');
+      if (stored && stored !== 'member') return stored;
+      const token =
+        localStorage.getItem('graphsign_session_token') || localStorage.getItem('token');
+      if (token) {
+        try {
+          const parts = token.split('.');
+          if (parts[1]) {
+            const p = JSON.parse(atob(parts[1]));
+            if (p.role) {
+              localStorage.setItem('graphsign_user_role', p.role);
+              return p.role;
+            }
+          }
+        } catch {}
+      }
+      return stored || 'member';
     }
     return 'member';
   });
@@ -253,6 +269,23 @@ function OrganisationSettingsContent() {
 
   function checkAdminOrWarn(): boolean {
     if (!isAdmin) {
+      if (typeof window !== 'undefined') {
+        const token =
+          localStorage.getItem('graphsign_session_token') || localStorage.getItem('token');
+        if (token) {
+          try {
+            const parts = token.split('.');
+            if (parts[1]) {
+              const p = JSON.parse(atob(parts[1]));
+              if (p.role === 'org_admin' || p.role === 'super_admin' || p.role === 'admin') {
+                localStorage.setItem('graphsign_user_role', p.role);
+                setUserRole(p.role);
+                return true;
+              }
+            }
+          } catch {}
+        }
+      }
       setError(
         'Only an organisation admin can change this setting. Please contact your workspace administrator.',
       );
@@ -523,6 +556,14 @@ function OrganisationSettingsContent() {
         if (resAdmins?.ok) {
           const adminsData = await resAdmins.json();
           setWorkspaceAdmins(Array.isArray(adminsData) ? adminsData : []);
+          const curUserId = localStorage.getItem('graphsign_user_id') ?? '';
+          if (
+            Array.isArray(adminsData) &&
+            adminsData.some((a: { id?: string }) => a.id === curUserId)
+          ) {
+            localStorage.setItem('graphsign_user_role', 'org_admin');
+            setUserRole('org_admin');
+          }
         }
         if (resJoinRequests?.ok) {
           const joinData = await resJoinRequests.json();

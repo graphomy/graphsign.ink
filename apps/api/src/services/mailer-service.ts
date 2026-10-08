@@ -147,7 +147,7 @@ export class ResendMailerService implements MailerService {
 
   constructor(
     apiKey: string,
-    private readonly from: string = 'noreply@graphsign.ink',
+    private readonly from: string = 'updates@notification.graphsign.ink',
     private readonly webUrl: string = 'http://localhost:3000',
     private readonly prisma?: PrismaClient,
   ) {
@@ -932,7 +932,7 @@ export function createMailerService(
   if (env.RESEND_API_KEY) {
     return new ResendMailerService(
       env.RESEND_API_KEY,
-      env.EMAIL_FROM ?? 'notification@mail.graphomy.com',
+      env.EMAIL_FROM ?? 'updates@notification.graphsign.ink',
       webUrl,
       prisma,
     );
