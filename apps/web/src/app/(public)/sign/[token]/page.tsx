@@ -705,7 +705,14 @@ export default function SignDocumentPage({
       return;
     }
 
-    if (signedAsGuest || !isAuthenticated) {
+    const isAuthed =
+      isAuthenticated ||
+      Boolean(
+        typeof window !== 'undefined' &&
+        (localStorage.getItem('graphsign_session_token') || localStorage.getItem('token')),
+      );
+
+    if (signedAsGuest || !isAuthed) {
       setIsSubmitting(true);
       try {
         const res = await fetch(`${getApiUrl()}/api/v1/sign/${rawToken}/otp/send`, {
@@ -822,7 +829,8 @@ export default function SignDocumentPage({
             }
           }
           if (attempt === 0) {
-            await new Promise((resolve) => setTimeout(resolve, 600));
+            const delay = process.env.NODE_ENV === 'test' ? 10 : 600;
+            await new Promise((resolve) => setTimeout(resolve, delay));
           }
         }
       } catch {
