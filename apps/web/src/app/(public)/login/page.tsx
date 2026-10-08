@@ -134,13 +134,7 @@ function LoginContent() {
       }
 
       if (data?.token) {
-        localStorage.setItem('token', data.token);
-        localStorage.setItem('graphsign_session_token', data.token);
-        localStorage.setItem('graphsign_user_email', data.email);
-        localStorage.setItem('graphsign_org_id', data.organisationId);
-        if (data.id) {
-          localStorage.setItem('graphsign_user_id', data.id);
-        }
+        saveSession(data);
       }
 
       const target = returnTo ? decodeURIComponent(returnTo) : '/dashboard';
@@ -151,6 +145,35 @@ function LoginContent() {
       setApiError('Unable to connect to the server. Please try again later.');
     } finally {
       setIsLoading(false);
+    }
+  }
+
+  function saveSession(data: {
+    token?: string;
+    email?: string;
+    organisationId?: string;
+    id?: string;
+    role?: string;
+  }) {
+    if (!data?.token) return;
+    localStorage.setItem('token', data.token);
+    localStorage.setItem('graphsign_session_token', data.token);
+    if (data.email) localStorage.setItem('graphsign_user_email', data.email);
+    if (data.organisationId) localStorage.setItem('graphsign_org_id', data.organisationId);
+    if (data.id) localStorage.setItem('graphsign_user_id', data.id);
+
+    let role = data.role;
+    if (!role) {
+      try {
+        const parts = data.token.split('.');
+        if (parts[1]) {
+          const payload = JSON.parse(atob(parts[1]));
+          role = payload.role;
+        }
+      } catch {}
+    }
+    if (role) {
+      localStorage.setItem('graphsign_user_role', role);
     }
   }
 
@@ -180,13 +203,7 @@ function LoginContent() {
       }
 
       if (data?.token) {
-        localStorage.setItem('token', data.token);
-        localStorage.setItem('graphsign_session_token', data.token);
-        localStorage.setItem('graphsign_user_email', data.email);
-        localStorage.setItem('graphsign_org_id', data.organisationId);
-        if (data.id) {
-          localStorage.setItem('graphsign_user_id', data.id);
-        }
+        saveSession(data);
       }
 
       const target = returnTo ? decodeURIComponent(returnTo) : '/dashboard';
