@@ -30,9 +30,14 @@ import {
   NotFoundError,
   UnauthorizedError,
   ValidationError,
+  BadRequestError,
 } from '../utils/errors.js';
 import { isSuperAdmin } from '../config/roles.js';
-import { isPersonalEmailDomain, extractEmailDomain } from '../utils/email-validation.js';
+import {
+  isPersonalEmailDomain,
+  isPersonalOrDisposableDomain,
+  extractEmailDomain,
+} from '../utils/email-validation.js';
 
 /** Verification tokens expire in 24 hours. */
 const VERIFICATION_TOKEN_EXPIRY_HOURS = 24;
@@ -603,6 +608,80 @@ export class AuthService {
         status: 'active',
       },
     });
+
+    // INK-318: Check if user domain matches a verified company organisation domain
+    const emailDomain = extractEmailDomain(user.email);
+    if (
+      emailDomain &&
+      !isPersonalOrDisposableDomain(emailDomain) &&
+      this.prisma.organisation?.findFirst
+    ) {
+      const matchingOrg = await this.prisma.organisation.findFirst({
+        where: {
+          verifiedDomain: emailDomain,
+          status: 'active',
+          deletedAt: null,
+        },
+      });
+
+      if (matchingOrg && matchingOrg.id !== user.organisationId) {
+        const policy = matchingOrg.domainOnboardingPolicy || 'admin_approval';
+        if (policy === 'automatic') {
+          if (this.prisma.userOrganisation) {
+            await this.prisma.userOrganisation.upsert({
+              where: { userId_organisationId: { userId: user.id, organisationId: matchingOrg.id } },
+              create: {
+                id: generateId(),
+                userId: user.id,
+                organisationId: matchingOrg.id,
+                role: 'member',
+                status: 'active',
+                joinedVia: 'domain_auto',
+              },
+              update: {
+                role: 'member',
+                status: 'active',
+                joinedVia: 'domain_auto',
+              },
+            });
+          }
+        } else if (policy === 'admin_approval') {
+          if (this.prisma.organisationJoinRequest) {
+            await this.prisma.organisationJoinRequest.upsert({
+              where: {
+                organisationId_userId_status: {
+                  organisationId: matchingOrg.id,
+                  userId: user.id,
+                  status: 'pending',
+                },
+              },
+              create: {
+                id: generateId(),
+                organisationId: matchingOrg.id,
+                userId: user.id,
+                email: user.email,
+                status: 'pending',
+              },
+              update: {},
+            });
+          }
+          if (this.prisma.userOrganisation) {
+            await this.prisma.userOrganisation.upsert({
+              where: { userId_organisationId: { userId: user.id, organisationId: matchingOrg.id } },
+              create: {
+                id: generateId(),
+                userId: user.id,
+                organisationId: matchingOrg.id,
+                role: 'member',
+                status: 'pending_approval',
+                joinedVia: 'domain_approved',
+              },
+              update: {},
+            });
+          }
+        }
+      }
+    }
 
     await this.audit.log({
       organisationId: user.organisationId,
@@ -1412,7 +1491,9 @@ export class AuthService {
   }
 
   /**
-   * Permanently deletes a user account from database upon password confirmation (GDPR Right to Erasure).
+   * INK-318: Soft deletes user account upon password confirmation.
+   * Enforces minimum administrator invariant across active organisations.
+   * Immediately revokes all sessions, tokens, and reassigns workspace assets.
    */
   async deleteAccount(
     userId: string,
@@ -1423,7 +1504,7 @@ export class AuthService {
       where: { id: userId },
     });
 
-    if (!user) {
+    if (!user || user.deletedAt) {
       throw new NotFoundError('User account not found.');
     }
 
@@ -1433,6 +1514,61 @@ export class AuthService {
         'Invalid password. Please enter your correct password to confirm account deletion.',
       );
     }
+
+    // Check organisations where user is an admin
+    const adminMemberships = this.prisma.userOrganisation
+      ? await this.prisma.userOrganisation.findMany({
+          where: {
+            userId,
+            role: { in: ['admin', 'org_admin'] },
+            status: 'active',
+          },
+        })
+      : [];
+
+    const primaryOrgAdmin =
+      user.role === 'admin' || user.role === 'org_admin'
+        ? [{ organisationId: user.organisationId }]
+        : [];
+
+    const allAdminOrgIds = Array.from(
+      new Set([
+        ...adminMemberships.map((m) => m.organisationId),
+        ...primaryOrgAdmin.map((o) => o.organisationId),
+      ]),
+    );
+
+    for (const orgId of allAdminOrgIds) {
+      const activeMembersCount = await this.prisma.user.count({
+        where: { organisationId: orgId, status: 'active', deletedAt: null },
+      });
+
+      const otherActiveAdminsCount = await this.prisma.user.count({
+        where: {
+          organisationId: orgId,
+          id: { not: userId },
+          role: { in: ['admin', 'org_admin'] },
+          status: 'active',
+          deletedAt: null,
+        },
+      });
+
+      if (otherActiveAdminsCount === 0) {
+        if (activeMembersCount > 1) {
+          throw new BadRequestError(
+            'Cannot delete account. You are the only active administrator of an organisation with other active members. Please promote an eligible active member first.',
+          );
+        } else {
+          // Sole active member in the workspace: Place organisation into closure state
+          await this.prisma.organisation.update({
+            where: { id: orgId },
+            data: { status: 'pending_closure', deletedAt: new Date() },
+          });
+        }
+      }
+    }
+
+    const deletedAt = new Date();
 
     if (this.audit) {
       await this.audit.log({
@@ -1445,32 +1581,63 @@ export class AuthService {
         userAgent: meta.userAgent,
         metadata: {
           email: user.email,
-          deletedAt: new Date().toISOString(),
-          gdprRightToErasure: true,
+          deletedAt: deletedAt.toISOString(),
+          softDeleted: true,
         },
       });
     }
 
     await this.prisma.$transaction(async (tx) => {
-      // Clear team leadership
+      // 1. Immediately revoke all refresh sessions & credentials
+      if (tx.refreshSession) {
+        await tx.refreshSession.deleteMany({ where: { userId } });
+      }
+
+      // 2. Clear team leadership
       await tx.team.updateMany({ where: { leadId: userId }, data: { leadId: null } });
-      // Delete user invitations
-      await tx.organisationInvitation.deleteMany({ where: { invitedById: userId } });
-      // Anonymize user reference on audit logs to preserve audit chain
-      await tx.auditLog.updateMany({ where: { userId }, data: { userId: null } });
-      // Delete user organisation memberships
-      await tx.userOrganisation.deleteMany({ where: { userId } });
-      // Delete team memberships
-      await tx.teamMember.deleteMany({ where: { userId } });
-      // Delete user-owned agreements and templates
-      await tx.agreementRecipient.deleteMany({ where: { agreement: { authorId: userId } } });
-      await tx.agreementVersion.deleteMany({ where: { agreement: { authorId: userId } } });
-      await tx.agreement.deleteMany({ where: { authorId: userId } });
-      await tx.templateShare.deleteMany({ where: { template: { authorId: userId } } });
-      await tx.templateVersion.deleteMany({ where: { template: { authorId: userId } } });
-      await tx.template.deleteMany({ where: { authorId: userId } });
-      // Permanently delete user from database
-      await tx.user.delete({ where: { id: userId } });
+
+      // 3. Reassign drafts/templates if another admin exists in the primary organisation
+      const backupAdmin = tx.user?.findFirst
+        ? await tx.user.findFirst({
+            where: {
+              organisationId: user.organisationId,
+              id: { not: userId },
+              role: { in: ['admin', 'org_admin'] },
+              status: 'active',
+              deletedAt: null,
+            },
+          })
+        : null;
+
+      if (backupAdmin) {
+        await tx.template.updateMany({
+          where: { authorId: userId, organisationId: user.organisationId },
+          data: { authorId: backupAdmin.id },
+        });
+        await tx.agreement.updateMany({
+          where: { authorId: userId, status: 'draft' },
+          data: { authorId: backupAdmin.id },
+        });
+      }
+
+      // 4. Update user organisation memberships to suspended
+      if (tx.userOrganisation?.updateMany) {
+        await tx.userOrganisation.updateMany({
+          where: { userId },
+          data: { status: 'suspended' },
+        });
+      }
+
+      // 5. Soft delete user record (retain record, email, and evidence)
+      await tx.user.update({
+        where: { id: userId },
+        data: {
+          status: 'deleted',
+          deletedAt,
+          emailVerificationTokenHash: null,
+          passwordResetTokenHash: null,
+        },
+      });
     });
   }
 

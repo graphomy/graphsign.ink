@@ -96,6 +96,13 @@ interface AuditLogItem {
   createdAt: string;
 }
 
+interface JoinRequestItem {
+  id: string;
+  status: string;
+  createdAt: string;
+  user?: { name?: string | null; email: string };
+}
+
 type OrgTab =
   | 'general'
   | 'branding'
@@ -219,6 +226,131 @@ function OrganisationSettingsContent() {
   const [upgradeCompanyName, setUpgradeCompanyName] = useState<string>('');
   const [isUpgrading, setIsUpgrading] = useState<boolean>(false);
 
+  // INK-318: Role and Administrator Management States
+  const [userRole, setUserRole] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('graphsign_user_role') || 'member';
+    }
+    return 'member';
+  });
+  const isAdmin = userRole === 'org_admin' || userRole === 'super_admin' || userRole === 'admin';
+
+  const [workspaceAdmins, setWorkspaceAdmins] = useState<
+    Array<{ id: string; name: string | null; email: string; role: string }>
+  >([]);
+  const [showContactAdminModal, setShowContactAdminModal] = useState<boolean>(false);
+  const [showPromoteModal, setShowPromoteModal] = useState<boolean>(false);
+  const [promoteTargetUserId, setPromoteTargetUserId] = useState<string | null>(null);
+  const [promotePassword, setPromotePassword] = useState<string>('');
+  const [promoteError, setPromoteError] = useState<string>('');
+  const [isPromoting, setIsPromoting] = useState<boolean>(false);
+
+  const [domainPolicy, setDomainPolicy] = useState<'admin_approval' | 'automatic' | 'disabled'>(
+    'admin_approval',
+  );
+  const [isSavingDomainPolicy, setIsSavingDomainPolicy] = useState<boolean>(false);
+  const [joinRequests, setJoinRequests] = useState<JoinRequestItem[]>([]);
+
+  function checkAdminOrWarn(): boolean {
+    if (!isAdmin) {
+      setError(
+        'Only an organisation admin can change this setting. Please contact your workspace administrator.',
+      );
+      return false;
+    }
+    return true;
+  }
+
+  function initiatePromoteToAdmin(userId: string) {
+    if (!checkAdminOrWarn()) return;
+    setPromoteTargetUserId(userId);
+    setPromotePassword('');
+    setPromoteError('');
+    setShowPromoteModal(true);
+  }
+
+  async function handleConfirmPromote(e: React.FormEvent) {
+    e.preventDefault();
+    if (!promoteTargetUserId) return;
+    setIsPromoting(true);
+    setPromoteError('');
+    try {
+      const token = localStorage.getItem('graphsign_session_token') || '';
+      const apiUrl = getApiUrl();
+      const res = await fetch(
+        `${apiUrl}/api/v1/organisations/members/${promoteTargetUserId}/role`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ role: 'org_admin', password: promotePassword }),
+        },
+      );
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data?.error?.message || data?.message || 'Failed to promote member.');
+      }
+      setShowPromoteModal(false);
+      setMessage('Member successfully promoted to Administrator.');
+      fetchMembers();
+    } catch (err: unknown) {
+      const errObj = err as Error;
+      setPromoteError(errObj.message || 'Promotion failed.');
+    } finally {
+      setIsPromoting(false);
+    }
+  }
+
+  async function handleSaveDomainPolicy(e: React.FormEvent) {
+    e.preventDefault();
+    if (!checkAdminOrWarn()) return;
+    setIsSavingDomainPolicy(true);
+    try {
+      const token = localStorage.getItem('graphsign_session_token') || '';
+      const apiUrl = getApiUrl();
+      const res = await fetch(`${apiUrl}/api/v1/organisations/me/onboarding-policy`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ policy: domainPolicy }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data?.error?.message || data?.message || 'Failed to update policy.');
+      }
+      setMessage('Domain onboarding policy updated successfully.');
+    } catch (err: unknown) {
+      const errObj = err as Error;
+      setError(errObj.message || 'Failed to update domain onboarding policy.');
+    } finally {
+      setIsSavingDomainPolicy(false);
+    }
+  }
+
+  async function handleReviewJoinRequest(requestId: string, decision: 'approve' | 'reject') {
+    if (!checkAdminOrWarn()) return;
+    try {
+      const token = localStorage.getItem('graphsign_session_token') || '';
+      const apiUrl = getApiUrl();
+      const res = await fetch(
+        `${apiUrl}/api/v1/organisations/me/join-requests/${requestId}/review`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ decision }),
+        },
+      );
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data?.error?.message || data?.message || 'Failed to process join request.');
+      }
+      setMessage(`Join request ${decision}d successfully.`);
+      setJoinRequests((prev) => prev.filter((r) => r.id !== requestId));
+      fetchMembers();
+    } catch (err: unknown) {
+      const errObj = err as Error;
+      setError(errObj.message || 'Failed to process join request.');
+    }
+  }
+
   async function handleUpgradeToTeams(e?: React.FormEvent) {
     if (e) e.preventDefault();
     setIsUpgrading(true);
@@ -309,6 +441,8 @@ function OrganisationSettingsContent() {
           resUserOrgs,
           resNotifs,
           resMembers,
+          resAdmins,
+          resJoinRequests,
         ] = await Promise.all([
           fetch(`${apiUrl}/api/v1/organisations/me`, { headers }).catch(() => null),
           fetch(`${apiUrl}/api/v1/organisations/me/branding`, { headers }).catch(() => null),
@@ -324,6 +458,8 @@ function OrganisationSettingsContent() {
           fetch(`${apiUrl}/api/v1/organisations/my-organisations`, { headers }).catch(() => null),
           fetch(`${apiUrl}/api/v1/organisations/me/notifications`, { headers }).catch(() => null),
           fetch(`${apiUrl}/api/v1/organisations/me/members`, { headers }).catch(() => null),
+          fetch(`${apiUrl}/api/v1/organisations/me/admins`, { headers }).catch(() => null),
+          fetch(`${apiUrl}/api/v1/organisations/me/join-requests`, { headers }).catch(() => null),
         ]);
 
         if (resOrg?.ok) {
@@ -332,6 +468,7 @@ function OrganisationSettingsContent() {
           setName(data.name ?? '');
           setSessionTimeout(data.sessionTimeoutMinutes ?? 15);
           setMfaRequired(data.mfaRequired ?? false);
+          setDomainPolicy(data.domainOnboardingPolicy ?? 'admin_approval');
         }
 
         if (resBranding?.ok) {
@@ -383,6 +520,14 @@ function OrganisationSettingsContent() {
           const membersData = await resMembers.json();
           setMembers(Array.isArray(membersData) ? membersData : []);
         }
+        if (resAdmins?.ok) {
+          const adminsData = await resAdmins.json();
+          setWorkspaceAdmins(Array.isArray(adminsData) ? adminsData : []);
+        }
+        if (resJoinRequests?.ok) {
+          const joinData = await resJoinRequests.json();
+          setJoinRequests(Array.isArray(joinData) ? joinData : []);
+        }
       } catch {
         setError('Failed to load organisation settings.');
       } finally {
@@ -415,6 +560,7 @@ function OrganisationSettingsContent() {
   }
 
   async function handleToggleMemberStatus(targetUserId: string, currentStatus: string) {
+    if (!checkAdminOrWarn()) return;
     try {
       const token = localStorage.getItem('graphsign_session_token') ?? '';
       const apiUrl = getApiUrl();
@@ -439,6 +585,7 @@ function OrganisationSettingsContent() {
   }
 
   async function handleRemoveMember(targetUserId: string, memberEmail: string) {
+    if (!checkAdminOrWarn()) return;
     if (!confirm(`Are you sure you want to remove ${memberEmail} from this organisation?`)) {
       return;
     }
@@ -558,6 +705,7 @@ function OrganisationSettingsContent() {
   // Save Compliance Settings (Retention 1-365 days)
   async function handleSaveCompliance(e: React.FormEvent) {
     e.preventDefault();
+    if (!checkAdminOrWarn()) return;
     setIsSaving(true);
     setMessage('');
     setError('');
@@ -639,6 +787,7 @@ function OrganisationSettingsContent() {
   // Save General Settings
   async function handleSaveGeneral(e: React.FormEvent) {
     e.preventDefault();
+    if (!checkAdminOrWarn()) return;
     setIsSaving(true);
     setMessage('');
     setError('');
@@ -667,6 +816,7 @@ function OrganisationSettingsContent() {
   // Save Branding
   async function handleSaveBranding(e: React.FormEvent) {
     e.preventDefault();
+    if (!checkAdminOrWarn()) return;
     setIsSaving(true);
     setMessage('');
     setError('');
@@ -726,6 +876,7 @@ function OrganisationSettingsContent() {
   // Save Notification Trigger Preferences (INK-114)
   async function handleSaveNotifications(e: React.FormEvent) {
     e.preventDefault();
+    if (!checkAdminOrWarn()) return;
     setIsSavingNotifications(true);
     setMessage('');
     setError('');
@@ -754,6 +905,7 @@ function OrganisationSettingsContent() {
   // Send Invitation (INK-56)
   async function handleInviteMember(e: React.FormEvent) {
     e.preventDefault();
+    if (!checkAdminOrWarn()) return;
     try {
       const token = localStorage.getItem('graphsign_session_token') ?? '';
       const apiUrl = getApiUrl();
@@ -798,6 +950,7 @@ function OrganisationSettingsContent() {
 
   // Soft Delete Org (INK-51)
   async function handleDeleteOrg() {
+    if (!checkAdminOrWarn()) return;
     if (
       !confirm(
         'Are you sure you want to delete this organisation? It will be retained for 30 days before permanent deletion.',
@@ -825,6 +978,7 @@ function OrganisationSettingsContent() {
   // Create Team (INK-52)
   async function handleCreateTeam(e: React.FormEvent) {
     e.preventDefault();
+    if (!checkAdminOrWarn()) return;
     try {
       const token = localStorage.getItem('graphsign_session_token') ?? '';
       const apiUrl = getApiUrl();
@@ -850,6 +1004,7 @@ function OrganisationSettingsContent() {
   // Create Custom Role (INK-55)
   async function handleCreateCustomRole(e: React.FormEvent) {
     e.preventDefault();
+    if (!checkAdminOrWarn()) return;
     try {
       const token = localStorage.getItem('graphsign_session_token') ?? '';
       const apiUrl = getApiUrl();
@@ -875,6 +1030,7 @@ function OrganisationSettingsContent() {
   // Add Domain (INK-60)
   async function handleAddDomain(e: React.FormEvent) {
     e.preventDefault();
+    if (!checkAdminOrWarn()) return;
     try {
       const token = localStorage.getItem('graphsign_session_token') ?? '';
       const apiUrl = getApiUrl();
@@ -1018,6 +1174,29 @@ function OrganisationSettingsContent() {
           </div>
         ) : (
           <div className="rounded-2xl border border-neutral-200 bg-white p-6 sm:p-8 shadow-sm">
+            {!isAdmin && (
+              <div
+                className="mb-6 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                data-testid="member-readonly-banner"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="text-amber-600 font-bold text-base">ℹ️</span>
+                  <span className="font-medium text-xs sm:text-sm">
+                    Only an organisation admin can change this setting. Please contact your
+                    workspace administrator.
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowContactAdminModal(true)}
+                  className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-amber-200 text-amber-900 hover:bg-amber-300 transition-colors whitespace-nowrap self-start sm:self-auto"
+                  data-testid="contact-admin-btn"
+                >
+                  Contact Administrator
+                </button>
+              </div>
+            )}
+
             {/* GENERAL TAB */}
             {activeTab === 'general' && (
               <form onSubmit={handleSaveGeneral} className="space-y-6" data-testid="general-form">
@@ -1570,6 +1749,16 @@ function OrganisationSettingsContent() {
                           </div>
 
                           <div className="flex items-center gap-2">
+                            {isAdmin && m.role !== 'org_admin' && m.role !== 'super_admin' && (
+                              <button
+                                type="button"
+                                onClick={() => initiatePromoteToAdmin(m.id)}
+                                className="px-2.5 py-1 text-xs font-semibold text-purple-700 bg-purple-50 hover:bg-purple-100 rounded border border-purple-200 transition-colors"
+                                data-testid={`promote-admin-${m.id}`}
+                              >
+                                Promote to Admin 👑
+                              </button>
+                            )}
                             <button
                               type="button"
                               onClick={() => handleToggleMemberStatus(m.id, m.status)}
@@ -2097,6 +2286,173 @@ function OrganisationSettingsContent() {
                     </div>
                   )}
                 </div>
+
+                {/* Onboarding Policy Configuration (INK-318) */}
+                <form
+                  onSubmit={handleSaveDomainPolicy}
+                  className="rounded-xl border p-4 bg-neutral-50 space-y-3"
+                  data-testid="domain-policy-form"
+                >
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div>
+                      <h4 className="text-xs font-bold text-neutral-900 uppercase">
+                        Domain-Based Membership & Onboarding Policy
+                      </h4>
+                      <p className="text-xs text-neutral-500 mt-0.5">
+                        Define how newly registered users with matching email domains join this
+                        organisation.
+                      </p>
+                    </div>
+                    {isAdmin && (
+                      <button
+                        type="submit"
+                        disabled={isSavingDomainPolicy}
+                        className="px-3 py-1 bg-[#ba0000] text-white text-xs font-bold rounded-lg hover:bg-[#a00000] disabled:opacity-50 transition-colors self-start sm:self-auto"
+                        data-testid="save-domain-policy-btn"
+                      >
+                        {isSavingDomainPolicy ? 'Saving...' : 'Save Policy'}
+                      </button>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
+                    <label
+                      className={`flex flex-col p-3 rounded-lg border cursor-pointer transition-all ${
+                        domainPolicy === 'admin_approval'
+                          ? 'border-[#ba0000] bg-red-50/40 text-neutral-900'
+                          : 'border-neutral-200 bg-white text-neutral-600'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="radio"
+                          name="domainPolicy"
+                          value="admin_approval"
+                          checked={domainPolicy === 'admin_approval'}
+                          onChange={() => setDomainPolicy('admin_approval')}
+                          disabled={!isAdmin}
+                          className="text-[#ba0000] focus:ring-[#ba0000]"
+                        />
+                        <span className="text-xs font-bold">Admin Approval (Default)</span>
+                      </div>
+                      <span className="text-[11px] text-neutral-500 mt-1 pl-5">
+                        New users submit a join request. An admin must approve before membership
+                        activates.
+                      </span>
+                    </label>
+
+                    <label
+                      className={`flex flex-col p-3 rounded-lg border cursor-pointer transition-all ${
+                        domainPolicy === 'automatic'
+                          ? 'border-[#ba0000] bg-red-50/40 text-neutral-900'
+                          : 'border-neutral-200 bg-white text-neutral-600'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="radio"
+                          name="domainPolicy"
+                          value="automatic"
+                          checked={domainPolicy === 'automatic'}
+                          onChange={() => setDomainPolicy('automatic')}
+                          disabled={!isAdmin}
+                          className="text-[#ba0000] focus:ring-[#ba0000]"
+                        />
+                        <span className="text-xs font-bold">Automatic Membership</span>
+                      </div>
+                      <span className="text-[11px] text-neutral-500 mt-1 pl-5">
+                        Eligible users automatically join with standard Member role. Requires
+                        verified DNS TXT domain.
+                      </span>
+                    </label>
+
+                    <label
+                      className={`flex flex-col p-3 rounded-lg border cursor-pointer transition-all ${
+                        domainPolicy === 'disabled'
+                          ? 'border-[#ba0000] bg-red-50/40 text-neutral-900'
+                          : 'border-neutral-200 bg-white text-neutral-600'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="radio"
+                          name="domainPolicy"
+                          value="disabled"
+                          checked={domainPolicy === 'disabled'}
+                          onChange={() => setDomainPolicy('disabled')}
+                          disabled={!isAdmin}
+                          className="text-[#ba0000] focus:ring-[#ba0000]"
+                        />
+                        <span className="text-xs font-bold">Disabled</span>
+                      </div>
+                      <span className="text-[11px] text-neutral-500 mt-1 pl-5">
+                        Domain matching disabled. Users can only join via explicit single-use email
+                        invitation.
+                      </span>
+                    </label>
+                  </div>
+                </form>
+
+                {/* Pending Join Requests (INK-318) */}
+                <div className="space-y-3" data-testid="join-requests-section">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="text-xs font-bold text-neutral-900 uppercase">
+                        Pending Join Requests ({joinRequests.length})
+                      </h4>
+                      <p className="text-xs text-neutral-500 mt-0.5">
+                        Users from your verified domain awaiting administrator approval.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="divide-y border rounded-xl overflow-hidden bg-white">
+                    {joinRequests.length > 0 ? (
+                      joinRequests.map((req) => (
+                        <div key={req.id} className="p-4 flex items-center justify-between">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-xs text-neutral-900">
+                                {req.user?.name || req.user?.email}
+                              </span>
+                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 uppercase">
+                                {req.status}
+                              </span>
+                            </div>
+                            <p className="text-xs text-neutral-500 mt-0.5">{req.user?.email}</p>
+                            <p className="text-[11px] text-neutral-400 mt-0.5">
+                              Requested {formatDateTime(req.createdAt)}
+                            </p>
+                          </div>
+
+                          {isAdmin && (
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => handleReviewJoinRequest(req.id, 'approve')}
+                                className="px-3 py-1 text-xs font-bold text-white bg-green-600 hover:bg-green-700 rounded shadow-xs transition-colors"
+                                data-testid={`approve-request-${req.id}`}
+                              >
+                                Approve ✓
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleReviewJoinRequest(req.id, 'reject')}
+                                className="px-3 py-1 text-xs font-semibold text-red-600 bg-red-50 hover:bg-red-100 rounded border border-red-200 transition-colors"
+                                data-testid={`reject-request-${req.id}`}
+                              >
+                                Reject ✕
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      ))
+                    ) : (
+                      <div className="p-6 text-center text-xs text-neutral-400">
+                        No pending join requests.
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
             )}
 
@@ -2394,6 +2750,119 @@ function OrganisationSettingsContent() {
                   className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-lg shadow-xs transition-colors disabled:opacity-50"
                 >
                   {isDeletingAccount ? 'Deleting Account...' : 'Permanently Delete My Account'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Contact Admin Modal (INK-318) */}
+      {showContactAdminModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-bold text-neutral-900 flex items-center gap-2">
+                <span>🛡️</span> Workspace Administrators
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowContactAdminModal(false)}
+                className="text-neutral-400 hover:text-neutral-600 p-1 rounded"
+              >
+                ✕
+              </button>
+            </div>
+            <p className="text-xs text-neutral-600 leading-relaxed">
+              Only an organisation administrator can modify workspace settings, invite members, or
+              manage policies. Reach out to one of your workspace administrators below:
+            </p>
+            <div className="divide-y border rounded-xl overflow-hidden max-h-60 overflow-y-auto">
+              {workspaceAdmins.length > 0 ? (
+                workspaceAdmins.map((adm) => (
+                  <div key={adm.id} className="p-3 flex items-center justify-between">
+                    <div>
+                      <p className="text-xs font-bold text-neutral-900">{adm.name || adm.email}</p>
+                      <p className="text-xs text-neutral-500">{adm.email}</p>
+                    </div>
+                    <span className="text-[10px] font-mono bg-purple-100 text-purple-800 font-bold px-2 py-0.5 rounded">
+                      {adm.role}
+                    </span>
+                  </div>
+                ))
+              ) : (
+                <div className="p-4 text-center text-xs text-neutral-400">
+                  No administrators currently listed.
+                </div>
+              )}
+            </div>
+            <div className="flex justify-end pt-2">
+              <button
+                type="button"
+                onClick={() => setShowContactAdminModal(false)}
+                className="px-4 py-2 border rounded-lg text-xs font-semibold text-neutral-700 hover:bg-neutral-100 transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Step-up Re-Auth Modal for Admin Promotion (INK-318) */}
+      {showPromoteModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div className="space-y-2">
+              <h3 className="text-base font-bold text-purple-700 flex items-center gap-2">
+                <span>👑</span> Promote to Organisation Administrator
+              </h3>
+              <p className="text-xs text-neutral-600 leading-relaxed">
+                Promoting a user to Administrator grants full authority over workspace settings,
+                security policies, and team members.{' '}
+                <strong>Step-up re-authentication is required.</strong> Please enter your
+                administrator password to confirm.
+              </p>
+            </div>
+
+            {promoteError && (
+              <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700 font-semibold">
+                {promoteError}
+              </div>
+            )}
+
+            <form onSubmit={handleConfirmPromote} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-neutral-800 mb-1">
+                  Your Administrator Password:
+                </label>
+                <input
+                  type="password"
+                  required
+                  placeholder="Enter your current password..."
+                  value={promotePassword}
+                  onChange={(e) => setPromotePassword(e.target.value)}
+                  className="w-full border border-neutral-300 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-purple-600 bg-white"
+                  autoFocus
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  disabled={isPromoting}
+                  onClick={() => setShowPromoteModal(false)}
+                  className="px-4 py-2 border rounded-lg text-xs font-semibold text-neutral-700 hover:bg-neutral-100 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isPromoting || !promotePassword}
+                  className="px-4 py-2 bg-purple-700 hover:bg-purple-800 text-white text-xs font-bold rounded-lg shadow-xs transition-colors disabled:opacity-50"
+                  data-testid="confirm-promote-btn"
+                >
+                  {isPromoting ? 'Verifying...' : 'Confirm Promotion'}
                 </button>
               </div>
             </form>

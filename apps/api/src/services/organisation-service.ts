@@ -7,10 +7,12 @@ import type {
   OrganisationDomain,
   AuditLog,
 } from '@graphsign/db';
-import { generateId, sha256 } from '../utils/crypto.js';
+import { generateId, sha256, verifyPassword } from '../utils/crypto.js';
 import { NotFoundError, ConflictError, ForbiddenError, BadRequestError } from '../utils/errors.js';
 import type { AuditService } from './audit-service.js';
 import type { MailerService } from './mailer-service.js';
+import { DnsVerificationService } from './dns-verification-service.js';
+import { isPersonalOrDisposableDomain, extractEmailDomain } from '../utils/email-validation.js';
 import type {
   CreateOrganisationInput,
   InviteMemberInput,
@@ -49,6 +51,7 @@ export class OrganisationService {
     private readonly prisma: PrismaClient,
     private readonly auditService: AuditService,
     private readonly mailerService: MailerService,
+    private readonly dnsService: DnsVerificationService = new DnsVerificationService(),
   ) {}
 
   /**
@@ -58,6 +61,31 @@ export class OrganisationService {
     data: CreateOrganisationInput,
     actorUserId?: string,
   ): Promise<Organisation> {
+    if (actorUserId && this.prisma.user?.findUnique) {
+      const actor = await this.prisma.user.findUnique({ where: { id: actorUserId } });
+      if (actor && !actor.emailVerified) {
+        throw new ForbiddenError('A user must verify their email before enabling Teams.');
+      }
+    }
+
+    if (data.domain) {
+      const domain = data.domain.toLowerCase().trim();
+      if (isPersonalOrDisposableDomain(domain)) {
+        throw new BadRequestError(
+          'Personal email providers and disposable domains cannot enable domain-based Teams onboarding.',
+        );
+      }
+      const existingDomainOrg = await this.prisma.organisation.findFirst({
+        where: {
+          OR: [{ verifiedDomain: domain }, { domain }],
+          deletedAt: null,
+        },
+      });
+      if (existingDomainOrg) {
+        throw new ConflictError(`An organisation already exists for domain "${domain}".`);
+      }
+    }
+
     const slug =
       data.slug ??
       data.name
@@ -85,6 +113,7 @@ export class OrganisationService {
         tenantId,
         planType,
         status: 'active',
+        domain: data.domain?.toLowerCase().trim(),
         sessionTimeoutMinutes: 15,
         mfaRequired: false,
         storageQuotaBytes: 5368709120n, // 5GB default
@@ -268,11 +297,35 @@ export class OrganisationService {
   ): Promise<Organisation> {
     const org = await this.getOrganisationById(orgId);
 
+    const actorUser = await this.prisma.user.findUnique({ where: { id: actorUserId } });
+    if (!actorUser || !actorUser.emailVerified) {
+      throw new ForbiddenError('A user must verify their email before enabling Teams.');
+    }
+
+    const emailDomain = extractEmailDomain(actorUser.email);
+    if (emailDomain && !isPersonalOrDisposableDomain(emailDomain)) {
+      const existingDomainOrg = await this.prisma.organisation.findFirst({
+        where: {
+          id: { not: orgId },
+          OR: [{ verifiedDomain: emailDomain }, { domain: emailDomain }],
+          deletedAt: null,
+        },
+      });
+      if (existingDomainOrg) {
+        throw new ConflictError(
+          `An organisation already exists for company domain "${emailDomain}". Please request to join the existing workspace.`,
+        );
+      }
+    }
+
     const updated = await this.prisma.organisation.update({
       where: { id: orgId },
       data: {
         planType: 'teams',
         ...(companyName && { name: companyName.trim() }),
+        ...(emailDomain && !isPersonalOrDisposableDomain(emailDomain)
+          ? { domain: emailDomain }
+          : {}),
       },
     });
 
@@ -435,13 +488,55 @@ export class OrganisationService {
     actorUserId: string,
     targetUserId: string,
     role: string,
+    passwordConfirmation?: string,
   ): Promise<void> {
     const user = await this.prisma.user.findFirst({
-      where: { id: targetUserId, organisationId: orgId },
+      where: { id: targetUserId, organisationId: orgId, deletedAt: null },
     });
 
     if (!user) {
       throw new NotFoundError('User not found in this organisation.');
+    }
+
+    const isPromotingToAdmin =
+      (role === 'admin' || role === 'org_admin') &&
+      user.role !== 'admin' &&
+      user.role !== 'org_admin';
+    const isDemotingAdmin =
+      (user.role === 'admin' || user.role === 'org_admin') &&
+      role !== 'admin' &&
+      role !== 'org_admin';
+
+    // Step-up authentication required for promotion to admin
+    if (isPromotingToAdmin) {
+      if (!passwordConfirmation) {
+        throw new BadRequestError(
+          'Promotion to administrator requires recent password confirmation.',
+        );
+      }
+      const actor = await this.prisma.user.findUnique({ where: { id: actorUserId } });
+      if (!actor) throw new NotFoundError('Actor user not found.');
+      const isValid = await verifyPassword(passwordConfirmation, actor.passwordHash);
+      if (!isValid) {
+        throw new BadRequestError('Invalid password. Recent authentication failed.');
+      }
+    }
+
+    // Minimum admin check on demotion
+    if (isDemotingAdmin) {
+      const activeAdminCount = await this.prisma.user.count({
+        where: {
+          organisationId: orgId,
+          role: { in: ['admin', 'org_admin', 'super_admin'] },
+          status: 'active',
+          deletedAt: null,
+        },
+      });
+      if (activeAdminCount <= 1) {
+        throw new BadRequestError(
+          'An admin may demote or remove themselves only when another active admin remains.',
+        );
+      }
     }
 
     await this.prisma.user.update({
@@ -460,10 +555,14 @@ export class OrganisationService {
     await this.auditService.log({
       organisationId: orgId,
       userId: actorUserId,
-      action: 'USER_ROLE_UPDATED',
+      action: isPromotingToAdmin
+        ? 'USER_PROMOTED_TO_ADMIN'
+        : isDemotingAdmin
+          ? 'USER_DEMOTED_FROM_ADMIN'
+          : 'USER_ROLE_UPDATED',
       resourceType: 'user',
       resourceId: targetUserId,
-      metadata: { newRole: role },
+      metadata: { previousRole: user.role, newRole: role },
     });
   }
 
@@ -753,11 +852,14 @@ export class OrganisationService {
         where: {
           organisationId: orgId,
           role: { in: ['admin', 'org_admin', 'super_admin'] },
+          status: 'active',
           deletedAt: null,
         },
       });
       if (adminCount <= 1) {
-        throw new BadRequestError('Cannot remove the only administrator of the organisation.');
+        throw new BadRequestError(
+          'An admin may demote or remove themselves only when another active admin remains.',
+        );
       }
     }
 
@@ -821,12 +923,36 @@ export class OrganisationService {
       throw new BadRequestError('You cannot suspend your own account.');
     }
 
+    if ((user.role === 'admin' || user.role === 'org_admin') && status === 'suspended') {
+      const otherActiveAdminCount = await this.prisma.user.count({
+        where: {
+          organisationId: orgId,
+          id: { not: targetUserId },
+          role: { in: ['admin', 'org_admin', 'super_admin'] },
+          status: 'active',
+          deletedAt: null,
+        },
+      });
+      if (otherActiveAdminCount < 1) {
+        throw new BadRequestError(
+          'A suspended user does not count as an active admin. Cannot suspend the only active administrator of the organisation.',
+        );
+      }
+    }
+
     const previousStatus = user.status;
     const updated = await this.prisma.user.update({
       where: { id: targetUserId },
       data: { status },
       select: { id: true, email: true, name: true, role: true, status: true },
     });
+
+    if (this.prisma.userOrganisation) {
+      await this.prisma.userOrganisation.updateMany({
+        where: { organisationId: orgId, userId: targetUserId },
+        data: { status },
+      });
+    }
 
     await this.auditService.log({
       organisationId: orgId,
@@ -854,12 +980,19 @@ export class OrganisationService {
   ): Promise<OrganisationDomain> {
     await this.requireTeamsPlan(orgId, 'Custom domain verification');
 
+    const domain = data.domain.toLowerCase().trim();
+    if (isPersonalOrDisposableDomain(domain)) {
+      throw new BadRequestError(
+        'Personal email providers and disposable domains cannot enable domain-based Teams onboarding.',
+      );
+    }
+
     const existingDomain = await this.prisma.organisationDomain.findUnique({
-      where: { domain: data.domain },
+      where: { domain },
     });
 
     if (existingDomain) {
-      throw new ConflictError(`Domain "${data.domain}" is already registered.`);
+      throw new ConflictError(`Domain "${domain}" is already registered.`);
     }
 
     const verificationToken = `graphsign-verify=${await sha256(generateId())}`;
@@ -868,7 +1001,7 @@ export class OrganisationService {
       data: {
         id: generateId(),
         organisationId: orgId,
-        domain: data.domain,
+        domain,
         verificationToken,
         status: 'pending',
       },
@@ -880,7 +1013,7 @@ export class OrganisationService {
       action: 'DOMAIN_ADDED',
       resourceType: 'organisation_domain',
       resourceId: domainRecord.id,
-      metadata: { domain: data.domain },
+      metadata: { domain },
     });
 
     return domainRecord;
@@ -902,11 +1035,49 @@ export class OrganisationService {
       throw new NotFoundError('Domain not found.');
     }
 
-    // Mark domain as verified
-    const updated = await this.prisma.organisationDomain.update({
-      where: { id: domainId },
-      data: { status: 'verified', verifiedAt: new Date() },
+    if (domainRecord.status === 'verified') {
+      return domainRecord;
+    }
+
+    const isValid = await this.dnsService.verifyTxtRecord(
+      domainRecord.domain,
+      domainRecord.verificationToken,
+    );
+
+    if (!isValid) {
+      throw new BadRequestError(
+        `DNS TXT verification failed for domain "${domainRecord.domain}". Proof of domain ownership (TXT record containing "${domainRecord.verificationToken}") not found.`,
+      );
+    }
+
+    const conflicting = await this.prisma.organisation.findFirst({
+      where: {
+        verifiedDomain: domainRecord.domain,
+        id: { not: orgId },
+        deletedAt: null,
+      },
     });
+    if (conflicting) {
+      throw new ConflictError(
+        `Domain "${domainRecord.domain}" is already verified by another organisation.`,
+      );
+    }
+
+    const [updated] = await this.prisma.$transaction([
+      this.prisma.organisationDomain.update({
+        where: { id: domainId },
+        data: {
+          status: 'verified',
+          isImmutable: true,
+          verifiedAt: new Date(),
+          dnsCheckedAt: new Date(),
+        },
+      }),
+      this.prisma.organisation.update({
+        where: { id: orgId },
+        data: { verifiedDomain: domainRecord.domain },
+      }),
+    ]);
 
     await this.auditService.log({
       organisationId: orgId,
@@ -918,6 +1089,229 @@ export class OrganisationService {
     });
 
     return updated;
+  }
+
+  /**
+   * INK-318: Removes a custom domain. Verified domains cannot be removed.
+   */
+  async removeDomain(orgId: string, domainId: string, actorUserId: string): Promise<void> {
+    const domainRecord = await this.prisma.organisationDomain.findFirst({
+      where: { id: domainId, organisationId: orgId },
+    });
+
+    if (!domainRecord) {
+      throw new NotFoundError('Domain not found.');
+    }
+
+    if (domainRecord.isImmutable || domainRecord.status === 'verified') {
+      throw new BadRequestError('Once domain verified, do not allow to change it.');
+    }
+
+    await this.prisma.organisationDomain.delete({ where: { id: domainId } });
+
+    await this.auditService.log({
+      organisationId: orgId,
+      userId: actorUserId,
+      action: 'DOMAIN_REMOVED',
+      resourceType: 'organisation_domain',
+      resourceId: domainId,
+      metadata: { domain: domainRecord.domain },
+    });
+  }
+
+  /**
+   * INK-318: Updates domain onboarding policy (admin_approval, automatic, disabled).
+   */
+  async updateDomainOnboardingPolicy(
+    orgId: string,
+    actorUserId: string,
+    policy: 'admin_approval' | 'automatic' | 'disabled',
+  ): Promise<Organisation> {
+    const org = await this.getOrganisationById(orgId);
+
+    if (policy === 'automatic' && !org.verifiedDomain) {
+      throw new BadRequestError(
+        'Before enabling automatic domain-based membership, require proof of domain ownership, such as a DNS TXT record.',
+      );
+    }
+
+    const updated = await this.prisma.organisation.update({
+      where: { id: orgId },
+      data: { domainOnboardingPolicy: policy },
+    });
+
+    await this.auditService.log({
+      organisationId: orgId,
+      userId: actorUserId,
+      action: 'DOMAIN_ONBOARDING_POLICY_UPDATED',
+      resourceType: 'organisation',
+      resourceId: orgId,
+      metadata: { previousPolicy: org.domainOnboardingPolicy, newPolicy: policy },
+    });
+
+    return updated;
+  }
+
+  /**
+   * INK-318: Lists pending join requests for an organisation.
+   */
+  async listJoinRequests(orgId: string): Promise<any[]> {
+    if (!this.prisma.organisationJoinRequest) return [];
+    return this.prisma.organisationJoinRequest.findMany({
+      where: { organisationId: orgId, status: 'pending' },
+      include: {
+        user: { select: { id: true, name: true, email: true, createdAt: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  /**
+   * INK-318: Reviews a join request (approve or reject).
+   */
+  async reviewJoinRequest(
+    orgId: string,
+    actorUserId: string,
+    requestId: string,
+    decision: 'approve' | 'reject',
+  ): Promise<any> {
+    if (!this.prisma.organisationJoinRequest) {
+      throw new NotFoundError('Join requests not supported.');
+    }
+
+    const request = await this.prisma.organisationJoinRequest.findFirst({
+      where: { id: requestId, organisationId: orgId },
+      include: { user: true },
+    });
+
+    if (!request || request.status !== 'pending') {
+      throw new NotFoundError('Join request not found or already processed.');
+    }
+
+    const newStatus = decision === 'approve' ? 'approved' : 'rejected';
+    const updated = await this.prisma.organisationJoinRequest.update({
+      where: { id: requestId },
+      data: {
+        status: newStatus,
+        reviewedById: actorUserId,
+        reviewedAt: new Date(),
+      },
+    });
+
+    if (decision === 'approve') {
+      if (this.prisma.userOrganisation) {
+        await this.prisma.userOrganisation.upsert({
+          where: { userId_organisationId: { userId: request.userId, organisationId: orgId } },
+          create: {
+            id: generateId(),
+            organisationId: orgId,
+            userId: request.userId,
+            role: 'member',
+            status: 'active',
+            joinedVia: 'domain_approved',
+          },
+          update: {
+            role: 'member',
+            status: 'active',
+            joinedVia: 'domain_approved',
+          },
+        });
+      }
+    } else {
+      if (this.prisma.userOrganisation) {
+        await this.prisma.userOrganisation.deleteMany({
+          where: { userId: request.userId, organisationId: orgId, status: 'pending_approval' },
+        });
+      }
+    }
+
+    await this.auditService.log({
+      organisationId: orgId,
+      userId: actorUserId,
+      action: decision === 'approve' ? 'JOIN_REQUEST_APPROVED' : 'JOIN_REQUEST_REJECTED',
+      resourceType: 'organisation_join_request',
+      resourceId: requestId,
+      metadata: {
+        targetUserId: request.userId,
+        targetEmail: (request.user as any)?.email,
+        decision,
+      },
+    });
+
+    return updated;
+  }
+
+  /**
+   * INK-318: Returns active administrators for member contact.
+   */
+  async getAdmins(
+    orgId: string,
+  ): Promise<Array<{ id: string; name: string | null; email: string; role: string }>> {
+    return this.prisma.user.findMany({
+      where: {
+        organisationId: orgId,
+        role: { in: ['admin', 'org_admin', 'super_admin'] },
+        status: 'active',
+        deletedAt: null,
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+      },
+      orderBy: { name: 'asc' },
+    });
+  }
+
+  /**
+   * INK-318: Platform super admin assigns an admin to an organisation.
+   */
+  async superAdminAssignAdmin(
+    orgId: string,
+    actorUserId: string,
+    targetUserId: string,
+  ): Promise<void> {
+    await this.getOrganisationById(orgId);
+
+    const targetUser = await this.prisma.user.findFirst({
+      where: { id: targetUserId },
+    });
+    if (!targetUser) {
+      throw new NotFoundError('Target user not found.');
+    }
+
+    await this.prisma.user.update({
+      where: { id: targetUserId },
+      data: { role: 'org_admin', organisationId: orgId, status: 'active' },
+    });
+
+    if (this.prisma.userOrganisation) {
+      await this.prisma.userOrganisation.upsert({
+        where: { userId_organisationId: { userId: targetUserId, organisationId: orgId } },
+        create: {
+          id: generateId(),
+          organisationId: orgId,
+          userId: targetUserId,
+          role: 'org_admin',
+          status: 'active',
+          isDefault: true,
+        },
+        update: {
+          role: 'org_admin',
+          status: 'active',
+        },
+      });
+    }
+
+    await this.auditService.log({
+      organisationId: orgId,
+      userId: actorUserId,
+      action: 'ADMIN_ASSIGNED_BY_SUPERADMIN',
+      resourceType: 'user',
+      resourceId: targetUserId,
+      metadata: { targetEmail: targetUser.email },
+    });
   }
 
   /**
