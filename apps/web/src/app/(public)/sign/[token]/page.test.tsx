@@ -634,6 +634,7 @@ describe('SignDocumentPage Component Tests (FR-007 Workflow Engine)', () => {
     fireEvent.click(screen.getByTestId('ersd-accept-button'));
 
     await waitFor(() => {
+      expect(screen.queryByTestId('ersd-modal-overlay')).toBeNull();
       expect(screen.queryByTestId('electronic-consent-modal')).toBeNull();
     });
 
@@ -653,6 +654,7 @@ describe('SignDocumentPage Component Tests (FR-007 Workflow Engine)', () => {
 
     await waitFor(() => {
       expect(screen.queryByTestId('signature-modal-overlay')).toBeNull();
+      expect(screen.queryByTestId('click-to-sign-f-sig')).toBeNull();
     });
 
     // Submit
@@ -760,6 +762,7 @@ describe('SignDocumentPage Component Tests (FR-007 Workflow Engine)', () => {
     fireEvent.click(screen.getByTestId('ersd-accept-button'));
 
     await waitFor(() => {
+      expect(screen.queryByTestId('ersd-modal-overlay')).toBeNull();
       expect(screen.queryByTestId('electronic-consent-modal')).toBeNull();
     });
 
@@ -778,6 +781,7 @@ describe('SignDocumentPage Component Tests (FR-007 Workflow Engine)', () => {
 
     await waitFor(() => {
       expect(screen.queryByTestId('signature-modal-overlay')).toBeNull();
+      expect(screen.queryByTestId('click-to-sign-f-sig')).toBeNull();
     });
 
     const finishBtn = await screen.findByTestId('guide-finish-button');
