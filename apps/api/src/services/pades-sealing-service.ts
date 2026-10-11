@@ -154,6 +154,28 @@ export class PadesSealingService {
       cert = await certService.getOrCreateDefaultCertificate(organisationId, effectiveUserId);
     }
 
+    // Auto-renew expired certificates so new documents are not signed with expired credentials
+    const now = new Date();
+    if (cert.validTo && new Date(cert.validTo) <= now) {
+      if (options.certificateId) {
+        throw new BadRequestError(
+          'The selected signing certificate has expired. Please renew or create a new certificate.',
+        );
+      }
+      cert = (
+        await new CertificateService(
+          this.prisma,
+          this.keyCustodyService,
+          this.auditService,
+          this.signingClient,
+        ).generateSelfSigned(organisationId, agreement.authorId, {
+          name: `${cert.name} (Renewed)`,
+          validityDays: 730,
+          setAsDefault: true,
+        })
+      ).certificate;
+    }
+
     // Legacy profiles are preserved for historical verification; renew into a new profile.
     if (
       cert.type === 'SELF_SIGNED' &&
@@ -173,6 +195,8 @@ export class PadesSealingService {
           this.signingClient,
         ).generateSelfSigned(organisationId, agreement.authorId, {
           name: 'Document Signing Certificate',
+          validityDays: 730,
+          setAsDefault: true,
         })
       ).certificate;
     }
@@ -195,10 +219,10 @@ export class PadesSealingService {
     // Assemble the complete PDF with Envelope ID on every page, flattened fields, and Certificate page
     const pdfAssembly = new PdfAssemblyService();
     const existingPdfBase64 =
-      (meta.signedPdfBase64 as string | undefined) ||
-      (meta.fileBase64 as string | undefined) ||
       (meta.fileData as string | undefined) ||
-      (typeof options.pdfData === 'string' ? options.pdfData : undefined);
+      (meta.fileBase64 as string | undefined) ||
+      (typeof options.pdfData === 'string' ? options.pdfData : undefined) ||
+      (meta.signedPdfBase64 as string | undefined);
     const existingPdfBytes = options.pdfData instanceof Uint8Array ? options.pdfData : undefined;
 
     const rawFields = agreement.fields as any;

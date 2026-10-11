@@ -119,6 +119,17 @@ export class PdfAssemblyService {
     const existingPages = pdfDoc.getPages();
     for (const page of existingPages) {
       const { height } = page.getSize();
+      // Draw opaque white mask to prevent overlapping text if document already contains an older envelope ID header
+      page.drawRectangle({
+        x: 32,
+        y: height - 26,
+        width: Math.max(
+          340,
+          helvetica.widthOfTextAtSize(`Graphsign.ink Envelope ID: ${envelopeId}`, 8) + 16,
+        ),
+        height: 16,
+        color: rgb(1, 1, 1),
+      });
       page.drawText(`Graphsign.ink Envelope ID: ${envelopeId}`, {
         x: 36,
         y: height - 22,
@@ -842,7 +853,7 @@ export class PdfAssemblyService {
       });
 
       const ipInfo = recip.ipAddress ? `IP: ${recip.ipAddress}` : 'IP: Verified Web Session';
-      const uaInfo = recip.userAgent ? recip.userAgent.substring(0, 48) : 'Web Client';
+      const uaInfo = this.formatUserAgent(recip.userAgent);
       certPage.drawText(this.cleanWinAnsi(`${ipInfo} • ${uaInfo}`), {
         x: marginX + 12,
         y: signerY - 30,
@@ -1021,6 +1032,27 @@ export class PdfAssemblyService {
       });
       legalY -= 10;
     }
+  }
+
+  /**
+   * Formats a user-agent string cleanly into browser and operating system info.
+   */
+  private formatUserAgent(ua?: string | null): string {
+    if (!ua) return 'Web Client';
+    let browser = 'Browser';
+    let os = 'Device';
+    if (/Windows/i.test(ua)) os = 'Windows';
+    else if (/Macintosh|Mac OS/i.test(ua)) os = 'macOS';
+    else if (/iPhone|iPad/i.test(ua)) os = 'iOS';
+    else if (/Android/i.test(ua)) os = 'Android';
+    else if (/Linux/i.test(ua)) os = 'Linux';
+
+    if (/Edg\//i.test(ua)) browser = 'Edge';
+    else if (/Chrome\//i.test(ua)) browser = 'Chrome';
+    else if (/Safari\//i.test(ua) && !/Chrome\//i.test(ua)) browser = 'Safari';
+    else if (/Firefox\//i.test(ua)) browser = 'Firefox';
+
+    return `${browser} on ${os}`;
   }
 
   /**

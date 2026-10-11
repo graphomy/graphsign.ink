@@ -68,7 +68,7 @@ jobs:
             --var WEB_URL:"${{ vars.WEB_URL || (github.ref_name == 'main' && 'https://graphsign.ink,https://www.graphsign.ink,https://graphsign-web.pages.dev,http://localhost:3000' || 'https://dev.graphsign.ink,https://dev-graphsign-web.pages.dev,http://localhost:3000') }}" \
             --var API_URL:"${{ vars.API_URL || (github.ref_name == 'main' && 'https://graphsign-api.kunal-f9f.workers.dev' || 'https://dev-graphsign-api.kunal-f9f.workers.dev') }}" \
             --var SIGNING_SERVICE_URL:"${{ vars.SIGNING_SERVICE_URL || '' }}" \
-            --var EMAIL_FROM:"${{ vars.EMAIL_FROM || 'notification@mail.graphomy.com' }}" \
+            --var EMAIL_FROM:"${{ vars.EMAIL_FROM || 'updates@notification.graphsign.ink' }}" \
             --var NODE_ENV:"${{ vars.NODE_ENV || (github.ref_name == 'main' && 'production' || 'development') }}"
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

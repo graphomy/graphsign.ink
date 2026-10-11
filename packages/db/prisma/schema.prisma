@@ -15,6 +15,8 @@ model Organisation {
   planType              String    @default("individual") @map("plan_type") @db.VarChar(20)
   status                String    @default("active") @db.VarChar(20)
   domain                String?   @db.VarChar(255)
+  verifiedDomain        String?   @unique @map("verified_domain") @db.VarChar(255)
+  domainOnboardingPolicy String   @default("admin_approval") @map("domain_onboarding_policy") @db.VarChar(30)
   sessionTimeoutMinutes Int       @default(15) @map("session_timeout_minutes")
   mfaRequired           Boolean   @default(false) @map("mfa_required")
   mfaRequiredRoles      Json?     @map("mfa_required_roles") @db.JsonB
@@ -50,6 +52,7 @@ model Organisation {
   users            User[]
   memberships      UserOrganisation[]
   invitations      OrganisationInvitation[]
+  joinRequests     OrganisationJoinRequest[]
   teams            Team[]
   customRoles      CustomRole[]
   domains          OrganisationDomain[]
@@ -77,6 +80,7 @@ model Organisation {
   @@index([slug])
   @@index([status])
   @@index([tenantId])
+  @@index([verifiedDomain])
   @@map("organisations")
 }
 
@@ -124,6 +128,8 @@ model User {
   actingClientBindings ApiClientBinding[]  @relation("ActingUser")
   refreshSessions      RefreshSession[]
   webhookSubscriptions WebhookSubscription[] @relation("WebhookOwner")
+  reviewedJoinRequests OrganisationJoinRequest[] @relation("JoinRequestReviewer")
+  joinRequests         OrganisationJoinRequest[]
 
   @@unique([organisationId, email])
   @@index([status])
@@ -136,6 +142,9 @@ model UserOrganisation {
   userId         String   @map("user_id") @db.Uuid
   organisationId String   @map("organisation_id") @db.Uuid
   role           String   @default("user") @db.VarChar(50)
+  status         String   @default("active") @db.VarChar(20) // 'active' | 'suspended' | 'pending_approval'
+  joinedVia      String   @default("invitation") @map("joined_via") @db.VarChar(30) // 'initial_creator' | 'domain_auto' | 'domain_approved' | 'invitation'
+  invitedById    String?  @map("invited_by_id") @db.Uuid
   isDefault      Boolean  @default(false) @map("is_default")
   createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz()
   updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz()
@@ -146,6 +155,7 @@ model UserOrganisation {
   @@unique([userId, organisationId])
   @@index([userId])
   @@index([organisationId])
+  @@index([organisationId, role, status])
   @@map("user_organisations")
 }
 
@@ -227,14 +237,38 @@ model OrganisationDomain {
   domain            String    @unique @db.VarChar(255)
   verificationToken String    @map("verification_token") @db.VarChar(255)
   status            String    @default("pending") @db.VarChar(20)
+  isImmutable       Boolean   @default(false) @map("is_immutable")
   verifiedAt        DateTime? @map("verified_at") @db.Timestamptz()
+  dnsCheckedAt      DateTime? @map("dns_checked_at") @db.Timestamptz()
   createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz()
   updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
 
   organisation Organisation @relation(fields: [organisationId], references: [id])
 
   @@index([organisationId])
+  @@index([domain, status])
   @@map("organisation_domains")
+}
+
+/// Organisation join requests under domain-based approval policy
+model OrganisationJoinRequest {
+  id             String    @id @db.Uuid
+  organisationId String    @map("organisation_id") @db.Uuid
+  userId         String    @map("user_id") @db.Uuid
+  email          String    @db.VarChar(255)
+  status         String    @default("pending") @db.VarChar(20) // 'pending' | 'approved' | 'rejected'
+  reviewedById   String?   @map("reviewed_by_id") @db.Uuid
+  reviewedAt     DateTime? @map("reviewed_at") @db.Timestamptz()
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
+
+  organisation Organisation @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reviewedBy   User?        @relation("JoinRequestReviewer", fields: [reviewedById], references: [id])
+
+  @@unique([organisationId, userId, status])
+  @@index([organisationId, status])
+  @@map("organisation_join_requests")
 }
 
 /// Agreement model — lifecycle, document uploads, drafts, metadata, and archiving.

@@ -1,7 +1,7 @@
 {
   "name": "graphsign-ink",
   "private": true,
-  "version": "0.9.2",
+  "version": "0.9.3",
   "description": "Open-source electronic signature platform",
   "license": "AGPL-3.0",
   "packageManager": "pnpm@9.15.4",

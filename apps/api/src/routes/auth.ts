@@ -161,6 +161,7 @@ export function createAuthRoutes(deps?: AuthDeps) {
       email: result.email,
       status: result.status,
       token: result.token,
+      role: result.role,
       organisationId: result.organisationId,
       message: 'Login successful.',
     });
@@ -623,6 +624,7 @@ export function createAuthRoutes(deps?: AuthDeps) {
       email: result.email,
       status: result.status,
       token: result.token,
+      role: result.role,
       organisationId: result.organisationId,
       message: 'Login successful.',
     });

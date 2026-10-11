@@ -201,7 +201,10 @@ export function ElectronicConsentModal({
       aria-modal="true"
       aria-labelledby="ersd-modal-title"
     >
-      <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[88dvh] flex flex-col shadow-[0_8px_16px_-4px_rgb(16_24_40/0.08),0_24px_48px_-12px_rgb(16_24_40/0.16)] border border-ink-200 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+      <div
+        data-testid="electronic-consent-modal"
+        className="bg-white rounded-2xl max-w-2xl w-full max-h-[88dvh] flex flex-col shadow-[0_8px_16px_-4px_rgb(16_24_40/0.08),0_24px_48px_-12px_rgb(16_24_40/0.16)] border border-ink-200 overflow-hidden animate-in fade-in zoom-in-95 duration-200"
+      >
         {/* Header */}
         <div className="p-7 border-b border-ink-200 shrink-0 relative bg-white">
           <Badge

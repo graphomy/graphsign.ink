@@ -116,6 +116,7 @@ export default function SignDocumentPage({
   const [error, setError] = useState<string | null>(null);
   const [agreement, setAgreement] = useState<AgreementDetails | null>(null);
   const [currentRecipient, setCurrentRecipient] = useState<RecipientInfo | null>(null);
+  const [allRecipients, setAllRecipients] = useState<RecipientInfo[]>([]);
   const [isTurn, setIsTurn] = useState<boolean>(true);
 
   // Authentication & Guest Gate
@@ -222,9 +223,44 @@ export default function SignDocumentPage({
           );
         }
 
+        const recips: RecipientInfo[] =
+          data.data.recipients || data.data.allRecipients || data.data.agreement?.recipients || [];
         setAgreement(data.data.agreement);
         setCurrentRecipient(data.data.recipient);
+        setAllRecipients(recips);
         setIsTurn(data.data.isTurn !== false);
+
+        // Pre-populate fields and signatures completed by other signers
+        if (Array.isArray(recips)) {
+          const initialFieldValues: Record<string, string | boolean | number> = {};
+          const docFields = data.data.agreement?.fields?.fields || [];
+          for (const r of recips as (RecipientInfo & {
+            fieldsData?: Record<string, unknown>;
+            signatureData?: string;
+          })[]) {
+            if (r.fieldsData && typeof r.fieldsData === 'object') {
+              Object.assign(initialFieldValues, r.fieldsData);
+            }
+            if (r.signatureData && Array.isArray(docFields)) {
+              for (const f of docFields) {
+                if (
+                  (f.type === 'SIGNATURE' || f.type === 'INITIALS') &&
+                  (f.recipientId === r.id ||
+                    (r.email && f.recipientId?.toLowerCase() === r.email.toLowerCase()) ||
+                    f.recipientId === `recipient-${r.routingOrder}` ||
+                    f.recipientId === `signer-${r.routingOrder}` ||
+                    f.recipientId === `recip-${r.routingOrder}` ||
+                    f.recipientId === `r-${r.routingOrder}`)
+                ) {
+                  initialFieldValues[f.id] = r.signatureData;
+                }
+              }
+            }
+          }
+          if (Object.keys(initialFieldValues).length > 0) {
+            setFieldValues((prev) => ({ ...initialFieldValues, ...prev }));
+          }
+        }
 
         if (data.data.agreement.status === 'COMPLETED') {
           setIsCompleted(true);
@@ -361,70 +397,125 @@ export default function SignDocumentPage({
   // Helper to determine if a field belongs to the currently active signer
   const isFieldAssignedToMe = useCallback(
     (fieldRecipientId?: string) => {
-      if (!fieldRecipientId) return true;
       if (!currentRecipient) return true;
 
-      // Direct ID or email match
-      if (fieldRecipientId === currentRecipient.id) return true;
-      if (
-        currentRecipient.email &&
-        fieldRecipientId.toLowerCase() === currentRecipient.email.toLowerCase()
-      ) {
-        return true;
-      }
-      if (currentRecipient.role && fieldRecipientId === currentRecipient.role) return true;
-
-      // Routing order matches: recipient-N, signer-N, recip-N
       const order = currentRecipient.routingOrder || 1;
+      const currentEmail = currentRecipient.email?.trim().toLowerCase();
+      const currentId = currentRecipient.id;
+      const currentRole = currentRecipient.role?.trim().toLowerCase();
+
+      // Combine known recipients from agreement.recipients and agreement.fields.recipients
+      const regRecipients = agreement?.fields?.recipients || [];
+      const combinedRecipients = [...allRecipients, ...regRecipients];
+      const hasMultipleRecipients =
+        allRecipients.length > 1 || (Array.isArray(regRecipients) && regRecipients.length > 1);
+
+      // If field has no recipientId specified
+      if (!fieldRecipientId || !fieldRecipientId.trim()) {
+        // If envelope has multiple signers, unassigned fields fall back to Signer 1 only
+        return hasMultipleRecipients ? order === 1 : true;
+      }
+
+      const trimmedFieldRecipId = fieldRecipientId.trim();
+      const lowerFieldRecipId = trimmedFieldRecipId.toLowerCase();
+
+      // 1. Direct match with current signer ID
+      if (trimmedFieldRecipId === currentId) return true;
+
+      // 2. Direct match with current signer email
+      if (currentEmail && lowerFieldRecipId === currentEmail) return true;
+
+      // 3. Direct match with current signer role
+      if (currentRole && lowerFieldRecipId === currentRole) return true;
+
+      // 4. Order-based match: recipient-N, signer-N, recip-N, r-N
       if (
-        fieldRecipientId === `recipient-${order}` ||
-        fieldRecipientId === `signer-${order}` ||
-        fieldRecipientId === `recip-${order}`
+        lowerFieldRecipId === `recipient-${order}` ||
+        lowerFieldRecipId === `signer-${order}` ||
+        lowerFieldRecipId === `recip-${order}` ||
+        lowerFieldRecipId === `r-${order}`
       ) {
         return true;
       }
 
-      // First signer fallbacks
+      // First signer fallback aliases (only if order === 1)
       if (order === 1) {
         if (
-          fieldRecipientId === 'recipient-1' ||
-          fieldRecipientId === 'signer-1' ||
-          fieldRecipientId === 'recip-1' ||
-          fieldRecipientId === 'signer' ||
-          fieldRecipientId === 'r-1'
+          lowerFieldRecipId === 'recipient-1' ||
+          lowerFieldRecipId === 'signer-1' ||
+          lowerFieldRecipId === 'recip-1' ||
+          lowerFieldRecipId === 'signer' ||
+          lowerFieldRecipId === 'r-1'
         ) {
           return true;
         }
       }
 
-      // Cross-reference with agreement.fields.recipients registry
-      const regRecipients = agreement?.fields?.recipients;
+      // 5. Match via registry entries in agreement.fields.recipients
       if (Array.isArray(regRecipients) && regRecipients.length > 0) {
-        const foundIndex = regRecipients.findIndex((r) => r.id === fieldRecipientId);
-        if (foundIndex !== -1) {
-          const matchedReg = regRecipients[foundIndex]!;
+        const matchedReg = regRecipients.find((r) => r.id === trimmedFieldRecipId);
+        if (matchedReg) {
           if (
             matchedReg.email &&
-            currentRecipient.email &&
-            matchedReg.email.toLowerCase() === currentRecipient.email.toLowerCase()
+            currentEmail &&
+            matchedReg.email.trim().toLowerCase() === currentEmail
           ) {
             return true;
           }
-          if (foundIndex + 1 === order) {
+          if (matchedReg.routingOrder && matchedReg.routingOrder === order) {
             return true;
           }
+          // If this registered recipient belongs to another signer, this field is strictly NOT for me
+          return false;
         }
-        if (regRecipients.length <= 1) {
-          return true;
-        }
-      } else {
-        // No recipient registry saved, default to active signer
-        return true;
       }
 
-      return false;
+      // 6. Match via allRecipients
+      if (Array.isArray(allRecipients) && allRecipients.length > 0) {
+        const matchedAll = allRecipients.find((r) => r.id === trimmedFieldRecipId);
+        if (matchedAll) {
+          if (
+            matchedAll.email &&
+            currentEmail &&
+            matchedAll.email.trim().toLowerCase() === currentEmail
+          ) {
+            return true;
+          }
+          if (matchedAll.routingOrder && matchedAll.routingOrder === order) {
+            return true;
+          }
+          // If this recipient belongs to another signer, this field is strictly NOT for me
+          return false;
+        }
+      }
+
+      // 7. Check if fieldRecipientId explicitly points to another signer
+      // Check other recipient orders: recipient-X, signer-X, etc.
+      const orderMatch = lowerFieldRecipId.match(/^(?:recipient|signer|recip|r)-(\d+)$/);
+      if (orderMatch && orderMatch[1]) {
+        const targetOrder = parseInt(orderMatch[1], 10);
+        return targetOrder === order;
+      }
+
+      // Check if fieldRecipientId matches any other recipient's email or ID
+      for (const other of combinedRecipients) {
+        if (other.id && other.id !== currentId && other.id === trimmedFieldRecipId) {
+          return false;
+        }
+        if (
+          other.email &&
+          currentEmail &&
+          other.email.trim().toLowerCase() !== currentEmail &&
+          other.email.trim().toLowerCase() === lowerFieldRecipId
+        ) {
+          return false;
+        }
+      }
+
+      // 8. If envelope only has one recipient, default to true. If multiple, default to false.
+      return !hasMultipleRecipients;
     },
-    [currentRecipient, agreement],
+    [currentRecipient, agreement, allRecipients],
   );
 
   // Assigned Fields for Current Recipient
@@ -614,7 +705,14 @@ export default function SignDocumentPage({
       return;
     }
 
-    if (signedAsGuest || !isAuthenticated) {
+    const isAuthed =
+      isAuthenticated ||
+      Boolean(
+        typeof window !== 'undefined' &&
+        (localStorage.getItem('graphsign_session_token') || localStorage.getItem('token')),
+      );
+
+    if (signedAsGuest || !isAuthed) {
       setIsSubmitting(true);
       try {
         const res = await fetch(`${getApiUrl()}/api/v1/sign/${rawToken}/otp/send`, {
@@ -731,7 +829,8 @@ export default function SignDocumentPage({
             }
           }
           if (attempt === 0) {
-            await new Promise((resolve) => setTimeout(resolve, 600));
+            const delay = process.env.NODE_ENV === 'test' ? 10 : 600;
+            await new Promise((resolve) => setTimeout(resolve, delay));
           }
         }
       } catch {

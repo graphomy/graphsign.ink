@@ -716,6 +716,8 @@ export class WorkflowService {
         routingOrder: true,
         status: true,
         color: true,
+        fieldsData: true,
+        signatureData: true,
       },
       orderBy: { routingOrder: 'asc' },
     });
@@ -1276,31 +1278,51 @@ export class WorkflowService {
 
     // Backend validation for assigned required fields (INK-104)
     const envelopeFields = (agreement.fields as any)?.fields || [];
+    const allAgreementRecips = (agreement.recipients || []) as any[];
     const assignedRequiredFields = envelopeFields.filter((f: any) => {
       if (!f.isRequired) return false;
-      if (!f.recipientId) return true;
-      if (f.recipientId === recipient.id) return true;
-      if (recipient.email && f.recipientId.toLowerCase() === recipient.email.toLowerCase())
-        return true;
+      const fRecipId = typeof f.recipientId === 'string' ? f.recipientId.trim() : undefined;
+      if (fRecipId === recipient.id) return true;
+      if (recipient.email && fRecipId?.toLowerCase() === recipient.email.toLowerCase()) return true;
       const order = recipient.routingOrder || 1;
       if (
-        f.recipientId === `recipient-${order}` ||
-        f.recipientId === `signer-${order}` ||
-        f.recipientId === `recip-${order}`
+        fRecipId === `recipient-${order}` ||
+        fRecipId === `signer-${order}` ||
+        fRecipId === `recip-${order}`
       ) {
         return true;
       }
+
+      // Check if field belongs to another recipient in the agreement
+      if (fRecipId && allAgreementRecips.length > 0) {
+        const belongsToOther = allAgreementRecips.some((r) => {
+          if (r.id === recipient.id) return false;
+          if (r.email && recipient.email && r.email.toLowerCase() === recipient.email.toLowerCase())
+            return false;
+          return (
+            r.id === fRecipId ||
+            (r.email && r.email.toLowerCase() === fRecipId.toLowerCase()) ||
+            `recipient-${r.routingOrder}` === fRecipId ||
+            `signer-${r.routingOrder}` === fRecipId ||
+            `recip-${r.routingOrder}` === fRecipId
+          );
+        });
+        if (belongsToOther) return false;
+      }
+
       if (
         order === 1 &&
-        (f.recipientId === 'recipient-1' ||
-          f.recipientId === 'signer-1' ||
-          f.recipientId === 'recip-1' ||
-          f.recipientId === 'signer' ||
-          f.recipientId === 'r-1')
+        allAgreementRecips.length <= 1 &&
+        (fRecipId === 'recipient-1' ||
+          fRecipId === 'signer-1' ||
+          fRecipId === 'recip-1' ||
+          fRecipId === 'signer' ||
+          fRecipId === 'r-1' ||
+          !fRecipId)
       ) {
         return true;
       }
-      return false;
+      return !fRecipId && allAgreementRecips.length <= 1;
     });
 
     const missingFields: string[] = [];

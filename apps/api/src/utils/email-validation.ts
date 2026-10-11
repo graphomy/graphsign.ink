@@ -51,6 +51,30 @@ export const DEFAULT_PERSONAL_EMAIL_DOMAINS = [
 ] as const;
 
 /**
+ * Default list of disposable/temporary email domains.
+ * Configurable via BLOCKED_DISPOSABLE_EMAIL_DOMAINS environment variable.
+ */
+export const DEFAULT_DISPOSABLE_EMAIL_DOMAINS = [
+  'mailinator.com',
+  'tempmail.com',
+  '10minutemail.com',
+  'guerrillamail.com',
+  'guerrillamail.block',
+  'sharklasers.com',
+  'throwawaymail.com',
+  'yopmail.com',
+  'getairmail.com',
+  'temp-mail.org',
+  'dispostable.com',
+  'trashmail.com',
+  'fakeinbox.com',
+  'mytemp.email',
+  'maildrop.cc',
+  'inboxkitten.com',
+  'generator.email',
+] as const;
+
+/**
  * Resolves the full set of personal email domains, including any configured
  * via the BLOCKED_PERSONAL_EMAIL_DOMAINS environment variable.
  */
@@ -79,12 +103,42 @@ export function getPersonalEmailDomains(extraDomains?: string[]): Set<string> {
 }
 
 /**
- * Extracts the normalized domain part from an email address.
+ * Resolves disposable email domains.
  */
-export function extractEmailDomain(email: string): string {
-  if (!email || typeof email !== 'string') return '';
-  const parts = email.trim().toLowerCase().split('@');
-  return parts.length === 2 ? parts[1]! : '';
+export function getDisposableEmailDomains(extraDomains?: string[]): Set<string> {
+  const domains = new Set<string>(DEFAULT_DISPOSABLE_EMAIL_DOMAINS);
+
+  const envBlocked =
+    typeof process !== 'undefined' ? process.env?.BLOCKED_DISPOSABLE_EMAIL_DOMAINS : undefined;
+  if (envBlocked) {
+    envBlocked
+      .split(',')
+      .map((d) => d.trim().toLowerCase())
+      .filter((d) => d.length > 0)
+      .forEach((d) => domains.add(d));
+  }
+
+  if (extraDomains) {
+    extraDomains
+      .map((d) => d.trim().toLowerCase())
+      .filter((d) => d.length > 0)
+      .forEach((d) => domains.add(d));
+  }
+
+  return domains;
+}
+
+/**
+ * Extracts the normalized domain part from an email address or domain string.
+ */
+export function extractEmailDomain(emailOrDomain: string): string {
+  if (!emailOrDomain || typeof emailOrDomain !== 'string') return '';
+  const trimmed = emailOrDomain.trim().toLowerCase();
+  if (trimmed.includes('@')) {
+    const parts = trimmed.split('@');
+    return parts.length === 2 ? parts[1]! : '';
+  }
+  return trimmed;
 }
 
 /**
@@ -95,4 +149,23 @@ export function isPersonalEmailDomain(email: string, extraDomains?: string[]): b
   if (!domain) return false;
   const blocked = getPersonalEmailDomains(extraDomains);
   return blocked.has(domain);
+}
+
+/**
+ * Checks if the given email belongs to a disposable/temporary email provider.
+ */
+export function isDisposableEmailDomain(email: string, extraDomains?: string[]): boolean {
+  const domain = extractEmailDomain(email);
+  if (!domain) return false;
+  const blocked = getDisposableEmailDomains(extraDomains);
+  return blocked.has(domain);
+}
+
+/**
+ * Checks if the given email or domain is either personal or disposable.
+ */
+export function isPersonalOrDisposableDomain(emailOrDomain: string): boolean {
+  const domain = extractEmailDomain(emailOrDomain);
+  if (!domain) return true;
+  return isPersonalEmailDomain(domain) || isDisposableEmailDomain(domain);
 }

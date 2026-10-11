@@ -51,6 +51,7 @@ function DashboardContent() {
 
   const [agreements, setAgreements] = useState<AgreementItem[]>([]);
   const [hasNoCertificate, setHasNoCertificate] = useState(false);
+  const [hasExpiredCertificate, setHasExpiredCertificate] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -105,7 +106,14 @@ function DashboardContent() {
         if (certsRes && certsRes.ok) {
           const certs = await certsRes.json().catch(() => []);
           if (!controller.signal.aborted) {
-            setHasNoCertificate(Array.isArray(certs) && certs.length === 0);
+            const certList = Array.isArray(certs) ? certs : (certs.items ?? []);
+            const now = Date.now();
+            const activeValidCerts = certList.filter(
+              (c: { status?: string; validTo?: string }) =>
+                c.status === 'ACTIVE' && (!c.validTo || new Date(c.validTo).getTime() > now),
+            );
+            setHasNoCertificate(certList.length === 0);
+            setHasExpiredCertificate(certList.length > 0 && activeValidCerts.length === 0);
           }
         }
       } catch (err: unknown) {
@@ -171,7 +179,33 @@ function DashboardContent() {
 
       <main className="flex-1 py-8 px-6 lg:px-8 max-w-[1440px] mx-auto w-full space-y-6">
         {/* Certificate Setup Callout Banner (Issue 2) */}
-        {!loading && hasNoCertificate && (
+        {!loading && hasExpiredCertificate && (
+          <div className="rounded-2xl bg-red-50 border border-red-300 p-5 sm:p-6 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-start sm:items-center gap-3.5">
+              <div className="w-10 h-10 rounded-xl bg-red-100 border border-red-300 text-red-800 flex items-center justify-center font-bold text-lg shrink-0">
+                🚨
+              </div>
+              <div className="space-y-0.5">
+                <h3 className="text-sm font-bold text-red-950">
+                  Action Required: Signing Certificate Expired
+                </h3>
+                <p className="text-xs text-red-800 leading-relaxed">
+                  Your organisation&apos;s X.509 digital signing certificate has expired. Documents
+                  sealed with an expired certificate will fail cryptographic PAdES verification.
+                  Create or upload a new certificate to maintain document validity.
+                </p>
+              </div>
+            </div>
+            <Link
+              href="/settings/certificates?action=create"
+              className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg bg-red-700 hover:bg-red-800 text-white text-xs font-bold transition-all shadow-xs shrink-0 self-start sm:self-auto"
+            >
+              Renew Certificate →
+            </Link>
+          </div>
+        )}
+
+        {!loading && !hasExpiredCertificate && hasNoCertificate && (
           <div className="rounded-2xl bg-amber-50 border border-amber-300 p-5 sm:p-6 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex items-start sm:items-center gap-3.5">
               <div className="w-10 h-10 rounded-xl bg-amber-100 border border-amber-300 text-amber-800 flex items-center justify-center font-bold text-lg shrink-0">

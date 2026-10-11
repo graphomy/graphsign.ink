@@ -40,12 +40,30 @@ export class CertificateService {
 
   /** Finds a tenant certificate or provisions a durable default in the signing boundary. */
   async getOrCreateDefaultCertificate(organisationId: string, userId: string) {
+    const now = new Date();
     const defaultCertificate = await this.prisma.signingCertificate.findFirst({
-      where: { organisationId, isDefault: true, deletedAt: null, status: 'ACTIVE' },
+      where: { organisationId, isDefault: true, deletedAt: null },
     });
-    if (defaultCertificate) return defaultCertificate;
+    if (defaultCertificate) {
+      if (defaultCertificate.validTo && defaultCertificate.validTo <= now) {
+        if (defaultCertificate.status === 'ACTIVE') {
+          await this.prisma.signingCertificate.update({
+            where: { id: defaultCertificate.id },
+            data: { status: 'EXPIRED' },
+          });
+        }
+      } else if (defaultCertificate.status === 'ACTIVE') {
+        return defaultCertificate;
+      }
+    }
+
     const certificate = await this.prisma.signingCertificate.findFirst({
-      where: { organisationId, deletedAt: null, status: 'ACTIVE' },
+      where: {
+        organisationId,
+        deletedAt: null,
+        status: 'ACTIVE',
+        validTo: { gt: now },
+      },
       orderBy: { createdAt: 'desc' },
     });
     if (certificate) {
@@ -55,9 +73,12 @@ export class CertificateService {
       });
       return { ...certificate, isDefault: true };
     }
+
     return (
       await this.generateSelfSigned(organisationId, userId, {
         name: 'Default Signing Certificate',
+        validityDays: 730,
+        setAsDefault: true,
       })
     ).certificate;
   }
@@ -270,6 +291,15 @@ export class CertificateService {
    * Lists all certificates belonging to an organisation.
    */
   async listCertificates(organisationId: string) {
+    const now = new Date();
+    await this.prisma.signingCertificate.updateMany({
+      where: {
+        organisationId,
+        status: 'ACTIVE',
+        validTo: { lte: now },
+      },
+      data: { status: 'EXPIRED' },
+    });
     return this.prisma.signingCertificate.findMany({
       where: { organisationId, deletedAt: null },
       orderBy: [{ isDefault: 'desc' }, { createdAt: 'desc' }],
@@ -309,7 +339,7 @@ export class CertificateService {
       throw new NotFoundError('Certificate not found.');
     }
 
-    if (cert.status !== 'ACTIVE') {
+    if (cert.status !== 'ACTIVE' || (cert.validTo && cert.validTo <= new Date())) {
       throw new ValidationError(
         'Cannot set an inactive, expired, or revoked certificate as the default.',
       );
