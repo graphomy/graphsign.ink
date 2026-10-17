@@ -68,7 +68,7 @@ function SignatureAnimation() {
   }, [node]);
 
   return (
-    <div ref={setNode} className="relative w-full max-w-md mx-auto mt-12">
+    <div ref={setNode} className="relative w-full max-w-md mx-auto mt-10 mb-8 pb-4">
       {/* Document card */}
       <div
         className="relative glass-panel rounded-2xl shadow-2xl shadow-slate-900/10 border border-slate-200/80 p-8 pt-6 card-hover"
@@ -137,7 +137,7 @@ function SignatureAnimation() {
 
         {/* Verified badge */}
         <div
-          className="absolute -bottom-4 -right-4 flex items-center gap-2 bg-emerald-500 text-white text-xs font-bold px-3.5 py-1.5 rounded-full shadow-lg shadow-emerald-500/25 border border-emerald-400"
+          className="absolute -bottom-3 right-4 sm:-right-2 flex items-center gap-2 bg-emerald-500 text-white text-xs font-bold px-3.5 py-1.5 rounded-full shadow-lg shadow-emerald-500/25 border border-emerald-400 z-30"
           style={{
             opacity: inView ? 1 : 0,
             transform: inView ? 'scale(1)' : 'scale(0.5)',
@@ -364,7 +364,7 @@ export default function Home() {
 
       <main className="flex-1">
         {/* ── Hero ── */}
-        <section className="relative min-h-[85vh] flex items-center justify-center px-6 overflow-hidden mesh-hero-bg">
+        <section className="relative min-h-[85vh] flex items-center justify-center px-6 pt-12 pb-24 overflow-hidden mesh-hero-bg">
           {/* Radial gradient accent */}
           <div
             className="absolute inset-0 pointer-events-none"
@@ -387,7 +387,7 @@ export default function Home() {
           />
 
           <div
-            className="relative z-10 text-center max-w-5xl mx-auto"
+            className="relative z-20 text-center max-w-5xl mx-auto"
             style={{
               opacity: heroVisible ? 1 : 0,
               transform: heroVisible ? 'translateY(0)' : 'translateY(40px)',
@@ -493,7 +493,7 @@ export default function Home() {
           </div>
 
           {/* Bottom fade */}
-          <div className="absolute bottom-0 left-0 right-0 h-28 bg-gradient-to-t from-white to-transparent pointer-events-none" />
+          <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-white to-transparent pointer-events-none z-10" />
         </section>
 
         {/* ── Features Grid ── */}
@@ -598,7 +598,7 @@ export default function Home() {
               Infrastructure.
             </h2>
             <p className="text-base text-neutral-500 max-w-xl mx-auto leading-relaxed">
-              Self-host with Docker, deploy to Cloudflare, or use our managed cloud. Your data, your
+              Deploy with Cloudflare and Neon, or use our managed cloud. Your data, your
               certificates, your rules&mdash;no vendor lock-in, ever.
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-2">
