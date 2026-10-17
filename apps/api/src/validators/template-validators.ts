@@ -6,7 +6,7 @@ export const ALLOWED_MIME_TYPES = [
   'application/msword',
 ];
 
-export const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024; // 25 MB
+export const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB
 export const MAX_HTML_CONTENT_LENGTH = 512 * 1024; // 512 KB
 
 /**
@@ -33,7 +33,7 @@ export const createTemplateSchema = z.object({
   title: z.string().min(2, 'Template title must be at least 2 characters').max(255),
   description: z.string().max(1000).optional(),
   fileName: z.string().optional(),
-  fileSize: z.number().min(1).max(MAX_FILE_SIZE_BYTES, 'File size cannot exceed 25MB').optional(),
+  fileSize: z.number().min(1).max(MAX_FILE_SIZE_BYTES, 'File size cannot exceed 5MB').optional(),
   mimeType: z
     .string()
     .refine(

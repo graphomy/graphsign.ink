@@ -56,11 +56,11 @@ describe('Agreement Validators Unit Tests (Epic INK-8)', () => {
       expect(invalid.success).toBe(false);
     });
 
-    it('should reject files exceeding 15MB', () => {
+    it('should reject files exceeding 5MB', () => {
       const invalid = createUploadAgreementSchema.safeParse({
         title: 'Huge Document',
         fileName: 'huge.pdf',
-        fileSize: 20 * 1024 * 1024, // 20MB
+        fileSize: 6 * 1024 * 1024, // 6MB
         mimeType: 'application/pdf',
       });
       expect(invalid.success).toBe(false);
