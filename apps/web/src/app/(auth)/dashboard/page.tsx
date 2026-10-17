@@ -429,9 +429,7 @@ function DashboardContent() {
                 <tbody className="divide-y divide-slate-100">
                   {agreements.slice(0, 5).map((agreement) => (
                     <tr key={agreement.id} className="hover:bg-slate-50/70 transition-colors">
-                      <td className="px-5 py-3.5 font-bold text-slate-900">
-                        {agreement.title}
-                      </td>
+                      <td className="px-5 py-3.5 font-bold text-slate-900">{agreement.title}</td>
                       <td className="px-5 py-3.5">
                         <span
                           className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider inline-flex items-center gap-1 ${

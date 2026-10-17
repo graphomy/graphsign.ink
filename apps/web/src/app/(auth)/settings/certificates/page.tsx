@@ -65,7 +65,10 @@ function CertificatesContent() {
   const [genCountry, setGenCountry] = useState('US');
   const [genState, setGenState] = useState('');
   const [genLocality, setGenLocality] = useState('');
-  const [genEmail, setGenEmail] = useState('');
+  const [genEmail, setGenEmail] = useState(() => {
+    if (typeof window === 'undefined') return '';
+    return localStorage.getItem('graphsign_user_email') || '';
+  });
   const [genAlgo, setGenAlgo] = useState<'RSA_2048' | 'RSA_4096' | 'ECDSA_P256' | 'ECDSA_P384'>(
     'RSA_2048',
   );
@@ -79,22 +82,15 @@ function CertificatesContent() {
 
   useEffect(() => {
     loadCertificates();
-    if (typeof window !== 'undefined') {
-      const storedEmail = localStorage.getItem('graphsign_user_email') || '';
-      if (storedEmail) {
-        setGenEmail(storedEmail);
-      }
-    }
   }, []);
 
-  useEffect(() => {
-    if (showGenerateModal && typeof window !== 'undefined') {
+  function openGenerateModal() {
+    if (typeof window !== 'undefined') {
       const storedEmail = localStorage.getItem('graphsign_user_email') || '';
-      if (storedEmail) {
-        setGenEmail(storedEmail);
-      }
+      setGenEmail(storedEmail);
     }
-  }, [showGenerateModal]);
+    setShowGenerateModal(true);
+  }
 
   async function loadCertificates() {
     try {
@@ -301,7 +297,7 @@ function CertificatesContent() {
             <div className="flex items-center gap-3">
               <button
                 type="button"
-                onClick={() => setShowGenerateModal(true)}
+                onClick={openGenerateModal}
                 className="py-2.5 px-4 rounded-xl bg-red-600 hover:bg-red-700 text-white font-semibold text-xs sm:text-sm transition-all shadow-sm flex items-center gap-1.5"
               >
                 <Plus className="w-4 h-4" />
@@ -377,7 +373,7 @@ function CertificatesContent() {
               <div className="mt-6 flex justify-center gap-3">
                 <button
                   type="button"
-                  onClick={() => setShowGenerateModal(true)}
+                  onClick={openGenerateModal}
                   className="py-2 px-5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-semibold shadow-sm"
                 >
                   Generate Free Certificate
@@ -680,7 +676,9 @@ function CertificatesContent() {
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1 flex items-center justify-between">
                       <span>Signer Email</span>
-                      <span className="text-[10px] font-normal text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">Logged-in User</span>
+                      <span className="text-[10px] font-normal text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
+                        Logged-in User
+                      </span>
                     </label>
                     <input
                       type="email"

@@ -70,18 +70,18 @@ graphsign.ink/
 
 ## 🛠️ Developer Matrix & Tech Stack
 
-| Layer                  | Technology                                                                                 | Purpose                                                |
-| :--------------------- | :----------------------------------------------------------------------------------------- | :----------------------------------------------------- |
-| **Frontend Framework** | [Next.js 16.4.0](https://nextjs.org/) (React 19, Turbopack)                                | Responsive, server-rendered and static web application |
-| **Backend API**        | [Hono 4.13.13](https://hono.dev/)                                                          | Ultra-fast, edge-native TypeScript REST API            |
-| **Language & Runtime** | [TypeScript 5.9.3](https://www.typescriptlang.org/)                                        | Type-safe end-to-end schemas and contracts             |
-| **Styling & Icons**    | [Tailwind CSS 4.3.3](https://tailwindcss.com/) + [Lucide Icons](https://lucide.dev/)       | Modern, accessible, clean design system                |
+| Layer                  | Technology                                                                                   | Purpose                                                |
+| :--------------------- | :------------------------------------------------------------------------------------------- | :----------------------------------------------------- |
+| **Frontend Framework** | [Next.js 16.4.0](https://nextjs.org/) (React 19, Turbopack)                                  | Responsive, server-rendered and static web application |
+| **Backend API**        | [Hono 4.13.13](https://hono.dev/)                                                            | Ultra-fast, edge-native TypeScript REST API            |
+| **Language & Runtime** | [TypeScript 5.9.3](https://www.typescriptlang.org/)                                          | Type-safe end-to-end schemas and contracts             |
+| **Styling & Icons**    | [Tailwind CSS 4.3.3](https://tailwindcss.com/) + [Lucide Icons](https://lucide.dev/)         | Modern, accessible, clean design system                |
 | **Database & ORM**     | [PostgreSQL (Neon Serverless)](https://neon.tech/) + [Prisma 7.10.1](https://www.prisma.io/) | Multi-tenant schema with driver adapters & migrations  |
-| **Email Delivery**     | [Resend](https://resend.com/)                                                              | Transactional signing invitations, alerts & notices    |
-| **Hosting & Edge**     | [Cloudflare](https://cloudflare.com/) (Workers, Pages, R2)                                 | Edge API execution, static assets, and object storage  |
-| **Authentication**     | [Web Crypto JWT + TOTP](https://developer.mozilla.org/en-US/docs/Web/API/Web_Crypto_API)   | Stateless, standards-compliant authentication          |
-| **Package Manager**    | [pnpm 9+](https://pnpm.io/)                                                                | Fast, disk space-efficient monorepo workspace          |
-| **Testing Suite**      | [Vitest 4.1.12](https://vitest.dev/) + React Testing Library                               | 700+ unit and integration tests passing                |
+| **Email Delivery**     | [Resend](https://resend.com/)                                                                | Transactional signing invitations, alerts & notices    |
+| **Hosting & Edge**     | [Cloudflare](https://cloudflare.com/) (Workers, Pages, R2)                                   | Edge API execution, static assets, and object storage  |
+| **Authentication**     | [Web Crypto JWT + TOTP](https://developer.mozilla.org/en-US/docs/Web/API/Web_Crypto_API)     | Stateless, standards-compliant authentication          |
+| **Package Manager**    | [pnpm 9+](https://pnpm.io/)                                                                  | Fast, disk space-efficient monorepo workspace          |
+| **Testing Suite**      | [Vitest 4.1.12](https://vitest.dev/) + React Testing Library                                 | 700+ unit and integration tests passing                |
 
 ---
 
@@ -100,6 +100,7 @@ graphsign.ink/
 ### 2. Service Credentials Setup
 
 #### A. Neon Serverless PostgreSQL
+
 1. Create a project and database on [neon.tech](https://neon.tech).
 2. Copy the **Direct connection string** (without `-pooler`) for running Prisma migrations:
    ```text
@@ -111,10 +112,12 @@ graphsign.ink/
    ```
 
 #### B. Resend Transactional Email
+
 1. Sign up at [resend.com](https://resend.com) and create an API key (`re_...`).
 2. Verify your sending domain under Domains, or use your account's test sender address for local development.
 
 #### C. Cloudflare (Workers & Pages)
+
 1. Authenticate with Wrangler CLI:
    ```bash
    pnpm exec wrangler login
@@ -144,6 +147,7 @@ cp apps/web/.env.local.example apps/web/.env.local
 ```
 
 Configure your environment files:
+
 - **`packages/db/.env`**:
   ```env
   DATABASE_URL="postgresql://<user>:<password>@<ep-direct>.neon.tech/neondb?sslmode=require"
@@ -173,6 +177,7 @@ pnpm db:push
 ```
 
 If connecting to an existing database with pre-created tables, baseline existing migrations first:
+
 ```bash
 pnpm --filter @graphsign/db exec prisma migrate resolve --applied 20260916_rest_and_webhooks
 pnpm --filter @graphsign/db exec prisma migrate deploy

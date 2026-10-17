@@ -1,7 +1,16 @@
 'use client';
 
 import { useState, useEffect, useRef, Suspense } from 'react';
-import { FilePlus2, PenLine, Upload, CloudOff, MoreHorizontal, Loader2, Plus, X } from 'lucide-react';
+import {
+  FilePlus2,
+  PenLine,
+  Upload,
+  CloudOff,
+  MoreHorizontal,
+  Loader2,
+  Plus,
+  X,
+} from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { SessionGuard } from '@/components/features/auth/SessionGuard';
@@ -1115,7 +1124,9 @@ function TemplateManagementContent() {
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center justify-between">
                     <span>PDF Document</span>
-                    <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">Max 5 MB</span>
+                    <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
+                      Max 5 MB
+                    </span>
                   </label>
                   <div className="border-2 border-dashed border-slate-200 hover:border-red-400 bg-slate-50/60 hover:bg-red-50/20 rounded-2xl p-5 text-center transition-all cursor-pointer">
                     <div className="w-10 h-10 rounded-xl bg-red-50 text-red-600 flex items-center justify-center mx-auto mb-2 shadow-xs">
@@ -1124,9 +1135,7 @@ function TemplateManagementContent() {
                     <p className="text-xs font-bold text-slate-800">
                       {uploadFile ? uploadFile.name : 'Select or drop your PDF template'}
                     </p>
-                    <p className="text-[11px] text-slate-500 mt-0.5">
-                      PDF files up to 5 MB
-                    </p>
+                    <p className="text-[11px] text-slate-500 mt-0.5">PDF files up to 5 MB</p>
                     <input
                       type="file"
                       accept=".pdf,application/pdf"

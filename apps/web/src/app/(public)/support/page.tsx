@@ -8,7 +8,6 @@ export default function SupportPage() {
     <LegalPage
       title="Support and contact"
       sections={[
-
         [
           'Support',
           'For account access, signing, downloads, exports or technical assistance, email support@graphsign.ink. Include a document or workflow identifier and a description of the issue. Do not send passwords, signing tokens or confidential documents.',

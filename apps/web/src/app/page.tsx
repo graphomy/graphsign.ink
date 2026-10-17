@@ -85,7 +85,9 @@ function SignatureAnimation() {
             <div className="w-3 h-3 rounded-full bg-amber-400/80" />
             <div className="w-3 h-3 rounded-full bg-emerald-400/80" />
           </div>
-          <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400">PAdES-B-LTA Document</span>
+          <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400">
+            PAdES-B-LTA Document
+          </span>
         </div>
 
         {/* Mock document text lines */}
@@ -331,9 +333,14 @@ export default function Home() {
       {/* ── Sticky Header ── */}
       <header className="glass-header sticky top-0 z-50 transition-all duration-200">
         <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
-          <Link href="/" className="text-xl font-black tracking-tight text-slate-900 flex items-center gap-1.5">
+          <Link
+            href="/"
+            className="text-xl font-black tracking-tight text-slate-900 flex items-center gap-1.5"
+          >
             <span className="w-2.5 h-2.5 rounded-full bg-red-600 animate-pulse" />
-            <span>graph<span className="text-[#e11d2e]">sign</span>.ink</span>
+            <span>
+              graph<span className="text-[#e11d2e]">sign</span>.ink
+            </span>
           </Link>
 
           <div className="flex items-center gap-3">
@@ -453,7 +460,8 @@ export default function Home() {
                 className="group relative w-full sm:w-auto px-8 py-4 rounded-xl gradient-brand-btn text-white font-bold text-sm transition-all duration-300 shadow-lg shadow-red-500/25 hover:shadow-xl hover:shadow-red-500/35 overflow-hidden"
               >
                 <span className="relative z-10 flex items-center justify-center gap-1.5">
-                  Start Building Free <span className="transition-transform group-hover:translate-x-1">→</span>
+                  Start Building Free{' '}
+                  <span className="transition-transform group-hover:translate-x-1">→</span>
                 </span>
                 <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent translate-x-[-200%] group-hover:translate-x-[200%] transition-transform duration-700" />
               </Link>
@@ -607,7 +615,8 @@ export default function Home() {
                 className="group relative w-full sm:w-auto px-8 py-4 rounded-xl gradient-brand-btn text-white font-bold text-sm transition-all duration-300 shadow-lg shadow-red-500/25 hover:shadow-xl hover:shadow-red-500/35 overflow-hidden"
               >
                 <span className="relative z-10 flex items-center justify-center gap-1.5">
-                  Start Free <span className="transition-transform group-hover:translate-x-1">→</span>
+                  Start Free{' '}
+                  <span className="transition-transform group-hover:translate-x-1">→</span>
                 </span>
                 <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent translate-x-[-200%] group-hover:translate-x-[200%] transition-transform duration-700" />
               </Link>
