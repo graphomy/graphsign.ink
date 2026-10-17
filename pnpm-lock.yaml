@@ -86,7 +86,7 @@ importers:
         version: 1.59.0(@types/react@19.3.0)(react@19.3.0)
       next:
         specifier: 16.4.0
-        version: 16.4.0(@babel/core@7.29.7)(@playwright/test@1.64.0)(@types/node@26.6.5)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+        version: 16.4.0(@babel/core@7.29.7)(@playwright/test@1.64.1)(@types/node@26.6.5)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       pdfjs-dist:
         specifier: 5.4.624
         version: 5.4.624
@@ -105,10 +105,10 @@ importers:
     devDependencies:
       '@cloudflare/next-on-pages':
         specifier: ^1.13.16
-        version: 1.13.16(next@16.4.0(@babel/core@7.29.7)(@playwright/test@1.64.0)(@types/node@26.6.5)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(wrangler@4.151.1(@types/node@26.6.5))
+        version: 1.13.16(next@16.4.0(@babel/core@7.29.7)(@playwright/test@1.64.1)(@types/node@26.6.5)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(wrangler@4.151.1(@types/node@26.6.5))
       '@playwright/test':
-        specifier: 1.64.0
-        version: 1.64.0
+        specifier: 1.64.1
+        version: 1.64.1
       '@tailwindcss/postcss':
         specifier: ^4.3.3
         version: 4.3.3
@@ -1013,8 +1013,8 @@ packages:
   '@pdf-lib/upng@1.0.1':
     resolution: {integrity: sha512-dQK2FUMQtowVP00mtIksrlZhdFXQZPC+taih1q4CvPZ5vqdxR/LKBaFg0oAfzd1GlHZXXSPdQfzQnt+ViGvEIQ==}
 
-  '@playwright/test@1.64.0':
-    resolution: {integrity: sha512-oTN9FNYuN6bqQMwiho6jJKLCG2/QOYCixGXuCjRmzOq23eODeukuY2XiAVoVpAECbuezMt1MHQjAiQxK8F+Y+g==}
+  '@playwright/test@1.64.1':
+    resolution: {integrity: sha512-IaYGml/nSOiZWROfPtuIL7neuu9qDOZ3TNvNljUIrhDMxiGTgPjzj/g9p9RxpS2tSepPDRY+UwAaEeiKtUvIAg==}
     engines: {node: '>=20'}
     hasBin: true
 
@@ -3343,13 +3343,13 @@ packages:
   pkg-types@2.3.3:
     resolution: {integrity: sha512-j/lCFdcppV0JxWpCEITdbDltBxPP6cHT+yNJ6Go2OgoSA9518X847X9z0p6LtA4Nc16+eQzCZjRrWanTGvHJ5w==}
 
-  playwright-core@1.64.0:
-    resolution: {integrity: sha512-T9r+MZkTECl2+oUcZ26YgZzTrYidTsIhYYkJix+6iDOymOb1FB2RLLSOxRGnZGv5DStt+aduIVbt+E8WygXYpg==}
+  playwright-core@1.64.1:
+    resolution: {integrity: sha512-BC4s8y6SEVA6Q1rSxZTto8hI1KUI3xXlHGZgvGqP4IqPdI/a6FX9H29IDNz7vKo9l21b6LfYosScPL6M3xxyDQ==}
     engines: {node: '>=20'}
     hasBin: true
 
-  playwright@1.64.0:
-    resolution: {integrity: sha512-kVzTnYFYEyQ9RGzBjNCd2+yEqWmVbxl3AHPynv3qQ6JTjv4a+kwRcnqQwIpuP3NnrnIrE/Q6wWAIAvMfIE2/Yg==}
+  playwright@1.64.1:
+    resolution: {integrity: sha512-HCrVhHr5QQuwYoswEUGTb7gGp522yflbv/ST8nF4sFWGuLjQCt17Q/EubpGGSNKYn1tsTCPZxqHhHCfVURu7UA==}
     engines: {node: '>=20'}
     hasBin: true
 
@@ -4237,7 +4237,7 @@ snapshots:
 
   '@cloudflare/kv-asset-handler@0.5.0': {}
 
-  '@cloudflare/next-on-pages@1.13.16(next@16.4.0(@babel/core@7.29.7)(@playwright/test@1.64.0)(@types/node@26.6.5)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(wrangler@4.151.1(@types/node@26.6.5))':
+  '@cloudflare/next-on-pages@1.13.16(next@16.4.0(@babel/core@7.29.7)(@playwright/test@1.64.1)(@types/node@26.6.5)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(wrangler@4.151.1(@types/node@26.6.5))':
     dependencies:
       acorn: 8.19.0
       ast-types: 0.14.2
@@ -4248,7 +4248,7 @@ snapshots:
       esbuild: 0.15.18
       js-yaml: 4.3.2
       miniflare: 3.20250718.3
-      next: 16.4.0(@babel/core@7.29.7)(@playwright/test@1.64.0)(@types/node@26.6.5)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      next: 16.4.0(@babel/core@7.29.7)(@playwright/test@1.64.1)(@types/node@26.6.5)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       package-manager-manager: 0.2.0
       pcre-to-regexp: 1.1.0
       semver: 7.8.5
@@ -4746,9 +4746,9 @@ snapshots:
     dependencies:
       pako: 1.0.11
 
-  '@playwright/test@1.64.0':
+  '@playwright/test@1.64.1':
     dependencies:
-      playwright: 1.64.0
+      playwright: 1.64.1
 
   '@poppinss/colors@4.1.6':
     dependencies:
@@ -7036,7 +7036,7 @@ snapshots:
 
   natural-compare@1.4.0: {}
 
-  next@16.4.0(@babel/core@7.29.7)(@playwright/test@1.64.0)(@types/node@26.6.5)(react-dom@19.3.0(react@19.3.0))(react@19.3.0):
+  next@16.4.0(@babel/core@7.29.7)(@playwright/test@1.64.1)(@types/node@26.6.5)(react-dom@19.3.0(react@19.3.0))(react@19.3.0):
     dependencies:
       '@next/env': 16.4.0
       '@swc/helpers': 0.5.23
@@ -7055,7 +7055,7 @@ snapshots:
       '@next/swc-linux-x64-musl': 16.4.0
       '@next/swc-win32-arm64-msvc': 16.4.0
       '@next/swc-win32-x64-msvc': 16.4.0
-      '@playwright/test': 1.64.0
+      '@playwright/test': 1.64.1
       sharp: 0.35.5(@types/node@26.6.5)
     transitivePeerDependencies:
       - '@babel/core'
@@ -7216,11 +7216,11 @@ snapshots:
       exsolve: 1.1.3
       pathe: 2.0.3
 
-  playwright-core@1.64.0: {}
+  playwright-core@1.64.1: {}
 
-  playwright@1.64.0:
+  playwright@1.64.1:
     dependencies:
-      playwright-core: 1.64.0
+      playwright-core: 1.64.1
 
   pngjs@5.0.0: {}
 
