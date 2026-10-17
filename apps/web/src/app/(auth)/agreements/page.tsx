@@ -1357,26 +1357,27 @@ function AgreementManagementContent() {
 
       {/* Upload Modal (PDF / DOCX / MD) */}
       {showUploadModal && (
-        <div className="fixed inset-0 z-50 bg-ink-950/55 backdrop-blur-[2px] flex items-center justify-center p-4">
-          <div className="bg-white border border-ink-200 rounded-xl p-6 max-w-lg w-full shadow-[0_8px_16px_-4px_rgb(16_24_40/0.08),0_24px_48px_-12px_rgb(16_24_40/0.16)]">
-            <div className="flex items-center justify-between mb-2">
-              <h2 className="text-lg font-bold text-ink-900">Upload agreement</h2>
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white border border-slate-200/90 rounded-2xl p-6 max-w-lg w-full shadow-2xl space-y-4">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+              <div>
+                <h2 className="text-lg font-bold text-slate-900">Upload Agreement</h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Upload a <strong>PDF or DOCX</strong> (v1.0 contract) or <strong>Markdown (.md)</strong> (v0.1 draft).
+                </p>
+              </div>
               <button
                 onClick={() => setShowUploadModal(false)}
-                className="text-ink-400 hover:text-ink-700"
+                className="text-slate-400 hover:text-slate-700 p-1 rounded-lg hover:bg-slate-100 transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <p className="text-xs text-ink-500 mb-4">
-              Upload a <strong>PDF or DOCX</strong> (becomes active contract at v1.0) or a{' '}
-              <strong>Markdown (.md)</strong> file (becomes draft at v0.1).
-            </p>
 
             <form onSubmit={handleUploadSubmit} className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-ink-700 mb-1">
-                  Agreement Title
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Agreement Title <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
@@ -1384,33 +1385,45 @@ function AgreementManagementContent() {
                   placeholder="e.g. Master Services Agreement 2026"
                   value={uploadTitle}
                   onChange={(e) => setUploadTitle(e.target.value)}
-                  className="w-full bg-white border border-ink-200 rounded-md px-3 py-2 text-xs text-ink-900 focus:border-ink-900 focus:outline-none"
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-red-500 focus:bg-white"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-ink-700 mb-1">
-                  Select File (.PDF, .DOCX, .MD up to 5MB)
+                <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center justify-between">
+                  <span>Document File</span>
+                  <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">Max 5 MB</span>
                 </label>
-                <input
-                  type="file"
-                  required
-                  accept=".pdf,.docx,.doc,.md,text/markdown,text/plain"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0] || null;
-                    if (file && file.size > 5 * 1024 * 1024) {
-                      setActionError(
-                        `File "${file.name}" (${(file.size / (1024 * 1024)).toFixed(1)} MB) exceeds the 5 MB limit. Please select a file under 5 MB.`,
-                      );
-                      setUploadFile(null);
-                      e.target.value = '';
-                      return;
-                    }
-                    setActionError(null);
-                    setUploadFile(file);
-                  }}
-                  className="w-full bg-ink-50 border border-ink-200 rounded-md p-2 text-xs text-ink-700"
-                />
+                <div className="border-2 border-dashed border-slate-200 hover:border-red-400 bg-slate-50/60 hover:bg-red-50/20 rounded-2xl p-5 text-center transition-all cursor-pointer">
+                  <div className="w-10 h-10 rounded-xl bg-red-50 text-red-600 flex items-center justify-center mx-auto mb-2 shadow-xs">
+                    <Upload className="w-5 h-5" />
+                  </div>
+                  <p className="text-xs font-bold text-slate-800">
+                    {uploadFile ? uploadFile.name : 'Select or drop your agreement file'}
+                  </p>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    Supports PDF, DOCX, and MD files up to 5 MB
+                  </p>
+                  <input
+                    type="file"
+                    required
+                    accept=".pdf,.docx,.doc,.md,text/markdown,text/plain"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0] || null;
+                      if (file && file.size > 5 * 1024 * 1024) {
+                        setActionError(
+                          `File "${file.name}" (${(file.size / (1024 * 1024)).toFixed(1)} MB) exceeds the 5 MB limit. Please select a file under 5 MB.`,
+                        );
+                        setUploadFile(null);
+                        e.target.value = '';
+                        return;
+                      }
+                      setActionError(null);
+                      setUploadFile(file);
+                    }}
+                    className="mt-3 block w-full text-xs text-slate-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-red-50 file:text-red-700 hover:file:bg-red-100 cursor-pointer"
+                  />
+                </div>
               </div>
 
               <div>

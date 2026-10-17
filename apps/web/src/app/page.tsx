@@ -71,26 +71,36 @@ function SignatureAnimation() {
     <div ref={setNode} className="relative w-full max-w-md mx-auto mt-12">
       {/* Document card */}
       <div
-        className="relative bg-white rounded-2xl shadow-2xl shadow-neutral-300/60 border border-neutral-200 p-8 pt-6"
+        className="relative glass-panel rounded-2xl shadow-2xl shadow-slate-900/10 border border-slate-200/80 p-8 pt-6 card-hover"
         style={{
           opacity: inView ? 1 : 0,
           transform: inView ? 'translateY(0) scale(1)' : 'translateY(30px) scale(0.95)',
           transition: 'all 0.8s cubic-bezier(0.16, 1, 0.3, 1)',
         }}
       >
+        {/* Mock document header */}
+        <div className="flex items-center justify-between pb-4 mb-4 border-b border-slate-100">
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded-full bg-red-500/80" />
+            <div className="w-3 h-3 rounded-full bg-amber-400/80" />
+            <div className="w-3 h-3 rounded-full bg-emerald-400/80" />
+          </div>
+          <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400">PAdES-B-LTA Document</span>
+        </div>
+
         {/* Mock document text lines */}
         <div className="space-y-3 mb-8">
-          <div className="h-2 bg-neutral-100 rounded-full w-3/4" />
-          <div className="h-2 bg-neutral-100 rounded-full w-full" />
-          <div className="h-2 bg-neutral-100 rounded-full w-5/6" />
-          <div className="h-2 bg-neutral-100 rounded-full w-2/3" />
-          <div className="h-2 bg-neutral-100 rounded-full w-4/5" />
+          <div className="h-2 bg-slate-200/70 rounded-full w-3/4" />
+          <div className="h-2 bg-slate-100 rounded-full w-full" />
+          <div className="h-2 bg-slate-100 rounded-full w-5/6" />
+          <div className="h-2 bg-slate-100 rounded-full w-2/3" />
+          <div className="h-2 bg-slate-200/50 rounded-full w-4/5" />
         </div>
 
         {/* Signature line */}
-        <div className="border-t border-dashed border-neutral-300 pt-4">
-          <p className="text-[10px] text-neutral-400 font-semibold uppercase tracking-widest mb-3">
-            Signature
+        <div className="border-t border-dashed border-slate-300 pt-4">
+          <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-widest mb-3">
+            Digital Signature &amp; Cryptographic Seal
           </p>
           <svg
             viewBox="0 0 300 80"
@@ -101,7 +111,7 @@ function SignatureAnimation() {
             {/* Cursive signature path */}
             <path
               d="M20 55 C30 20, 50 20, 55 45 C60 65, 65 25, 80 30 C95 35, 85 55, 100 50 C115 45, 105 25, 120 30 C135 35, 130 55, 145 45 C155 38, 150 28, 165 35 C175 40, 170 50, 185 42 C195 36, 190 25, 210 30 C225 34, 220 50, 240 40"
-              stroke="#ba0000"
+              stroke="#e11d2e"
               strokeWidth="2.5"
               strokeLinecap="round"
               strokeLinejoin="round"
@@ -116,7 +126,7 @@ function SignatureAnimation() {
               cx="248"
               cy="38"
               r="2.5"
-              fill="#ba0000"
+              fill="#e11d2e"
               style={{
                 opacity: inView ? 1 : 0,
                 transition: 'opacity 0.3s ease 3s',
@@ -127,7 +137,7 @@ function SignatureAnimation() {
 
         {/* Verified badge */}
         <div
-          className="absolute -bottom-4 -right-4 flex items-center gap-2 bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-bold px-3 py-1.5 rounded-full shadow-md"
+          className="absolute -bottom-4 -right-4 flex items-center gap-2 bg-emerald-500 text-white text-xs font-bold px-3.5 py-1.5 rounded-full shadow-lg shadow-emerald-500/25 border border-emerald-400"
           style={{
             opacity: inView ? 1 : 0,
             transform: inView ? 'scale(1)' : 'scale(0.5)',
@@ -143,7 +153,7 @@ function SignatureAnimation() {
           >
             <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
           </svg>
-          Verified
+          Cryptographically Verified
         </div>
       </div>
     </div>
@@ -317,12 +327,13 @@ export default function Home() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-white text-neutral-900 flex flex-col font-sans selection:bg-[#ba0000] selection:text-white overflow-x-hidden">
+    <div className="min-h-screen bg-white text-slate-900 flex flex-col font-sans selection:bg-[#e11d2e] selection:text-white overflow-x-hidden">
       {/* ── Sticky Header ── */}
-      <header className="border-b border-neutral-200/80 bg-white/80 backdrop-blur-xl sticky top-0 z-50">
+      <header className="glass-header sticky top-0 z-50 transition-all duration-200">
         <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
-          <Link href="/" className="text-xl font-bold tracking-tight text-neutral-900">
-            graph<span className="text-[#ba0000]">sign</span>.ink
+          <Link href="/" className="text-xl font-black tracking-tight text-slate-900 flex items-center gap-1.5">
+            <span className="w-2.5 h-2.5 rounded-full bg-red-600 animate-pulse" />
+            <span>graph<span className="text-[#e11d2e]">sign</span>.ink</span>
           </Link>
 
           <div className="flex items-center gap-3">
@@ -330,20 +341,20 @@ export default function Home() {
               href="https://github.com/graphomy/graphsign.ink"
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-2 text-xs font-semibold text-neutral-600 hover:text-neutral-900 border border-neutral-200 hover:border-neutral-400 px-3 py-2 rounded-lg transition-all duration-300"
+              className="flex items-center gap-2 text-xs font-semibold text-slate-600 hover:text-slate-900 border border-slate-200 hover:border-slate-300 bg-white/70 hover:bg-white px-3 py-2 rounded-xl transition-all duration-200 shadow-sm"
             >
               <GitHubIcon className="w-4 h-4" />
               <span className="hidden sm:inline">GitHub</span>
             </a>
             <Link
               href="/login"
-              className="text-xs font-semibold text-neutral-600 hover:text-neutral-900 transition-colors px-3 py-2 rounded-lg"
+              className="text-xs font-semibold text-slate-600 hover:text-slate-900 transition-colors px-3 py-2 rounded-xl hover:bg-slate-100/70"
             >
               Sign In
             </Link>
             <Link
               href="/register"
-              className="text-xs font-semibold bg-[#ba0000] hover:bg-[#a00000] text-white px-4 py-2 rounded-lg transition-all duration-300 shadow-md shadow-red-600/20 hover:shadow-lg hover:shadow-red-600/30"
+              className="text-xs font-bold gradient-brand-btn text-white px-4 py-2 rounded-xl shadow-md shadow-red-500/20 hover:shadow-lg hover:shadow-red-500/30 transition-all duration-200"
             >
               Get Started
             </Link>
@@ -353,7 +364,7 @@ export default function Home() {
 
       <main className="flex-1">
         {/* ── Hero ── */}
-        <section className="relative min-h-[85vh] flex items-center justify-center px-6 overflow-hidden bg-gradient-to-b from-neutral-50 to-white">
+        <section className="relative min-h-[85vh] flex items-center justify-center px-6 overflow-hidden mesh-hero-bg">
           {/* Radial gradient accent */}
           <div
             className="absolute inset-0 pointer-events-none"
@@ -439,20 +450,42 @@ export default function Home() {
             >
               <Link
                 href="/register"
-                className="group relative w-full sm:w-auto px-8 py-4 rounded-xl bg-[#ba0000] text-white font-bold text-sm transition-all duration-300 shadow-lg shadow-red-600/20 hover:shadow-xl hover:shadow-red-600/30 hover:bg-[#a00000] overflow-hidden"
+                className="group relative w-full sm:w-auto px-8 py-4 rounded-xl gradient-brand-btn text-white font-bold text-sm transition-all duration-300 shadow-lg shadow-red-500/25 hover:shadow-xl hover:shadow-red-500/35 overflow-hidden"
               >
-                <span className="relative z-10">Start Building Free →</span>
-                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent translate-x-[-200%] group-hover:translate-x-[200%] transition-transform duration-700" />
+                <span className="relative z-10 flex items-center justify-center gap-1.5">
+                  Start Building Free <span className="transition-transform group-hover:translate-x-1">→</span>
+                </span>
+                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent translate-x-[-200%] group-hover:translate-x-[200%] transition-transform duration-700" />
               </Link>
               <a
                 href="https://github.com/graphomy/graphsign.ink"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="w-full sm:w-auto flex items-center justify-center gap-2 px-8 py-4 rounded-xl border border-neutral-200 hover:border-neutral-400 bg-white hover:bg-neutral-50 text-neutral-800 font-bold text-sm transition-all duration-300 shadow-sm"
+                className="w-full sm:w-auto flex items-center justify-center gap-2 px-8 py-4 rounded-xl border border-slate-200 hover:border-slate-300 bg-white/90 hover:bg-white text-slate-800 font-bold text-sm transition-all duration-200 shadow-sm hover:shadow"
               >
                 <GitHubIcon className="w-4 h-4" />
                 View on GitHub
               </a>
+            </div>
+
+            {/* Trust and Compliance Badges Banner */}
+            <div className="mt-12 pt-8 border-t border-slate-200/60 flex flex-wrap items-center justify-center gap-6 sm:gap-10 text-xs font-semibold text-slate-500">
+              <span className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                eIDAS &amp; ESIGN Legal Compliance
+              </span>
+              <span className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-blue-500" />
+                Cloudflare Workers Global Edge
+              </span>
+              <span className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-teal-500" />
+                Neon Serverless Postgres
+              </span>
+              <span className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-red-500" />
+                RFC 3161 PAdES-B-LTA Sealing
+              </span>
             </div>
 
             {/* Signature animation */}
@@ -460,17 +493,17 @@ export default function Home() {
           </div>
 
           {/* Bottom fade */}
-          <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-white to-transparent pointer-events-none" />
+          <div className="absolute bottom-0 left-0 right-0 h-28 bg-gradient-to-t from-white to-transparent pointer-events-none" />
         </section>
 
         {/* ── Features Grid ── */}
         <section className="py-24 px-6 relative bg-white">
           <div className="max-w-7xl mx-auto">
             <AnimateInView className="text-center mb-16">
-              <p className="text-xs font-bold tracking-[0.2em] uppercase text-[#ba0000] mb-3">
+              <p className="text-xs font-bold tracking-[0.2em] uppercase text-[#e11d2e] mb-3">
                 Built for Trust
               </p>
-              <h2 className="text-3xl sm:text-5xl font-black tracking-tight text-neutral-900">
+              <h2 className="text-3xl sm:text-5xl font-black tracking-tight text-slate-900">
                 Enterprise-Grade Features
               </h2>
             </AnimateInView>
@@ -480,17 +513,17 @@ export default function Home() {
                 <AnimateInView
                   key={f.title}
                   delay={i * 0.1}
-                  className="group relative p-8 rounded-2xl border border-neutral-200 bg-neutral-50/50 hover:bg-white hover:border-neutral-300 hover:shadow-lg hover:shadow-neutral-200/50 transition-all duration-500 overflow-hidden"
+                  className="group relative p-8 rounded-2xl glass-panel card-hover border border-slate-200/90 shadow-sm hover:shadow-xl hover:border-red-200/80 transition-all duration-300 overflow-hidden"
                 >
-                  {/* Hover glow */}
-                  <div className="absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500 bg-gradient-to-br from-[#ba0000]/[0.03] via-transparent to-transparent pointer-events-none" />
+                  {/* Subtle top indicator bar on hover */}
+                  <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-red-500 to-amber-500 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
 
                   <div className="relative z-10 space-y-4">
-                    <div className="w-12 h-12 rounded-xl bg-red-50 border border-red-100 flex items-center justify-center text-2xl group-hover:scale-110 transition-transform duration-300">
+                    <div className="w-12 h-12 rounded-xl bg-red-50/80 border border-red-100 flex items-center justify-center text-2xl group-hover:scale-110 group-hover:bg-red-50 transition-all duration-300">
                       {f.icon}
                     </div>
-                    <h3 className="text-lg font-bold text-neutral-900">{f.title}</h3>
-                    <p className="text-sm text-neutral-500 leading-relaxed">{f.desc}</p>
+                    <h3 className="text-lg font-bold text-slate-900">{f.title}</h3>
+                    <p className="text-sm text-slate-500 leading-relaxed">{f.desc}</p>
                   </div>
                 </AnimateInView>
               ))}
@@ -571,16 +604,18 @@ export default function Home() {
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-2">
               <Link
                 href="/register"
-                className="group relative w-full sm:w-auto px-8 py-4 rounded-xl bg-[#ba0000] text-white font-bold text-sm transition-all duration-300 shadow-lg shadow-red-600/20 hover:shadow-xl hover:shadow-red-600/30 hover:bg-[#a00000] overflow-hidden"
+                className="group relative w-full sm:w-auto px-8 py-4 rounded-xl gradient-brand-btn text-white font-bold text-sm transition-all duration-300 shadow-lg shadow-red-500/25 hover:shadow-xl hover:shadow-red-500/35 overflow-hidden"
               >
-                <span className="relative z-10">Start Free →</span>
-                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent translate-x-[-200%] group-hover:translate-x-[200%] transition-transform duration-700" />
+                <span className="relative z-10 flex items-center justify-center gap-1.5">
+                  Start Free <span className="transition-transform group-hover:translate-x-1">→</span>
+                </span>
+                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent translate-x-[-200%] group-hover:translate-x-[200%] transition-transform duration-700" />
               </Link>
               <a
                 href="https://github.com/graphomy/graphsign.ink"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="w-full sm:w-auto flex items-center justify-center gap-2 px-8 py-4 rounded-xl border border-neutral-200 hover:border-neutral-400 bg-white hover:bg-neutral-50 text-neutral-800 font-bold text-sm transition-all duration-300 shadow-sm"
+                className="w-full sm:w-auto flex items-center justify-center gap-2 px-8 py-4 rounded-xl border border-slate-200 hover:border-slate-300 bg-white/90 hover:bg-white text-slate-800 font-bold text-sm transition-all duration-200 shadow-sm hover:shadow"
               >
                 <GitHubIcon className="w-4 h-4" />
                 Star on GitHub
