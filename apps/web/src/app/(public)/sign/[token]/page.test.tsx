@@ -230,6 +230,7 @@ describe('SignDocumentPage Component Tests (FR-007 Workflow Engine)', () => {
     // Accept ERSD Consent Modal first
     await waitFor(() => {
       expect(screen.getByTestId('ersd-modal-overlay')).toBeDefined();
+      expect(screen.getByTestId('ersd-checkbox')).toHaveProperty('disabled', false);
     });
     fireEvent.click(screen.getByTestId('ersd-checkbox'));
     fireEvent.click(screen.getByTestId('ersd-accept-button'));
@@ -344,6 +345,7 @@ describe('SignDocumentPage Component Tests (FR-007 Workflow Engine)', () => {
     // 1. Check that ERSD Modal appears
     await waitFor(() => {
       expect(screen.getByTestId('ersd-modal-overlay')).toBeDefined();
+      expect(screen.getByTestId('ersd-checkbox')).toHaveProperty('disabled', false);
     });
 
     // Accept ERSD Consent
@@ -507,6 +509,7 @@ describe('SignDocumentPage Component Tests (FR-007 Workflow Engine)', () => {
     // 3. ERSD modal appears
     await waitFor(() => {
       expect(screen.getByTestId('ersd-modal-overlay')).toBeDefined();
+      expect(screen.getByTestId('ersd-checkbox')).toHaveProperty('disabled', false);
     });
     fireEvent.click(screen.getByTestId('ersd-checkbox'));
     fireEvent.click(screen.getByTestId('ersd-accept-button'));
@@ -629,6 +632,7 @@ describe('SignDocumentPage Component Tests (FR-007 Workflow Engine)', () => {
 
     await waitFor(() => {
       expect(screen.getByTestId('ersd-modal-overlay')).toBeDefined();
+      expect(screen.getByTestId('ersd-checkbox')).toHaveProperty('disabled', false);
     });
     fireEvent.click(screen.getByTestId('ersd-checkbox'));
     fireEvent.click(screen.getByTestId('ersd-accept-button'));
@@ -757,6 +761,7 @@ describe('SignDocumentPage Component Tests (FR-007 Workflow Engine)', () => {
 
     await waitFor(() => {
       expect(screen.getByTestId('ersd-modal-overlay')).toBeDefined();
+      expect(screen.getByTestId('ersd-checkbox')).toHaveProperty('disabled', false);
     });
     fireEvent.click(screen.getByTestId('ersd-checkbox'));
     fireEvent.click(screen.getByTestId('ersd-accept-button'));
@@ -874,6 +879,7 @@ describe('SignDocumentPage Component Tests (FR-007 Workflow Engine)', () => {
     // Accept ERSD Consent Modal
     await waitFor(() => {
       expect(screen.getByTestId('ersd-modal-overlay')).toBeDefined();
+      expect(screen.getByTestId('ersd-checkbox')).toHaveProperty('disabled', false);
     });
     fireEvent.click(screen.getByTestId('ersd-checkbox'));
     fireEvent.click(screen.getByTestId('ersd-accept-button'));
