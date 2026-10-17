@@ -139,6 +139,9 @@ describe('SignDocumentPage Component Tests (FR-007 Workflow Engine)', () => {
       expect(screen.getByTestId('ersd-checkbox')).toHaveProperty('disabled', false),
     );
     fireEvent.click(screen.getByTestId('ersd-checkbox'));
+    await waitFor(() =>
+      expect(screen.getByTestId('ersd-accept-button')).toHaveProperty('disabled', false),
+    );
     fireEvent.click(screen.getByTestId('ersd-accept-button'));
     await waitFor(() =>
       expect(screen.getByRole('alert').textContent).toContain('Consent could not be recorded'),
@@ -233,6 +236,9 @@ describe('SignDocumentPage Component Tests (FR-007 Workflow Engine)', () => {
       expect(screen.getByTestId('ersd-checkbox')).toHaveProperty('disabled', false);
     });
     fireEvent.click(screen.getByTestId('ersd-checkbox'));
+    await waitFor(() =>
+      expect(screen.getByTestId('ersd-accept-button')).toHaveProperty('disabled', false),
+    );
     fireEvent.click(screen.getByTestId('ersd-accept-button'));
 
     await waitFor(() => {
@@ -350,6 +356,9 @@ describe('SignDocumentPage Component Tests (FR-007 Workflow Engine)', () => {
 
     // Accept ERSD Consent
     fireEvent.click(screen.getByTestId('ersd-checkbox'));
+    await waitFor(() =>
+      expect(screen.getByTestId('ersd-accept-button')).toHaveProperty('disabled', false),
+    );
     fireEvent.click(screen.getByTestId('ersd-accept-button'));
 
     // 2. Fill in required text field
@@ -512,6 +521,9 @@ describe('SignDocumentPage Component Tests (FR-007 Workflow Engine)', () => {
       expect(screen.getByTestId('ersd-checkbox')).toHaveProperty('disabled', false);
     });
     fireEvent.click(screen.getByTestId('ersd-checkbox'));
+    await waitFor(() =>
+      expect(screen.getByTestId('ersd-accept-button')).toHaveProperty('disabled', false),
+    );
     fireEvent.click(screen.getByTestId('ersd-accept-button'));
 
     // 4. Sign document
@@ -635,6 +647,9 @@ describe('SignDocumentPage Component Tests (FR-007 Workflow Engine)', () => {
       expect(screen.getByTestId('ersd-checkbox')).toHaveProperty('disabled', false);
     });
     fireEvent.click(screen.getByTestId('ersd-checkbox'));
+    await waitFor(() =>
+      expect(screen.getByTestId('ersd-accept-button')).toHaveProperty('disabled', false),
+    );
     fireEvent.click(screen.getByTestId('ersd-accept-button'));
 
     await waitFor(() => {
@@ -764,6 +779,9 @@ describe('SignDocumentPage Component Tests (FR-007 Workflow Engine)', () => {
       expect(screen.getByTestId('ersd-checkbox')).toHaveProperty('disabled', false);
     });
     fireEvent.click(screen.getByTestId('ersd-checkbox'));
+    await waitFor(() =>
+      expect(screen.getByTestId('ersd-accept-button')).toHaveProperty('disabled', false),
+    );
     fireEvent.click(screen.getByTestId('ersd-accept-button'));
 
     await waitFor(() => {
@@ -882,6 +900,9 @@ describe('SignDocumentPage Component Tests (FR-007 Workflow Engine)', () => {
       expect(screen.getByTestId('ersd-checkbox')).toHaveProperty('disabled', false);
     });
     fireEvent.click(screen.getByTestId('ersd-checkbox'));
+    await waitFor(() =>
+      expect(screen.getByTestId('ersd-accept-button')).toHaveProperty('disabled', false),
+    );
     fireEvent.click(screen.getByTestId('ersd-accept-button'));
 
     // Verify text field font size 12 and Arial font
