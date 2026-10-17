@@ -143,3 +143,82 @@ select:-webkit-autofill {
   outline: 2px solid #0a0a0b;
   outline-offset: 2px;
 }
+
+/* Glassmorphism & Modern Design Tokens */
+.glass-panel {
+  background: rgba(255, 255, 255, 0.82);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(226, 232, 240, 0.85);
+}
+
+.dark-glass-panel {
+  background: rgba(15, 23, 42, 0.75);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.glass-header {
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid rgba(226, 232, 240, 0.8);
+}
+
+.card-hover {
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.card-hover:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 32px -8px rgba(15, 23, 42, 0.08), 0 4px 12px -2px rgba(15, 23, 42, 0.04);
+}
+
+.gradient-brand-text {
+  background: linear-gradient(135deg, #e11d2e 0%, #9e0c18 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.gradient-brand-btn {
+  background: linear-gradient(135deg, #e11d2e 0%, #c2101f 100%);
+  transition: all 0.2s ease;
+}
+
+.gradient-brand-btn:hover {
+  background: linear-gradient(135deg, #f26a6a 0%, #e11d2e 100%);
+  box-shadow: 0 4px 14px 0 rgba(225, 29, 46, 0.35);
+}
+
+.mesh-hero-bg {
+  background-color: #ffffff;
+  background-image: 
+    radial-gradient(at 10% 15%, rgba(254, 226, 226, 0.6) 0px, transparent 50%),
+    radial-gradient(at 90% 10%, rgba(254, 243, 199, 0.45) 0px, transparent 50%),
+    radial-gradient(at 50% 90%, rgba(241, 245, 249, 0.7) 0px, transparent 55%);
+}
+
+.mesh-dashboard-bg {
+  background-color: #f8fafc;
+  background-image:
+    radial-gradient(at 0% 0%, rgba(254, 226, 226, 0.25) 0px, transparent 40%),
+    radial-gradient(at 100% 0%, rgba(238, 242, 248, 0.5) 0px, transparent 40%);
+}
+
+/* Subtle modern scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.4);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.6);
+}
+

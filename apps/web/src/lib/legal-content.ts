@@ -29,7 +29,7 @@ export const electronicDisclosure = [
 export const termsSections = [
   [
     'Business identity and agreement',
-    'Graphsign.ink is operated by Graphomy Technologies LLP (Graphomy, we, us). Graphomy is located in Noida, Uttar Pradesh, India, and is a limited liability partnership. Contact support@graphsign.ink for business correspondence. These Terms govern hosted service use by account holders, workspace members and invited signers. The Service is available for use globally, subject to applicable laws and service availability; it is not restricted to users in a particular country. Use is voluntary. By registering or using the Service you agree to these Terms; if you disagree, stop using it. The electronic-signing disclosure separately governs consent to electronic records. An agreement you sign with a sender is between its parties, not Graphomy.',
+    'Graphsign.ink is operated by Graphomy Technologies LLP (Graphomy, we, us). Contact support@graphsign.ink for business correspondence. These Terms govern hosted service use by account holders, workspace members and invited signers. The Service is available for use globally, subject to applicable laws and service availability; it is not restricted to users in a particular country. Use is voluntary. By registering or using the Service you agree to these Terms; if you disagree, stop using it. The electronic-signing disclosure separately governs consent to electronic records. An agreement you sign with a sender is between its parties, not Graphomy.',
   ],
   [
     'Eligibility and authority',
@@ -76,7 +76,7 @@ export const termsSections = [
 export const privacySections = [
   [
     'Who this notice covers',
-    'Graphomy Technologies LLP, located in Noida, Uttar Pradesh, India, operates Graphsign.ink. This notice covers visitors, account holders, workspace members and invited signers, including those without an account. Graphomy determines how account administration, service security and support data are used. For documents and recipient details submitted by a customer, the sending organization generally determines the purposes and Graphomy processes them on its instructions. Contact the sender about its own privacy practices and us at support@graphsign.ink about ours.',
+    'Graphomy Technologies LLP operates Graphsign.ink. This notice covers visitors, account holders, workspace members and invited signers, including those without an account. Graphomy determines how account administration, service security and support data are used. For documents and recipient details submitted by a customer, the sending organization generally determines the purposes and Graphomy processes them on its instructions. Contact the sender about its own privacy practices and us at support@graphsign.ink about ours.',
   ],
   [
     'Data and sources',
@@ -104,6 +104,6 @@ export const privacySections = [
   ],
   [
     'Security, children and contact',
-    'Access controls and security measures help protect data, but no system eliminates every risk. Use secure devices and keep signing links confidential. The Service is for adults aged 18 or over; report suspected children’s data to us. For privacy requests, security concerns and grievances, email support@graphsign.ink. The designated Grievance Officer is Kunal Priyadarshi, Designated Partner, Graphomy Technologies LLP, reachable at the same email address. We will handle requests within applicable legal time limits. Material notice changes will be communicated as appropriate; see the effective date for this version.',
+    'Access controls and security measures help protect data, but no system eliminates every risk. Use secure devices and keep signing links confidential. The Service is for adults aged 18 or over; report suspected children’s data to us. For privacy requests, security concerns and grievances, email support@graphsign.ink. We will handle requests within applicable legal time limits. Material notice changes will be communicated as appropriate; see the effective date for this version.',
   ],
 ] as const;

@@ -1,7 +1,16 @@
 'use client';
 
 import { useState, useEffect, useRef, Suspense } from 'react';
-import { FilePlus2, PenLine, Upload, CloudOff, MoreHorizontal, Loader2, Plus } from 'lucide-react';
+import {
+  FilePlus2,
+  PenLine,
+  Upload,
+  CloudOff,
+  MoreHorizontal,
+  Loader2,
+  Plus,
+  X,
+} from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { SessionGuard } from '@/components/features/auth/SessionGuard';
@@ -356,6 +365,14 @@ function TemplateManagementContent() {
     e.preventDefault();
     if (!uploadFile) {
       setActionError('Please select a file to upload.');
+      return;
+    }
+
+    const MAX_UPLOAD_SIZE = 5 * 1024 * 1024; // 5 MB
+    if (uploadFile.size > MAX_UPLOAD_SIZE) {
+      setActionError(
+        `File size (${(uploadFile.size / (1024 * 1024)).toFixed(1)} MB) exceeds the 5 MB limit. Please select a file under 5 MB.`,
+      );
       return;
     }
 
@@ -1067,22 +1084,32 @@ function TemplateManagementContent() {
 
         {/* Upload Template Modal */}
         {showUploadModal && (
-          <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
-            <div className="bg-white border border-neutral-200 rounded-2xl p-6 max-w-lg w-full shadow-xl">
-              <h2 className="text-lg font-bold text-neutral-900 mb-1">Upload PDF Template</h2>
-              <p className="text-xs text-neutral-500 mb-4">
-                Upload a verified PDF contract file to use as a reusable template.
-              </p>
+          <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-white border border-slate-200/90 rounded-2xl p-6 max-w-lg w-full shadow-2xl space-y-4">
+              <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                <div>
+                  <h2 className="text-lg font-bold text-slate-900">Upload PDF Template</h2>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Upload a verified PDF contract file to use as a reusable template.
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShowUploadModal(false)}
+                  className="text-slate-400 hover:text-slate-700 p-1 rounded-lg hover:bg-slate-100 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
 
               {actionError && (
-                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-xs font-medium text-red-700">
+                <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs font-medium text-red-700">
                   {actionError}
                 </div>
               )}
 
               <form onSubmit={handleUploadSubmit} className="space-y-4">
                 <div>
-                  <label className="block text-xs font-semibold text-neutral-700 mb-1">
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
                     Template Title (Optional)
                   </label>
                   <input
@@ -1090,21 +1117,45 @@ function TemplateManagementContent() {
                     placeholder="Defaults to filename"
                     value={uploadTitle}
                     onChange={(e) => setUploadTitle(e.target.value)}
-                    className="w-full bg-neutral-50 border border-neutral-300 rounded-lg px-3 py-2 text-xs text-neutral-900 focus:outline-none focus:border-[#ba0000]"
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-red-500 focus:bg-white"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-neutral-700 mb-1">
-                    Select File (.pdf)
+                  <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center justify-between">
+                    <span>PDF Document</span>
+                    <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
+                      Max 5 MB
+                    </span>
                   </label>
-                  <input
-                    type="file"
-                    accept=".pdf,application/pdf"
-                    required
-                    onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
-                    className="w-full text-xs text-neutral-600 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-red-50 file:text-[#ba0000] hover:file:bg-red-100"
-                  />
+                  <div className="border-2 border-dashed border-slate-200 hover:border-red-400 bg-slate-50/60 hover:bg-red-50/20 rounded-2xl p-5 text-center transition-all cursor-pointer">
+                    <div className="w-10 h-10 rounded-xl bg-red-50 text-red-600 flex items-center justify-center mx-auto mb-2 shadow-xs">
+                      <Upload className="w-5 h-5" />
+                    </div>
+                    <p className="text-xs font-bold text-slate-800">
+                      {uploadFile ? uploadFile.name : 'Select or drop your PDF template'}
+                    </p>
+                    <p className="text-[11px] text-slate-500 mt-0.5">PDF files up to 5 MB</p>
+                    <input
+                      type="file"
+                      accept=".pdf,application/pdf"
+                      required
+                      onChange={(e) => {
+                        const file = e.target.files?.[0] || null;
+                        if (file && file.size > 5 * 1024 * 1024) {
+                          setActionError(
+                            `File "${file.name}" (${(file.size / (1024 * 1024)).toFixed(1)} MB) exceeds the 5 MB limit. Please select a file under 5 MB.`,
+                          );
+                          setUploadFile(null);
+                          e.target.value = '';
+                          return;
+                        }
+                        setActionError(null);
+                        setUploadFile(file);
+                      }}
+                      className="mt-3 block w-full text-xs text-slate-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-red-50 file:text-red-700 hover:file:bg-red-100 cursor-pointer"
+                    />
+                  </div>
                 </div>
 
                 <div>

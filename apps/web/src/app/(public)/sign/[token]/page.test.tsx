@@ -139,6 +139,9 @@ describe('SignDocumentPage Component Tests (FR-007 Workflow Engine)', () => {
       expect(screen.getByTestId('ersd-checkbox')).toHaveProperty('disabled', false),
     );
     fireEvent.click(screen.getByTestId('ersd-checkbox'));
+    await waitFor(() =>
+      expect(screen.getByTestId('ersd-accept-button')).toHaveProperty('disabled', false),
+    );
     fireEvent.click(screen.getByTestId('ersd-accept-button'));
     await waitFor(() =>
       expect(screen.getByRole('alert').textContent).toContain('Consent could not be recorded'),
@@ -230,8 +233,12 @@ describe('SignDocumentPage Component Tests (FR-007 Workflow Engine)', () => {
     // Accept ERSD Consent Modal first
     await waitFor(() => {
       expect(screen.getByTestId('ersd-modal-overlay')).toBeDefined();
+      expect(screen.getByTestId('ersd-checkbox')).toHaveProperty('disabled', false);
     });
     fireEvent.click(screen.getByTestId('ersd-checkbox'));
+    await waitFor(() =>
+      expect(screen.getByTestId('ersd-accept-button')).toHaveProperty('disabled', false),
+    );
     fireEvent.click(screen.getByTestId('ersd-accept-button'));
 
     await waitFor(() => {
@@ -344,10 +351,14 @@ describe('SignDocumentPage Component Tests (FR-007 Workflow Engine)', () => {
     // 1. Check that ERSD Modal appears
     await waitFor(() => {
       expect(screen.getByTestId('ersd-modal-overlay')).toBeDefined();
+      expect(screen.getByTestId('ersd-checkbox')).toHaveProperty('disabled', false);
     });
 
     // Accept ERSD Consent
     fireEvent.click(screen.getByTestId('ersd-checkbox'));
+    await waitFor(() =>
+      expect(screen.getByTestId('ersd-accept-button')).toHaveProperty('disabled', false),
+    );
     fireEvent.click(screen.getByTestId('ersd-accept-button'));
 
     // 2. Fill in required text field
@@ -507,8 +518,12 @@ describe('SignDocumentPage Component Tests (FR-007 Workflow Engine)', () => {
     // 3. ERSD modal appears
     await waitFor(() => {
       expect(screen.getByTestId('ersd-modal-overlay')).toBeDefined();
+      expect(screen.getByTestId('ersd-checkbox')).toHaveProperty('disabled', false);
     });
     fireEvent.click(screen.getByTestId('ersd-checkbox'));
+    await waitFor(() =>
+      expect(screen.getByTestId('ersd-accept-button')).toHaveProperty('disabled', false),
+    );
     fireEvent.click(screen.getByTestId('ersd-accept-button'));
 
     // 4. Sign document
@@ -629,8 +644,12 @@ describe('SignDocumentPage Component Tests (FR-007 Workflow Engine)', () => {
 
     await waitFor(() => {
       expect(screen.getByTestId('ersd-modal-overlay')).toBeDefined();
+      expect(screen.getByTestId('ersd-checkbox')).toHaveProperty('disabled', false);
     });
     fireEvent.click(screen.getByTestId('ersd-checkbox'));
+    await waitFor(() =>
+      expect(screen.getByTestId('ersd-accept-button')).toHaveProperty('disabled', false),
+    );
     fireEvent.click(screen.getByTestId('ersd-accept-button'));
 
     await waitFor(() => {
@@ -757,8 +776,12 @@ describe('SignDocumentPage Component Tests (FR-007 Workflow Engine)', () => {
 
     await waitFor(() => {
       expect(screen.getByTestId('ersd-modal-overlay')).toBeDefined();
+      expect(screen.getByTestId('ersd-checkbox')).toHaveProperty('disabled', false);
     });
     fireEvent.click(screen.getByTestId('ersd-checkbox'));
+    await waitFor(() =>
+      expect(screen.getByTestId('ersd-accept-button')).toHaveProperty('disabled', false),
+    );
     fireEvent.click(screen.getByTestId('ersd-accept-button'));
 
     await waitFor(() => {
@@ -874,8 +897,12 @@ describe('SignDocumentPage Component Tests (FR-007 Workflow Engine)', () => {
     // Accept ERSD Consent Modal
     await waitFor(() => {
       expect(screen.getByTestId('ersd-modal-overlay')).toBeDefined();
+      expect(screen.getByTestId('ersd-checkbox')).toHaveProperty('disabled', false);
     });
     fireEvent.click(screen.getByTestId('ersd-checkbox'));
+    await waitFor(() =>
+      expect(screen.getByTestId('ersd-accept-button')).toHaveProperty('disabled', false),
+    );
     fireEvent.click(screen.getByTestId('ersd-accept-button'));
 
     // Verify text field font size 12 and Arial font
