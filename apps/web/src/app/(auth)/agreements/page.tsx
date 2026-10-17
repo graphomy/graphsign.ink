@@ -390,6 +390,14 @@ function AgreementManagementContent() {
       return;
     }
 
+    const MAX_UPLOAD_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB
+    if (uploadFile.size > MAX_UPLOAD_SIZE_BYTES) {
+      setActionError(
+        `File size (${(uploadFile.size / (1024 * 1024)).toFixed(1)} MB) exceeds the maximum allowed limit of 5 MB. Please select a smaller file.`,
+      );
+      return;
+    }
+
     setIsUploading(true);
     try {
       const isMd =
@@ -1382,13 +1390,25 @@ function AgreementManagementContent() {
 
               <div>
                 <label className="block text-xs font-semibold text-ink-700 mb-1">
-                  Select File (.PDF, .DOCX, .MD up to 15MB)
+                  Select File (.PDF, .DOCX, .MD up to 5MB)
                 </label>
                 <input
                   type="file"
                   required
                   accept=".pdf,.docx,.doc,.md,text/markdown,text/plain"
-                  onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0] || null;
+                    if (file && file.size > 5 * 1024 * 1024) {
+                      setActionError(
+                        `File "${file.name}" (${(file.size / (1024 * 1024)).toFixed(1)} MB) exceeds the 5 MB limit. Please select a file under 5 MB.`,
+                      );
+                      setUploadFile(null);
+                      e.target.value = '';
+                      return;
+                    }
+                    setActionError(null);
+                    setUploadFile(file);
+                  }}
                   className="w-full bg-ink-50 border border-ink-200 rounded-md p-2 text-xs text-ink-700"
                 />
               </div>

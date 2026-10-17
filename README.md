@@ -7,8 +7,8 @@
 [![Release](https://img.shields.io/badge/release-v0.1.0-blue.svg?style=flat-square)](https://github.com/graphomy/graphsign.ink/releases)
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-red.svg?style=flat-square)](LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9.3-3178C6.svg?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-[![Next.js](https://img.shields.io/badge/Next.js-16.3.1-black.svg?style=flat-square&logo=next.js&logoColor=white)](https://nextjs.org/)
-[![Hono](https://img.shields.io/badge/Hono-4.13.3-E36002.svg?style=flat-square&logo=hono&logoColor=white)](https://hono.dev/)
+[![Next.js](https://img.shields.io/badge/Next.js-16.4.0-black.svg?style=flat-square&logo=next.js&logoColor=white)](https://nextjs.org/)
+[![Hono](https://img.shields.io/badge/Hono-4.13.13-E36002.svg?style=flat-square&logo=hono&logoColor=white)](https://hono.dev/)
 [![Cloudflare](https://img.shields.io/badge/Cloudflare-Workers%20%26%20Pages-F38020.svg?style=flat-square&logo=cloudflare&logoColor=white)](https://cloudflare.com/)
 [![PostgreSQL](<https://img.shields.io/badge/Database-PostgreSQL%20(Neon)-4169E1.svg?style=flat-square&logo=postgresql&logoColor=white>)](https://neon.tech/)
 [![Compliance](https://img.shields.io/badge/Compliance-ESIGN%20%7C%20UETA%20%7C%20eIDAS-10B981.svg?style=flat-square)](.claude/docs/product.md)
@@ -20,8 +20,9 @@
   <a href="#-quick-start"><b>Quick Start</b></a> •
   <a href="#-developer-matrix"><b>Tech Stack</b></a> •
   <a href="#-verification--testing"><b>Testing</b></a> •
-  <a href="#-documentation"><b>Documentation</b></a> •
-  <a href="#-compliance"><b>Compliance</b></a>
+  <a href="https://github.com/graphomy/graphsign.ink/wiki"><b>Documentation & Wiki</b></a> •
+  <a href="#-compliance"><b>Compliance</b></a> •
+  <a href="#-acknowledgments"><b>Acknowledgments</b></a>
 </p>
 
 ---
@@ -71,14 +72,16 @@ graphsign.ink/
 
 | Layer                  | Technology                                                                                 | Purpose                                                |
 | :--------------------- | :----------------------------------------------------------------------------------------- | :----------------------------------------------------- |
-| **Frontend Framework** | [Next.js 16.3.1](https://nextjs.org/) (React 19, Turbopack)                                | Responsive, server-rendered and static web application |
-| **Backend API**        | [Hono 4.13.3](https://hono.dev/)                                                           | Ultra-fast, edge-native TypeScript REST API            |
+| **Frontend Framework** | [Next.js 16.4.0](https://nextjs.org/) (React 19, Turbopack)                                | Responsive, server-rendered and static web application |
+| **Backend API**        | [Hono 4.13.13](https://hono.dev/)                                                          | Ultra-fast, edge-native TypeScript REST API            |
 | **Language & Runtime** | [TypeScript 5.9.3](https://www.typescriptlang.org/)                                        | Type-safe end-to-end schemas and contracts             |
-| **Styling & Icons**    | [Tailwind CSS 3.4](https://tailwindcss.com/)                                               | Modern, accessible, clean design system                |
-| **Database & ORM**     | [PostgreSQL (Neon Serverless)](https://neon.tech/) + [Prisma 6.19](https://www.prisma.io/) | Multi-tenant schema with driver adapters               |
+| **Styling & Icons**    | [Tailwind CSS 4.3.3](https://tailwindcss.com/) + [Lucide Icons](https://lucide.dev/)       | Modern, accessible, clean design system                |
+| **Database & ORM**     | [PostgreSQL (Neon Serverless)](https://neon.tech/) + [Prisma 7.10.1](https://www.prisma.io/) | Multi-tenant schema with driver adapters & migrations  |
+| **Email Delivery**     | [Resend](https://resend.com/)                                                              | Transactional signing invitations, alerts & notices    |
+| **Hosting & Edge**     | [Cloudflare](https://cloudflare.com/) (Workers, Pages, R2)                                 | Edge API execution, static assets, and object storage  |
 | **Authentication**     | [Web Crypto JWT + TOTP](https://developer.mozilla.org/en-US/docs/Web/API/Web_Crypto_API)   | Stateless, standards-compliant authentication          |
 | **Package Manager**    | [pnpm 9+](https://pnpm.io/)                                                                | Fast, disk space-efficient monorepo workspace          |
-| **Testing Suite**      | [Vitest 3.2](https://vitest.dev/) + React Testing Library                                  | 100% unit and integration test coverage                |
+| **Testing Suite**      | [Vitest 4.1.12](https://vitest.dev/) + React Testing Library                               | 700+ unit and integration tests passing                |
 
 ---
 
@@ -88,12 +91,42 @@ graphsign.ink/
 
 - **Node.js**: `v20.x` or higher
 - **pnpm**: `v9.x` or higher (`npm install -g pnpm`)
-- **PostgreSQL**: Local instance or free [Neon Serverless Postgres](https://neon.tech/) database
+- **Cloudflare Account**: [Cloudflare](https://dash.cloudflare.com/) for deploying Workers and Pages
+- **Neon Account**: [Neon](https://neon.tech/) for Serverless PostgreSQL
+- **Resend Account**: [Resend](https://resend.com/) for email delivery
 
-### 2. Installation
+---
+
+### 2. Service Credentials Setup
+
+#### A. Neon Serverless PostgreSQL
+1. Create a project and database on [neon.tech](https://neon.tech).
+2. Copy the **Direct connection string** (without `-pooler`) for running Prisma migrations:
+   ```text
+   postgresql://<user>:<password>@<ep-direct>.neon.tech/neondb?sslmode=require
+   ```
+3. Copy the **Pooled connection string** (with `-pooler`) for production runtime connection pooling:
+   ```text
+   postgresql://<user>:<password>@<ep-pooler>.neon.tech/neondb?sslmode=require
+   ```
+
+#### B. Resend Transactional Email
+1. Sign up at [resend.com](https://resend.com) and create an API key (`re_...`).
+2. Verify your sending domain under Domains, or use your account's test sender address for local development.
+
+#### C. Cloudflare (Workers & Pages)
+1. Authenticate with Wrangler CLI:
+   ```bash
+   pnpm exec wrangler login
+   ```
+2. Note your Cloudflare **Account ID** and **API Token** from the Cloudflare Dashboard for CI/CD deployments.
+
+---
+
+### 3. Installation & Environment Setup
 
 ```bash
-# Clone repository
+# Clone the repository
 git clone https://github.com/graphomy/graphsign.ink.git
 cd graphsign.ink
 
@@ -101,9 +134,7 @@ cd graphsign.ink
 pnpm install
 ```
 
-### 3. Environment Configuration
-
-Copy the example environment files:
+Copy the example environment configuration files:
 
 ```bash
 cp .env.example .env
@@ -112,19 +143,51 @@ cp apps/api/.dev.vars.example apps/api/.dev.vars
 cp apps/web/.env.local.example apps/web/.env.local
 ```
 
-### 4. Database Setup & Migrations
+Configure your environment files:
+- **`packages/db/.env`**:
+  ```env
+  DATABASE_URL="postgresql://<user>:<password>@<ep-direct>.neon.tech/neondb?sslmode=require"
+  ```
+- **`apps/api/.dev.vars`**:
+  ```env
+  DATABASE_URL="postgresql://<user>:<password>@<ep-pooler>.neon.tech/neondb?sslmode=require"
+  JWT_SECRET="your-secure-jwt-secret-at-least-32-chars-long"
+  RESEND_API_KEY="re_your_resend_api_key"
+  EMAIL_FROM="updates@notification.graphsign.ink"
+  ```
+- **`apps/web/.env.local`**:
+  ```env
+  NEXT_PUBLIC_API_URL="http://localhost:8787"
+  ```
+
+---
+
+### 4. Database Initialization & Migrations
 
 ```bash
-# Generate Prisma Client & push schema to database
+# Generate the Prisma client
 pnpm db:generate
+
+# Push schema directly or deploy existing migrations
 pnpm db:push
 ```
+
+If connecting to an existing database with pre-created tables, baseline existing migrations first:
+```bash
+pnpm --filter @graphsign/db exec prisma migrate resolve --applied 20260916_rest_and_webhooks
+pnpm --filter @graphsign/db exec prisma migrate deploy
+```
+
+---
 
 ### 5. Launch Development Servers
 
 ```bash
-# Run both API Worker and Web Application concurrently
-pnpm dev
+# Start Web Portal (Next.js)
+pnpm dev:web
+
+# In a separate terminal, start API Worker (Hono on Cloudflare Workers)
+pnpm dev:api
 ```
 
 - 🌐 **Web Portal**: [http://localhost:3000](http://localhost:3000)
@@ -146,7 +209,7 @@ pnpm lint
 # 3. Perform TypeScript typechecking across all packages
 pnpm typecheck
 
-# 4. Run entire Vitest unit & integration test suite (310+ tests)
+# 4. Run entire Vitest unit & integration test suite (700+ tests)
 pnpm test
 
 # 5. Validate production build (Next.js & Hono)
@@ -155,14 +218,11 @@ pnpm build
 
 ---
 
-## 📚 Documentation & Reference Guides
+## 📚 Documentation & Wiki
 
-- 🤖 **[CLAUDE.md](CLAUDE.md)**: Master developer workflow, Git policy, and AI pair-programming instructions.
-- 📘 **[Local Development Setup Guide](Environment_Setup/local-development-setup-guide.md)**: Step-by-step developer setup and troubleshooting.
-- 📖 **[Product Specifications](.claude/docs/product.md)**: Product goals, compliance matrices, and roadmap.
-- 🏗️ **[System Architecture](.claude/docs/architecture.md)**: Edge architecture, component boundaries, and security.
-- 🔒 **[Security & Privacy Architecture](.claude/docs/security.md)**: Threat modeling, KMS encryption, and audit controls.
-- 🌐 **[REST API Documentation](.claude/docs/api.md)**: API routes, payload validators, and error schemas.
+Comprehensive architecture specs, API guides, compliance checklists, and troubleshooting runbooks are maintained in our central Wiki:
+
+👉 **[Graphsign.ink Knowledge Base & Documentation Wiki](https://github.com/graphomy/graphsign.ink/wiki)**
 
 ---
 
@@ -175,12 +235,23 @@ Graphsign.ink is engineered to comply with major global electronic signature fra
 
 ---
 
+## 💖 Acknowledgments
+
+Graphsign.ink is built possible thanks to the outstanding infrastructure and developer tooling provided by:
+
+- **[Cloudflare](https://cloudflare.com/)**: For globally distributed, hyper-fast edge execution on Cloudflare Workers, Pages, and R2 storage.
+- **[Neon](https://neon.tech/)**: For developer-first serverless PostgreSQL with instant branching, autoscaling, and connection pooling.
+- **[Resend](https://resend.com/)**: For clean, modern, and highly deliverable transactional email delivery.
+- **[Google Antigravity](https://deepmind.google/)**: For intelligent AI pair-programming, codebase indexing, and autonomous engineering workflows.
+
+---
+
 ## 🤝 Contributing
 
 We welcome contributions! Please adhere to our standard Git workflow:
 
-1. Ensure work is linked to a Jira issue or GitHub Issue.
-2. Create a branch from `develop`: `feature/<issue-id>-<description>`.
+1. Ensure work is linked to a Jira issue under EPIC **INK-249** or a GitHub Issue.
+2. Create a branch from `develop`: `feature/<issue-id>-<description>` or `bugfix/<issue-id>-<description>`.
 3. Verify all formatting, linting, tests, and builds pass locally.
 4. Submit a Pull Request targeting `develop`.
 

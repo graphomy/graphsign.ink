@@ -359,6 +359,14 @@ function TemplateManagementContent() {
       return;
     }
 
+    const MAX_UPLOAD_SIZE = 5 * 1024 * 1024; // 5 MB
+    if (uploadFile.size > MAX_UPLOAD_SIZE) {
+      setActionError(
+        `File size (${(uploadFile.size / (1024 * 1024)).toFixed(1)} MB) exceeds the 5 MB limit. Please select a file under 5 MB.`,
+      );
+      return;
+    }
+
     setIsSubmittingUpload(true);
     setActionError(null);
     try {
@@ -1096,13 +1104,25 @@ function TemplateManagementContent() {
 
                 <div>
                   <label className="block text-xs font-semibold text-neutral-700 mb-1">
-                    Select File (.pdf)
+                    Select File (.pdf up to 5MB)
                   </label>
                   <input
                     type="file"
                     accept=".pdf,application/pdf"
                     required
-                    onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0] || null;
+                      if (file && file.size > 5 * 1024 * 1024) {
+                        setActionError(
+                          `File "${file.name}" (${(file.size / (1024 * 1024)).toFixed(1)} MB) exceeds the 5 MB limit. Please select a file under 5 MB.`,
+                        );
+                        setUploadFile(null);
+                        e.target.value = '';
+                        return;
+                      }
+                      setActionError(null);
+                      setUploadFile(file);
+                    }}
                     className="w-full text-xs text-neutral-600 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-red-50 file:text-[#ba0000] hover:file:bg-red-100"
                   />
                 </div>
