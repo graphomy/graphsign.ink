@@ -98,11 +98,16 @@ export class PlatformConfigService {
   ): Promise<{ key: string; value: string }> {
     const existing = await this.prisma.platformConfig.findUnique({ where: { key } });
 
+    const isUuid = (val?: string) =>
+      Boolean(val && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val));
+
+    const validActorId = isUuid(actorUserId) ? actorUserId : undefined;
+
     let updated;
     if (existing) {
       updated = await this.prisma.platformConfig.update({
         where: { key },
-        data: { value, updatedBy: actorUserId },
+        data: { value, updatedBy: validActorId },
       });
     } else {
       updated = await this.prisma.platformConfig.create({
@@ -110,24 +115,43 @@ export class PlatformConfigService {
           id: generateId(),
           key,
           value,
-          updatedBy: actorUserId,
+          updatedBy: validActorId,
         },
       });
     }
 
-    if (this.auditService && actorUserId) {
-      await this.auditService.log({
-        organisationId: '00000000-0000-0000-0000-000000000000',
-        userId: actorUserId,
-        action: 'PLATFORM_CONFIG_UPDATED',
-        resourceType: 'platform_config',
-        resourceId: updated.id,
-        metadata: {
-          key,
-          oldValue: existing?.value ?? PLATFORM_CONFIG_DEFAULTS[key],
-          newValue: value,
-        },
-      });
+    if (this.auditService) {
+      // Find actor user's organisation or fall back to any active organisation for foreign key integrity
+      let targetOrgId: string | undefined;
+      if (validActorId) {
+        const actor = await this.prisma.user.findUnique({
+          where: { id: validActorId },
+          select: { organisationId: true },
+        });
+        targetOrgId = actor?.organisationId;
+      }
+
+      if (!targetOrgId) {
+        const firstOrg = await this.prisma.organisation.findFirst({
+          select: { id: true },
+        });
+        targetOrgId = firstOrg?.id;
+      }
+
+      if (targetOrgId) {
+        await this.auditService.log({
+          organisationId: targetOrgId,
+          userId: validActorId,
+          action: 'PLATFORM_CONFIG_UPDATED',
+          resourceType: 'platform_config',
+          resourceId: updated.id,
+          metadata: {
+            key,
+            oldValue: existing?.value ?? PLATFORM_CONFIG_DEFAULTS[key],
+            newValue: value,
+          },
+        });
+      }
     }
 
     return { key: updated.key, value: updated.value };

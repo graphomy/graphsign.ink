@@ -404,13 +404,13 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
 
       switch (type) {
         case 'SIGNATURE':
-          defaultW = 25;
-          defaultH = 9;
+          defaultW = 18;
+          defaultH = 4.5;
           label = 'Signature';
           break;
         case 'INITIALS':
-          defaultW = 14;
-          defaultH = 8;
+          defaultW = 10;
+          defaultH = 4;
           label = 'Initials';
           break;
         case 'DATE':

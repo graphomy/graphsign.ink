@@ -197,6 +197,10 @@ function OrganisationSettingsContent() {
   const [teams, setTeams] = useState<TeamItem[]>([]);
   const [teamName, setTeamName] = useState<string>('');
   const [teamDesc, setTeamDesc] = useState<string>('');
+  const [expandedTeamId, setExpandedTeamId] = useState<string | null>(null);
+  const [addingMemberTeamId, setAddingMemberTeamId] = useState<string | null>(null);
+  const [selectedMemberToAdd, setSelectedMemberToAdd] = useState<string>('');
+  const [isManagingTeamMember, setIsManagingTeamMember] = useState<boolean>(false);
 
   const [roles, setRoles] = useState<CustomRoleItem[]>([]);
   const [roleName, setRoleName] = useState<string>('');
@@ -1042,6 +1046,67 @@ function OrganisationSettingsContent() {
     }
   }
 
+  // Add Member to Team (INK-53)
+  async function handleAddTeamMember(teamId: string, userId: string) {
+    if (!checkAdminOrWarn()) return;
+    if (!userId) return;
+    setIsManagingTeamMember(true);
+    try {
+      const token = localStorage.getItem('graphsign_session_token') ?? '';
+      const apiUrl = getApiUrl();
+      const res = await fetch(`${apiUrl}/api/v1/organisations/teams/${teamId}/members`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ userId }),
+      });
+      const data = await res.json().catch(() => null);
+      if (res.ok) {
+        // Refresh team list to get updated member association
+        const teamRes = await fetch(`${apiUrl}/api/v1/organisations/teams`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (teamRes.ok) setTeams(await teamRes.json());
+        setSelectedMemberToAdd('');
+        setAddingMemberTeamId(null);
+        setMessage('Member added to team successfully.');
+      } else {
+        setError(data?.error?.message ?? 'Failed to add member to team.');
+      }
+    } catch {
+      setError('Failed to add member to team.');
+    } finally {
+      setIsManagingTeamMember(false);
+    }
+  }
+
+  // Remove Member from Team (INK-53)
+  async function handleRemoveTeamMember(teamId: string, userId: string) {
+    if (!checkAdminOrWarn()) return;
+    setIsManagingTeamMember(true);
+    try {
+      const token = localStorage.getItem('graphsign_session_token') ?? '';
+      const apiUrl = getApiUrl();
+      const res = await fetch(`${apiUrl}/api/v1/organisations/teams/${teamId}/members/${userId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json().catch(() => null);
+      if (res.ok) {
+        const teamRes = await fetch(`${apiUrl}/api/v1/organisations/teams`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (teamRes.ok) setTeams(await teamRes.json());
+        setMessage('Member removed from team successfully.');
+      } else {
+        setError(data?.error?.message ?? 'Failed to remove member from team.');
+      }
+    } catch {
+      setError('Failed to remove member from team.');
+    } finally {
+      setIsManagingTeamMember(false);
+    }
+  }
+
   // Create Custom Role (INK-55)
   async function handleCreateCustomRole(e: React.FormEvent) {
     e.preventDefault();
@@ -1188,7 +1253,6 @@ function OrganisationSettingsContent() {
             { id: 'members', label: 'Members' },
             { id: 'teams', label: 'Teams' },
             { id: 'roles', label: 'Custom Roles' },
-            { id: 'domains', label: 'Domains' },
             { id: 'audit', label: 'Audit Logs' },
             { id: 'usage', label: 'Usage & Quotas' },
             { id: 'compliance', label: 'Compliance' },
@@ -1934,21 +1998,150 @@ function OrganisationSettingsContent() {
                   </button>
                 </form>
 
-                <div className="divide-y border rounded-xl">
+                <div className="divide-y border rounded-xl overflow-hidden bg-white">
                   {teams.length > 0 ? (
-                    teams.map((team) => (
-                      <div key={team.id} className="p-4 flex justify-between items-center">
-                        <div>
-                          <span className="font-bold text-sm text-neutral-900">{team.name}</span>
-                          <p className="text-xs text-neutral-500">
-                            {team.description || 'No description'}
-                          </p>
+                    teams.map((team) => {
+                      const isExpanded = expandedTeamId === team.id;
+                      const isAdding = addingMemberTeamId === team.id;
+                      const teamMemberUserIds = new Set(team.members?.map((m) => m.user.id) || []);
+                      const availableMembers = members.filter((m) => !teamMemberUserIds.has(m.id));
+
+                      return (
+                        <div key={team.id} className="p-4 space-y-3">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="font-bold text-sm text-neutral-900">
+                                  {team.name}
+                                </span>
+                                {team.lead && (
+                                  <span className="text-[11px] font-medium text-neutral-500 bg-neutral-100 px-2 py-0.5 rounded">
+                                    Lead: {team.lead.name || team.lead.email}
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-xs text-neutral-500 mt-0.5">
+                                {team.description || 'No description provided'}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-2 self-start sm:self-auto">
+                              <span className="text-xs font-semibold text-neutral-700 bg-neutral-100 px-2.5 py-1 rounded-full">
+                                {team.members?.length || 0} Members
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => setExpandedTeamId(isExpanded ? null : team.id)}
+                                className="px-3 py-1 text-xs font-semibold text-neutral-700 bg-neutral-100 hover:bg-neutral-200 rounded transition-colors"
+                              >
+                                {isExpanded ? 'Hide Members ▴' : 'View Members ▾'}
+                              </button>
+                              {isAdmin && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setAddingMemberTeamId(isAdding ? null : team.id);
+                                    if (!isExpanded) setExpandedTeamId(team.id);
+                                  }}
+                                  className="px-3 py-1 text-xs font-bold text-white bg-[#ba0000] hover:bg-[#a00000] rounded shadow-xs transition-colors"
+                                >
+                                  + Add Member
+                                </button>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Member management panel */}
+                          {isExpanded && (
+                            <div className="mt-3 pt-3 border-t space-y-3 bg-neutral-50 -mx-4 -mb-4 p-4">
+                              {isAdding && (
+                                <div className="p-3 bg-white border rounded-lg flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                                  <select
+                                    value={selectedMemberToAdd}
+                                    onChange={(e) => setSelectedMemberToAdd(e.target.value)}
+                                    className="flex-1 rounded border px-3 py-1.5 text-xs bg-white text-neutral-900"
+                                  >
+                                    <option value="">
+                                      Select an organisation member to add...
+                                    </option>
+                                    {availableMembers.map((m) => (
+                                      <option key={m.id} value={m.id}>
+                                        {m.name ? `${m.name} (${m.email})` : m.email}
+                                      </option>
+                                    ))}
+                                  </select>
+                                  <div className="flex items-center gap-2">
+                                    <button
+                                      type="button"
+                                      disabled={!selectedMemberToAdd || isManagingTeamMember}
+                                      onClick={() =>
+                                        handleAddTeamMember(team.id, selectedMemberToAdd)
+                                      }
+                                      className="px-3 py-1.5 bg-[#ba0000] text-white text-xs font-bold rounded hover:bg-[#a00000] disabled:opacity-50 transition-colors"
+                                    >
+                                      {isManagingTeamMember ? 'Adding...' : 'Confirm'}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setAddingMemberTeamId(null);
+                                        setSelectedMemberToAdd('');
+                                      }}
+                                      className="px-3 py-1.5 border border-neutral-300 text-neutral-600 text-xs font-semibold rounded hover:bg-neutral-100 transition-colors"
+                                    >
+                                      Cancel
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+
+                              <div className="space-y-1.5">
+                                <h5 className="text-[11px] font-bold text-neutral-500 uppercase tracking-wider">
+                                  Team Members ({team.members?.length || 0})
+                                </h5>
+                                {team.members && team.members.length > 0 ? (
+                                  <div className="divide-y bg-white border rounded-lg">
+                                    {team.members.map((m) => (
+                                      <div
+                                        key={m.user.id}
+                                        className="p-2.5 px-3 flex items-center justify-between text-xs"
+                                      >
+                                        <div>
+                                          <span className="font-semibold text-neutral-900">
+                                            {m.user.name || m.user.email}
+                                          </span>
+                                          {m.user.name && (
+                                            <span className="text-neutral-500 ml-1.5 text-[11px]">
+                                              {m.user.email}
+                                            </span>
+                                          )}
+                                        </div>
+                                        {isAdmin && (
+                                          <button
+                                            type="button"
+                                            disabled={isManagingTeamMember}
+                                            onClick={() =>
+                                              handleRemoveTeamMember(team.id, m.user.id)
+                                            }
+                                            className="px-2 py-0.5 text-[11px] font-semibold text-red-600 hover:text-red-800 hover:bg-red-50 rounded transition-colors disabled:opacity-50"
+                                          >
+                                            Remove
+                                          </button>
+                                        )}
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <p className="text-xs text-neutral-400 italic py-2">
+                                    No members in this team yet. Click "+ Add Member" to assign
+                                    users.
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          )}
                         </div>
-                        <span className="text-xs font-semibold text-neutral-600 bg-neutral-100 px-2.5 py-1 rounded-full">
-                          {team.members?.length || 0} Members
-                        </span>
-                      </div>
-                    ))
+                      );
+                    })
                   ) : (
                     <div className="p-8 text-center text-xs text-neutral-400">
                       No teams created yet. Create your first team using the form above.
@@ -2599,12 +2792,167 @@ function OrganisationSettingsContent() {
 
             {/* USAGE TAB */}
             {activeTab === 'usage' && (
-              <div className="space-y-4" data-testid="usage-section">
-                <h3 className="text-xs font-bold uppercase text-neutral-900">Usage & Quotas</h3>
-                <p className="text-xs text-neutral-500">
-                  Storage quota: {formatBytes(usage?.storageUsedBytes)} /{' '}
-                  {formatBytes(usage?.storageQuotaBytes)}
-                </p>
+              <div className="space-y-6" data-testid="usage-section">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b pb-4">
+                  <div>
+                    <h3 className="text-sm font-bold text-neutral-900">Usage & Resource Quotas</h3>
+                    <p className="text-xs text-neutral-500 mt-0.5">
+                      Monitor consumed storage, document transaction volume, and user seat
+                      allocation.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold uppercase tracking-wider px-2.5 py-1 rounded-full bg-neutral-100 text-neutral-800 border">
+                      Plan: {org?.planType?.toUpperCase() || 'STANDARD'}
+                    </span>
+                  </div>
+                </div>
+
+                {usage ? (
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {/* Storage Meter Card */}
+                    <div className="border rounded-xl p-5 bg-white space-y-3 shadow-xs">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-neutral-600 uppercase tracking-wider">
+                          Cloud Storage
+                        </span>
+                        <span
+                          className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                            usage.storageUsagePercent >= 90
+                              ? 'bg-red-100 text-red-700'
+                              : usage.storageUsagePercent >= 80
+                                ? 'bg-amber-100 text-amber-700'
+                                : 'bg-emerald-100 text-emerald-700'
+                          }`}
+                        >
+                          {usage.storageUsagePercent}%
+                        </span>
+                      </div>
+                      <div className="flex items-baseline gap-1.5">
+                        <span className="text-xl font-extrabold text-neutral-900">
+                          {formatBytes(usage.storageUsedBytes)}
+                        </span>
+                        <span className="text-xs font-medium text-neutral-400">
+                          / {formatBytes(usage.storageQuotaBytes)}
+                        </span>
+                      </div>
+                      <div className="w-full bg-neutral-100 rounded-full h-2 overflow-hidden">
+                        <div
+                          className={`h-2 transition-all duration-300 rounded-full ${
+                            usage.storageUsagePercent >= 90
+                              ? 'bg-red-600'
+                              : usage.storageUsagePercent >= 80
+                                ? 'bg-amber-500'
+                                : 'bg-[#ba0000]'
+                          }`}
+                          style={{
+                            width: `${Math.min(100, Math.max(0, usage.storageUsagePercent))}%`,
+                          }}
+                        />
+                      </div>
+                      <p className="text-[11px] text-neutral-500">
+                        {usage.isStorageLimitReached
+                          ? 'Storage quota fully consumed. Remove old documents or upgrade quota.'
+                          : usage.isStorageNearLimit
+                            ? 'Warning: Storage is nearing allocated capacity (>80%).'
+                            : 'Allocated tenant file storage capacity.'}
+                      </p>
+                    </div>
+
+                    {/* Document Count Meter Card */}
+                    <div className="border rounded-xl p-5 bg-white space-y-3 shadow-xs">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-neutral-600 uppercase tracking-wider">
+                          Agreements Volume
+                        </span>
+                        <span
+                          className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                            usage.documentUsagePercent >= 90
+                              ? 'bg-red-100 text-red-700'
+                              : usage.documentUsagePercent >= 80
+                                ? 'bg-amber-100 text-amber-700'
+                                : 'bg-emerald-100 text-emerald-700'
+                          }`}
+                        >
+                          {usage.documentUsagePercent}%
+                        </span>
+                      </div>
+                      <div className="flex items-baseline gap-1.5">
+                        <span className="text-xl font-extrabold text-neutral-900">
+                          {usage.documentCount.toLocaleString()}
+                        </span>
+                        <span className="text-xs font-medium text-neutral-400">
+                          /{' '}
+                          {usage.maxDocuments > 0
+                            ? usage.maxDocuments.toLocaleString()
+                            : 'Unlimited'}
+                        </span>
+                      </div>
+                      <div className="w-full bg-neutral-100 rounded-full h-2 overflow-hidden">
+                        <div
+                          className={`h-2 transition-all duration-300 rounded-full ${
+                            usage.documentUsagePercent >= 90
+                              ? 'bg-red-600'
+                              : usage.documentUsagePercent >= 80
+                                ? 'bg-amber-500'
+                                : 'bg-[#ba0000]'
+                          }`}
+                          style={{
+                            width: `${Math.min(100, Math.max(0, usage.documentUsagePercent))}%`,
+                          }}
+                        />
+                      </div>
+                      <p className="text-[11px] text-neutral-500">
+                        {usage.isDocumentLimitReached
+                          ? 'Document cap reached. You cannot create new agreements until quota increases.'
+                          : 'Total agreements created and managed under this organisation.'}
+                      </p>
+                    </div>
+
+                    {/* Member Seats Meter Card */}
+                    <div className="border rounded-xl p-5 bg-white space-y-3 shadow-xs">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-neutral-600 uppercase tracking-wider">
+                          User Seats
+                        </span>
+                        <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-neutral-100 text-neutral-700">
+                          {usage.maxUsers > 0
+                            ? `${Math.round(((usage.activeUsersCount + usage.pendingInvitationsCount) / usage.maxUsers) * 100)}%`
+                            : 'Active'}
+                        </span>
+                      </div>
+                      <div className="flex items-baseline gap-1.5">
+                        <span className="text-xl font-extrabold text-neutral-900">
+                          {(
+                            usage.activeUsersCount + usage.pendingInvitationsCount
+                          ).toLocaleString()}
+                        </span>
+                        <span className="text-xs font-medium text-neutral-400">
+                          / {usage.maxUsers > 0 ? usage.maxUsers.toLocaleString() : 'Unlimited'}
+                        </span>
+                      </div>
+                      <div className="w-full bg-neutral-100 rounded-full h-2 overflow-hidden">
+                        <div
+                          className="h-2 bg-[#ba0000] transition-all duration-300 rounded-full"
+                          style={{
+                            width:
+                              usage.maxUsers > 0
+                                ? `${Math.min(100, Math.max(0, Math.round(((usage.activeUsersCount + usage.pendingInvitationsCount) / usage.maxUsers) * 100)))}%`
+                                : '10%',
+                          }}
+                        />
+                      </div>
+                      <p className="text-[11px] text-neutral-500">
+                        {usage.activeUsersCount} active members, {usage.pendingInvitationsCount}{' '}
+                        pending invitations.
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-8 text-center text-xs text-neutral-400 bg-white border rounded-xl">
+                    Loading organisation quota and usage metrics...
+                  </div>
+                )}
               </div>
             )}
 
@@ -2650,51 +2998,109 @@ function OrganisationSettingsContent() {
                       <label className="block text-xs font-bold text-neutral-900 mb-1">
                         Allowed E-Signature Standards
                       </label>
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 text-xs pt-1">
-                        {['ESIGN', 'UETA', 'eIDAS_SES', 'eIDAS_AES', 'eIDAS_QES', 'PART_11'].map(
-                          (std) => (
-                            <label
-                              key={std}
-                              className="flex items-center gap-2 bg-white p-2 rounded-lg border cursor-pointer hover:bg-neutral-100/50"
-                            >
-                              <input
-                                type="checkbox"
-                                checked={complianceStandards.includes(std)}
-                                onChange={(e) =>
-                                  e.target.checked
-                                    ? setComplianceStandards([...complianceStandards, std])
-                                    : setComplianceStandards(
-                                        complianceStandards.filter((s) => s !== std),
-                                      )
-                                }
-                                className="rounded text-[#ba0000]"
-                              />
-                              <span className="font-semibold text-neutral-800">{std}</span>
-                            </label>
-                          ),
-                        )}
+                      <p className="text-[11px] text-neutral-500 mb-2.5">
+                        Select which legal signature frameworks are permitted across agreements
+                        created in this workspace.
+                      </p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs pt-1">
+                        {[
+                          {
+                            id: 'ESIGN',
+                            title: 'US ESIGN Act',
+                            desc: 'United States federal standard granting legal validity to electronic contracts and records.',
+                          },
+                          {
+                            id: 'UETA',
+                            title: 'Uniform Electronic Transactions Act',
+                            desc: 'US state-level framework harmonizing electronic commerce, signatures, and document records.',
+                          },
+                          {
+                            id: 'eIDAS_SES',
+                            title: 'eIDAS Simple Electronic Signature (SES)',
+                            desc: 'European Union basic electronic signature for standard commercial agreements with tamper-evident audit.',
+                          },
+                          {
+                            id: 'eIDAS_AES',
+                            title: 'eIDAS Advanced Electronic Signature (AES)',
+                            desc: 'EU standard uniquely linked to the signer with cryptographic integrity and signer identification.',
+                          },
+                          {
+                            id: 'PART_11',
+                            title: 'FDA 21 CFR Part 11',
+                            desc: 'US FDA regulatory standard for electronic records and signatures in life sciences and healthcare.',
+                          },
+                        ].map((std) => (
+                          <label
+                            key={std.id}
+                            className={`flex items-start gap-2.5 p-3 rounded-lg border cursor-pointer transition-colors ${
+                              complianceStandards.includes(std.id)
+                                ? 'border-[#ba0000] bg-red-50/30'
+                                : 'border-neutral-200 bg-white hover:bg-neutral-50'
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={complianceStandards.includes(std.id)}
+                              onChange={(e) =>
+                                e.target.checked
+                                  ? setComplianceStandards([...complianceStandards, std.id])
+                                  : setComplianceStandards(
+                                      complianceStandards.filter((s) => s !== std.id),
+                                    )
+                              }
+                              className="mt-0.5 rounded text-[#ba0000] focus:ring-[#ba0000]"
+                            />
+                            <div>
+                              <span className="font-bold text-neutral-900 text-xs block">
+                                {std.title}
+                              </span>
+                              <span className="text-[11px] text-neutral-500 leading-relaxed block mt-0.5">
+                                {std.desc}
+                              </span>
+                            </div>
+                          </label>
+                        ))}
                       </div>
                     </div>
 
-                    <div className="space-y-2 pt-2 border-t">
-                      <label className="flex items-center gap-2 text-xs font-semibold text-neutral-800 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={requireReauth}
-                          onChange={(e) => setRequireReauth(e.target.checked)}
-                          className="rounded text-[#ba0000]"
-                        />
-                        Require re-authentication before signing documents
-                      </label>
-                      <label className="flex items-center gap-2 text-xs font-semibold text-neutral-800 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={signatureReason}
-                          onChange={(e) => setSignatureReason(e.target.checked)}
-                          className="rounded text-[#ba0000]"
-                        />
-                        Require signer to provide signature intent / reason
-                      </label>
+                    {/* FDA 21 CFR Part 11 Specific Controls */}
+                    <div className="space-y-2 pt-3 border-t">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold text-neutral-900">
+                          21 CFR Part 11 &amp; High-Assurance Controls
+                        </span>
+                        {complianceStandards.includes('PART_11') && (
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800">
+                            Recommended
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-neutral-500">
+                        Regulatory mandates for life sciences requiring explicit signature reason
+                        and identity re-authentication.
+                      </p>
+                      <div className="space-y-2 pt-1 pl-1">
+                        <label className="flex items-center gap-2 text-xs font-semibold text-neutral-800 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={requireReauth}
+                            onChange={(e) => setRequireReauth(e.target.checked)}
+                            className="rounded text-[#ba0000] focus:ring-[#ba0000]"
+                          />
+                          Require re-authentication before signing documents (Password/Passcode
+                          verification)
+                        </label>
+                        <label className="flex items-center gap-2 text-xs font-semibold text-neutral-800 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={signatureReason}
+                            onChange={(e) => setSignatureReason(e.target.checked)}
+                            className="rounded text-[#ba0000] focus:ring-[#ba0000]"
+                          />
+                          Require signer to declare explicit signature reason (e.g. "I approve this
+                          document")
+                        </label>
+                      </div>
                     </div>
                   </div>
 

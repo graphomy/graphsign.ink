@@ -236,49 +236,52 @@ describe('OrganisationSettingsPage', () => {
     expect(screen.getByTestId('remove-member-user-1')).toBeInTheDocument();
   });
 
-  it('renders verify DNS button for unverified custom domains', async () => {
+  it('hides Domains tab from navigation for now and renders comprehensive Usage & Quotas meters', async () => {
     vi.mocked(global.fetch).mockImplementation((url: RequestInfo | URL) => {
       const urlStr = url.toString();
-      if (urlStr.includes('/organisations/domains')) {
+      if (urlStr.includes('/organisations/me/usage')) {
         return Promise.resolve({
           ok: true,
           json: () =>
-            Promise.resolve([
-              {
-                id: 'dom-1',
-                domain: 'sign.acme.com',
-                verificationToken: 'graphsign-verify=abc123token',
-                status: 'pending',
-              },
-              {
-                id: 'dom-2',
-                domain: 'legal.acme.com',
-                verificationToken: 'graphsign-verify=xyz789token',
-                status: 'verified',
-                verifiedAt: new Date().toISOString(),
-              },
-            ]),
+            Promise.resolve({
+              storageQuotaBytes: '1073741824',
+              storageUsedBytes: '268435456',
+              storageUsagePercent: 25,
+              maxDocuments: 100,
+              documentCount: 15,
+              documentUsagePercent: 15,
+              maxUsers: 10,
+              activeUsersCount: 3,
+              pendingInvitationsCount: 1,
+              isStorageNearLimit: false,
+              isStorageLimitReached: false,
+              isDocumentLimitReached: false,
+            }),
         } as Response);
       }
       return Promise.resolve({
         ok: true,
-        json: () => Promise.resolve({ name: 'Acme Legal' }),
+        json: () => Promise.resolve({ name: 'Acme Legal', planType: 'teams' }),
       } as Response);
     });
 
     render(<OrganisationSettingsPage />);
 
     await waitFor(() => {
-      expect(screen.getByTestId('tab-domains')).toBeInTheDocument();
+      expect(screen.getByTestId('tab-general')).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByTestId('tab-domains'));
+    // Domains tab should be hidden from navigation
+    expect(screen.queryByTestId('tab-domains')).not.toBeInTheDocument();
+
+    // Usage & Quotas tab should display comprehensive resource meters
+    fireEvent.click(screen.getByTestId('tab-usage'));
 
     await waitFor(() => {
-      expect(screen.getByText('sign.acme.com')).toBeInTheDocument();
+      expect(screen.getByText('Usage & Resource Quotas')).toBeInTheDocument();
+      expect(screen.getByText('Cloud Storage')).toBeInTheDocument();
+      expect(screen.getByText('Agreements Volume')).toBeInTheDocument();
+      expect(screen.getByText('User Seats')).toBeInTheDocument();
     });
-
-    expect(screen.getByTestId('verify-domain-dom-1')).toBeInTheDocument();
-    expect(screen.queryByTestId('verify-domain-dom-2')).not.toBeInTheDocument();
   });
 });

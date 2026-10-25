@@ -16,7 +16,7 @@
   "dependencies": {
     "@graphsign/db": "workspace:*",
     "hono": "^4.13.13",
-    "jose": "^6.2.12",
+    "jose": "^6.2.13",
     "node-forge": "^1.4.0",
     "pdf-lib": "^1.17.1",
     "qrcode": "^1.5.4",
@@ -33,6 +33,6 @@
     "@types/uuid": "^11.0.0",
     "typescript": "^5.9.3",
     "vitest": "^4.1.12",
-    "wrangler": "^4.151.1"
+    "wrangler": "^4.152.0"
   }
 }
