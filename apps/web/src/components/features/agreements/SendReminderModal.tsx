@@ -127,11 +127,17 @@ export function SendReminderModal({
               className="w-full px-3.5 py-2.5 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 text-sm focus:ring-2 focus:ring-amber-500 focus:outline-none transition"
             >
               <option value="all">All Pending Signers</option>
-              {pendingRecipients.map((r) => (
-                <option key={r.id || r.email} value={r.id || r.email}>
-                  {r.name} ({r.email})
-                </option>
-              ))}
+              {pendingRecipients.map((r) => {
+                const label =
+                  r.email && r.email.trim() && r.email.trim() !== r.name.trim()
+                    ? `${r.name} (${r.email.trim()})`
+                    : r.name;
+                return (
+                  <option key={r.id || r.email} value={r.id || r.email}>
+                    {label}
+                  </option>
+                );
+              })}
             </select>
             <p className="text-xs text-zinc-400 mt-1">
               Recipients will receive a refreshed signing link and direct access to sign the
