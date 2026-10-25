@@ -265,7 +265,11 @@ export class PadesSealingService {
     let sealedPdfBytes: Uint8Array;
     let sealAlgorithm = cert.algorithm;
     let sealPadesLevel = cert.padesLevel || 'B_T';
-    let tsaResult: { tsaUrl: string; timestamp: Date | null; provider: string };
+    let tsaResult: { tsaUrl: string; timestamp: Date | null; provider: string } = {
+      tsaUrl: '',
+      timestamp: null,
+      provider: 'None',
+    };
 
     if (this.signingClient.configured) {
       const signed = await this.signingClient.sign({
@@ -303,18 +307,10 @@ export class PadesSealingService {
       }
     } else {
       // In-process sealing using native PdfSignerEngine (Adobe Acrobat recognized PAdES B-T)
-      const preSealDigest = await sha256(assembledPdfBytes);
-      const tsa = await this.tsaService.requestTimestamp(preSealDigest, cert.tsaUrl || undefined);
-      tsaResult = {
-        tsaUrl: tsa.tsaUrl || '',
-        timestamp: tsa.timestamp,
-        provider: tsa.provider,
-      };
-      sealPadesLevel = cert.padesLevel || 'B_T';
       sealAlgorithm = cert.algorithm;
+      const shouldTimestamp = cert.padesLevel !== 'B_B';
 
       const keys = await this.keyCustodyService.generateKeyPair(cert.algorithm as any);
-      const tsaTokenBytes = tsa.tokenBase64 ? Buffer.from(tsa.tokenBase64, 'base64') : null;
 
       const signResult = await PdfSignerEngine.signPdf({
         pdfBytes: assembledPdfBytes,
@@ -322,9 +318,24 @@ export class PadesSealingService {
         privateKeyPem: keys.privateKeyPem,
         reason: `Cryptographically sealed by ${cert.name || 'graphsign.ink'}`,
         contactInfo: `https://graphsign.ink/verify/${verificationToken}`,
-        tsaTokenBytes,
+        requestTimestamp: shouldTimestamp
+          ? async (signatureBytes: Uint8Array) => {
+              // Standard ETSI EN 319 142 PAdES-T: timestamp is calculated over the raw signature value bytes
+              const sigHash = await sha256(signatureBytes);
+              const tsa = await this.tsaService.requestTimestamp(sigHash, cert.tsaUrl || undefined);
+              tsaResult = {
+                tsaUrl: tsa.tsaUrl || '',
+                timestamp: tsa.timestamp,
+                provider: tsa.provider,
+              };
+              return (
+                tsa.tokenBytes || (tsa.tokenBase64 ? Buffer.from(tsa.tokenBase64, 'base64') : null)
+              );
+            }
+          : undefined,
       });
 
+      sealPadesLevel = tsaResult.timestamp ? cert.padesLevel || 'B_T' : 'B_B';
       sealedPdfBase64 = signResult.signedPdfBase64;
       sealedPdfBytes = signResult.signedPdfBytes;
     }
