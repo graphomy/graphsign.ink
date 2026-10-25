@@ -16,14 +16,19 @@ function waitForRetry(delay: number, signal?: AbortSignal | null): Promise<void>
   });
 }
 
+export type FetchReadOptions = Omit<RequestInit, 'method' | 'body'> & {
+  timeoutMs?: number;
+};
+
 /** Retry transient failures for read-only requests, with a bounded wait per attempt. */
-export async function fetchRead(url: string, init: Omit<RequestInit, 'method' | 'body'> = {}) {
+export async function fetchRead(url: string, init: FetchReadOptions = {}) {
+  const timeoutMs = init.timeoutMs ?? 25_000;
   for (let attempt = 0; attempt < 3; attempt++) {
     init.signal?.throwIfAborted();
     const controller = new AbortController();
     const onAbort = () => controller.abort(init.signal?.reason);
     init.signal?.addEventListener('abort', onAbort, { once: true });
-    const timer = setTimeout(() => controller.abort(), 8_000);
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
       const response = await fetch(url, { ...init, method: 'GET', signal: controller.signal });
       if (!RETRYABLE_STATUSES.has(response.status)) return response;
