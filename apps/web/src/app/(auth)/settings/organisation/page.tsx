@@ -2132,8 +2132,8 @@ function OrganisationSettingsContent() {
                                   </div>
                                 ) : (
                                   <p className="text-xs text-neutral-400 italic py-2">
-                                    No members in this team yet. Click "+ Add Member" to assign
-                                    users.
+                                    No members in this team yet. Click &quot;+ Add Member&quot; to
+                                    assign users.
                                   </p>
                                 )}
                               </div>
@@ -3097,8 +3097,8 @@ function OrganisationSettingsContent() {
                             onChange={(e) => setSignatureReason(e.target.checked)}
                             className="rounded text-[#ba0000] focus:ring-[#ba0000]"
                           />
-                          Require signer to declare explicit signature reason (e.g. "I approve this
-                          document")
+                          Require signer to declare explicit signature reason (e.g. &quot;I approve
+                          this document&quot;)
                         </label>
                       </div>
                     </div>

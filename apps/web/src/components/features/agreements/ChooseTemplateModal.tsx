@@ -41,6 +41,7 @@ function checkIsOrganisationUser(): boolean {
 
   // If user explicitly belongs to a teams/enterprise plan or has a designated organisation
   if (planType === 'teams' || planType === 'team' || planType === 'enterprise') return true;
+  if (orgId && orgId !== 'personal' && orgId !== 'null' && orgId !== 'undefined') return true;
   if (
     orgName &&
     orgName.toLowerCase() !== 'personal workspace' &&

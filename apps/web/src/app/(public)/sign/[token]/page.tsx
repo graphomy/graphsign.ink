@@ -237,12 +237,12 @@ export default function SignDocumentPage({
           const docFields = data.data.agreement?.fields?.fields || [];
           for (const r of recips as (RecipientInfo & {
             fieldsData?: Record<string, unknown>;
-            signatureData?: any;
+            signatureData?: unknown;
           })[]) {
             if (r.fieldsData && typeof r.fieldsData === 'object') {
               for (const [k, v] of Object.entries(r.fieldsData)) {
-                if (v && typeof v === 'object' && 'data' in (v as any)) {
-                  initialFieldValues[k] = String((v as any).data);
+                if (v && typeof v === 'object' && 'data' in (v as Record<string, unknown>)) {
+                  initialFieldValues[k] = String((v as Record<string, unknown>).data);
                 } else if (
                   typeof v === 'string' ||
                   typeof v === 'boolean' ||
@@ -253,12 +253,13 @@ export default function SignDocumentPage({
               }
             }
             if (r.signatureData && Array.isArray(docFields)) {
-              const sigStr =
+              const sigObj =
                 typeof r.signatureData === 'object' && r.signatureData !== null
-                  ? String(
-                      (r.signatureData as any).data || (r.signatureData as any).signature || '',
-                    )
-                  : String(r.signatureData);
+                  ? (r.signatureData as Record<string, unknown>)
+                  : null;
+              const sigStr = sigObj
+                ? String(sigObj.data || sigObj.signature || '')
+                : String(r.signatureData);
 
               for (const f of docFields) {
                 if (
@@ -779,8 +780,12 @@ export default function SignDocumentPage({
           typeof v === 'number'
         ) {
           sanitizedFieldsData[k] = v;
-        } else if (typeof v === 'object' && v !== null && 'data' in (v as any)) {
-          sanitizedFieldsData[k] = String((v as any).data);
+        } else if (
+          typeof v === 'object' &&
+          v !== null &&
+          'data' in (v as Record<string, unknown>)
+        ) {
+          sanitizedFieldsData[k] = String((v as Record<string, unknown>).data);
         } else if (v !== undefined) {
           sanitizedFieldsData[k] = String(v);
         }
@@ -1702,8 +1707,8 @@ export default function SignDocumentPage({
                                   >
                                     {typeof value === 'object' &&
                                     value !== null &&
-                                    'data' in (value as any)
-                                      ? String((value as any).data)
+                                    'data' in (value as Record<string, unknown>)
+                                      ? String((value as Record<string, unknown>).data)
                                       : String(value)}
                                   </span>
                                 )}
