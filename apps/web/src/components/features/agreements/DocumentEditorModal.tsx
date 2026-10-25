@@ -404,13 +404,13 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
 
       switch (type) {
         case 'SIGNATURE':
-          defaultW = 25;
-          defaultH = 9;
+          defaultW = 18;
+          defaultH = 4.5;
           label = 'Signature';
           break;
         case 'INITIALS':
-          defaultW = 14;
-          defaultH = 8;
+          defaultW = 10;
+          defaultH = 4;
           label = 'Initials';
           break;
         case 'DATE':
@@ -1474,11 +1474,17 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
                     }
                     className="w-full bg-neutral-50 border border-neutral-300 rounded-lg px-2.5 py-1.5 text-xs text-neutral-900 focus:outline-none focus:border-blue-600"
                   >
-                    {recipients.map((r) => (
-                      <option key={r.id} value={r.id}>
-                        {r.name} ({r.email})
-                      </option>
-                    ))}
+                    {recipients.map((r) => {
+                      const label =
+                        r.email && r.email.trim() && r.email.trim() !== r.name.trim()
+                          ? `${r.name} (${r.email.trim()})`
+                          : r.name;
+                      return (
+                        <option key={r.id} value={r.id}>
+                          {label}
+                        </option>
+                      );
+                    })}
                   </select>
                 </div>
 
@@ -1744,7 +1750,11 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
                           style={{ backgroundColor: r.color }}
                         />
                         <span className="font-semibold text-neutral-800 truncate">{r.name}</span>
-                        <span className="text-[10px] text-neutral-400 truncate">({r.email})</span>
+                        {r.email && r.email.trim() && r.email.trim() !== r.name.trim() && (
+                          <span className="text-[10px] text-neutral-400 truncate">
+                            ({r.email.trim()})
+                          </span>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -1785,11 +1795,17 @@ export function DocumentEditorModal({ agreement, onClose, onSuccess }: DocumentE
                 onChange={(e) => setPreviewRecipientId(e.target.value)}
                 className="w-full bg-neutral-50 border border-neutral-300 rounded-lg px-3 py-2 text-xs font-bold text-neutral-900 focus:outline-none focus:border-blue-600"
               >
-                {recipients.map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {r.name} ({r.email})
-                  </option>
-                ))}
+                {recipients.map((r) => {
+                  const label =
+                    r.email && r.email.trim() && r.email.trim() !== r.name.trim()
+                      ? `${r.name} (${r.email.trim()})`
+                      : r.name;
+                  return (
+                    <option key={r.id} value={r.id}>
+                      {label}
+                    </option>
+                  );
+                })}
               </select>
             </div>
 

@@ -411,12 +411,13 @@ function AgreementManagementContent() {
       if (isMd) {
         markdownContent = await uploadFile.text();
       } else {
-        fileBase64 = await new Promise<string>((resolve, reject) => {
+        const rawDataUrl = await new Promise<string>((resolve, reject) => {
           const reader = new FileReader();
           reader.onload = () => resolve(reader.result as string);
           reader.onerror = reject;
           reader.readAsDataURL(uploadFile);
         });
+        fileBase64 = rawDataUrl.includes(',') ? rawDataUrl.split(',')[1] : rawDataUrl;
       }
 
       const res = await fetch(`${getApiUrl()}/api/v1/agreements/upload`, {

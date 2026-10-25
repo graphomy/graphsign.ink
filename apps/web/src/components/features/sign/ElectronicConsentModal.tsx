@@ -279,7 +279,7 @@ export function ElectronicConsentModal({
         </div>
 
         {/* Scroll Region with Progress Bar */}
-        <div className="flex-1 mx-7 mt-4 border border-ink-200 rounded-md relative flex flex-col min-h-[220px] overflow-hidden bg-white">
+        <div className="flex-1 mx-7 mt-4 border border-ink-200 rounded-md relative flex flex-col min-h-0 overflow-hidden bg-white">
           {/* Progress bar pinned to top */}
           <div className="w-full bg-ink-100 h-0.5">
             <div
