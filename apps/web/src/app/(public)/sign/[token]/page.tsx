@@ -5,6 +5,7 @@ export const runtime = 'edge';
 import React, { useState, useEffect, useMemo, useCallback, useRef, use } from 'react';
 import Link from 'next/link';
 import { getApiUrl } from '@/lib/api';
+import { fetchRead } from '@/lib/fetch-read';
 import { orDash, orLabel, formatHash } from '@/lib/format';
 import { formatDate, formatDateTime } from '@/lib/date-utils';
 import { Button } from '@/components/ui/Button';
@@ -214,7 +215,7 @@ export default function SignDocumentPage({
     async function loadSigningSession() {
       try {
         setLoading(true);
-        const res = await fetch(`${getApiUrl()}/api/v1/sign/${rawToken}`);
+        const res = await fetchRead(`${getApiUrl()}/api/v1/sign/${rawToken}`);
         const data = await res.json();
 
         if (!res.ok || !data.success) {
@@ -236,12 +237,29 @@ export default function SignDocumentPage({
           const docFields = data.data.agreement?.fields?.fields || [];
           for (const r of recips as (RecipientInfo & {
             fieldsData?: Record<string, unknown>;
-            signatureData?: string;
+            signatureData?: any;
           })[]) {
             if (r.fieldsData && typeof r.fieldsData === 'object') {
-              Object.assign(initialFieldValues, r.fieldsData);
+              for (const [k, v] of Object.entries(r.fieldsData)) {
+                if (v && typeof v === 'object' && 'data' in (v as any)) {
+                  initialFieldValues[k] = String((v as any).data);
+                } else if (
+                  typeof v === 'string' ||
+                  typeof v === 'boolean' ||
+                  typeof v === 'number'
+                ) {
+                  initialFieldValues[k] = v;
+                }
+              }
             }
             if (r.signatureData && Array.isArray(docFields)) {
+              const sigStr =
+                typeof r.signatureData === 'object' && r.signatureData !== null
+                  ? String(
+                      (r.signatureData as any).data || (r.signatureData as any).signature || '',
+                    )
+                  : String(r.signatureData);
+
               for (const f of docFields) {
                 if (
                   (f.type === 'SIGNATURE' || f.type === 'INITIALS') &&
@@ -252,7 +270,9 @@ export default function SignDocumentPage({
                     f.recipientId === `recip-${r.routingOrder}` ||
                     f.recipientId === `r-${r.routingOrder}`)
                 ) {
-                  initialFieldValues[f.id] = r.signatureData;
+                  if (sigStr) {
+                    initialFieldValues[f.id] = sigStr;
+                  }
                 }
               }
             }
@@ -306,7 +326,7 @@ export default function SignDocumentPage({
       setPdfFetchError(null);
 
       try {
-        const res = await fetch(`${getApiUrl()}/api/v1/sign/${rawToken}/file`);
+        const res = await fetchRead(`${getApiUrl()}/api/v1/sign/${rawToken}/file`);
         if (!res.ok) {
           throw new Error(`Failed to stream document file (${res.status})`);
         }
@@ -750,28 +770,60 @@ export default function SignDocumentPage({
         return f && (f.type === 'SIGNATURE' || f.type === 'INITIALS');
       })?.[1];
 
-      const res = await fetch(`${getApiUrl()}/api/v1/sign/${rawToken}/complete`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          fieldsData: fieldValues,
-          signatureData: {
-            type:
-              adoptedSignature?.type ||
-              (typeof primarySigVal === 'string' && primarySigVal.startsWith('data:')
-                ? 'DRAWN'
-                : 'TYPED'),
-            data: String(
-              primarySigVal || adoptedSignature?.dataUrl || currentRecipient?.name || 'Signed',
-            ),
-            fontFamily: adoptedSignature?.fontFamily,
-            consentGiven: true,
-            timestamp: new Date().toISOString(),
-          },
-          signedAsGuest: Boolean(signedAsGuest || !isAuthenticated),
-          otpCode,
-        }),
-      });
+      const sanitizedFieldsData: Record<string, string | boolean | number | null> = {};
+      for (const [k, v] of Object.entries(fieldValues)) {
+        if (
+          v === null ||
+          typeof v === 'string' ||
+          typeof v === 'boolean' ||
+          typeof v === 'number'
+        ) {
+          sanitizedFieldsData[k] = v;
+        } else if (typeof v === 'object' && v !== null && 'data' in (v as any)) {
+          sanitizedFieldsData[k] = String((v as any).data);
+        } else if (v !== undefined) {
+          sanitizedFieldsData[k] = String(v);
+        }
+      }
+
+      const submitPayload = {
+        fieldsData: sanitizedFieldsData,
+        signatureData: {
+          type:
+            adoptedSignature?.type ||
+            (typeof primarySigVal === 'string' && primarySigVal.startsWith('data:')
+              ? 'DRAWN'
+              : 'TYPED'),
+          data: String(
+            primarySigVal || adoptedSignature?.dataUrl || currentRecipient?.name || 'Signed',
+          ),
+          fontFamily: adoptedSignature?.fontFamily,
+          consentGiven: true,
+          timestamp: new Date().toISOString(),
+        },
+        signedAsGuest: Boolean(signedAsGuest || !isAuthenticated),
+        otpCode,
+      };
+
+      let res: Response | null = null;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          res = await fetch(`${getApiUrl()}/api/v1/sign/${rawToken}/complete`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(submitPayload),
+          });
+          if (res.ok || res.status < 500) break;
+        } catch (fetchErr) {
+          if (attempt === 0) {
+            await new Promise((r) => setTimeout(r, 800));
+            continue;
+          }
+          throw fetchErr;
+        }
+      }
+
+      if (!res) throw new Error('Network request failed. Please check connection and retry.');
 
       const data = await res.json();
       if (!res.ok || !data.success) {
@@ -1648,7 +1700,11 @@ export default function SignDocumentPage({
                                         : 'font-serif italic text-sm text-ink-900 font-bold'
                                     }`}
                                   >
-                                    {String(value)}
+                                    {typeof value === 'object' &&
+                                    value !== null &&
+                                    'data' in (value as any)
+                                      ? String((value as any).data)
+                                      : String(value)}
                                   </span>
                                 )}
                                 <span className="absolute bottom-0.5 right-1 text-[9px] text-ink-600 bg-white/90 px-1 rounded opacity-0 group-hover:opacity-100 transition-opacity font-bold shadow-2xs">
