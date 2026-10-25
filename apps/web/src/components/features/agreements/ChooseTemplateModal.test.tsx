@@ -127,4 +127,22 @@ describe('ChooseTemplateModal Unit Tests (INK-264)', () => {
       expect(onClose).toHaveBeenCalled();
     });
   });
+
+  it('hides Library tab for non-organization users (individual plan)', async () => {
+    // Non-org user
+    localStorage.setItem('graphsign_plan_type', 'individual');
+    localStorage.removeItem('graphsign_org_name');
+    localStorage.removeItem('graphsign_org_id');
+
+    render(<ChooseTemplateModal onClose={vi.fn()} onSuccess={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Sales Agreement Template')).toBeInTheDocument();
+    });
+
+    // Library tab should not be rendered
+    expect(screen.queryByTestId('tab-template-library')).not.toBeInTheDocument();
+    // Only My Templates should be rendered
+    expect(screen.getByTestId('tab-template-mine')).toBeInTheDocument();
+  });
 });

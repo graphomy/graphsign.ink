@@ -33,8 +33,49 @@ function getToken(): string {
   return localStorage.getItem('graphsign_session_token') || localStorage.getItem('token') || '';
 }
 
+function checkIsOrganisationUser(): boolean {
+  if (typeof window === 'undefined') return false;
+  const planType = (localStorage.getItem('graphsign_plan_type') || '').toLowerCase();
+  const orgName = (localStorage.getItem('graphsign_org_name') || '').trim();
+  const orgId = (localStorage.getItem('graphsign_org_id') || '').trim();
+
+  // If user explicitly belongs to a teams/enterprise plan or has a designated organisation
+  if (planType === 'teams' || planType === 'team' || planType === 'enterprise') return true;
+  if (
+    orgName &&
+    orgName.toLowerCase() !== 'personal workspace' &&
+    orgName.toLowerCase() !== 'individual'
+  ) {
+    return true;
+  }
+
+  // Also check token claims if stored
+  const token =
+    localStorage.getItem('graphsign_session_token') || localStorage.getItem('token') || '';
+  if (token) {
+    try {
+      const parts = token.split('.');
+      if (parts[1]) {
+        const payload = JSON.parse(atob(parts[1]));
+        if (
+          payload.planType === 'teams' ||
+          payload.planType === 'team' ||
+          payload.planType === 'enterprise'
+        ) {
+          return true;
+        }
+      }
+    } catch {}
+  }
+
+  return false;
+}
+
 export function ChooseTemplateModal({ onClose, onSuccess }: ChooseTemplateModalProps) {
-  const [activeTab, setActiveTab] = useState<'library' | 'mine'>('library');
+  const [isOrgUser, setIsOrgUser] = useState<boolean>(() => checkIsOrganisationUser());
+  const [activeTab, setActiveTab] = useState<'library' | 'mine'>(() =>
+    checkIsOrganisationUser() ? 'library' : 'mine',
+  );
   const [templates, setTemplates] = useState<TemplateItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -42,6 +83,36 @@ export function ChooseTemplateModal({ onClose, onSuccess }: ChooseTemplateModalP
   const [searchQuery, setSearchQuery] = useState('');
   const [instantiatingId, setInstantiatingId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // Re-verify organization plan details from /api/v1/organisations/me
+  useEffect(() => {
+    let ignore = false;
+    async function verifyOrg() {
+      try {
+        const token = getToken();
+        if (!token) return;
+        const res = await fetch(`${getApiUrl()}/api/v1/organisations/me`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (!ignore && data) {
+            const plan = (data.planType || 'individual').toLowerCase();
+            const isOrg = plan === 'teams' || plan === 'team' || plan === 'enterprise';
+            setIsOrgUser(isOrg);
+            localStorage.setItem('graphsign_plan_type', data.planType);
+            if (!isOrg) {
+              setActiveTab('mine');
+            }
+          }
+        }
+      } catch {}
+    }
+    verifyOrg();
+    return () => {
+      ignore = true;
+    };
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -166,17 +237,20 @@ export function ChooseTemplateModal({ onClose, onSuccess }: ChooseTemplateModalP
         {/* Tabs & Search */}
         <div className="py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-1 bg-neutral-100 p-1 rounded-lg">
-            <button
-              type="button"
-              onClick={() => setActiveTab('library')}
-              className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
-                activeTab === 'library'
-                  ? 'bg-white text-neutral-900 shadow-xs border border-neutral-200'
-                  : 'text-neutral-600 hover:text-neutral-900'
-              }`}
-            >
-              Library
-            </button>
+            {isOrgUser && (
+              <button
+                type="button"
+                onClick={() => setActiveTab('library')}
+                className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+                  activeTab === 'library'
+                    ? 'bg-white text-neutral-900 shadow-xs border border-neutral-200'
+                    : 'text-neutral-600 hover:text-neutral-900'
+                }`}
+                data-testid="tab-template-library"
+              >
+                Library
+              </button>
+            )}
             <button
               type="button"
               onClick={() => setActiveTab('mine')}
@@ -185,6 +259,7 @@ export function ChooseTemplateModal({ onClose, onSuccess }: ChooseTemplateModalP
                   ? 'bg-white text-neutral-900 shadow-xs border border-neutral-200'
                   : 'text-neutral-600 hover:text-neutral-900'
               }`}
+              data-testid="tab-template-mine"
             >
               My Templates
             </button>
