@@ -170,6 +170,13 @@ export class AgreementService {
       }
     }
 
+    // Clean base64 without data: URI header to minimize memory
+    const cleanBase64 = fileBase64
+      ? fileBase64.includes(',')
+        ? fileBase64.split(',')[1]
+        : fileBase64
+      : undefined;
+
     // Simulated storage / PDF conversion URL
     const cleanFileName = input.fileName.toLowerCase().replace(/[^a-z0-9.]/g, '-');
     const pdfFileName = isMarkdown
@@ -196,7 +203,7 @@ export class AgreementService {
         tags: input.tags ? (input.tags as any) : [],
         metadata: {
           ...((input.metadata as any) || {}),
-          ...(fileBase64 ? { fileData: fileBase64, fileBase64 } : {}),
+          ...(cleanBase64 ? { fileData: cleanBase64 } : {}),
         },
         version,
         versions: {
@@ -212,6 +219,23 @@ export class AgreementService {
             authorId,
           },
         },
+      },
+      select: {
+        id: true,
+        organisationId: true,
+        authorId: true,
+        title: true,
+        description: true,
+        status: true,
+        fileUrl: true,
+        fileName: true,
+        fileSize: true,
+        mimeType: true,
+        markdownContent: true,
+        tags: true,
+        version: true,
+        createdAt: true,
+        updatedAt: true,
       },
     });
 
@@ -235,8 +259,8 @@ export class AgreementService {
       });
     }
 
-    // Strip large fileData binary from the returned agreement object to keep response lightweight (<1KB)
-    const { metadata, ...rest } = agreement;
+    // Keep response lightweight (<1KB) without raw binary
+    const { metadata, ...rest } = (agreement || {}) as any;
     const cleanMetadata =
       metadata && typeof metadata === 'object' ? { ...(metadata as Record<string, unknown>) } : {};
     delete cleanMetadata.fileData;
