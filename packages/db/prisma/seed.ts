@@ -29,7 +29,7 @@ async function main() {
   }
 
   // Ensure super_admin seed users from SUPERADMIN_ID env var (INK-206)
-  const superAdminIds = (process.env.SUPERADMIN_ID || 'kunal@graphomy.com')
+  const superAdminIds = (process.env.SUPERADMIN_ID || 'support@graphsign.ink')
     .split(',')
     .map((e) => e.trim().toLowerCase())
     .filter((e) => e.length > 0);

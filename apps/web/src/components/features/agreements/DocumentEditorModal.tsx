@@ -97,7 +97,7 @@ const DEFAULT_RECIPIENT_COLORS = [
 ];
 
 function getToken(): string {
-  if (typeof window === 'undefined') return '';
+  if (typeof window === 'undefined' || typeof localStorage === 'undefined') return '';
   return (
     localStorage.getItem('graphsign_session_token') ||
     localStorage.getItem('token') ||

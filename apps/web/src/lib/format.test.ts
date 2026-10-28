@@ -43,7 +43,7 @@ describe('format utilities', () => {
     });
 
     it('masks standard usernames keeping first char and last 2 chars', () => {
-      expect(maskEmail('kunal_p@live.in')).toBe('k••••_p@live.in');
+      expect(maskEmail('alex_p@live.in')).toBe('a••••_p@live.in');
       expect(maskEmail('john.doe@company.org')).toBe('j••••oe@company.org');
     });
   });

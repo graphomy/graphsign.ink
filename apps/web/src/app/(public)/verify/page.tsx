@@ -450,7 +450,7 @@ export default function PublicVerifyPage() {
     },
     {
       id: 2,
-      question: 'What is PAdES B-T / B-LTA and how does graphsign.ink seal documents?',
+      question: 'What is PAdES B-T and how does graphsign.ink seal documents?',
       answer: (
         <div className="space-y-2 text-slate-600 text-sm">
           <p>

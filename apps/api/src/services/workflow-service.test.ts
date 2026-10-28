@@ -650,4 +650,203 @@ describe('WorkflowService Unit Tests (INK-86 to INK-116)', () => {
       );
     });
   });
+
+  describe('getSigningDocumentFile Security Tests (INK-327)', () => {
+    it('rejects direct unauthenticated agreement lookup by raw UUID (IDOR defense)', async () => {
+      // Simulate unauthenticated request with agreement UUID
+      mockPrisma.agreementRecipient.findUnique.mockResolvedValue(null);
+      mockPrisma.documentSeal = { findFirst: vi.fn().mockResolvedValue(null) };
+      mockPrisma.agreement.findFirst.mockResolvedValue({
+        ...mockAgreement,
+        status: 'SENT',
+      });
+
+      await expect(
+        service.getSigningDocumentFile('a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d'),
+      ).rejects.toThrow('Agreement file is not available.');
+    });
+
+    it('rejects unauthenticated agreement lookup by envelopeId (IDOR defense)', async () => {
+      mockPrisma.agreementRecipient.findUnique.mockResolvedValue(null);
+      mockPrisma.documentSeal = { findFirst: vi.fn().mockResolvedValue(null) };
+
+      await expect(service.getSigningDocumentFile('ENV-123456')).rejects.toThrow(
+        'Agreement file is not available.',
+      );
+    });
+
+    it('rejects retrieval with expired recipient token', async () => {
+      mockPrisma.agreementRecipient.findUnique.mockResolvedValue({
+        id: 'recip-1',
+        tokenExpiresAt: new Date(Date.now() - 60000), // Expired 1 min ago
+        agreement: {
+          ...mockAgreement,
+          status: 'SENT',
+        },
+      });
+
+      await expect(service.getSigningDocumentFile('expired-raw-token')).rejects.toThrow(
+        'This signing link has expired.',
+      );
+    });
+
+    it('allows retrieval with valid recipient token', async () => {
+      mockPrisma.agreementRecipient.findUnique.mockResolvedValue({
+        id: 'recip-1',
+        tokenExpiresAt: new Date(Date.now() + 3600000), // Valid for 1h
+        agreement: {
+          ...mockAgreement,
+          status: 'SENT',
+          fileName: 'doc.pdf',
+          metadata: { fileBase64: 'fake-base64-data' },
+        },
+      });
+
+      const res = await service.getSigningDocumentFile('valid-raw-token');
+      expect(res.fileName).toBe('doc.pdf');
+      expect(res.fileData).toBe('fake-base64-data');
+    });
+
+    it('allows completed document retrieval via valid verificationToken (GS-...)', async () => {
+      mockPrisma.agreementRecipient.findUnique.mockResolvedValue(null);
+      mockPrisma.documentSeal = {
+        findFirst: vi.fn().mockResolvedValue({
+          verificationToken: 'GS-VERIFY123',
+          agreement: {
+            ...mockAgreement,
+            status: 'COMPLETED',
+            fileName: 'signed.pdf',
+            metadata: { signedPdfBase64: 'signed-pdf-data' },
+          },
+        }),
+      };
+
+      const res = await service.getSigningDocumentFile('GS-VERIFY123');
+      expect(res.fileName).toBe('signed.pdf');
+      expect(res.fileData).toBe('signed-pdf-data');
+    });
+  });
+
+  describe('Signer OTP Multi-Worker Persistence & Redaction (INK-329 / GS-CONF-003)', () => {
+    it('persists hashed OTP challenge to agreementRecipient.signatureData on sendSignerOtp', async () => {
+      mockPrisma.agreementRecipient.findUnique.mockResolvedValue({
+        id: 'recip-1',
+        email: 'signer@example.com',
+        name: 'Signer Sam',
+        status: 'PENDING',
+        signatureData: null,
+        agreement: { id: 'ag-1', organisationId: 'org-1', title: 'Test Agreement' },
+      });
+
+      const res = await service.sendSignerOtp('raw-token-123');
+      expect(res.success).toBe(true);
+      expect(res.email).toBe('signer@example.com');
+      expect(mockMailer.sendOtpVerificationEmail).toHaveBeenCalled();
+
+      // Check DB persistence call
+      expect(mockPrisma.agreementRecipient.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'recip-1' },
+          data: expect.objectContaining({
+            signatureData: expect.objectContaining({
+              _otp: expect.objectContaining({
+                hash: expect.any(String),
+                verified: false,
+                attempts: 0,
+              }),
+            }),
+          }),
+        }),
+      );
+    });
+
+    it('verifies OTP from DB persistence across worker isolate restarts', async () => {
+      const { hashToken } = await import('../utils/crypto.js');
+      const otpCode = '654321';
+      const otpHash = await hashToken(otpCode);
+
+      mockPrisma.agreementRecipient.findUnique.mockResolvedValue({
+        id: 'recip-1',
+        email: 'signer@example.com',
+        name: 'Signer Sam',
+        status: 'PENDING',
+        signatureData: {
+          _otp: {
+            hash: otpHash,
+            expiresAt: Date.now() + 600000,
+            verified: false,
+            attempts: 0,
+          },
+        },
+        agreement: { id: 'ag-1', organisationId: 'org-1' },
+      });
+
+      // Clear static memory store to simulate fresh worker instance
+      (WorkflowService as any).otpStore.clear();
+
+      const res = await service.verifySignerOtp('raw-token-456', '654321');
+      expect(res.success).toBe(true);
+      expect(res.verified).toBe(true);
+
+      // Verify DB updated with verified: true
+      expect(mockPrisma.agreementRecipient.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'recip-1' },
+          data: expect.objectContaining({
+            signatureData: expect.objectContaining({
+              _otp: expect.objectContaining({
+                verified: true,
+              }),
+            }),
+          }),
+        }),
+      );
+    });
+
+    it('strips internal _otp challenge from public getPublicSigningSession response', async () => {
+      mockPrisma.agreementRecipient.findUnique.mockResolvedValue({
+        id: 'recip-1',
+        name: 'Signer Sam',
+        email: 'signer@example.com',
+        role: 'signer',
+        status: 'PENDING',
+        routingOrder: 1,
+        color: '#2563EB',
+        agreement: {
+          id: 'ag-1',
+          title: 'Contract',
+          status: 'SENT',
+          signingOrder: 'PARALLEL',
+          author: { name: 'Alice', email: 'alice@example.com' },
+          organisation: { name: 'Acme', logoUrl: null },
+          metadata: {},
+        },
+      });
+
+      mockPrisma.agreementRecipient.findMany.mockResolvedValue([
+        {
+          id: 'recip-1',
+          name: 'Signer Sam',
+          email: 'signer@example.com',
+          role: 'signer',
+          routingOrder: 1,
+          status: 'PENDING',
+          color: '#2563EB',
+          fieldsData: {},
+          signatureData: {
+            signedAt: null,
+            _otp: {
+              hash: 'secret-hash',
+              expiresAt: Date.now() + 600000,
+              verified: false,
+            },
+          },
+        },
+      ]);
+
+      const session = await service.getPublicSigningSession('raw-token-123');
+      expect(session.recipients[0]!.signatureData).toBeDefined();
+      expect((session.recipients[0]!.signatureData as any)._otp).toBeUndefined();
+    });
+  });
 });

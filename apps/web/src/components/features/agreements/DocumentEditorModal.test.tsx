@@ -205,8 +205,8 @@ describe('DocumentEditorModal Component Tests (INK-78 to INK-85, INK-270)', () =
         recipients: [
           {
             id: 'recipient-no-color',
-            name: 'Kunal Signer',
-            email: 'kunal@example.com',
+            name: 'Sample Signer',
+            email: 'signer@example.com',
             role: 'signer' as const,
           },
         ],

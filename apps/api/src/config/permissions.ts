@@ -43,7 +43,7 @@ export const PERMISSIONS = {
   CERTIFICATES_READ: 'certificates:read',
   CERTIFICATES_MANAGE: 'certificates:manage',
 
-  // Super Admin Management (Restricted to kunal@graphomy.com)
+  // Super Admin Management (Restricted to platform superadmin)
   SUPER_ADMIN_MANAGE: 'super_admin:manage',
 } as const;
 

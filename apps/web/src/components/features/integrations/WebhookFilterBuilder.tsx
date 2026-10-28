@@ -126,7 +126,7 @@ export function WebhookFilterBuilder({ initialRules, onChange }: WebhookFilterBu
           {rules.map((rule) => (
             <div
               key={rule.id}
-              className="flex items-center space-x-2 bg-slate-950/60 p-2.5 rounded border border-slate-800/80"
+              className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 bg-slate-950/60 p-2.5 rounded-lg border border-slate-800/80"
             >
               <input
                 type="text"
@@ -134,7 +134,7 @@ export function WebhookFilterBuilder({ initialRules, onChange }: WebhookFilterBu
                 value={rule.field}
                 onChange={(e) => updateRule(rule.id, { field: e.target.value })}
                 placeholder="Field (e.g. data.folder)"
-                className="w-1/3 px-2.5 py-1.5 text-xs bg-slate-900 border border-slate-700 rounded text-slate-200 focus:outline-none focus:border-emerald-500 font-mono"
+                className="w-full sm:w-1/3 px-2.5 py-1.5 text-xs bg-slate-900 border border-slate-700 rounded text-slate-200 focus:outline-none focus:border-emerald-500 font-mono"
               />
               <datalist id="common-fields">
                 {COMMON_FIELDS.map((f) => (
@@ -149,12 +149,12 @@ export function WebhookFilterBuilder({ initialRules, onChange }: WebhookFilterBu
                 onChange={(e) =>
                   updateRule(rule.id, { operator: e.target.value as FilterOperator })
                 }
-                className="w-1/4 px-2 py-1.5 text-xs bg-slate-900 border border-slate-700 rounded text-slate-200 focus:outline-none focus:border-emerald-500"
+                className="w-full sm:w-28 px-2 py-1.5 text-xs bg-slate-900 border border-slate-700 rounded text-slate-200 focus:outline-none focus:border-emerald-500 shrink-0"
               >
                 <option value="eq">Equals (==)</option>
                 <option value="neq">Not Equals (!=)</option>
                 <option value="contains">Contains</option>
-                <option value="in">In (comma-separated)</option>
+                <option value="in">In (comma)</option>
               </select>
 
               <input
@@ -162,13 +162,13 @@ export function WebhookFilterBuilder({ initialRules, onChange }: WebhookFilterBu
                 value={rule.value}
                 onChange={(e) => updateRule(rule.id, { value: e.target.value })}
                 placeholder={rule.operator === 'in' ? 'value1, value2' : 'Value'}
-                className="flex-1 px-2.5 py-1.5 text-xs bg-slate-900 border border-slate-700 rounded text-slate-200 focus:outline-none focus:border-emerald-500"
+                className="w-full sm:flex-1 px-2.5 py-1.5 text-xs bg-slate-900 border border-slate-700 rounded text-slate-200 focus:outline-none focus:border-emerald-500"
               />
 
               <button
                 type="button"
                 onClick={() => removeRule(rule.id)}
-                className="p-1.5 text-slate-400 hover:text-rose-400 transition rounded"
+                className="self-end sm:self-auto p-1.5 text-slate-400 hover:text-rose-400 transition rounded shrink-0"
                 title="Remove rule"
               >
                 <Trash2 className="w-4 h-4" />

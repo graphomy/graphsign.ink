@@ -44,7 +44,7 @@ describe('email-validation utility', () => {
   });
 
   it('allows valid business/company email domains', () => {
-    expect(isPersonalEmailDomain('kunal@graphomy.com')).toBe(false);
+    expect(isPersonalEmailDomain('support@graphsign.ink')).toBe(false);
     expect(isPersonalEmailDomain('admin@acmecorp.com')).toBe(false);
     expect(isPersonalEmailDomain('legal@company.co.uk')).toBe(false);
   });

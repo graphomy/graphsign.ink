@@ -184,19 +184,20 @@ export function WebhookModal({ subscription, onClose, onSuccess }: WebhookModalP
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 overflow-y-auto animate-in fade-in">
-      <div className="bg-slate-900 border border-slate-800 rounded-xl max-w-2xl w-full p-6 shadow-2xl space-y-6 text-slate-100 my-8">
-        <div className="flex items-center justify-between pb-4 border-b border-slate-800">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-3 sm:p-4 overflow-hidden animate-in fade-in">
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-2xl w-full shadow-2xl text-slate-100 flex flex-col max-h-[92vh] overflow-hidden">
+        {/* Header - Fixed Top */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 shrink-0">
           <div>
-            <h2 className="text-lg font-bold">
+            <h2 className="text-base sm:text-lg font-bold text-slate-100">
               {isEditing ? 'Edit Webhook Subscription' : 'Create Webhook Subscription'}
             </h2>
             <p className="text-xs text-slate-400 mt-0.5">
-              Receive signed, real-time HTTP event notifications with automatic exponential retry
-              and DLQ routing.
+              Receive signed, real-time HTTP event notifications with automatic retry.
             </p>
           </div>
           <button
+            type="button"
             onClick={onClose}
             className="p-1.5 text-slate-400 hover:text-slate-100 rounded-lg hover:bg-slate-800 transition"
           >
@@ -204,193 +205,201 @@ export function WebhookModal({ subscription, onClose, onSuccess }: WebhookModalP
           </button>
         </div>
 
-        {error && (
-          <div className="p-3 bg-rose-950/40 border border-rose-500/30 rounded-lg flex items-center space-x-2 text-xs text-rose-300">
-            <AlertCircle className="w-4 h-4 text-rose-400 flex-shrink-0" />
-            <span>{error}</span>
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-slate-200">
-                Subscription Name <span className="text-rose-400">*</span>
-              </label>
-              <input
-                type="text"
-                required
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="e.g. Production ERP Webhook"
-                className="w-full px-3 py-2 text-xs bg-slate-950 border border-slate-800 rounded-lg text-slate-200 focus:outline-none focus:border-emerald-500"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-slate-200">Status</label>
-              <select
-                value={status}
-                onChange={(e) => setStatus(e.target.value as 'active' | 'disabled')}
-                className="w-full px-3 py-2 text-xs bg-slate-950 border border-slate-800 rounded-lg text-slate-200 focus:outline-none focus:border-emerald-500"
-              >
-                <option value="active">Active (Receives Events)</option>
-                <option value="disabled">Disabled (Suspended)</option>
-              </select>
-            </div>
-          </div>
-
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-slate-200 flex items-center justify-between">
-              <span>
-                Target HTTPS URL <span className="text-rose-400">*</span>
-              </span>
-              <span className="text-[11px] text-slate-400 font-normal">
-                Disallows private IP addresses (SSRF protected)
-              </span>
-            </label>
-            <div className="relative">
-              <Globe className="w-4 h-4 text-slate-500 absolute left-3 top-2.5" />
-              <input
-                type="url"
-                required
-                value={targetUrl}
-                onChange={(e) => setTargetUrl(e.target.value)}
-                placeholder="https://api.yourdomain.com/webhooks/graphsign"
-                className="w-full pl-9 pr-3 py-2 text-xs bg-slate-950 border border-slate-800 rounded-lg text-slate-200 focus:outline-none focus:border-emerald-500 font-mono"
-              />
-            </div>
-          </div>
-
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-slate-200">Description (Optional)</label>
-            <input
-              type="text"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="e.g. Syncs signed agreements to Salesforce"
-              className="w-full px-3 py-2 text-xs bg-slate-950 border border-slate-800 rounded-lg text-slate-200 focus:outline-none focus:border-emerald-500"
-            />
-          </div>
-
-          {/* Subscribed Event Types */}
-          <div className="space-y-2 pt-2 border-t border-slate-800">
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-semibold text-slate-200">
-                Subscribed Event Types <span className="text-rose-400">*</span>
-              </label>
-              <button
-                type="button"
-                onClick={handleSelectAllEvents}
-                className="text-xs text-emerald-400 hover:text-emerald-300 transition"
-              >
-                {selectedEvents.length === ALL_EVENT_OPTIONS.length ? 'Deselect All' : 'Select All'}
-              </button>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
-              {ALL_EVENT_OPTIONS.map((ev) => {
-                const checked = selectedEvents.includes(ev.id);
-                return (
-                  <label
-                    key={ev.id}
-                    className={`flex items-start space-x-2.5 p-2 rounded-lg border text-xs cursor-pointer transition ${
-                      checked
-                        ? 'bg-emerald-950/20 border-emerald-500/40 text-slate-200'
-                        : 'bg-slate-950/40 border-slate-800/80 text-slate-400 hover:border-slate-700'
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={() => handleToggleEvent(ev.id)}
-                      className="mt-0.5 rounded border-slate-700 text-emerald-600 focus:ring-emerald-500 bg-slate-900"
-                    />
-                    <div className="flex-1 min-w-0">
-                      <div className="font-mono font-semibold text-[11px] text-emerald-300">
-                        {ev.label}
-                      </div>
-                      <div className="text-[11px] text-slate-400 truncate">{ev.desc}</div>
-                    </div>
-                  </label>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Rate Limiting */}
-          <div className="space-y-1.5 pt-2 border-t border-slate-800">
-            <label className="text-xs font-semibold text-slate-200 flex items-center justify-between">
-              <span>Outbound Rate Limit (Requests per minute)</span>
-              <span className="text-[11px] text-slate-400 font-normal">1 to 1,000 req/min</span>
-            </label>
-            <input
-              type="number"
-              min={1}
-              max={1000}
-              value={rateLimitPerMinute}
-              onChange={(e) => setRateLimitPerMinute(parseInt(e.target.value, 10) || 10)}
-              className="w-full px-3 py-2 text-xs bg-slate-950 border border-slate-800 rounded-lg text-slate-200 focus:outline-none focus:border-emerald-500 font-mono"
-            />
-          </div>
-
-          {/* Custom HTTP Headers */}
-          <div className="space-y-2 pt-2 border-t border-slate-800">
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-semibold text-slate-200">Custom HTTP Headers</label>
-              <button
-                type="button"
-                onClick={handleAddHeader}
-                className="inline-flex items-center space-x-1 text-xs text-emerald-400 hover:text-emerald-300 transition"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Add Header</span>
-              </button>
-            </div>
-
-            {headersList.length === 0 ? (
-              <p className="text-[11px] text-slate-500">No custom headers defined.</p>
-            ) : (
-              <div className="space-y-2">
-                {headersList.map((hdr, idx) => (
-                  <div key={idx} className="flex items-center space-x-2">
-                    <input
-                      type="text"
-                      placeholder="Header Name (e.g. X-Custom-Auth)"
-                      value={hdr.key}
-                      onChange={(e) => handleHeaderChange(idx, 'key', e.target.value)}
-                      className="w-1/2 px-2.5 py-1.5 text-xs bg-slate-950 border border-slate-800 rounded text-slate-200 font-mono focus:outline-none focus:border-emerald-500"
-                    />
-                    <input
-                      type="text"
-                      placeholder="Header Value"
-                      value={hdr.value}
-                      onChange={(e) => handleHeaderChange(idx, 'value', e.target.value)}
-                      className="w-1/2 px-2.5 py-1.5 text-xs bg-slate-950 border border-slate-800 rounded text-slate-200 font-mono focus:outline-none focus:border-emerald-500"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveHeader(idx)}
-                      className="p-1.5 text-slate-400 hover:text-rose-400 transition"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                ))}
+        {/* Scrollable Form Body */}
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden min-h-0">
+          <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+            {error && (
+              <div className="p-3 bg-rose-950/40 border border-rose-500/30 rounded-lg flex items-center space-x-2 text-xs text-rose-300">
+                <AlertCircle className="w-4 h-4 text-rose-400 flex-shrink-0" />
+                <span>{error}</span>
               </div>
             )}
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-slate-200">
+                  Subscription Name <span className="text-rose-400">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="e.g. Production ERP Webhook"
+                  className="w-full px-3 py-2 text-xs bg-slate-950 border border-slate-800 rounded-lg text-slate-200 focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-slate-200">Status</label>
+                <select
+                  value={status}
+                  onChange={(e) => setStatus(e.target.value as 'active' | 'disabled')}
+                  className="w-full px-3 py-2 text-xs bg-slate-950 border border-slate-800 rounded-lg text-slate-200 focus:outline-none focus:border-emerald-500"
+                >
+                  <option value="active">Active (Receives Events)</option>
+                  <option value="disabled">Disabled (Suspended)</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-slate-200 flex items-center justify-between">
+                <span>
+                  Target HTTPS URL <span className="text-rose-400">*</span>
+                </span>
+                <span className="text-[11px] text-slate-400 font-normal">
+                  Disallows private IP addresses (SSRF protected)
+                </span>
+              </label>
+              <div className="relative flex items-center">
+                <Globe className="w-4 h-4 text-slate-500 absolute left-3 pointer-events-none" />
+                <input
+                  type="url"
+                  required
+                  value={targetUrl}
+                  onChange={(e) => setTargetUrl(e.target.value)}
+                  placeholder="https://api.yourdomain.com/webhooks/graphsign"
+                  className="w-full pl-9 pr-3 py-2 text-xs bg-slate-950 border border-slate-800 rounded-lg text-slate-200 focus:outline-none focus:border-emerald-500 font-mono"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-slate-200">Description (Optional)</label>
+              <input
+                type="text"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="e.g. Syncs signed agreements to Salesforce"
+                className="w-full px-3 py-2 text-xs bg-slate-950 border border-slate-800 rounded-lg text-slate-200 focus:outline-none focus:border-emerald-500"
+              />
+            </div>
+
+            {/* Subscribed Event Types */}
+            <div className="space-y-2 pt-2 border-t border-slate-800">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-semibold text-slate-200">
+                  Subscribed Event Types <span className="text-rose-400">*</span>
+                </label>
+                <button
+                  type="button"
+                  onClick={handleSelectAllEvents}
+                  className="text-xs text-emerald-400 hover:text-emerald-300 transition font-medium"
+                >
+                  {selectedEvents.length === ALL_EVENT_OPTIONS.length
+                    ? 'Deselect All'
+                    : 'Select All'}
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
+                {ALL_EVENT_OPTIONS.map((ev) => {
+                  const checked = selectedEvents.includes(ev.id);
+                  return (
+                    <label
+                      key={ev.id}
+                      className={`flex items-start space-x-2.5 p-2 rounded-lg border text-xs cursor-pointer transition ${
+                        checked
+                          ? 'bg-emerald-950/20 border-emerald-500/40 text-slate-200'
+                          : 'bg-slate-950/40 border-slate-800/80 text-slate-400 hover:border-slate-700'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => handleToggleEvent(ev.id)}
+                        className="mt-0.5 rounded border-slate-700 text-emerald-600 focus:ring-emerald-500 bg-slate-900"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="font-mono font-semibold text-[11px] text-emerald-300">
+                          {ev.label}
+                        </div>
+                        <div className="text-[11px] text-slate-400 truncate">{ev.desc}</div>
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Rate Limiting */}
+            <div className="space-y-1.5 pt-2 border-t border-slate-800">
+              <label className="text-xs font-semibold text-slate-200 flex items-center justify-between">
+                <span>Outbound Rate Limit (Requests per minute)</span>
+                <span className="text-[11px] text-slate-400 font-normal">1 to 1,000 req/min</span>
+              </label>
+              <input
+                type="number"
+                min={1}
+                max={1000}
+                value={rateLimitPerMinute}
+                onChange={(e) => setRateLimitPerMinute(parseInt(e.target.value, 10) || 10)}
+                className="w-full px-3 py-2 text-xs bg-slate-950 border border-slate-800 rounded-lg text-slate-200 focus:outline-none focus:border-emerald-500 font-mono"
+              />
+            </div>
+
+            {/* Custom HTTP Headers */}
+            <div className="space-y-2 pt-2 border-t border-slate-800">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-semibold text-slate-200">Custom HTTP Headers</label>
+                <button
+                  type="button"
+                  onClick={handleAddHeader}
+                  className="inline-flex items-center space-x-1 text-xs text-emerald-400 hover:text-emerald-300 transition font-medium"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Add Header</span>
+                </button>
+              </div>
+
+              {headersList.length === 0 ? (
+                <p className="text-[11px] text-slate-500">No custom headers defined.</p>
+              ) : (
+                <div className="space-y-2">
+                  {headersList.map((hdr, idx) => (
+                    <div key={idx} className="flex items-center space-x-2">
+                      <input
+                        type="text"
+                        placeholder="Header Name (e.g. X-Custom-Auth)"
+                        value={hdr.key}
+                        onChange={(e) => handleHeaderChange(idx, 'key', e.target.value)}
+                        className="flex-1 px-2.5 py-1.5 text-xs bg-slate-950 border border-slate-800 rounded-lg text-slate-200 font-mono focus:outline-none focus:border-emerald-500"
+                      />
+                      <input
+                        type="text"
+                        placeholder="Header Value"
+                        value={hdr.value}
+                        onChange={(e) => handleHeaderChange(idx, 'value', e.target.value)}
+                        className="flex-1 px-2.5 py-1.5 text-xs bg-slate-950 border border-slate-800 rounded-lg text-slate-200 font-mono focus:outline-none focus:border-emerald-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveHeader(idx)}
+                        className="p-1.5 text-slate-400 hover:text-rose-400 bg-slate-950 border border-slate-800 hover:border-slate-700 rounded-lg transition shrink-0"
+                        title="Remove header"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* AST Filter Predicate Builder */}
+            <WebhookFilterBuilder initialRules={filterRules} onChange={setFilterRules} />
+
+            {/* Payload Projection Picker */}
+            <WebhookPayloadPicker value={payloadProjection} onChange={setPayloadProjection} />
           </div>
 
-          {/* AST Filter Predicate Builder */}
-          <WebhookFilterBuilder initialRules={filterRules} onChange={setFilterRules} />
-
-          {/* Payload Projection Picker */}
-          <WebhookPayloadPicker value={payloadProjection} onChange={setPayloadProjection} />
-
-          <div className="flex items-center justify-end space-x-3 pt-4 border-t border-slate-800">
+          {/* Footer - Fixed Bottom */}
+          <div className="flex items-center justify-end space-x-3 px-6 py-4 border-t border-slate-800 bg-slate-950/80 backdrop-blur-sm shrink-0">
             <button
               type="button"
               onClick={onClose}
+              disabled={isLoading}
               className="px-4 py-2 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition"
             >
               Cancel
@@ -398,7 +407,7 @@ export function WebhookModal({ subscription, onClose, onSuccess }: WebhookModalP
             <button
               type="submit"
               disabled={isLoading}
-              className="inline-flex items-center space-x-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-semibold rounded-lg transition"
+              className="inline-flex items-center space-x-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-semibold rounded-lg shadow-sm transition"
             >
               {isLoading && <Loader2 className="w-4 h-4 animate-spin" />}
               <span>{isEditing ? 'Save Changes' : 'Create Subscription'}</span>
