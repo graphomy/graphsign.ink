@@ -80,6 +80,7 @@ export async function signJwt(
 
   const fullPayload: JwtPayload = {
     ...payload,
+    jti: payload.jti || crypto.randomUUID(),
     iat: payload.iat ?? now,
     exp: payload.exp ?? now + expiresInSeconds,
   } as JwtPayload;

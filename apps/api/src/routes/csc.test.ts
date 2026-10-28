@@ -11,6 +11,7 @@ vi.mock('../services/tsa-service.js', () => ({
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { createCscRoutes } from './csc.js';
 import { signJwt } from '../utils/jwt.js';
+import { errorHandler } from '../middleware/error-handler.js';
 
 describe('CSC v2.2 Remote Signature API Routes Integration Tests', () => {
   let app: any;
@@ -47,6 +48,7 @@ describe('CSC v2.2 Remote Signature API Routes Integration Tests', () => {
     };
 
     app = createCscRoutes({ prisma: mockPrisma as any });
+    app.onError(errorHandler);
   });
 
   it('POST /info returns CSC v2.2 capabilities specification', async () => {
@@ -131,5 +133,34 @@ describe('CSC v2.2 Remote Signature API Routes Integration Tests', () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.timestamp).toBeDefined();
+    expect(res.headers.get('X-RateLimit-Limit')).toBe('10');
+  });
+
+  it('POST /signatures/timestamp enforces rate limiting (INK-333)', async () => {
+    // Send requests up to limit
+    for (let i = 0; i < 10; i++) {
+      const res = await app.request('/signatures/timestamp', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'cf-connecting-ip': '198.51.100.22',
+        },
+        body: JSON.stringify({ hash: 'YWJjZGVmMTIzNDU2' }),
+      });
+      expect(res.status).toBe(200);
+    }
+
+    // 11th request should exceed rate limit
+    const blockedRes = await app.request('/signatures/timestamp', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'cf-connecting-ip': '198.51.100.22',
+      },
+      body: JSON.stringify({ hash: 'YWJjZGVmMTIzNDU2' }),
+    });
+
+    expect(blockedRes.status).toBe(429);
+    expect(blockedRes.headers.get('Retry-After')).toBeDefined();
   });
 });

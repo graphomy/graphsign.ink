@@ -722,6 +722,19 @@ export class WorkflowService {
       orderBy: { routingOrder: 'asc' },
     });
 
+    // INK-329: Ensure internal OTP challenges are never exposed in public responses
+    const cleanRecipients = allRecipients.map((rec) => {
+      if (
+        rec.signatureData &&
+        typeof rec.signatureData === 'object' &&
+        '_otp' in (rec.signatureData as any)
+      ) {
+        const { _otp, ...sanitized } = rec.signatureData as any;
+        return { ...rec, signatureData: sanitized };
+      }
+      return rec;
+    });
+
     // Check sequential routing turn
     const isTurn =
       agreement.signingOrder === 'PARALLEL' ||
@@ -769,7 +782,7 @@ export class WorkflowService {
         verificationToken: ((agreement.metadata as any)?.verificationToken as string) || undefined,
         documentHash: ((agreement.metadata as any)?.documentHash as string) || undefined,
       },
-      recipients: allRecipients,
+      recipients: cleanRecipients,
       isTurn,
     };
   }
@@ -919,12 +932,35 @@ export class WorkflowService {
     const randomBytes = new Uint32Array(1);
     crypto.getRandomValues(randomBytes);
     const otpCode = (100000 + (randomBytes[0]! % 900000)).toString();
+    const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes
 
     WorkflowService.otpStore.set(tokenHash, {
       code: otpCode,
-      expiresAt: Date.now() + 10 * 60 * 1000, // 10 minutes
+      expiresAt,
       verified: false,
       attempts: 0,
+    });
+
+    // INK-329: Multi-worker persistence in database so OTP verification survives isolate rotation
+    const otpHash = await hashToken(otpCode);
+    const existingSigData =
+      recipient.signatureData && typeof recipient.signatureData === 'object'
+        ? (recipient.signatureData as Record<string, any>)
+        : {};
+
+    await this.prisma.agreementRecipient.update({
+      where: { id: recipient.id },
+      data: {
+        signatureData: {
+          ...existingSigData,
+          _otp: {
+            hash: otpHash,
+            expiresAt,
+            verified: false,
+            attempts: 0,
+          },
+        },
+      },
     });
 
     await this.mailerService.sendOtpVerificationEmail(
@@ -963,6 +999,7 @@ export class WorkflowService {
 
   /**
    * INK-266: Verify 6-digit OTP code for signer
+   * INK-329: Multi-worker persistence fallback
    */
   async verifySignerOtp(rawToken: string, otpCode: string, ip?: string, userAgent?: string) {
     const tokenHash = await hashToken(rawToken);
@@ -977,24 +1014,81 @@ export class WorkflowService {
       throw new NotFoundError('Invalid signing link.');
     }
 
-    const entry = WorkflowService.otpStore.get(tokenHash);
-    if (!entry || Date.now() > entry.expiresAt) {
+    const memEntry = WorkflowService.otpStore.get(tokenHash);
+    const dbOtp = (recipient.signatureData as any)?._otp;
+
+    if (!memEntry && !dbOtp) {
       throw new BadRequestError('Invalid or expired verification code.');
     }
 
-    if ((entry.attempts || 0) >= 5) {
+    const expiresAt = memEntry?.expiresAt ?? dbOtp?.expiresAt ?? 0;
+    if (Date.now() > expiresAt) {
+      throw new BadRequestError('Invalid or expired verification code.');
+    }
+
+    const attempts = memEntry?.attempts ?? dbOtp?.attempts ?? 0;
+    if (attempts >= 5) {
       WorkflowService.otpStore.delete(tokenHash);
       throw new BadRequestError(
         'Too many failed verification attempts. Please request a new code.',
       );
     }
 
-    if (entry.code !== otpCode.trim()) {
-      entry.attempts = (entry.attempts || 0) + 1;
+    const cleanInputCode = otpCode.trim();
+    let isMatch = false;
+
+    if (memEntry?.code) {
+      isMatch = memEntry.code === cleanInputCode;
+    } else if (dbOtp?.hash) {
+      const inputHash = await hashToken(cleanInputCode);
+      isMatch = dbOtp.hash === inputHash;
+    }
+
+    if (!isMatch) {
+      const newAttempts = attempts + 1;
+      if (memEntry) {
+        memEntry.attempts = newAttempts;
+      }
+      const existingSigData =
+        recipient.signatureData && typeof recipient.signatureData === 'object'
+          ? (recipient.signatureData as Record<string, any>)
+          : {};
+      await this.prisma.agreementRecipient.update({
+        where: { id: recipient.id },
+        data: {
+          signatureData: {
+            ...existingSigData,
+            _otp: {
+              ...(dbOtp || {}),
+              attempts: newAttempts,
+            },
+          },
+        },
+      });
       throw new BadRequestError('Invalid verification code.');
     }
 
-    entry.verified = true;
+    if (memEntry) {
+      memEntry.verified = true;
+    }
+
+    const existingSigData =
+      recipient.signatureData && typeof recipient.signatureData === 'object'
+        ? (recipient.signatureData as Record<string, any>)
+        : {};
+
+    await this.prisma.agreementRecipient.update({
+      where: { id: recipient.id },
+      data: {
+        signatureData: {
+          ...existingSigData,
+          _otp: {
+            ...(dbOtp || {}),
+            verified: true,
+          },
+        },
+      },
+    });
 
     await this.auditService.log({
       organisationId: recipient.agreement.organisationId,
@@ -1210,26 +1304,44 @@ export class WorkflowService {
       };
     }
 
-    // Verify OTP if signed as guest or if OTP was initiated
-    if (input.signedAsGuest || WorkflowService.otpStore.has(tokenHash)) {
+    // Verify OTP if signed as guest or if OTP was initiated (INK-329)
+    const dbOtp = (recipient.signatureData as any)?._otp;
+    const isOtpRequired =
+      input.signedAsGuest || WorkflowService.otpStore.has(tokenHash) || (dbOtp && dbOtp.expiresAt);
+
+    if (isOtpRequired) {
       const entry = WorkflowService.otpStore.get(tokenHash);
       if (input.otpCode) {
-        if (!entry || Date.now() > entry.expiresAt) {
+        const expiresAt = entry?.expiresAt ?? dbOtp?.expiresAt ?? 0;
+        if (Date.now() > expiresAt) {
           throw new BadRequestError('Invalid or expired verification code.');
         }
-        if ((entry.attempts || 0) >= 5) {
+        const attempts = entry?.attempts ?? dbOtp?.attempts ?? 0;
+        if (attempts >= 5) {
           WorkflowService.otpStore.delete(tokenHash);
           throw new BadRequestError(
             'Too many failed verification attempts. Please request a new code.',
           );
         }
-        if (entry.code !== input.otpCode.trim()) {
-          entry.attempts = (entry.attempts || 0) + 1;
+        const cleanInputCode = input.otpCode.trim();
+        let isMatch = false;
+        if (entry?.code) {
+          isMatch = entry.code === cleanInputCode;
+        } else if (dbOtp?.hash) {
+          const inputHash = await hashToken(cleanInputCode);
+          isMatch = dbOtp.hash === inputHash;
+        }
+        if (!isMatch) {
+          const newAttempts = attempts + 1;
+          if (entry) entry.attempts = newAttempts;
           throw new BadRequestError('Invalid verification code.');
         }
-        entry.verified = true;
+        if (entry) entry.verified = true;
+        if (dbOtp) dbOtp.verified = true;
       }
-      if (!entry || !entry.verified) {
+      const isVerified =
+        (entry && entry.verified) || (dbOtp && dbOtp.verified && Date.now() <= dbOtp.expiresAt);
+      if (!isVerified) {
         throw new BadRequestError(
           'Email OTP verification is required before confirming signature.',
         );
@@ -1314,6 +1426,8 @@ export class WorkflowService {
         userAgent,
       },
     });
+
+    WorkflowService.otpStore.delete(tokenHash);
 
     await this.auditService.log({
       organisationId: agreement.organisationId,

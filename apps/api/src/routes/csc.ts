@@ -7,6 +7,7 @@ import { KeyCustodyService } from '../services/key-custody-service.js';
 import { TsaService } from '../services/tsa-service.js';
 import { jwtAuth } from '../middleware/jwt-auth.js';
 import { requirePermission } from '../middleware/rbac-middleware.js';
+import { createRateLimiter } from '../middleware/rate-limiter.js';
 import type { Env } from '../index.js';
 
 export interface CscDeps {
@@ -89,8 +90,8 @@ export function createCscRoutes(deps?: CscDeps) {
     return c.json(result, 200);
   });
 
-  // POST /csc/v2/signatures/timestamp (CSC §11.10)
-  csc.post('/signatures/timestamp', async (c) => {
+  // POST /csc/v2/signatures/timestamp (CSC §11.10 - INK-333 Rate limited against TSA exhaustion)
+  csc.post('/signatures/timestamp', createRateLimiter(10, 60_000), async (c) => {
     const { cscService } = getServices(c);
     const body = await c.req.json().catch(() => ({}));
     const result = await cscService.timestamp(body);

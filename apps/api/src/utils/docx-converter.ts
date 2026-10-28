@@ -46,14 +46,18 @@ export function extractDocxText(buffer: Buffer | Uint8Array): string {
 
       if (filename === 'word/document.xml') {
         const compData = buf.subarray(dataStart, dataStart + compSize);
+        // INK-332: Enforce 10MB upper limit on decompressed DOCX XML to protect against Zip bombs
+        const MAX_UNCOMPRESSED_XML_BYTES = 10 * 1024 * 1024;
         try {
           xmlContent =
             compMethod === 8
-              ? Buffer.from(zlib.inflateRawSync(compData)).toString('utf-8')
-              : Buffer.from(compData).toString('utf-8');
+              ? Buffer.from(
+                  zlib.inflateRawSync(compData, { maxOutputLength: MAX_UNCOMPRESSED_XML_BYTES }),
+                ).toString('utf-8')
+              : Buffer.from(compData.subarray(0, MAX_UNCOMPRESSED_XML_BYTES)).toString('utf-8');
         } catch {
-          // Fallback if inflate fails
-          xmlContent = compData.toString('utf-8');
+          // Fallback if inflate fails or exceeds bound
+          xmlContent = compData.subarray(0, MAX_UNCOMPRESSED_XML_BYTES).toString('utf-8');
         }
         break;
       }

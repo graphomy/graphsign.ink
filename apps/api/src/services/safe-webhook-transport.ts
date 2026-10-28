@@ -127,6 +127,24 @@ export class SafeWebhookTransport {
       throw new Error(`Egress policy blocked request: ${validation.error}`);
     }
 
+    // INK-331: Pre-flight DNS resolution to prevent DNS rebinding SSRF
+    const parsedUrl = new URL(options.url);
+    try {
+      const dns = await import('node:dns');
+      if (dns?.promises?.lookup) {
+        const addresses = await dns.promises.lookup(parsedUrl.hostname, { all: true });
+        for (const addr of addresses) {
+          if (isPrivateOrReservedHost(addr.address, isDev)) {
+            throw new Error('Egress policy blocked request: Target host resolves to a restricted private, loopback, or cloud metadata IP.');
+          }
+        }
+      }
+    } catch (dnsErr: any) {
+      if (dnsErr.message?.includes('Egress policy blocked request')) {
+        throw dnsErr;
+      }
+    }
+
     const controller = new AbortController();
     const timeoutMs = options.timeoutMs ?? 10_000;
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
