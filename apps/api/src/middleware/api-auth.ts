@@ -144,10 +144,9 @@ export function apiAuth(options?: ApiAuthOptions): MiddlewareHandler {
         }
       }
 
-      const orgId =
-        (c.req.header('x-organisation-id') ||
-          payload.orgId ||
-          (payload as any).organisationId) as string;
+      const orgId = (c.req.header('x-organisation-id') ||
+        payload.orgId ||
+        (payload as any).organisationId) as string;
       const sub = payload.sub as string;
       const role = (payload.role as string) || 'user';
       const email = payload.email as string | undefined;

@@ -5,7 +5,17 @@ import { SessionGuard } from '@/components/features/auth/SessionGuard';
 import { HeaderNav } from '@/components/layout/HeaderNav';
 import { Footer } from '@/components/layout/Footer';
 import { WebhookSubscriptionList } from '@/components/features/integrations/WebhookSubscriptionList';
-import { Webhook, Key, BookOpen, RefreshCw, Activity, ExternalLink, Plus, Trash2, Edit2 } from 'lucide-react';
+import {
+  Webhook,
+  Key,
+  BookOpen,
+  RefreshCw,
+  Activity,
+  ExternalLink,
+  Plus,
+  Trash2,
+  Edit2,
+} from 'lucide-react';
 import { ApiClientModal } from '@/components/features/integrations/ApiClientModal';
 import { getApiUrl } from '@/lib/api';
 

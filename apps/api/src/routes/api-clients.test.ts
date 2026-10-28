@@ -41,7 +41,10 @@ describe('API Client Routes & Authentication Tests (INK-148, FR-016.006)', () =>
 
     app = new Hono();
     app.onError(errorHandler);
-    app.route('/api/v1/organisations/me/api-clients', createApiClientRoutes({ prisma: mockPrisma }));
+    app.route(
+      '/api/v1/organisations/me/api-clients',
+      createApiClientRoutes({ prisma: mockPrisma }),
+    );
   });
 
   it('allows org_admin to list client bindings', async () => {
@@ -132,4 +135,3 @@ describe('API Client Routes & Authentication Tests (INK-148, FR-016.006)', () =>
     );
   });
 });
-

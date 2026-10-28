@@ -65,4 +65,3 @@ describe('WebhookModal Component Tests (INK-156)', () => {
     expect(screen.getByPlaceholderText('Header Value')).toBeInTheDocument();
   });
 });
-

@@ -29,9 +29,21 @@ const AVAILABLE_SCOPES = [
   { id: 'templates:read', label: 'templates:read', desc: 'Access reusable template library' },
   { id: 'audit:read', label: 'audit:read', desc: 'Export verifiable audit trail records' },
   { id: 'webhooks:read', label: 'webhooks:read', desc: 'View registered outbound webhooks' },
-  { id: 'webhooks:manage', label: 'webhooks:manage', desc: 'Register or modify webhook subscriptions' },
-  { id: 'webhooks:replay', label: 'webhooks:replay', desc: 'Trigger manual webhook event re-deliveries' },
-  { id: 'api_clients:manage', label: 'api_clients:manage', desc: 'Administer machine client bindings' },
+  {
+    id: 'webhooks:manage',
+    label: 'webhooks:manage',
+    desc: 'Register or modify webhook subscriptions',
+  },
+  {
+    id: 'webhooks:replay',
+    label: 'webhooks:replay',
+    desc: 'Trigger manual webhook event re-deliveries',
+  },
+  {
+    id: 'api_clients:manage',
+    label: 'api_clients:manage',
+    desc: 'Administer machine client bindings',
+  },
   { id: 'api_logs:read', label: 'api_logs:read', desc: 'Search and inspect API request logs' },
 ];
 
@@ -303,4 +315,3 @@ export function ApiClientModal({ client, onClose, onSuccess }: ApiClientModalPro
     </div>
   );
 }
-

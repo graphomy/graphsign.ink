@@ -135,7 +135,9 @@ export class SafeWebhookTransport {
         const addresses = await dns.promises.lookup(parsedUrl.hostname, { all: true });
         for (const addr of addresses) {
           if (isPrivateOrReservedHost(addr.address, isDev)) {
-            throw new Error('Egress policy blocked request: Target host resolves to a restricted private, loopback, or cloud metadata IP.');
+            throw new Error(
+              'Egress policy blocked request: Target host resolves to a restricted private, loopback, or cloud metadata IP.',
+            );
           }
         }
       }

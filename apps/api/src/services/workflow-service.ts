@@ -1145,10 +1145,7 @@ export class WorkflowService {
         if (this.prisma.documentSeal?.findFirst) {
           const seal = await this.prisma.documentSeal.findFirst({
             where: {
-              OR: [
-                { verificationToken: cleanId },
-                { verificationToken: tokenUpper },
-              ],
+              OR: [{ verificationToken: cleanId }, { verificationToken: tokenUpper }],
             },
             include: {
               agreement: {

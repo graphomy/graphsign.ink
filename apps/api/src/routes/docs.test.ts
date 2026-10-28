@@ -37,4 +37,3 @@ describe('Docs Routes & Interactive Scalar Reference (INK-146)', () => {
     expect(res.headers.get('content-type')).toContain('text/html');
   });
 });
-

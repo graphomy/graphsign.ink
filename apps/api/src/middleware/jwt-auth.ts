@@ -51,9 +51,9 @@ export function jwtAuth(): MiddlewareHandler {
       if (payload.jti) {
         const hasDb = Boolean(
           (c && typeof c.get === 'function' && c.get('prisma')) ||
-            (c as any)?.prisma ||
-            c?.env?.DATABASE_URL ||
-            process.env.DATABASE_URL,
+          (c as any)?.prisma ||
+          c?.env?.DATABASE_URL ||
+          process.env.DATABASE_URL,
         );
         if (hasDb) {
           try {
