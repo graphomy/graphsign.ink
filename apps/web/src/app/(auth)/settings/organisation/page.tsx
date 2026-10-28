@@ -1921,7 +1921,7 @@ function OrganisationSettingsContent() {
                       <option value="auditor">Auditor</option>
                       <option value="org_admin">Organisation Admin</option>
                       <option value="super_admin">
-                        Super Admin (Restricted to kunal@graphomy.com)
+                        Super Admin (Platform Restricted)
                       </option>
                     </select>
                   </div>

@@ -64,7 +64,7 @@ describe('RbacService Unit Tests (Epic INK-12)', () => {
       );
     });
 
-    it('should throw ForbiddenError if non-kunal user tries to assign super_admin role', async () => {
+    it('should throw ForbiddenError if non-admin user tries to assign super_admin role', async () => {
       await expect(
         rbacService.assignUserRole({
           actorUserId: 'admin-1',
@@ -78,7 +78,7 @@ describe('RbacService Unit Tests (Epic INK-12)', () => {
       expect(mockPrisma.userOrganisation.updateMany).not.toHaveBeenCalled();
     });
 
-    it('should allow kunal@graphomy.com to assign super_admin role', async () => {
+    it('should allow support@graphsign.ink to assign super_admin role', async () => {
       mockPrisma.user.findUnique.mockResolvedValue({
         id: 'target-1',
         email: 'bob@graphomy.com',
@@ -87,8 +87,8 @@ describe('RbacService Unit Tests (Epic INK-12)', () => {
       });
 
       const res = await rbacService.assignUserRole({
-        actorUserId: 'kunal-1',
-        actorEmail: 'kunal@graphomy.com',
+        actorUserId: 'admin-1',
+        actorEmail: 'support@graphsign.ink',
         targetUserId: 'target-1',
         orgId: 'org-1',
         newRole: 'super_admin',

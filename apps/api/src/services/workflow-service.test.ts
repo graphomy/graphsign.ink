@@ -845,8 +845,8 @@ describe('WorkflowService Unit Tests (INK-86 to INK-116)', () => {
       ]);
 
       const session = await service.getPublicSigningSession('raw-token-123');
-      expect(session.recipients[0].signatureData).toBeDefined();
-      expect((session.recipients[0].signatureData as any)._otp).toBeUndefined();
+      expect(session.recipients[0]!.signatureData).toBeDefined();
+      expect((session.recipients[0]!.signatureData as any)._otp).toBeUndefined();
     });
   });
 });

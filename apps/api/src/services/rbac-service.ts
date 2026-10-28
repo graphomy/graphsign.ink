@@ -46,7 +46,7 @@ export class RbacService {
       );
     }
 
-    // Super Admin security constraint: strictly limited to kunal@graphomy.com
+    // Super Admin security constraint: strictly limited to platform superadmin
     if (newRole === 'super_admin' && !isSuperAdmin(actorEmail)) {
       throw new ForbiddenError(
         'Only designated platform super admins are authorized to assign the super_admin role.',

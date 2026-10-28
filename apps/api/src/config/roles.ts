@@ -12,7 +12,7 @@ export interface RoleDefinition {
   defaultPermissions: string[];
 }
 
-export const SUPER_ADMIN_EMAIL = 'kunal@graphomy.com';
+export const SUPER_ADMIN_EMAIL = 'support@graphsign.ink';
 
 /**
  * Resolves superadmin email(s) from environment variable SUPERADMIN_ID.
@@ -48,7 +48,7 @@ export const DEFAULT_ROLES: RoleDefinition[] = [
     id: 'super_admin',
     name: 'Super Admin',
     description:
-      'Platform super administrator with unrestricted global access. Restricted to kunal@graphomy.com.',
+      'Platform super administrator with unrestricted global access. Restricted to platform super administrator (support@graphsign.ink).',
     hierarchyLevel: 100,
     isSystemRole: true,
     defaultPermissions: [
