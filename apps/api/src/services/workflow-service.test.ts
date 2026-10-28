@@ -650,4 +650,80 @@ describe('WorkflowService Unit Tests (INK-86 to INK-116)', () => {
       );
     });
   });
+
+  describe('getSigningDocumentFile Security Tests (INK-327)', () => {
+    it('rejects direct unauthenticated agreement lookup by raw UUID (IDOR defense)', async () => {
+      // Simulate unauthenticated request with agreement UUID
+      mockPrisma.agreementRecipient.findUnique.mockResolvedValue(null);
+      mockPrisma.documentSeal = { findFirst: vi.fn().mockResolvedValue(null) };
+      mockPrisma.agreement.findFirst.mockResolvedValue({
+        ...mockAgreement,
+        status: 'SENT',
+      });
+
+      await expect(
+        service.getSigningDocumentFile('a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d'),
+      ).rejects.toThrow('Agreement file is not available.');
+    });
+
+    it('rejects unauthenticated agreement lookup by envelopeId (IDOR defense)', async () => {
+      mockPrisma.agreementRecipient.findUnique.mockResolvedValue(null);
+      mockPrisma.documentSeal = { findFirst: vi.fn().mockResolvedValue(null) };
+
+      await expect(service.getSigningDocumentFile('ENV-123456')).rejects.toThrow(
+        'Agreement file is not available.',
+      );
+    });
+
+    it('rejects retrieval with expired recipient token', async () => {
+      mockPrisma.agreementRecipient.findUnique.mockResolvedValue({
+        id: 'recip-1',
+        tokenExpiresAt: new Date(Date.now() - 60000), // Expired 1 min ago
+        agreement: {
+          ...mockAgreement,
+          status: 'SENT',
+        },
+      });
+
+      await expect(service.getSigningDocumentFile('expired-raw-token')).rejects.toThrow(
+        'This signing link has expired.',
+      );
+    });
+
+    it('allows retrieval with valid recipient token', async () => {
+      mockPrisma.agreementRecipient.findUnique.mockResolvedValue({
+        id: 'recip-1',
+        tokenExpiresAt: new Date(Date.now() + 3600000), // Valid for 1h
+        agreement: {
+          ...mockAgreement,
+          status: 'SENT',
+          fileName: 'doc.pdf',
+          metadata: { fileBase64: 'fake-base64-data' },
+        },
+      });
+
+      const res = await service.getSigningDocumentFile('valid-raw-token');
+      expect(res.fileName).toBe('doc.pdf');
+      expect(res.fileData).toBe('fake-base64-data');
+    });
+
+    it('allows completed document retrieval via valid verificationToken (GS-...)', async () => {
+      mockPrisma.agreementRecipient.findUnique.mockResolvedValue(null);
+      mockPrisma.documentSeal = {
+        findFirst: vi.fn().mockResolvedValue({
+          verificationToken: 'GS-VERIFY123',
+          agreement: {
+            ...mockAgreement,
+            status: 'COMPLETED',
+            fileName: 'signed.pdf',
+            metadata: { signedPdfBase64: 'signed-pdf-data' },
+          },
+        }),
+      };
+
+      const res = await service.getSigningDocumentFile('GS-VERIFY123');
+      expect(res.fileName).toBe('signed.pdf');
+      expect(res.fileData).toBe('signed-pdf-data');
+    });
+  });
 });

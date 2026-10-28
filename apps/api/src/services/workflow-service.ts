@@ -1036,98 +1036,58 @@ export class WorkflowService {
     });
 
     if (recipient) {
+      if (recipient.tokenExpiresAt && new Date() > recipient.tokenExpiresAt) {
+        throw new ValidationError('This signing link has expired.');
+      }
       agreement = recipient.agreement;
     } else {
-      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-        cleanId,
-      );
+      // INK-327: Prevent unauthenticated IDOR document extraction.
+      // Do NOT permit lookup by agreement UUID or envelopeId on public sign endpoints.
+      // Only permit completed agreement lookup via cryptographic verificationToken (GS-...).
+      const isVerificationToken = /^GS-[A-Za-z0-9_-]{6,64}$/i.test(cleanId);
+      if (isVerificationToken) {
+        const tokenUpper = cleanId.toUpperCase();
 
-      const tokenVariations: string[] = Array.from(
-        new Set([
-          cleanId,
-          cleanId.toUpperCase(),
-          cleanId.toLowerCase(),
-          cleanId.startsWith('GS-') ? cleanId.substring(3) : `GS-${cleanId}`,
-          cleanId.startsWith('gs-') ? cleanId.substring(3) : `GS-${cleanId.toUpperCase()}`,
-          `GS-${cleanId.toLowerCase()}`,
-          ...(isUuid ? [cleanId] : []),
-        ]),
-      );
-
-      // 2. Try verification token in documentSeal
-      if (this.prisma.documentSeal?.findFirst) {
-        const seal = await this.prisma.documentSeal.findFirst({
-          where: {
-            OR: [
-              ...tokenVariations.map((t) => ({ verificationToken: t })),
-              ...(isUuid ? [{ agreementId: cleanId }, { id: cleanId }] : []),
-            ],
-          },
-          include: {
-            agreement: {
-              include: {
-                recipients: true,
-                organisation: { select: { name: true } },
+        if (this.prisma.documentSeal?.findFirst) {
+          const seal = await this.prisma.documentSeal.findFirst({
+            where: {
+              OR: [
+                { verificationToken: cleanId },
+                { verificationToken: tokenUpper },
+              ],
+            },
+            include: {
+              agreement: {
+                include: {
+                  recipients: true,
+                  organisation: { select: { name: true } },
+                },
               },
             },
-          },
-          orderBy: { createdAt: 'desc' },
-        });
+            orderBy: { createdAt: 'desc' },
+          });
 
-        if (seal?.agreement) {
-          agreement = seal.agreement;
+          if (seal?.agreement && seal.agreement.status === 'COMPLETED') {
+            agreement = seal.agreement;
+          }
         }
-      }
 
-      // 3. Try lookup directly on agreement by UUID, envelopeId, or verificationToken
-      if (!agreement && this.prisma.agreement?.findFirst) {
-        agreement = await this.prisma.agreement.findFirst({
-          where: {
-            deletedAt: null,
-            OR: [
-              ...(isUuid ? [{ id: cleanId }] : []),
-              ...tokenVariations.map((t) => ({ metadata: { path: ['envelopeId'], equals: t } })),
-              ...tokenVariations.map((t) => ({
-                metadata: { path: ['verificationToken'], equals: t },
-              })),
-            ],
-          },
-          include: {
-            recipients: true,
-            organisation: { select: { name: true } },
-          },
-        });
-      }
-
-      // 4. Fallback search for recently completed agreements matching token or envelopeId in metadata
-      if (!agreement && this.prisma.agreement?.findMany) {
-        const recentCompleted = await this.prisma.agreement.findMany({
-          where: {
-            deletedAt: null,
-            status: 'COMPLETED',
-          },
-          include: {
-            recipients: true,
-            organisation: { select: { name: true } },
-          },
-          orderBy: { completedAt: 'desc' },
-          take: 50,
-        });
-
-        const targetLower = cleanId.toLowerCase();
-        agreement =
-          recentCompleted.find((ag) => {
-            const m = (ag.metadata as Record<string, unknown>) || {};
-            const vToken =
-              typeof m.verificationToken === 'string' ? m.verificationToken.toLowerCase() : '';
-            const eId = typeof m.envelopeId === 'string' ? m.envelopeId.toLowerCase() : '';
-            return (
-              vToken === targetLower ||
-              vToken.replace('gs-', '') === targetLower.replace('gs-', '') ||
-              eId === targetLower ||
-              ag.id === cleanId
-            );
-          }) || null;
+        if (!agreement && this.prisma.agreement?.findFirst) {
+          agreement = await this.prisma.agreement.findFirst({
+            where: {
+              status: 'COMPLETED',
+              deletedAt: null,
+              OR: [
+                { metadata: { path: ['verificationToken'], equals: cleanId } },
+                { metadata: { path: ['verificationToken'], equals: tokenUpper } },
+              ],
+            },
+            include: {
+              recipients: true,
+              organisation: { select: { name: true } },
+            },
+          });
+        }
       }
     }
 
