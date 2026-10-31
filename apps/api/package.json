@@ -17,7 +17,7 @@
     "@graphsign/db": "workspace:*",
     "hono": "^4.13.13",
     "jose": "^6.2.13",
-    "node-forge": "^1.4.0",
+    "node-forge": "^1.4.2",
     "pdf-lib": "^1.17.1",
     "qrcode": "^1.5.4",
     "resend": "^6.34.1",
