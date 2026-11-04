@@ -51,7 +51,7 @@ describe('DomainCanonicalizer Component', () => {
     expect(replaceMock).not.toHaveBeenCalled();
   });
 
-  it('redirects cloudflare pages.dev hostname to graphsign.ink', () => {
+  it('does not redirect on development domain dev-graphsign-web.pages.dev', () => {
     const replaceMock = vi.fn();
     setWindowLocation({
       hostname: 'dev-graphsign-web.pages.dev',
@@ -62,12 +62,24 @@ describe('DomainCanonicalizer Component', () => {
     });
 
     render(<DomainCanonicalizer />);
-    expect(replaceMock).toHaveBeenCalledWith(
-      'https://graphsign.ink/agreements?status=DRAFT#section1',
-    );
+    expect(replaceMock).not.toHaveBeenCalled();
   });
 
-  it('redirects graphsign-web.pages.dev to graphsign.ink', () => {
+  it('does not redirect on dev.graphsign.ink or dev preview deployment', () => {
+    const replaceMock = vi.fn();
+    setWindowLocation({
+      hostname: '1234abcd.dev-graphsign-web.pages.dev',
+      pathname: '/sign/GS-12345',
+      search: '',
+      hash: '',
+      replace: replaceMock as unknown as Location['replace'],
+    });
+
+    render(<DomainCanonicalizer />);
+    expect(replaceMock).not.toHaveBeenCalled();
+  });
+
+  it('redirects production graphsign-web.pages.dev to graphsign.ink', () => {
     const replaceMock = vi.fn();
     setWindowLocation({
       hostname: 'graphsign-web.pages.dev',
@@ -79,5 +91,21 @@ describe('DomainCanonicalizer Component', () => {
 
     render(<DomainCanonicalizer />);
     expect(replaceMock).toHaveBeenCalledWith('https://graphsign.ink/');
+  });
+
+  it('redirects production branch preview to graphsign.ink preserving path, query, and hash', () => {
+    const replaceMock = vi.fn();
+    setWindowLocation({
+      hostname: 'deploy-preview-1.graphsign-web.pages.dev',
+      pathname: '/agreements',
+      search: '?status=DRAFT',
+      hash: '#section1',
+      replace: replaceMock as unknown as Location['replace'],
+    });
+
+    render(<DomainCanonicalizer />);
+    expect(replaceMock).toHaveBeenCalledWith(
+      'https://graphsign.ink/agreements?status=DRAFT#section1',
+    );
   });
 });
