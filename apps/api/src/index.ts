@@ -60,16 +60,20 @@ app.use('*', async (c, next) => {
     origin: (requestOrigin) => {
       if (!requestOrigin) return '';
 
-      const isLocal =
-        requestOrigin.startsWith('http://localhost:') ||
-        requestOrigin.startsWith('http://127.0.0.1:') ||
-        requestOrigin.startsWith('http://192.168.') ||
-        requestOrigin.startsWith('http://10.') ||
-        requestOrigin.startsWith('http://172.') ||
-        requestOrigin.includes('.local:');
+      // INK-330: Restrict local origins to non-production environments with strict RFC 1918 subnets
+      const isDev = c.env?.NODE_ENV !== 'production' && process.env?.NODE_ENV !== 'production';
+      if (isDev) {
+        const isLocal =
+          requestOrigin.startsWith('http://localhost:') ||
+          requestOrigin.startsWith('http://127.0.0.1:') ||
+          requestOrigin.startsWith('http://192.168.') ||
+          requestOrigin.startsWith('http://10.') ||
+          /^https?:\/\/172\.(1[6-9]|2\d|3[0-1])\./.test(requestOrigin) ||
+          requestOrigin.includes('.local:');
 
-      if (isLocal) {
-        return requestOrigin;
+        if (isLocal) {
+          return requestOrigin;
+        }
       }
 
       if (!allowedOriginSetting) {

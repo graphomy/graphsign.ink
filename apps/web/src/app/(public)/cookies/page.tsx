@@ -22,7 +22,7 @@ export default function CookiesPage() {
         ],
         [
           'Contact',
-          'Questions about storage technologies or privacy choices can be sent to Graphomy Technologies LLP at support@graphsign.ink. See the Privacy Notice for processing purposes, retention and rights.',
+          'Questions about storage technologies or privacy choices can be sent to Graphsign.ink at support@graphsign.ink. See the Privacy Notice for processing purposes, retention, account deletion and rights.',
         ],
       ]}
     />

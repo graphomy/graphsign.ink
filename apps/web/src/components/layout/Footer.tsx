@@ -11,7 +11,7 @@ export function Footer() {
           <span className="font-bold text-ink-900">
             graphsign<span className="text-brand-600">.ink</span>
           </span>
-          <span>© 2026 Graphomy Technologies LLP</span>
+          <span>© 2026 Graphsign.ink</span>
         </div>
         <div className="flex items-center gap-6 text-ink-500">
           <Link

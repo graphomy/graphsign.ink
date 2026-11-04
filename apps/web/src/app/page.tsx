@@ -86,7 +86,7 @@ function SignatureAnimation() {
             <div className="w-3 h-3 rounded-full bg-emerald-400/80" />
           </div>
           <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400">
-            PAdES-B-LTA Document
+            PAdES-B-T Document
           </span>
         </div>
 
@@ -480,7 +480,7 @@ export default function Home() {
             <div className="mt-12 pt-8 border-t border-slate-200/60 flex flex-wrap items-center justify-center gap-6 sm:gap-10 text-xs font-semibold text-slate-500">
               <span className="flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                eIDAS &amp; ESIGN Legal Compliance
+                eIDAS &amp; ESIGN Compliance
               </span>
               <span className="flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-blue-500" />
@@ -492,7 +492,7 @@ export default function Home() {
               </span>
               <span className="flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-red-500" />
-                RFC 3161 PAdES-B-LTA Sealing
+                RFC 3161 PAdES-B-T Sealing
               </span>
             </div>
 
@@ -646,6 +646,18 @@ export default function Home() {
           </div>
 
           <div className="flex items-center gap-6 text-xs text-neutral-500">
+            <Link href="/terms" className="hover:text-neutral-900 transition-colors">
+              Terms of Service
+            </Link>
+            <Link href="/privacy" className="hover:text-neutral-900 transition-colors">
+              Privacy Notice
+            </Link>
+            <Link href="/cookies" className="hover:text-neutral-900 transition-colors">
+              Cookie Notice
+            </Link>
+            <Link href="/support" className="hover:text-neutral-900 transition-colors">
+              Support
+            </Link>
             <a
               href="https://github.com/graphomy/graphsign.ink"
               target="_blank"

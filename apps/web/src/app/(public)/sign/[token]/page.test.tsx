@@ -778,12 +778,9 @@ describe('SignDocumentPage Component Tests (FR-007 Workflow Engine)', () => {
       expect(screen.getByTestId('ersd-modal-overlay')).toBeDefined();
       expect(screen.getByTestId('ersd-checkbox')).toHaveProperty('disabled', false);
     });
-    const ersdCheck = screen.getByTestId('ersd-checkbox');
-    fireEvent.click(ersdCheck);
-    fireEvent.change(ersdCheck, { target: { checked: true } });
-    await waitFor(
-      () => expect(screen.getByTestId('ersd-accept-button')).toHaveProperty('disabled', false),
-      { timeout: 5000 },
+    fireEvent.click(screen.getByTestId('ersd-checkbox'));
+    await waitFor(() =>
+      expect(screen.getByTestId('ersd-accept-button')).toHaveProperty('disabled', false),
     );
     fireEvent.click(screen.getByTestId('ersd-accept-button'));
 
@@ -902,12 +899,9 @@ describe('SignDocumentPage Component Tests (FR-007 Workflow Engine)', () => {
       expect(screen.getByTestId('ersd-modal-overlay')).toBeDefined();
       expect(screen.getByTestId('ersd-checkbox')).toHaveProperty('disabled', false);
     });
-    const ersdCheck = screen.getByTestId('ersd-checkbox');
-    fireEvent.click(ersdCheck);
-    fireEvent.change(ersdCheck, { target: { checked: true } });
-    await waitFor(
-      () => expect(screen.getByTestId('ersd-accept-button')).toHaveProperty('disabled', false),
-      { timeout: 5000 },
+    fireEvent.click(screen.getByTestId('ersd-checkbox'));
+    await waitFor(() =>
+      expect(screen.getByTestId('ersd-accept-button')).toHaveProperty('disabled', false),
     );
     fireEvent.click(screen.getByTestId('ersd-accept-button'));
 

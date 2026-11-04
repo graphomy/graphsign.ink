@@ -11,6 +11,11 @@ export interface SignPdfOptions {
   location?: string;
   signingTime?: Date;
   tsaTokenBytes?: Uint8Array | Buffer | null;
+  /**
+   * Optional async callback to dynamically request an RFC 3161 timestamp token
+   * over the raw signature value bytes per ETSI EN 319 142 PAdES-T.
+   */
+  requestTimestamp?: (signatureBytes: Uint8Array) => Promise<Uint8Array | Buffer | null>;
 }
 
 export interface PdfSignerResult {
@@ -19,6 +24,7 @@ export interface PdfSignerResult {
   documentHash: string;
   byteRange: [number, number, number, number];
   hexSignatureLength: number;
+  signatureValueBytes: Uint8Array;
 }
 
 const BYTE_RANGE_PLACEHOLDER = '/ByteRange [ 0 1000000000 1000000000 1000000000 ]';
@@ -254,15 +260,44 @@ export class PdfSignerEngine {
     } as any);
 
     p7.sign({ detached: true });
+
+    // Extract raw signature value bytes from SignerInfo for RFC 3161 PAdES-T timestamping
+    const rawSigString = ((p7 as any).signers?.[0] as any)?.signature || '';
+    const signatureValueBytes = Buffer.from(rawSigString, 'binary');
+
+    let tsaTokenBytes = options.tsaTokenBytes || null;
+    if (options.requestTimestamp && signatureValueBytes.length > 0) {
+      try {
+        const dynamicToken = await options.requestTimestamp(new Uint8Array(signatureValueBytes));
+        if (dynamicToken) {
+          tsaTokenBytes = dynamicToken;
+        }
+      } catch (tsaErr) {
+        console.warn(
+          '[PDF_SIGNER] Failed requesting dynamic RFC 3161 timestamp for signature value:',
+          (tsaErr as Error).message,
+        );
+      }
+    }
+
     const asn1 = p7.toAsn1();
 
-    // 6. Embed RFC 3161 Timestamp Token in unauthenticatedAttributes if provided
-    if (options.tsaTokenBytes && options.tsaTokenBytes.length > 0) {
+    // 6. Embed RFC 3161 Timestamp Token in unauthenticatedAttributes if provided (OID 1.2.840.113549.1.9.16.2.14)
+    if (tsaTokenBytes && tsaTokenBytes.length > 0) {
       try {
-        const tsaBuf = Buffer.isBuffer(options.tsaTokenBytes)
-          ? options.tsaTokenBytes
-          : Buffer.from(options.tsaTokenBytes);
-        const tsTokenAsn1 = forge.asn1.fromDer(forge.util.createBuffer(tsaBuf.toString('binary')));
+        const tsaBuf = Buffer.isBuffer(tsaTokenBytes) ? tsaTokenBytes : Buffer.from(tsaTokenBytes);
+        let tsTokenAsn1 = forge.asn1.fromDer(forge.util.createBuffer(tsaBuf.toString('binary')));
+
+        // If a full TimeStampResp was provided, extract the inner TimeStampToken (ContentInfo)
+        if (
+          tsTokenAsn1.type === forge.asn1.Type.SEQUENCE &&
+          Array.isArray(tsTokenAsn1.value) &&
+          tsTokenAsn1.value.length === 2 &&
+          tsTokenAsn1.value[0]?.type === forge.asn1.Type.SEQUENCE &&
+          tsTokenAsn1.value[1]?.type === forge.asn1.Type.SEQUENCE
+        ) {
+          tsTokenAsn1 = tsTokenAsn1.value[1];
+        }
 
         const timeStampAttr = forge.asn1.create(
           forge.asn1.Class.UNIVERSAL,
@@ -321,6 +356,7 @@ export class PdfSignerEngine {
       documentHash: finalDocumentHash,
       byteRange: actualByteRange,
       hexSignatureLength: hexSignature.length,
+      signatureValueBytes: new Uint8Array(signatureValueBytes),
     };
   }
 }

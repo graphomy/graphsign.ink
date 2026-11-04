@@ -61,7 +61,7 @@ describe('User Role Assignment Routes Integration Tests (INK-62 & INK-64)', () =
     );
   });
 
-  it('PUT /:id/role should return 403 when non-kunal attempts to assign super_admin', async () => {
+  it('PUT /:id/role should return 403 when non-admin attempts to assign super_admin', async () => {
     const token = await signJwt({ sub: 'admin-1', email: 'imposter@acme.com', role: 'org_admin' });
 
     const res = await app.request('/target-10/role', {

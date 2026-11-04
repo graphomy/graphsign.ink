@@ -5,7 +5,18 @@ import { SessionGuard } from '@/components/features/auth/SessionGuard';
 import { HeaderNav } from '@/components/layout/HeaderNav';
 import { Footer } from '@/components/layout/Footer';
 import { WebhookSubscriptionList } from '@/components/features/integrations/WebhookSubscriptionList';
-import { Webhook, Key, BookOpen, RefreshCw, Activity, ExternalLink } from 'lucide-react';
+import {
+  Webhook,
+  Key,
+  BookOpen,
+  RefreshCw,
+  Activity,
+  ExternalLink,
+  Plus,
+  Trash2,
+  Edit2,
+} from 'lucide-react';
+import { ApiClientModal } from '@/components/features/integrations/ApiClientModal';
 import { getApiUrl } from '@/lib/api';
 
 export default function IntegrationsPage() {
@@ -127,7 +138,7 @@ interface ApiRequestLogDto {
 }
 
 function getToken(): string {
-  if (typeof window === 'undefined') return '';
+  if (typeof window === 'undefined' || typeof localStorage === 'undefined') return '';
   return (
     localStorage.getItem('graphsign_session_token') ||
     localStorage.getItem('token') ||
@@ -174,11 +185,6 @@ function ApiClientsTab() {
   // Modals state
   const [modalOpen, setModalOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<ApiClientBindingDto | null>(null);
-  const [createdSecret, setCreatedSecret] = useState<{
-    clientId: string;
-    clientSecret: string;
-    name: string;
-  } | null>(null);
 
   const handleCreateNew = () => {
     setEditingClient(null);
@@ -206,33 +212,6 @@ function ApiClientsTab() {
     }
   };
 
-  const handleRotate = async (id: string, name: string) => {
-    if (
-      !confirm(
-        `Are you sure you want to rotate secrets for "${name}"? Existing active tokens will remain valid during grace period.`,
-      )
-    )
-      return;
-
-    try {
-      const token = getToken();
-      const res = await fetch(`${getApiUrl()}/api/v1/organisations/me/api-clients/${id}/rotate`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) throw new Error('Failed to rotate API client secret');
-      const data = (await res.json()) as { clientSecret: string; clientId: string };
-      setCreatedSecret({
-        clientId: data.clientId,
-        clientSecret: data.clientSecret,
-        name,
-      });
-      reloadClients();
-    } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : 'Error rotating API client secret');
-    }
-  };
-
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -243,13 +222,24 @@ function ApiClientsTab() {
             login.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={reloadClients}
-          className="p-2 text-slate-400 hover:text-slate-100 bg-slate-900 border border-slate-800 rounded-lg transition"
-        >
-          <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
-        </button>
+        <div className="flex items-center space-x-2">
+          <button
+            type="button"
+            onClick={reloadClients}
+            className="p-2 text-slate-400 hover:text-slate-100 bg-slate-900 border border-slate-800 rounded-lg transition"
+            title="Refresh"
+          >
+            <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+          </button>
+          <button
+            type="button"
+            onClick={handleCreateNew}
+            className="inline-flex items-center space-x-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-lg transition"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Register Client</span>
+          </button>
+        </div>
       </div>
 
       {error && (
@@ -263,25 +253,39 @@ function ApiClientsTab() {
           Loading client bindings...
         </div>
       ) : clients.length === 0 ? (
-        <div className="p-10 text-center border border-dashed border-slate-800 rounded-xl bg-slate-950/40 space-y-2">
+        <div className="p-10 text-center border border-dashed border-slate-800 rounded-xl bg-slate-950/40 space-y-3">
           <Key className="w-8 h-8 text-slate-500 mx-auto" />
           <p className="text-sm font-semibold text-slate-300">No Machine API Clients Configured</p>
           <p className="text-xs text-slate-500 max-w-md mx-auto">
             Machine client bindings allow external daemon scripts or services to act on behalf of
             your workspace using OAuth2 client credentials grant.
           </p>
+          <button
+            type="button"
+            onClick={handleCreateNew}
+            className="inline-flex items-center space-x-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-lg transition mt-2"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Register First Client</span>
+          </button>
         </div>
       ) : (
         <div className="space-y-3">
           {clients.map((c) => (
             <div
               key={c.id}
-              className="p-4 bg-slate-900 border border-slate-800 rounded-lg flex items-center justify-between"
+              className="p-4 bg-slate-900 border border-slate-800 rounded-lg flex items-center justify-between gap-4"
             >
               <div>
                 <div className="flex items-center space-x-2">
                   <span className="font-bold text-sm text-slate-200">{c.name}</span>
-                  <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-emerald-950 text-emerald-300 border border-emerald-800">
+                  <span
+                    className={`px-2 py-0.5 rounded text-[10px] font-mono border ${
+                      c.status === 'active'
+                        ? 'bg-emerald-950 text-emerald-300 border-emerald-800'
+                        : 'bg-slate-950 text-slate-400 border-slate-800'
+                    }`}
+                  >
                     {c.status}
                   </span>
                 </div>
@@ -297,9 +301,36 @@ function ApiClientsTab() {
                   ))}
                 </div>
               </div>
+
+              <div className="flex items-center space-x-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => handleEdit(c)}
+                  className="p-1.5 text-slate-400 hover:text-slate-200 bg-slate-950 border border-slate-800 rounded-lg hover:border-slate-700 transition"
+                  title="Edit Client"
+                >
+                  <Edit2 className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleRevoke(c.id, c.name)}
+                  className="p-1.5 text-rose-400 hover:text-rose-300 bg-slate-950 border border-slate-800 rounded-lg hover:border-rose-900/50 transition"
+                  title="Revoke Binding"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
             </div>
           ))}
         </div>
+      )}
+
+      {modalOpen && (
+        <ApiClientModal
+          client={editingClient}
+          onClose={() => setModalOpen(false)}
+          onSuccess={() => reloadClients()}
+        />
       )}
     </div>
   );

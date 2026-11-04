@@ -130,4 +130,61 @@ describe('PdfSignerEngine (INK-295)', () => {
     const signedPdfText = (Buffer.from(result.signedPdfBytes) as any).toString('latin1');
     expect(signedPdfText.toLowerCase()).toContain(oidDerHex.toLowerCase());
   });
+
+  it('requests dynamic RFC 3161 timestamp over raw signature value bytes (PAdES-T / INK-326)', async () => {
+    const pdfDoc = await PDFDocument.create();
+    pdfDoc.addPage([595, 842]);
+    const originalBytes = await pdfDoc.save();
+
+    const keys = forge.pki.rsa.generateKeyPair(2048);
+    const cert = forge.pki.createCertificate();
+    cert.publicKey = keys.publicKey;
+    cert.serialNumber = '03';
+    cert.validity.notBefore = new Date();
+    cert.validity.notAfter = new Date();
+    cert.validity.notAfter.setFullYear(2028);
+    cert.setSubject([{ name: 'commonName', value: 'Dynamic PAdES-T' }]);
+    cert.setIssuer([{ name: 'commonName', value: 'Dynamic PAdES-T' }]);
+    cert.sign(keys.privateKey, forge.md.sha256.create());
+
+    const certificatePem = forge.pki.certificateToPem(cert);
+    const privateKeyPem = forge.pki.privateKeyToPem(keys.privateKey);
+
+    let receivedSigBytes: Uint8Array | null = null;
+
+    const dummyTsaToken = forge.asn1.create(
+      forge.asn1.Class.UNIVERSAL,
+      forge.asn1.Type.SEQUENCE,
+      true,
+      [
+        forge.asn1.create(
+          forge.asn1.Class.UNIVERSAL,
+          forge.asn1.Type.OCTETSTRING,
+          false,
+          'SIGNATURE_DIGEST_TIMESTAMP',
+        ),
+      ],
+    );
+    const tsaTokenBytes = Buffer.from(forge.asn1.toDer(dummyTsaToken).getBytes(), 'binary');
+
+    const result = await PdfSignerEngine.signPdf({
+      pdfBytes: originalBytes,
+      certificatePem,
+      privateKeyPem,
+      requestTimestamp: async (sigBytes) => {
+        receivedSigBytes = sigBytes;
+        return tsaTokenBytes;
+      },
+    });
+
+    expect(receivedSigBytes).not.toBeNull();
+    expect(receivedSigBytes!.length).toBe(256); // 2048-bit RSA signature = 256 bytes
+    expect(result.signatureValueBytes).toEqual(receivedSigBytes);
+
+    const oidDerHex = forge.util.bytesToHex(
+      forge.asn1.oidToDer('1.2.840.113549.1.9.16.2.14').getBytes(),
+    );
+    const signedPdfText = Buffer.from(result.signedPdfBytes).toString('latin1');
+    expect(signedPdfText.toLowerCase()).toContain(oidDerHex.toLowerCase());
+  });
 });

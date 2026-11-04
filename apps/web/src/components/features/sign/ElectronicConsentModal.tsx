@@ -68,7 +68,6 @@ export function ElectronicConsentModal({
       } else {
         setHasScrolledToBottom(true);
       }
-      setAgreed(false);
       setShowDeclineConfirm(false);
       setDeclineReason('');
       setActionError(null);

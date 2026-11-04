@@ -14,7 +14,7 @@ describe('Web Auth Validators (INK-265)', () => {
 
     it('identifies custom corporate/company email domains as business', () => {
       expect(isPersonalEmailDomain('alex@acme.com')).toBe(false);
-      expect(isPersonalEmailDomain('kunal@graphomy.com')).toBe(false);
+      expect(isPersonalEmailDomain('support@graphsign.ink')).toBe(false);
       expect(isPersonalEmailDomain('john@company.co.uk')).toBe(false);
     });
 

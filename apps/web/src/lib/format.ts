@@ -13,7 +13,7 @@ export const orLabel = (v: string | null | undefined, fallback: string): string 
 };
 
 /**
- * Mask an email address (e.g. kunal_p@live.in -> k••••_p@live.in)
+ * Mask an email address (e.g. alex_p@live.in -> a••••_p@live.in)
  */
 export const maskEmail = (email?: string | null): string => {
   if (!email || !email.includes('@')) return 'your email';

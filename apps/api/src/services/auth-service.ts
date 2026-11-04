@@ -133,19 +133,44 @@ export class AuthService {
   }
 
   /**
-   * Revokes a JWT token by adding its unique jti claim to the revoked list.
+   * Revokes a JWT token by adding its unique jti claim to the durable revoked list (INK-328).
    */
-  revokeToken(jti: string): void {
+  async revokeToken(
+    jti: string,
+    issuer: string = 'graphsign-local',
+    expiresAt?: Date,
+  ): Promise<void> {
     if (jti) {
       AuthService.revokedJtis.add(jti);
+      if (this.prisma?.revokedAccessToken?.create) {
+        try {
+          await this.prisma.revokedAccessToken.create({
+            data: {
+              jti,
+              issuer,
+              expiresAt: expiresAt || new Date(Date.now() + 24 * 60 * 60 * 1000),
+            },
+          });
+        } catch {
+          // Ignore unique constraint if already recorded
+        }
+      }
     }
   }
 
   /**
-   * Checks whether a JWT token has been revoked by checking its jti claim.
+   * Checks whether a JWT token has been revoked by checking its jti claim (INK-328).
    */
-  isTokenRevoked(jti: string): boolean {
-    return AuthService.revokedJtis.has(jti);
+  async isTokenRevoked(jti: string): Promise<boolean> {
+    if (!jti) return false;
+    if (AuthService.revokedJtis.has(jti)) return true;
+    if (this.prisma?.revokedAccessToken?.findUnique) {
+      const revoked = await this.prisma.revokedAccessToken.findUnique({
+        where: { jti },
+      });
+      return !!revoked;
+    }
+    return false;
   }
 
   /**
@@ -903,7 +928,7 @@ export class AuthService {
     const org = await this.getOrCreateDefaultOrganisation();
 
     if (jti) {
-      this.revokeToken(jti);
+      await this.revokeToken(jti);
     }
 
     if (userId) {
@@ -1161,7 +1186,7 @@ export class AuthService {
 
     if (typeof lastActiveAtMsOrToken === 'string') {
       const decoded = decodeJwt(lastActiveAtMsOrToken);
-      if (decoded && decoded.jti && this.isTokenRevoked(decoded.jti)) {
+      if (decoded && decoded.jti && (await this.isTokenRevoked(decoded.jti))) {
         return {
           valid: false,
           sessionTimeoutMinutes: settings.sessionTimeoutMinutes,

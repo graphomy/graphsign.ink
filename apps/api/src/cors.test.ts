@@ -71,4 +71,41 @@ describe('CORS Preflight Caching (INK-300)', () => {
 
     expect(res.headers.get('Access-Control-Allow-Origin')).toBeNull();
   });
+
+  it('rejects localhost origins when NODE_ENV is production (INK-330)', async () => {
+    const res = await app.request(
+      '/api/v1/health',
+      {
+        method: 'OPTIONS',
+        headers: {
+          Origin: 'http://localhost:3000',
+          'Access-Control-Request-Method': 'GET',
+        },
+      },
+      {
+        NODE_ENV: 'production',
+        WEB_URL: 'https://graphsign.ink',
+      },
+    );
+
+    expect(res.headers.get('Access-Control-Allow-Origin')).toBeNull();
+  });
+
+  it('rejects 172.32.0.1 (outside RFC 1918 /12 block) even in development (INK-330)', async () => {
+    const res = await app.request(
+      '/api/v1/health',
+      {
+        method: 'OPTIONS',
+        headers: {
+          Origin: 'http://172.32.0.1:3000',
+          'Access-Control-Request-Method': 'GET',
+        },
+      },
+      {
+        NODE_ENV: 'development',
+      },
+    );
+
+    expect(res.headers.get('Access-Control-Allow-Origin')).toBeNull();
+  });
 });

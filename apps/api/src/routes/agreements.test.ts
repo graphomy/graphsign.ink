@@ -317,7 +317,7 @@ describe('Agreement Routes Integration Tests (Epic INK-8)', () => {
 
     const superAdminToken = await signJwt({
       sub: 'super-1',
-      email: 'kunal@graphomy.com',
+      email: 'support@graphsign.ink',
       orgId: 'org-123',
       role: 'super_admin',
     });
@@ -343,7 +343,7 @@ describe('Agreement Routes Integration Tests (Epic INK-8)', () => {
 
     const superAdminToken = await signJwt({
       sub: 'super-1',
-      email: 'kunal@graphomy.com',
+      email: 'support@graphsign.ink',
       orgId: 'org-123',
       role: 'super_admin',
     });

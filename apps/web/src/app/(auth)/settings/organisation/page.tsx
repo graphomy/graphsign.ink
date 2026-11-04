@@ -1920,9 +1920,7 @@ function OrganisationSettingsContent() {
                       <option value="signer">Signer</option>
                       <option value="auditor">Auditor</option>
                       <option value="org_admin">Organisation Admin</option>
-                      <option value="super_admin">
-                        Super Admin (Restricted to kunal@graphomy.com)
-                      </option>
+                      <option value="super_admin">Super Admin (Platform Restricted)</option>
                     </select>
                   </div>
                   <button

@@ -12,7 +12,7 @@ export interface RoleDefinition {
   defaultPermissions: string[];
 }
 
-export const SUPER_ADMIN_EMAIL = 'kunal@graphomy.com';
+export const SUPER_ADMIN_EMAIL = 'support@graphsign.ink';
 
 /**
  * Resolves superadmin email(s) from environment variable SUPERADMIN_ID.
@@ -26,8 +26,8 @@ export function getSuperAdminEmails(): string[] {
     .map((e) => e.trim().toLowerCase())
     .filter((e) => e.length > 0);
 
-  // Fallback to legacy hardcoded value if env var is not set
-  if (emails.length === 0 && SUPER_ADMIN_EMAIL) {
+  // INK-334: Disallow hardcoded fallback in production
+  if (emails.length === 0 && process.env?.NODE_ENV !== 'production' && SUPER_ADMIN_EMAIL) {
     return [SUPER_ADMIN_EMAIL.toLowerCase()];
   }
 
@@ -48,7 +48,7 @@ export const DEFAULT_ROLES: RoleDefinition[] = [
     id: 'super_admin',
     name: 'Super Admin',
     description:
-      'Platform super administrator with unrestricted global access. Restricted to kunal@graphomy.com.',
+      'Platform super administrator with unrestricted global access. Restricted to platform super administrator (support@graphsign.ink).',
     hierarchyLevel: 100,
     isSystemRole: true,
     defaultPermissions: [

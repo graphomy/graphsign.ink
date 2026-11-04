@@ -253,12 +253,11 @@ Graphsign.ink is built possible thanks to the outstanding infrastructure and dev
 
 ## 🤝 Contributing
 
-We welcome contributions! Please adhere to our standard Git workflow:
+PRs are welcome! Help us improve the product.
 
-1. Ensure work is linked to a Jira issue under EPIC **INK-249** or a GitHub Issue.
-2. Create a branch from `develop`: `feature/<issue-id>-<description>` or `bugfix/<issue-id>-<description>`.
-3. Verify all formatting, linting, tests, and builds pass locally.
-4. Submit a Pull Request targeting `develop`.
+1. Fork the repo.
+2. Add your entry (must be 100% tested - Verify all formatting, linting, tests, and builds pass locally.).
+3. Submit a PR.
 
 ---
 

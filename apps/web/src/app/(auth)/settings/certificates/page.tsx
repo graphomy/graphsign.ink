@@ -829,7 +829,7 @@ function CertificatesContent() {
               </div>
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Intermediate / Root Chain PEM (Optional for PAdES B-LTA)
+                  Intermediate / Root Chain PEM (Optional for certificate chain validation)
                 </label>
                 <textarea
                   rows={3}

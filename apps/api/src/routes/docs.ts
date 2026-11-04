@@ -16,7 +16,7 @@ export function createDocsRoutes() {
         'Official REST APIs and Webhook capabilities for the graphsign.ink electronic signature platform.',
     },
     servers: [
-      { url: 'https://dev-graphsign-api.kunal-f9f.workers.dev', description: 'Development API' },
+      { url: 'https://api.graphsign.ink', description: 'Production API' },
       { url: 'http://localhost:8787', description: 'Local Development' },
     ],
     components: {
@@ -48,105 +48,113 @@ export function createDocsRoutes() {
               ],
             },
             version: { type: 'string' },
-            mimeType: { type: 'string' },
-            fileSize: { type: 'integer' },
-            tags: { type: 'array', items: { type: 'string' } },
-            metadata: { type: 'object' },
             createdAt: { type: 'string', format: 'date-time' },
-            updatedAt: { type: 'string', format: 'date-time' },
           },
         },
-        Error: {
+        WebhookSubscription: {
           type: 'object',
           properties: {
-            error: {
-              type: 'object',
-              properties: {
-                code: { type: 'string' },
-                message: { type: 'string' },
-                details: { type: 'object' },
-                requestId: { type: 'string' },
-              },
-            },
+            id: { type: 'string', format: 'uuid' },
+            url: { type: 'string', format: 'uri' },
+            events: { type: 'array', items: { type: 'string' } },
+            status: { type: 'string', enum: ['active', 'failing', 'disabled'] },
+            failureCount: { type: 'integer' },
+            createdAt: { type: 'string', format: 'date-time' },
+          },
+        },
+        ApiClientBinding: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+            clientId: { type: 'string' },
+            name: { type: 'string' },
+            scopes: { type: 'array', items: { type: 'string' } },
+            status: { type: 'string', enum: ['active', 'disabled', 'revoked'] },
+            createdAt: { type: 'string', format: 'date-time' },
+          },
+        },
+        ApiRequestLog: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+            requestId: { type: 'string' },
+            method: { type: 'string' },
+            routeTemplate: { type: 'string' },
+            statusCode: { type: 'integer' },
+            durationMs: { type: 'integer' },
+            createdAt: { type: 'string', format: 'date-time' },
           },
         },
       },
     },
-    security: [{ BearerAuth: [] }],
     paths: {
+      '/api/v1/auth/login': {
+        post: { summary: 'Authenticate user and receive session JWT' },
+      },
+      '/api/v1/auth/refresh': {
+        post: { summary: 'Rotate session tokens' },
+      },
       '/api/v1/documents': {
-        get: {
-          summary: 'List documents',
-          description:
-            'Retrieve paginated list of documents with optional status and metadata filters.',
-          responses: {
-            '200': { description: 'Successful list response' },
-            '401': { description: 'Unauthorized' },
-          },
-        },
-        post: {
-          summary: 'Create document',
-          description: 'Create a new draft document or agreement from markdown or base64 PDF.',
-          responses: {
-            '201': { description: 'Document successfully created' },
-            '200': { description: 'Idempotent replay of previously created document' },
-            '400': { description: 'Invalid payload' },
-            '409': { description: 'Idempotency conflict' },
-          },
-        },
+        get: { summary: 'List tenant agreements with state filtering' },
+        post: { summary: 'Create a new agreement envelope' },
       },
       '/api/v1/documents/{id}': {
+        get: { summary: 'Get agreement details and field manifests' },
+        put: { summary: 'Update agreement metadata and recipient lists' },
+        delete: { summary: 'Cancel/void an agreement' },
+      },
+      '/api/v1/documents/{id}/audit': {
+        get: { summary: 'Retrieve cryptographically verified audit trail logs' },
+      },
+      '/api/v1/documents/{id}/verify': {
+        get: { summary: 'Public integrity verification of sealed PDF' },
+      },
+      '/api/v1/organisations/me/api-clients': {
         get: {
-          summary: 'Get document by ID',
-          parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
-          responses: {
-            '200': { description: 'Document found' },
-            '404': { description: 'Document not found' },
-          },
+          summary: 'List trusted machine API client bindings (OAuth2 Client Credentials)',
+          security: [{ BearerAuth: [] }],
         },
-        put: {
-          summary: 'Replace document',
-          parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
-          responses: {
-            '200': { description: 'Document updated' },
-            '400': { description: 'Invalid input' },
-          },
+        post: {
+          summary: 'Register a new trusted machine client binding',
+          security: [{ BearerAuth: [] }],
         },
+      },
+      '/api/v1/organisations/me/api-clients/{id}': {
         patch: {
-          summary: 'Partially update document',
-          parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
-          responses: {
-            '200': { description: 'Document updated' },
-          },
+          summary: 'Update or deactivate machine API client binding',
+          security: [{ BearerAuth: [] }],
         },
         delete: {
-          summary: 'Soft-delete document',
-          parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
-          responses: {
-            '204': { description: 'Document deleted' },
-          },
+          summary: 'Revoke and soft-delete an API client binding',
+          security: [{ BearerAuth: [] }],
+        },
+      },
+      '/api/v1/organisations/me/api-logs': {
+        get: {
+          summary: 'Query searchable, redacted API request logs',
+          security: [{ BearerAuth: [] }],
         },
       },
       '/api/v1/webhooks': {
         get: {
-          summary: 'List webhook subscriptions',
-          responses: { '200': { description: 'List of subscriptions' } },
+          summary: 'List registered outbound webhook endpoints',
+          security: [{ BearerAuth: [] }],
         },
         post: {
-          summary: 'Create webhook subscription',
-          responses: { '201': { description: 'Subscription created with one-time secret' } },
+          summary: 'Subscribe external HTTPS endpoint to domain events',
+          security: [{ BearerAuth: [] }],
         },
       },
       '/api/v1/webhooks/{id}': {
         get: { summary: 'Get webhook subscription details' },
-        patch: { summary: 'Update webhook subscription' },
-        delete: { summary: 'Delete webhook subscription' },
-      },
-      '/api/v1/webhooks/{id}/rotate-secret': {
-        post: { summary: 'Rotate webhook signing secret with 24-hour grace period' },
+        patch: { summary: 'Update webhook target URL, events, or filters' },
+        delete: { summary: 'Delete a webhook subscription' },
       },
       '/api/v1/webhooks/{id}/test': {
-        post: { summary: 'Dispatch synthetic test event to webhook endpoint' },
+        post: { summary: 'Trigger a manual test delivery with sample payload' },
+      },
+      '/api/v1/webhooks/{id}/deliveries': {
+        get: { summary: 'Inspect recent delivery attempts and responses' },
       },
       '/api/v1/webhooks/{id}/metrics': {
         get: { summary: 'Get delivery metrics or CSV export' },
@@ -164,23 +172,38 @@ export function createDocsRoutes() {
   router.get('/openapi.json', (c) => c.json(openApiSpec));
 
   // Serve Interactive Scalar UI
-  router.get('/', (c) => {
+  const serveScalarDocs = (c: any) => {
+    c.header(
+      'Content-Security-Policy',
+      "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' https: data:; img-src 'self' data: https:;",
+    );
+    const specJson = JSON.stringify(openApiSpec).replace(/</g, '\\u003c');
     const html = `<!doctype html>
 <html>
   <head>
     <title>GraphSign API Reference</title>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      body {
+        margin: 0;
+      }
+    </style>
   </head>
   <body>
     <script
       id="api-reference"
-      data-url="/api/v1/docs/openapi.json"
-      src="https://cdn.jsdelivr.net/npm/@scalar/api-reference"></script>
+      type="application/json">
+      ${specJson}
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/@scalar/api-reference"></script>
   </body>
 </html>`;
     return c.html(html);
-  });
+  };
+
+  router.get('/', serveScalarDocs);
+  router.get('/*', serveScalarDocs);
 
   return router;
 }

@@ -18,15 +18,15 @@ describe('RBAC Middleware (INK-63)', () => {
       expect(next).toHaveBeenCalled();
     });
 
-    it('should allow kunal@graphomy.com regardless of specified role', async () => {
-      const c = createMockContext({ userRole: 'signer', userEmail: 'kunal@graphomy.com' });
+    it('should allow support@graphsign.ink regardless of specified role', async () => {
+      const c = createMockContext({ userRole: 'signer', userEmail: 'support@graphsign.ink' });
       const next = vi.fn();
 
       await requireRole(['org_admin'])(c, next);
       expect(next).toHaveBeenCalled();
     });
 
-    it('should NOT allow super_admin role without kunal@graphomy.com email', async () => {
+    it('should NOT allow super_admin role without support@graphsign.ink email', async () => {
       const c = createMockContext({ userRole: 'super_admin', userEmail: 'imposter@acme.com' });
       const next = vi.fn();
 
