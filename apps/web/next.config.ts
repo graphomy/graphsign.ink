@@ -4,8 +4,8 @@ const isDev = process.env.NODE_ENV !== 'production';
 
 // Allow local development and test API endpoints as well as WebSocket HMR in non-production
 const connectSrc = isDev
-  ? "connect-src 'self' https: wss: ws: http://localhost:* http://127.0.0.1:*;"
-  : "connect-src 'self' https: wss:;";
+  ? "connect-src 'self' blob: data: https: wss: ws: http://localhost:* http://127.0.0.1:*;"
+  : "connect-src 'self' blob: data: https: wss:;";
 
 const nextConfig: NextConfig = {
   async headers() {
@@ -15,7 +15,7 @@ const nextConfig: NextConfig = {
         headers: [
           {
             key: 'Content-Security-Policy',
-            value: `default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; ${connectSrc} frame-ancestors 'none';`,
+            value: `default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; worker-src 'self' blob:; ${connectSrc} frame-ancestors 'none';`,
           },
           {
             key: 'X-Frame-Options',
